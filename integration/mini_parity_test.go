@@ -118,12 +118,16 @@ func assertMiniCIAttributes(t *testing.T, want, got []map[string]any) {
 	t.Helper()
 	validateCIFieldDuplicates(t, want)
 	validateCIFieldDuplicates(t, got)
-	if a, b := ciWireEvents(want), ciWireEvents(got); !reflect.DeepEqual(a, b) {
+	a, b, err := comparableCIWireEvents(want, got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(a, b) {
 		t.Fatalf("CI attributes SDK %v MINI %v", a, b)
 	}
 }
 
-// Listing emits no test events from which a session can inherit capabilities.
+// Sessions without tests cannot inherit capabilities from test events.
 // Validate Mini's complete set against the frozen SDK's declarations, and allow
 // only missing SDK session values. Every other wire attribute stays unchanged.
 func sessionOnlyCIWireEvents(events []map[string]any, allowMissingCapabilities bool) ([]string, error) {
@@ -139,7 +143,7 @@ func sessionOnlyCIWireEvents(events []map[string]any, allowMissingCapabilities b
 	}
 	for _, event := range events {
 		if event["type"] != "test_session_end" {
-			return nil, fmt.Errorf("listing emitted %v instead of only a session", event["type"])
+			return nil, fmt.Errorf("session-only execution emitted %v instead of only a session", event["type"])
 		}
 	}
 	rows := ciWireEvents(events)
@@ -152,14 +156,14 @@ func sessionOnlyCIWireEvents(events []map[string]any, allowMissingCapabilities b
 		for key, value := range meta {
 			if strings.HasPrefix(key, "_dd.library_capabilities.") {
 				if expected, ok := capabilities[key]; !ok || value != expected {
-					return nil, fmt.Errorf("unexpected listing capability %s=%v", key, value)
+					return nil, fmt.Errorf("unexpected session-only capability %s=%v", key, value)
 				}
 			}
 		}
 		for key, value := range capabilities {
 			if _, present := meta[key]; !present {
 				if !allowMissingCapabilities {
-					return nil, fmt.Errorf("missing Mini listing capability %s", key)
+					return nil, fmt.Errorf("missing Mini session-only capability %s", key)
 				}
 				meta[key] = value
 			}
@@ -174,20 +178,63 @@ func sessionOnlyCIWireEvents(events []map[string]any, allowMissingCapabilities b
 	return rows, nil
 }
 
-func assertMiniListCIAttributes(t *testing.T, want, got []map[string]any) {
-	t.Helper()
-	validateCIFieldDuplicates(t, want)
-	validateCIFieldDuplicates(t, got)
-	a, err := sessionOnlyCIWireEvents(want, true)
+func hasOnlyCISessions(events []map[string]any) bool {
+	if len(events) == 0 {
+		return false
+	}
+	for _, event := range events {
+		if event["type"] != "test_session_end" {
+			return false
+		}
+	}
+	return true
+}
+
+func comparableCIWireEvents(want, got []map[string]any) ([]string, []string, error) {
+	if hasOnlyCISessions(want) && hasOnlyCISessions(got) {
+		a, err := sessionOnlyCIWireEvents(want, true)
+		if err != nil {
+			return nil, nil, err
+		}
+		b, err := sessionOnlyCIWireEvents(got, false)
+		return a, b, err
+	}
+	return ciWireEvents(want), ciWireEvents(got), nil
+}
+
+func TestCIComparatorSessionOnlySelection(t *testing.T) {
+	session := func(meta map[string]any) []map[string]any {
+		return []map[string]any{{"type": "test_session_end", "version": uint64(1), "content": map[string]any{"test_session_id": uint64(1), "meta": meta}}}
+	}
+	sdk := session(map[string]any{})
+	rows, err := sessionOnlyCIWireEvents(sdk, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := sessionOnlyCIWireEvents(got, false)
-	if err != nil {
+	var row map[string]any
+	if err := json.Unmarshal([]byte(rows[0]), &row); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(a, b) {
-		t.Fatalf("listing CI attributes SDK %v MINI %v", a, b)
+	mini := session(row["meta"].(map[string]any))
+	a, b, err := comparableCIWireEvents(sdk, mini)
+	if err != nil || !reflect.DeepEqual(a, b) {
+		t.Fatalf("session-only normalization: %v %v %v", a, b, err)
+	}
+	if _, _, err := comparableCIWireEvents(sdk, sdk); err == nil {
+		t.Fatal("missing Mini session capabilities masked")
+	}
+	testEvent := map[string]any{"type": "test", "version": uint64(2), "content": map[string]any{"test_session_id": uint64(1), "meta": map[string]any{}}}
+	for _, sdkHasTest := range []bool{false, true} {
+		want, got := sdk, mini
+		if sdkHasTest {
+			want = append(want, testEvent)
+		} else {
+			got = append(got, testEvent)
+		}
+		a, b, err := comparableCIWireEvents(want, got)
+		if err != nil || reflect.DeepEqual(a, b) {
+			t.Fatalf("missing test events masked: %v %v %v", a, b, err)
+		}
 	}
 }
 
