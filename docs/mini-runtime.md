@@ -219,3 +219,8 @@ values from consistent attributes of that session's actual test events; it
 never drops a CI attribute, changes a present value, crosses session identities
 or fills a missing test attribute. Unit checks reject conflicts and omissions.
 This is semantic inheritance parity, not byte-identical event placement.
+
+Listing tests emits a session without test events. That case validates Mini's
+complete capabilities against the frozen SDK declarations and permits only
+missing SDK capabilities. Wrong values, unknown capabilities, test events and
+all other CI attribute differences remain failures.

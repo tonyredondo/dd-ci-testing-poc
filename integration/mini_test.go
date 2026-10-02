@@ -141,7 +141,11 @@ func TestMiniTestingCompatibility(t *testing.T) {
 				want := execute(t, dir, bins[0], tc.args, enabled, false)
 				got := execute(t, dir, bins[1], tc.args, enabled, false)
 				assertMiniEquivalent(t, want, got)
-				assertMiniCIAttributes(t, want.wireEvents, got.wireEvents)
+				if tc.name == "list" {
+					assertMiniListCIAttributes(t, want.wireEvents, got.wireEvents)
+				} else {
+					assertMiniCIAttributes(t, want.wireEvents, got.wireEvents)
+				}
 				if got.out != want.out {
 					t.Fatalf("native output differs\nSDK:%s\nMINI:%s", want.out, got.out)
 				}

@@ -59,7 +59,7 @@ func ciWireEvents(events []map[string]any) []string {
 	var out []string
 	for _, event := range events {
 		c := event["content"].(map[string]any)
-		row := map[string]any{"type": event["type"], "version": event["version"]}
+		row := map[string]any{"event_type": event["type"], "version": event["version"]}
 		for _, key := range []string{"name", "service", "resource", "type", "error", "itr_correlation_id"} {
 			row[key] = c[key]
 		}
@@ -122,11 +122,142 @@ func assertMiniCIAttributes(t *testing.T, want, got []map[string]any) {
 		t.Fatalf("CI attributes SDK %v MINI %v", a, b)
 	}
 }
+
+// Listing emits no test events from which a session can inherit capabilities.
+// Validate Mini's complete set against the frozen SDK's declarations, and allow
+// only missing SDK session values. Every other wire attribute stays unchanged.
+func sessionOnlyCIWireEvents(events []map[string]any, allowMissingCapabilities bool) ([]string, error) {
+	// dd-trace-go/v2@v2.11.0-rc.1, civisibility_features.go:347-353.
+	capabilities := map[string]string{
+		"_dd.library_capabilities.early_flake_detection":          "1",
+		"_dd.library_capabilities.auto_test_retries":              "1",
+		"_dd.library_capabilities.coverage_report_upload":         "1",
+		"_dd.library_capabilities.test_impact_analysis":           "1",
+		"_dd.library_capabilities.test_management.quarantine":     "1",
+		"_dd.library_capabilities.test_management.disable":        "1",
+		"_dd.library_capabilities.test_management.attempt_to_fix": "5",
+	}
+	for _, event := range events {
+		if event["type"] != "test_session_end" {
+			return nil, fmt.Errorf("listing emitted %v instead of only a session", event["type"])
+		}
+	}
+	rows := ciWireEvents(events)
+	for i, encoded := range rows {
+		var row map[string]any
+		if err := json.Unmarshal([]byte(encoded), &row); err != nil {
+			return nil, err
+		}
+		meta := row["meta"].(map[string]any)
+		for key, value := range meta {
+			if strings.HasPrefix(key, "_dd.library_capabilities.") {
+				if expected, ok := capabilities[key]; !ok || value != expected {
+					return nil, fmt.Errorf("unexpected listing capability %s=%v", key, value)
+				}
+			}
+		}
+		for key, value := range capabilities {
+			if _, present := meta[key]; !present {
+				if !allowMissingCapabilities {
+					return nil, fmt.Errorf("missing Mini listing capability %s", key)
+				}
+				meta[key] = value
+			}
+		}
+		data, err := json.Marshal(row)
+		if err != nil {
+			return nil, err
+		}
+		rows[i] = string(data)
+	}
+	sort.Strings(rows)
+	return rows, nil
+}
+
+func assertMiniListCIAttributes(t *testing.T, want, got []map[string]any) {
+	t.Helper()
+	validateCIFieldDuplicates(t, want)
+	validateCIFieldDuplicates(t, got)
+	a, err := sessionOnlyCIWireEvents(want, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := sessionOnlyCIWireEvents(got, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(a, b) {
+		t.Fatalf("listing CI attributes SDK %v MINI %v", a, b)
+	}
+}
+
+func TestCIComparatorSessionOnlyCapabilities(t *testing.T) {
+	event := func(meta map[string]any) []map[string]any {
+		return []map[string]any{{"type": "test_session_end", "version": uint64(1), "content": map[string]any{"meta": meta}}}
+	}
+	baseline, err := sessionOnlyCIWireEvents(event(map[string]any{}), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var normalized map[string]any
+	if err := json.Unmarshal([]byte(baseline[0]), &normalized); err != nil {
+		t.Fatal(err)
+	}
+	meta := normalized["meta"].(map[string]any)
+	if len(meta) != 7 || meta["_dd.library_capabilities.test_management.attempt_to_fix"] != "5" {
+		t.Fatalf("unexpected SDK capability declaration: %v", meta)
+	}
+	complete, err := sessionOnlyCIWireEvents(event(meta), false)
+	if err != nil || !reflect.DeepEqual(complete, baseline) {
+		t.Fatalf("complete Mini capabilities: %v %v", complete, err)
+	}
+	for key := range meta {
+		for _, mode := range []string{"missing", "wrong"} {
+			candidate := make(map[string]any)
+			for k, v := range meta {
+				candidate[k] = v
+			}
+			if mode == "missing" {
+				delete(candidate, key)
+			} else {
+				candidate[key] = "wrong"
+			}
+			if _, err := sessionOnlyCIWireEvents(event(candidate), false); err == nil {
+				t.Fatalf("Mini %s capability accepted: %s", mode, key)
+			}
+			if mode == "wrong" {
+				if _, err := sessionOnlyCIWireEvents(event(candidate), true); err == nil {
+					t.Fatalf("wrong SDK capability accepted: %s", key)
+				}
+			}
+		}
+	}
+	for _, key := range []string{"custom", "itr_correlation_id", "test.status"} {
+		changed, err := sessionOnlyCIWireEvents(event(map[string]any{key: "different"}), true)
+		if err != nil || reflect.DeepEqual(changed, baseline) {
+			t.Fatalf("listing CI attribute masked: %s", key)
+		}
+	}
+	if _, err := sessionOnlyCIWireEvents(event(map[string]any{"_dd.library_capabilities.unknown": "1"}), true); err == nil {
+		t.Fatal("unknown capability accepted")
+	}
+	tests := event(map[string]any{})
+	tests[0]["type"] = "test"
+	if _, err := sessionOnlyCIWireEvents(tests, true); err == nil {
+		t.Fatal("listing test event accepted")
+	}
+}
+
 func TestCIComparatorRetainsProductAttributes(t *testing.T) {
 	event := func(meta map[string]any, metrics map[string]any) []map[string]any {
 		return []map[string]any{{"type": "test", "version": uint64(2), "content": map[string]any{"meta": meta, "metrics": metrics}}}
 	}
 	base := ciWireEvents(event(map[string]any{}, map[string]any{}))
+	changedType := event(map[string]any{}, map[string]any{})
+	changedType[0]["type"] = "test_session_end"
+	if reflect.DeepEqual(base, ciWireEvents(changedType)) {
+		t.Fatal("CI event envelope type excluded")
+	}
 	for _, key := range []string{"version", "test.status", "test.session", "_dd.library_capabilities.auto_test_retries", "git.commit.sha", "custom"} {
 		if reflect.DeepEqual(base, ciWireEvents(event(map[string]any{key: "present"}, map[string]any{}))) {
 			t.Fatalf("CI attribute excluded: %s", key)
