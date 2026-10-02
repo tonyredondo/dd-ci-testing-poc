@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"golang.org/x/sys/windows"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/platform/windows"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/locking"
 )

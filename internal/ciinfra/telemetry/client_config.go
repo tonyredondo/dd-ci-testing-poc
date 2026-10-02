@@ -10,23 +10,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"runtime/debug"
 	"time"
 
 	globalinternal "github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/bazel"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/env"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/log"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/telemetry/internal"
 )
 
 type ClientConfig struct {
-	// DependencyLoader determines how dependency data is sent via telemetry.
-	// The default value is [debug.ReadBuildInfo] since Application Security Monitoring uses this data to detect vulnerabilities in the ASM-SCA product
-	// To disable this feature, please implement a function that returns nil, false.
-	// This can only be controlled via the env var DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED
-	DependencyLoader func() (*debug.BuildInfo, bool)
-
 	// MetricsEnabled determines whether metrics are sent via telemetry.
 	// If false, libraries should not send the generate-metrics or distributions events.
 	// This can only be controlled via the env var DD_TELEMETRY_METRICS_ENABLED
@@ -48,16 +40,9 @@ type ClientConfig struct {
 	// HTTPClient is the http client to use for sending telemetry, defaults to a http.DefaultClient copy.
 	HTTPClient *http.Client
 
-	// HeartbeatInterval is the interval at which to send a heartbeat payload, defaults to 60s.
-	// The maximum value is 60s.
-	HeartbeatInterval time.Duration
-
-	// ExtendedHeartbeatInterval is the interval at which to send an extended heartbeat payload, defaults to 24h.
-	ExtendedHeartbeatInterval time.Duration
-
 	// FlushInterval is the interval at which the client flushes the data.
 	// By default, the client will start to Flush at 60s intervals and will reduce the interval based on the load till it hit 15s
-	// Both values cannot be higher than 60s because the heartbeat need to be sent at least every 60s. Values will be clamped otherwise.
+	// Both values cannot be higher than 60s to bound CI telemetry flush intervals. Values will be clamped otherwise.
 	FlushInterval internal.Range[time.Duration]
 
 	// PayloadQueueSize is the size of the payload queue. Default range is [4, 32].
@@ -83,7 +68,7 @@ type ClientConfig struct {
 	// The default value is 1024.
 	MaxDistinctLogs int32
 
-	// internalMetricsEnabled determines whether client stats metrics are sent via telemetry. Default to true.
+	// internalMetricsEnabled remains false: only CI metrics are collected.
 	internalMetricsEnabled bool
 }
 
@@ -93,19 +78,13 @@ var (
 	// It is also the default URL in case connecting to the agent URL fails.
 	agentlessURLTemplate = "https://instrumentation-telemetry-intake.%s/api/v2/apmtelemetry"
 
-	// defaultHeartbeatInterval is the default interval at which the agent sends a heartbeat.
-	defaultHeartbeatInterval = time.Minute
-
-	// defaultExtendedHeartbeatInterval is the default interval at which the agent sends an extended heartbeat.
-	defaultExtendedHeartbeatInterval = 24 * time.Hour
-
 	// defaultMinFlushInterval is the default interval at which the client flushes the data.
 	defaultFlushIntervalRange = internal.Range[time.Duration]{
 		Min: 15 * time.Second,
 		Max: 60 * time.Second,
 	}
 
-	defaultAuthorizedHearbeatRange = internal.Range[time.Duration]{
+	authorizedFlushIntervalRange = internal.Range[time.Duration]{
 		Min: time.Microsecond,
 		Max: time.Minute,
 	}
@@ -144,9 +123,6 @@ var (
 )
 
 func (config ClientConfig) validateConfig() error {
-	if config.HeartbeatInterval > time.Minute {
-		return fmt.Errorf("HeartbeatInterval cannot be higher than 60s, got %v", config.HeartbeatInterval)
-	}
 
 	if config.FlushInterval.Min > time.Minute || config.FlushInterval.Max > time.Minute {
 		return fmt.Errorf("FlushIntervalRange cannot be higher than 60s, got Min: %v, Max: %v", config.FlushInterval.Min, config.FlushInterval.Max)
@@ -182,34 +158,13 @@ func defaultConfig(config ClientConfig) ClientConfig {
 	if config.FlushInterval.Min == 0 {
 		config.FlushInterval.Min = defaultFlushIntervalRange.Min
 	} else {
-		config.FlushInterval.Min = defaultAuthorizedHearbeatRange.Clamp(config.FlushInterval.Min)
+		config.FlushInterval.Min = authorizedFlushIntervalRange.Clamp(config.FlushInterval.Min)
 	}
 
 	if config.FlushInterval.Max == 0 {
 		config.FlushInterval.Max = defaultFlushIntervalRange.Max
 	} else {
-		config.FlushInterval.Max = defaultAuthorizedHearbeatRange.Clamp(config.FlushInterval.Max)
-	}
-
-	heartBeatInterval := defaultHeartbeatInterval
-	if config.HeartbeatInterval != 0 {
-		heartBeatInterval = config.HeartbeatInterval
-	}
-
-	envVal := globalinternal.FloatEnv("DD_TELEMETRY_HEARTBEAT_INTERVAL", heartBeatInterval.Seconds())
-	config.HeartbeatInterval = defaultAuthorizedHearbeatRange.Clamp(time.Duration(envVal * float64(time.Second)))
-	if config.HeartbeatInterval != defaultHeartbeatInterval {
-		log.Debug("telemetry: using custom heartbeat interval %s", config.HeartbeatInterval)
-	}
-	// Make sure we flush at least at each heartbeat interval
-	config.FlushInterval = config.FlushInterval.ReduceMax(config.HeartbeatInterval)
-
-	if config.HeartbeatInterval == config.FlushInterval.Max { // Since the go ticker is not exact when it comes to the interval, we need to make sure the heartbeat is actually sent
-		config.HeartbeatInterval = config.HeartbeatInterval - 10*time.Millisecond
-	}
-
-	if config.DependencyLoader == nil && globalinternal.BoolEnv("DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED", true) {
-		config.DependencyLoader = debug.ReadBuildInfo
+		config.FlushInterval.Max = authorizedFlushIntervalRange.Clamp(config.FlushInterval.Max)
 	}
 
 	if !config.MetricsEnabled {
@@ -220,20 +175,9 @@ func defaultConfig(config ClientConfig) ClientConfig {
 		config.LogsEnabled = globalinternal.BoolEnv("DD_TELEMETRY_LOG_COLLECTION_ENABLED", true)
 	}
 
-	if !config.internalMetricsEnabled {
-		config.internalMetricsEnabled = true
-	}
-
 	if config.EarlyFlushPayloadSize == 0 {
 		config.EarlyFlushPayloadSize = defaultEarlyFlushPayloadSize
 	}
-
-	extendedHeartbeatInterval := defaultExtendedHeartbeatInterval
-	if config.ExtendedHeartbeatInterval != 0 {
-		extendedHeartbeatInterval = config.ExtendedHeartbeatInterval
-	}
-	envExtVal := globalinternal.FloatEnv("DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL", extendedHeartbeatInterval.Seconds())
-	config.ExtendedHeartbeatInterval = time.Duration(envExtVal * float64(time.Second))
 
 	if config.PayloadQueueSize.Min == 0 {
 		config.PayloadQueueSize.Min = defaultPayloadQueueSize.Min

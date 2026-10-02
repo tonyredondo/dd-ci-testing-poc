@@ -6,13 +6,12 @@
 // Package telemetry provides a telemetry client that is thread-safe burden-less telemetry client following the specification of the instrumentation telemetry from Datadog.
 // Specification here: https://github.com/DataDog/instrumentation-telemetry-api-docs/tree/main
 //
-// The telemetry package has 6 main capabilities:
+// The telemetry package has 5 main capabilities:
 //   - Metrics: Support for [Count], [Rate], [Gauge], [Distribution] metrics.
 //   - Logs: Support Debug, Warn, Error logs with tags and stack traces via the subpackage [log] or the [Log] function.
 //   - Product: Start, Stop and Startup errors reporting to the backend
 //   - App Config: Register and change the configuration of the application and declare its origin
 //   - Integration: Loading and errors
-//   - Dependencies: Sending all the dependencies of the application to the backend (for SCA purposes for example)
 //
 // Each of these capabilities is exposed through the [Client] interface but mainly through the package level functions.
 // that mirror and call the global client that is started through the [StartApp] function.
@@ -20,10 +19,8 @@
 // Before the [StartApp] function is called, all called to the global client will be recorded and replay
 // when the [StartApp] function is called synchronously. The telemetry client is allowed to record at most 512 calls.
 //
-// At the end of the app lifetime. If [tracer.Stop] is called, the client should be stopped with the [StopApp] function.
+// At the end of the app lifetime. On CI shutdown, the client should be stopped with the [StopApp] function.
 // For all data to be flushed to the backend appropriately.
-//
-// Note: No public API is available for the dependencies payloads as this is does in-house with the `ClientConfig.DependencyLoader` function output.
 package telemetry
 
 import (
@@ -114,48 +111,6 @@ type Configuration struct {
 	SeqID uint64
 }
 
-type AppEndpointAuthentication = transport.AppEndpointAuthentication
-
-//goland:noinspection GoVarAndConstTypeMayBeOmitted Goland is having a hard time with the following const block, it keeps deleting the type
-const (
-	AppEndpointAuthenticationJWT     AppEndpointAuthentication = transport.AppEndpointAuthenticationJWT
-	AppEndpointAuthenticationBasic   AppEndpointAuthentication = transport.AppEndpointAuthenticationBasic
-	AppEndpointAuthenticationOAuth   AppEndpointAuthentication = transport.AppEndpointAuthenticationOAuth
-	AppEndpointAuthenticationOIDC    AppEndpointAuthentication = transport.AppEndpointAuthenticationOIDC
-	AppEndpointAuthenticationAPIKey  AppEndpointAuthentication = transport.AppEndpointAuthenticationAPIKey
-	AppEndpointAuthenticationSession AppEndpointAuthentication = transport.AppEndpointAuthenticationSession
-	AppEndpointAuthenticationMTLS    AppEndpointAuthentication = transport.AppEndpointAuthenticationMTLS
-	AppEndpointAuthenticationSAML    AppEndpointAuthentication = transport.AppEndpointAuthenticationSAML
-	AppEndpointAuthenticationLDAP    AppEndpointAuthentication = transport.AppEndpointAuthenticationLDAP
-	AppEndpointAuthenticationForm    AppEndpointAuthentication = transport.AppEndpointAuthenticationForm
-	AppEndpointAuthenticationOther   AppEndpointAuthentication = transport.AppEndpointAuthenticationOther
-)
-
-type AppEndpointAttributes struct {
-	// Kind is the type of the endpoint, typically "REST".
-	Kind string
-	// Method is the HTTP method of the endpoint ([net/http.MethodGet], etc...),
-	// or `"*"` is any/all method is allowed.
-	Method string
-	// Path is the path of the endpoint, which should match the `http.route` span
-	// tag sent on traces for this endpoint.
-	Path string
-	// RequestBodyType is the MIME types accepted by the endpoint for the request
-	// body, if known/any.
-	RequestBodyType []string
-	// ResponseBodyType is the MIME types returned by the endpoint for the
-	// response, if known/any.
-	ResponseBodyType []string
-	// ResponseCode is the HTTP status codes returned by the endpoint, if
-	// known/any.
-	ResponseCode []int
-	// Authentication is the authentication type used/accepted by the endpoint, if
-	// known/any.
-	Authentication []AppEndpointAuthentication
-	// Metadata is a map of additional metadata about the endpoint, if any.
-	Metadata map[string]any
-}
-
 // LogOption is a function that modifies the log message that is sent to the telemetry.
 type LogOption func(key *loggerKey, value *loggerValue)
 
@@ -204,14 +159,6 @@ type Client interface {
 
 	// MarkIntegrationAsLoaded marks an integration as loaded in the telemetry
 	MarkIntegrationAsLoaded(integration Integration)
-
-	// RegisterAppEndpoint reports a new REST endpoint exposed by the application.
-	// This can be called multiple times (endpoints are accumulated additively by
-	// the backend), and is called independent of the endpoint receiving traffic.
-	//
-	// The `opName` must match the operation name set on spans for this endpoint,
-	// and `resName` must match the resource name set on spans for this endpoint.
-	RegisterAppEndpoint(opName string, resName string, attrs AppEndpointAttributes)
 
 	// Flush closes the client and flushes any remaining data.
 	Flush()

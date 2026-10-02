@@ -4,3 +4,14 @@ Copyright 2023-present Datadog, Inc. Upstream copyright headers are retained.
 
 The SDK backend uses the original dd-trace-go module without modifications.
 The mini backend contains extracted CI code and a separate native event client.
+
+MessagePack runtime sources from tinylib/msgp v1.6.4 and philhofer/fwd v1.2.0
+are incorporated in internal/msgp and internal/fwd. Copyright Philip Hofer,
+licensed under MIT; the original license files are retained. Go Authors portions
+retain their source notices and the BSD license in internal/msgp/LICENSE-go.
+Pinned source hashes and relocation details: docs/messagepack-provenance.json.
+
+Selected platform declarations and read-only operations are adapted from
+golang.org/x/sys v0.47.0, Copyright The Go Authors, under its BSD license.
+The license is retained in internal/platform/LICENSE. Sources and adaptations:
+docs/platform-provenance.json. Runtime consumers do not require x/sys.

@@ -70,7 +70,12 @@ Agentless delivery uses gzip and `/api/v2/citestcycle`. Agent delivery uses the 
 v2 proxy and its intake header. Coverage continues through the extracted native
 CI coverage client. No APM tracer, profiler, security engine, remote configuration
 client, OTLP stack, or agent statistics pipeline is imported by the mini runtime.
-Existing CI configuration, diagnostics and CI telemetry helpers are retained.
+CI configuration, diagnostics and CI telemetry helpers are retained. The native
+runtime reads `DD_TRACE_DEBUG` and `DD_CIVISIBILITY_LOGS_ENABLED` from the
+environment only: APM YAML/Fleet configuration is intentionally unsupported.
+SDK telemetry heartbeats, SCA dependency inventory and REST endpoint inventory
+are removed. Actual CI metrics, delivery diagnostics and lifecycle telemetry
+remain; their shared intake URL contains `apmtelemetry`, but no APM tracer runs.
 `DD_VERSION` sets the service `version` tag on CI events. Session naming reuses
 the SDK algorithm: an explicitly defined `DD_TEST_SESSION_NAME` wins, including
 an empty value; otherwise use `<CI job name>-<test command>`, or the test command
@@ -92,18 +97,38 @@ credentials for the native event client and does not send event HTTP requests.
 The SDK-derived settings loader still requires a nonempty API key to consume
 a settings cache; the offline differential fixture supplies a synthetic key.
 The test verifies zero HTTP requests with all three payload types present.
-The mini runtime imports 266 packages including the standard library, versus 511
-for the original SDK public runtime. Six direct utility modules and one indirect
-module remain in the runtime graph. Test-only `testify` dependencies support
-the ported SDK assertions and do not enter `go list -deps ./testopt`. The CLI
-has no external package imports.
+The Linux mini runtime imports 256 packages including the standard library,
+versus 511 for the historical original SDK public-runtime snapshot. There are
+no external runtime modules. A fresh consumer's `go get` and `go mod tidy` add
+only `github.com/tonyredondo/dd-ci-testing-poc` to its `go.mod`; the consumer also
+builds offline. Test-only `testify` dependencies support the ported SDK assertions
+and do not enter `go list -deps ./testopt` or the consumer's requirements. The CLI
+has no external package imports. Runtime UUIDv4 generation uses `crypto/rand`
+and does not require `google/uuid`.
 [Dependency and module integrity proof](mini-dependency-proof.json) retains the
 package lists and successful module verification output.
 
+CI telemetry metric registries use the standard library's `sync.Map`; only first
+registration is serialized. Global metric references use `sync.OnceValue` so
+concurrent registration cannot duplicate startup replay or client installation.
+Diagnostic logs use a mutex-protected map. Collection detaches that map under
+the same lock, then formats the immutable batch outside it, preserving counts
+when additions overlap collection. No `xsync` source is incorporated. The SDK
+comparison fixture still uses its original dependency graph.
+
 `testopt.New` also creates an explicit client without reading API credentials
 from the environment. Its configuration controls endpoint, tags, batch capacity
-and timeout. `Finish` seals an event once; `Flush` and `Close` report delivery
-errors. Failed batches stay queued for a later flush. A full queue applies
+and timeout. `Finish` seals an event once and shares its private tag/metric maps read-only
+with delivery. Setters become no-ops and getters remain available. Native CI
+hierarchy IDs are stored separately, so serialization never deletes tag entries.
+Metadata maps are sized up front; metrics maps are allocated only when needed.
+Events encode directly into one reusable, bounded payload buffer; the queue
+capacity is reused after successful delivery. Failed batches retain their events.
+Agentless gzip compressors and bounded output buffers are reused. Request bodies
+are sealed before those buffers can be reused, including asynchronous HTTP errors
+and replay readers. APM `process_id` enrichment is omitted.
+`Flush` and `Close` report delivery errors. Failed batches stay queued for a later
+flush. A full queue applies
 backpressure and rejects incoming events if delivery fails; `DroppedEvents`
 reports those rejections, including events finished after closure. Hook-driven
 shutdown logs delivery failures and rejected counts without changing test results.
@@ -225,3 +250,56 @@ validate Mini's complete capabilities against the frozen SDK declarations and
 permit only missing SDK capabilities. This applies only when both runtimes
 emit sessions without tests. Wrong values, unknown capabilities, missing test
 events and all other CI attribute differences remain failures.
+
+## Internal MessagePack runtime
+
+`msgp` v1.6.4 and `fwd` v1.2.0 are incorporated under `internal/`, preserving
+upstream runtime implementations, original tests, copyright notices and licenses.
+This is source incorporation: consumers do not depend on their external modules,
+and a library-local `vendor/` directory is not required. It moves maintenance
+responsibility here; it does not itself reduce codec instructions or linked bytes.
+The source/hash manifest is [messagepack-provenance.json](messagepack-provenance.json).
+Regenerate reproducibly with:
+
+```sh
+go run ./scripts/vendor-msgpack
+go generate ./internal/msgp ./internal/minitracer ./internal/civisibility/integrations/gotesting/coverage
+```
+
+The generator runs in an isolated, pinned tool module. Its dependencies are
+build-time tooling and never enter `go list -deps ./testopt`. Runtime source
+changes are limited to import relocation and the test generator directive.
+The module cache must contain those pinned tools for offline regeneration.
+
+## Internal platform support
+
+The runtime no longer requires `golang.org/x/sys`. Linux and AIX use the standard
+library's `syscall.Uname`. BSD platforms read the pinned numeric sysctl keys
+through `syscall.Syscall6` into Uname's fixed buffers, retaining partial bytes on
+`ENOMEM` and the original whitespace formatting. Solaris retains the small upstream
+libc/runtime trampoline. Windows uses a selected internal subset of native Job
+Object, thread, timer and read-only registry operations. Retry ownership and
+process-containment policy are unchanged.
+
+Windows DLL loading remains restricted to the system directory through the same
+standard-runtime hook used by `x/sys`; application-controlled DLL paths are not
+searched. This hook and the Solaris trampoline must be rechecked when supported
+Go versions change. The upstream BSD license is retained in
+`internal/platform/LICENSE`; [platform-provenance.json](platform-provenance.json)
+records pinned sources, adaptations and destination hashes.
+
+Local Go 1.27.1 verification passed the full Linux suite, project race checks,
+`go vet`, module integrity and an offline consumer build. Registry value decoding,
+buffer growth and injected BSD formatting/error paths run on Linux. Windows
+Job Object/thread structure sizes, field offsets and constants were checked
+against pinned `x/sys` for amd64, 386 and arm64. Native Windows tests and retry
+integration tests cross-link on all three architectures. OS metadata tests also
+cross-link for Darwin, Linux, FreeBSD, NetBSD, OpenBSD, DragonFly, Solaris,
+illumos and AIX. These builds do not prove native execution on those platforms.
+Windows/macOS native execution and Go 1.26 validation remain pending CI.
+
+BSD metadata reads do not use the two-step `syscall.Sysctl` size/read API. They
+retain Uname's single fixed-buffer read and partial-data error behavior. Numeric
+MIB keys were checked against all five pinned upstream targets; injected tests
+cover partial buffers, bounds and whitespace. Native execution is still required
+to establish full cross-platform equivalence.

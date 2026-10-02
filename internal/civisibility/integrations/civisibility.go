@@ -14,10 +14,10 @@ import (
 	"sync/atomic"
 	"syscall"
 
+	infra "github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/bazel"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/env"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/log"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/stableconfig"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/telemetry"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/civisibility"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/civisibility/constants"
@@ -94,7 +94,7 @@ func internalCiVisibilityInitialization(tracerInitializer func([]tracer.StartOpt
 
 		// check the debug flag to enable debug logs. The tracer initialization happens
 		// after the CI Visibility initialization so we need to handle this flag ourselves
-		if enabled, _, _ := stableconfig.Bool("DD_TRACE_DEBUG", false); enabled {
+		if infra.BoolEnv("DD_TRACE_DEBUG", false) {
 			log.SetLevel(log.LevelDebug)
 		}
 

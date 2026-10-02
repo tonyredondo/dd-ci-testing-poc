@@ -20,7 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tinylib/msgp/msgp"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/msgp"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/env"
 	logger "github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/log"

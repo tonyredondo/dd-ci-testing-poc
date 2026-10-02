@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"maps"
-	"os"
 	"runtime/debug"
 	"strconv"
 	"sync"
@@ -16,13 +14,15 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/propagation"
 )
 
-// Span is one mutable CI event. Finish takes an immutable snapshot once.
+// Span is mutable until Finish seals its maps for shared, read-only delivery.
 type Span struct {
-	mu       sync.Mutex
-	client   *Client
-	identity propagation.Context
-	content  tslvSpan
-	finished bool
+	mu           sync.Mutex
+	client       *Client
+	identity     propagation.Context
+	content      tslvSpan
+	finished     bool
+	hierarchy    [3]string
+	hierarchySet uint8
 }
 type SpanContext struct{ identity propagation.Context }
 
@@ -70,10 +70,10 @@ func (s *Span) SetTag(key string, value any) {
 	}
 	switch v := value.(type) {
 	case string:
-		s.content.Meta[key] = v
+		s.setMeta(key, v)
 		delete(s.content.Metrics, key)
 	case bool:
-		s.content.Meta[key] = strconv.FormatBool(v)
+		s.setMeta(key, strconv.FormatBool(v))
 		delete(s.content.Metrics, key)
 	case int:
 		s.setMetric(key, float64(v))
@@ -85,7 +85,7 @@ func (s *Span) SetTag(key string, value any) {
 		s.setMetric(key, float64(v))
 	case int64:
 		if v > (1<<53)-1 || v < -(1<<53)+1 {
-			s.content.Meta[key] = strconv.FormatInt(v, 10)
+			s.setMeta(key, strconv.FormatInt(v, 10))
 			delete(s.content.Metrics, key)
 		} else {
 			s.setMetric(key, float64(v))
@@ -100,7 +100,7 @@ func (s *Span) SetTag(key string, value any) {
 		s.setMetric(key, float64(v))
 	case uint64:
 		if v > (1<<53)-1 {
-			s.content.Meta[key] = strconv.FormatUint(v, 10)
+			s.setMeta(key, strconv.FormatUint(v, 10))
 			delete(s.content.Metrics, key)
 		} else {
 			s.setMetric(key, float64(v))
@@ -110,14 +110,46 @@ func (s *Span) SetTag(key string, value any) {
 	case float64:
 		s.setMetric(key, v)
 	default:
-		s.content.Meta[key] = fmt.Sprint(v)
+		s.setMeta(key, fmt.Sprint(v))
 		delete(s.content.Metrics, key)
 	}
 }
-func (s *Span) setMetric(k string, v float64) { s.content.Metrics[k] = v; delete(s.content.Meta, k) }
+func hierarchyIndex(key string) int {
+	switch key {
+	case "test_session_id":
+		return 0
+	case "test_module_id":
+		return 1
+	case "test_suite_id":
+		return 2
+	}
+	return -1
+}
+func (s *Span) setMeta(key, value string) {
+	if i := hierarchyIndex(key); i >= 0 {
+		s.hierarchy[i] = value
+		s.hierarchySet |= 1 << i
+		return
+	}
+	s.content.Meta[key] = value
+}
+func (s *Span) setMetric(key string, value float64) {
+	if s.content.Metrics == nil {
+		s.content.Metrics = make(map[string]float64)
+	}
+	s.content.Metrics[key] = value
+	delete(s.content.Meta, key)
+	if i := hierarchyIndex(key); i >= 0 {
+		s.hierarchySet &^= 1 << i
+		s.hierarchy[i] = ""
+	}
+}
 func (s *Span) Meta(key string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if i := hierarchyIndex(key); i >= 0 {
+		return s.hierarchy[i], s.hierarchySet&(1<<i) != 0
+	}
 	v, ok := s.content.Meta[key]
 	return v, ok
 }
@@ -142,22 +174,14 @@ func (s *Span) Finish(options ...FinishOption) {
 	}
 	s.finished = true
 	content := s.content
-	content.Meta = maps.Clone(content.Meta)
-	content.Metrics = maps.Clone(content.Metrics)
 	content.Duration = cfg.time.UnixNano() - content.Start
 	if content.Duration < 0 {
 		content.Duration = 0
 	}
 	event := &ciVisibilityEvent{Type: content.Type, Version: 1, Content: content}
-	takeID := func(key string) uint64 {
-		v := content.Meta[key]
-		delete(content.Meta, key)
-		id, _ := strconv.ParseUint(v, 10, 64)
-		return id
-	}
-	event.Content.SessionID = takeID("test_session_id")
-	event.Content.ModuleID = takeID("test_module_id")
-	event.Content.SuiteID = takeID("test_suite_id")
+	event.Content.SessionID, _ = strconv.ParseUint(s.hierarchy[0], 10, 64)
+	event.Content.ModuleID, _ = strconv.ParseUint(s.hierarchy[1], 10, 64)
+	event.Content.SuiteID, _ = strconv.ParseUint(s.hierarchy[2], 10, 64)
 	switch content.Type {
 	case "test":
 		event.Content.CorrelationID = content.Meta["itr_correlation_id"]
@@ -188,11 +212,15 @@ func newSpan(client *Client, ctx context.Context, name string, options ...StartS
 	if err != nil {
 		panic("cannot generate CI trace identifiers")
 	}
-	s := &Span{client: client, identity: identity, content: tslvSpan{Name: name, Resource: name, Start: time.Now().UnixNano(), SpanID: identity.SpanID, TraceID: binary.BigEndian.Uint64(identity.TraceID[8:]), ParentID: parent, Meta: map[string]string{}, Metrics: map[string]float64{}}}
+	capacity := len(options) + 3
+	if client != nil {
+		capacity += len(client.tags)
+	}
+	s := &Span{client: client, identity: identity, content: tslvSpan{Name: name, Resource: name, Start: time.Now().UnixNano(), SpanID: identity.SpanID, TraceID: binary.BigEndian.Uint64(identity.TraceID[8:]), ParentID: parent, Meta: make(map[string]string, capacity)}}
 	if client != nil {
 		s.content.Service = client.service
 		for k, v := range client.tags {
-			s.content.Meta[k] = v
+			s.setMeta(k, v)
 		}
 		if client.env != "" {
 			s.content.Meta["env"] = client.env
@@ -203,7 +231,6 @@ func newSpan(client *Client, ctx context.Context, name string, options ...StartS
 	}
 	s.content.Meta["_dd.origin"] = "ciapp-test"
 	s.content.Meta["_dd.p.tid"] = fmt.Sprintf("%016x", binary.BigEndian.Uint64(identity.TraceID[:8]))
-	s.content.Metrics["process_id"] = float64(os.Getpid())
 	for _, option := range options {
 		option(s)
 	}

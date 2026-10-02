@@ -107,6 +107,10 @@ func (c *ciVisibilityCommon) GetTag(key string) (any, bool) {
 
 // fillCommonTags adds common tags to the span options for CI visibility.
 func fillCommonTags(opts []tracer.StartSpanOption) []tracer.StartSpanOption {
+	ciTags, ciMetrics := utils.GetCITags(), utils.GetCIMetrics()
+	combined := make([]tracer.StartSpanOption, len(opts), len(opts)+len(ciTags)+len(ciMetrics)+2)
+	copy(combined, opts)
+	opts = combined
 	opts = append(opts, []tracer.StartSpanOption{
 		ciVisibilityTag(constants.Origin, constants.CIAppTestOrigin),
 		ciVisibilityTag(ext.ManualKeep, true),
@@ -115,7 +119,7 @@ func fillCommonTags(opts []tracer.StartSpanOption) []tracer.StartSpanOption {
 	skipCIGitOSRuntimeTags := bazel.IsPayloadFilesModeEnabled()
 
 	// Apply CI tags
-	for k, v := range utils.GetCITags() {
+	for k, v := range ciTags {
 		// Ignore the test session name (sent at the payload metadata level, see `civisibility_payload.go`)
 		if k == constants.TestSessionName {
 			continue
@@ -133,7 +137,7 @@ func fillCommonTags(opts []tracer.StartSpanOption) []tracer.StartSpanOption {
 	}
 
 	// Apply CI metrics
-	for k, v := range utils.GetCIMetrics() {
+	for k, v := range ciMetrics {
 		opts = append(opts, ciVisibilityTag(k, v))
 	}
 

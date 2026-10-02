@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tinylib/msgp/msgp"
 	infra "github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/env"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/globalconfig"
@@ -20,6 +19,7 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/civisibility/utils"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/civisibility/utils/telemetry"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/msgp"
 )
 
 const Version = version.Number
@@ -54,6 +54,7 @@ type Client struct {
 	closed         bool
 	lastErr        error
 	dropped        uint64
+	payload        bytes.Buffer // Protected by sendMu; released after oversized batches.
 }
 
 func New(c Config) (*Client, error) {
@@ -186,42 +187,36 @@ func (c *Client) Flush(ctx context.Context) error {
 func (c *Client) flushLocked(ctx context.Context) error {
 	c.mu.Lock()
 	batch := c.events
+	if len(batch) == 0 {
+		c.mu.Unlock()
+		return nil
+	}
 	batchBytes := c.queuedBytes
 	c.events = nil
 	c.queuedBytes = 0
 	c.mu.Unlock()
-	if len(batch) == 0 {
-		return nil
-	}
 	serializationStart := time.Now()
-	var events bytes.Buffer
-	writer := msgp.NewWriter(&events)
-	err := writer.WriteArrayHeader(uint32(len(batch)))
-	for _, event := range batch {
-		if err != nil {
-			break
-		}
-		err = event.EncodeMsg(writer)
-	}
-	if err == nil {
-		err = writer.Flush()
-	}
-	var payload bytes.Buffer
-	if err == nil {
-		err = msgp.Encode(&payload, &ciTestCyclePayload{Version: 1, Metadata: c.metadata, Events: events.Bytes()})
-	}
+	c.payload.Reset()
+	c.payload.Grow(batchBytes + c.envelopeBytes)
+	err := msgp.Encode(&c.payload, &ciTestCycleBatch{Version: 1, Metadata: c.metadata, Events: batch})
 	if err == nil {
 		telemetry.EndpointPayloadEventsCount(telemetry.TestCycleEndpointType, float64(len(batch)))
-		telemetry.EndpointPayloadBytes(telemetry.TestCycleEndpointType, float64(payload.Len()))
+		telemetry.EndpointPayloadBytes(telemetry.TestCycleEndpointType, float64(c.payload.Len()))
 		telemetry.EndpointEventsSerializationMs(telemetry.TestCycleEndpointType, float64(time.Since(serializationStart).Milliseconds()))
-		err = c.transport.Send(ctx, payload.Bytes())
+		err = c.transport.Send(ctx, c.payload.Bytes())
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.lastErr = err
 	if err != nil {
-		c.events = append(batch, c.events...)
-		c.queuedBytes += batchBytes
+		c.events = batch
+		c.queuedBytes = batchBytes
+	} else {
+		clear(batch)
+		c.events = batch[:0]
+	}
+	if c.payload.Cap() > citransport.TestCycleFlushBytes {
+		c.payload = bytes.Buffer{}
 	}
 	return err
 }

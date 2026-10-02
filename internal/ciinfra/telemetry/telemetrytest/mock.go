@@ -94,10 +94,6 @@ func (m *MockClient) MarkIntegrationAsLoaded(integration telemetry.Integration) 
 	m.Called(integration)
 }
 
-func (m *MockClient) RegisterAppEndpoint(opName string, resName string, attrs telemetry.AppEndpointAttributes) {
-	m.Called(opName, resName, attrs)
-}
-
 func (m *MockClient) Flush() {
 	m.Called()
 }

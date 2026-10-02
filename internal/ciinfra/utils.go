@@ -10,8 +10,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"unicode"
-
-	"github.com/puzpuzpuz/xsync/v4"
 )
 
 // OtelTagsDelimeter is the separator between key-val pairs for OTEL env vars
@@ -84,39 +82,6 @@ func (l *LockMap) Get(k string) string {
 	l.RLock()
 	defer l.RUnlock()
 	return l.m[k]
-}
-
-// XSyncMapCounterMap uses xsync protect counter increments and reads during
-// concurrent access.
-// Implementation and related tests were taken/inspired by felixge/countermap
-// https://github.com/felixge/countermap/pull/2
-type XSyncMapCounterMap struct {
-	counts *xsync.Map[string, *xsync.Counter]
-}
-
-func NewXSyncMapCounterMap() *XSyncMapCounterMap {
-	return &XSyncMapCounterMap{counts: xsync.NewMap[string, *xsync.Counter]()}
-}
-
-func (cm *XSyncMapCounterMap) Inc(key string) {
-	val, ok := cm.counts.Load(key)
-	if !ok {
-		val, _ = cm.counts.LoadOrStore(key, xsync.NewCounter())
-	}
-	val.Inc()
-}
-
-func (cm *XSyncMapCounterMap) GetAndReset() map[string]int64 {
-	ret := map[string]int64{}
-	// DeleteMatching drains the store as it iterates: each counter's value is
-	// snapshotted into the result and then deleted (delete=true, stop=false).
-	// A concurrent-resize re-visit is idempotent here (re-assigning ret[key]
-	// with the same counter), so at-most-once visitation is not required.
-	cm.counts.DeleteMatching(func(key string, value *xsync.Counter) (bool, bool) {
-		ret[key] = value.Value()
-		return true, false
-	})
-	return ret
 }
 
 // ToFloat64 attempts to convert value into a float64. If the value is an integer

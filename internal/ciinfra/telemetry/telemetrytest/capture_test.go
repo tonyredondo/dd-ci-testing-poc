@@ -1,50 +1,45 @@
-// Unless explicitly stated otherwise all files in this repository are licensed
-// under the Apache License Version 2.0.
-// This product includes software developed at Datadog (https://www.datadoghq.com/).
-// Copyright 2026 Datadog, Inc.
-
 package telemetrytest
 
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/telemetry"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/telemetry/internal/transport"
 )
 
-// TestNewCapturingClient_RegisterAppEndpoint proves CaptureRoundTripper can
-// decode an "app-endpoints" request without aborting the test.
-// transport.Body.UnmarshalJSON dispatches by RequestType through
-// unmarshalPayload, which used to have no case for
-// transport.RequestTypeAppEndpoints ("app-endpoints") — every other
-// RequestType a Client can produce (app-started, logs, generate-metrics,
-// etc.) had a matching case there except this one, so
-// json.Unmarshal(payloadBytes, nil) ran with a nil destination and
-// CaptureRoundTripper.RoundTrip's Fatalf aborted the test outright, even
-// though this helper is documented as capturing the client's outbound
-// bodies generically.
-func TestNewCapturingClient_RegisterAppEndpoint(t *testing.T) {
-	client, rt := NewCapturingClient(t)
-	defer telemetry.MockClient(client)()
-
-	client.RegisterAppEndpoint("GET /decision-maker", "GET /decision-maker", telemetry.AppEndpointAttributes{
-		Kind:   "REST",
-		Method: "GET",
-		Path:   "/decision-maker",
-	})
+// The mini runtime retains CI metrics, but emits neither idle SDK heartbeats,
+// dependency inventory nor REST endpoint inventory.
+func TestCapturingClientCIOnly(t *testing.T) {
+	client, capture := NewCapturingClient(t)
+	defer client.Close()
+	client.ProductStarted(telemetry.NamespaceCIVisibility)
+	client.Count(telemetry.NamespaceCIVisibility, "event_created", []string{"event_type:test", "test_framework:testing"}).Submit(3)
+	client.AppStart()
 	client.Flush()
-
-	bodies := rt.Bodies()
-	require.NotEmpty(t, bodies, "expected at least one captured request body")
-
-	var found bool
-	for _, body := range bodies {
-		if body.RequestType == "app-endpoints" {
-			found = true
-			break
+	client.Flush()
+	var metric bool
+	check := func(kind transport.RequestType, payload transport.Payload) {
+		switch kind {
+		case "app-heartbeat", "app-extended-heartbeat", "app-dependencies-loaded", "app-endpoints":
+			t.Errorf("non-CI payload %s", kind)
+		}
+		if p, ok := payload.(*transport.GenerateMetrics); ok {
+			for _, s := range p.Series {
+				if s.Namespace == telemetry.NamespaceCIVisibility && s.Metric == "event_created" && len(s.Points) == 1 && s.Points[0][1] == float64(3) {
+					metric = true
+				}
+			}
 		}
 	}
-	assert.True(t, found, "expected an app-endpoints request among the captured bodies: %+v", bodies)
+	for _, body := range capture.Bodies() {
+		check(body.RequestType, body.Payload)
+		if batch, ok := body.Payload.(transport.MessageBatch); ok {
+			for _, message := range batch {
+				check(message.RequestType, message.Payload)
+			}
+		}
+	}
+	if !metric {
+		t.Fatal("CI metric not delivered")
+	}
 }

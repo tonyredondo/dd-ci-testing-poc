@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinylib/msgp/msgp"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/msgp"
 	"github.com/tonyredondo/dd-ci-testing-poc/propagation"
 )
 

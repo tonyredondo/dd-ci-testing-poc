@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/stableconfig"
+	infra "github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/hostname"
 )
@@ -66,7 +66,7 @@ func isEnabledLocked() bool {
 	if enabled, ok := cachedEnabled(); ok {
 		return enabled
 	}
-	v, _, _ := stableconfig.Bool("DD_CIVISIBILITY_LOGS_ENABLED", false)
+	v := infra.BoolEnv("DD_CIVISIBILITY_LOGS_ENABLED", false)
 	if v {
 		enabledState.Store(logsEnabledTrue)
 	} else {

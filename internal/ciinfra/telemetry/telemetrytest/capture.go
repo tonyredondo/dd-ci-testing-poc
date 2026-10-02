@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"runtime/debug"
 	"sync"
 	"testing"
 
@@ -88,9 +87,8 @@ func NewCapturingClient(t testing.TB) (telemetry.Client, *CaptureRoundTripper) {
 
 	rt := &CaptureRoundTripper{t: t}
 	client, err := telemetry.NewClient("test-service", "test-env", "1.0.0", telemetry.ClientConfig{
-		AgentURL:         "http://localhost:8126",
-		HTTPClient:       &http.Client{Transport: rt},
-		DependencyLoader: func() (*debug.BuildInfo, bool) { return nil, false },
+		AgentURL:   "http://localhost:8126",
+		HTTPClient: &http.Client{Transport: rt},
 	})
 	if err != nil {
 		t.Fatalf("telemetrytest.NewCapturingClient: %s", err.Error())

@@ -14,8 +14,6 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
-
-	"golang.org/x/sys/unix"
 )
 
 func init() {
@@ -35,11 +33,10 @@ func init() {
 		osVersion = string(bytes.Trim(out, "\n"))
 	}
 
-	var uts unix.Utsname
-	if err := unix.Uname(&uts); err == nil {
-		kernelName = string(bytes.TrimRight(uts.Sysname[:], "\x00"))
-		kernelVersion = string(bytes.TrimRight(uts.Version[:], "\x00"))
-		kernelRelease = strings.SplitN(strings.TrimRight(string(uts.Release[:]), "\x00"), "-", 2)[0]
+	if info, err := getKernelInfo(); err == nil {
+		kernelName = info.name
+		kernelVersion = info.version
+		kernelRelease = strings.SplitN(info.release, "-", 2)[0]
 
 		// Backwards compatibility on how data is reported for freebsd
 		if runtime.GOOS == "freebsd" {

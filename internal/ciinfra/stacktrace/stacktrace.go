@@ -3,8 +3,6 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
 // Copyright 2016 Datadog, Inc.
 
-//go:generate go run github.com/tinylib/msgp -o=stacktrace_msgp.go -tests=false
-
 package stacktrace
 
 import (

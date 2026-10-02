@@ -10,10 +10,9 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/log"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/telemetry/internal/knownmetrics"
@@ -75,38 +74,42 @@ type metricHandle interface {
 }
 
 type metrics struct {
-	store         *xsync.Map[metricKey, metricHandle]
+	store         sync.Map // metricKey -> metricHandle
+	initMu        sync.Mutex
 	skipAllowlist bool // Debugging feature to skip the allowlist of known metrics
 }
 
 // LoadOrStore returns a MetricHandle for the given metric key. If the metric key does not exist, it will be created.
 func (m *metrics) LoadOrStore(namespace Namespace, kind transport.MetricType, name string, tags []string) MetricHandle {
 
-	var (
-		key    = newMetricKey(namespace, kind, name, tags)
-		handle MetricHandle
-		loaded bool
-	)
-	switch kind {
-	case transport.CountMetric:
-		handle, loaded = m.store.LoadOrCompute(key, func() (metricHandle, bool) {
-			return &count{metric: metric{key: key}}, false
-		})
-	case transport.GaugeMetric:
-		handle, loaded = m.store.LoadOrCompute(key, func() (metricHandle, bool) {
-			return &gauge{metric: metric{key: key}}, false
-		})
-	case transport.RateMetric:
-		handle, loaded = m.store.LoadOrCompute(key, func() (metricHandle, bool) {
+	key := newMetricKey(namespace, kind, name, tags)
+	if handle, ok := m.store.Load(key); ok {
+		return handle.(metricHandle)
+	}
+
+	// Serialize only registration. Existing handles and their atomic updates
+	// remain independent of this lock.
+	m.initMu.Lock()
+	handle, loaded := m.store.Load(key)
+	if !loaded {
+		switch kind {
+		case transport.CountMetric:
+			handle = &count{metric: metric{key: key}}
+		case transport.GaugeMetric:
+			handle = &gauge{metric: metric{key: key}}
+		case transport.RateMetric:
 			rate := &rate{count: count{metric: metric{key: key}}}
 			now := time.Now()
 			rate.intervalStart.Store(&now)
-			return rate, false
-		})
-	default:
-		log.Warn("telemetry: unknown metric type %q", kind)
-		return nil
+			handle = rate
+		default:
+			m.initMu.Unlock()
+			log.Warn("telemetry: unknown metric type %q", kind)
+			return nil
+		}
+		m.store.Store(key, handle)
 	}
+	m.initMu.Unlock()
 
 	if !loaded && !m.skipAllowlist { // The metric is new: validate and log issues about it
 		if err := validateMetricKey(namespace, kind, name, tags); err != nil {
@@ -114,16 +117,17 @@ func (m *metrics) LoadOrStore(namespace Namespace, kind transport.MetricType, na
 		}
 	}
 
-	return handle
+	return handle.(metricHandle)
 }
 
 func (m *metrics) Payload() transport.Payload {
-	series := make([]transport.MetricData, 0, m.store.Size())
-	for _, handle := range m.store.All() {
-		if payload := handle.Payload(); payload.Type != "" {
+	var series []transport.MetricData
+	m.store.Range(func(_, value any) bool {
+		if payload := value.(metricHandle).Payload(); payload.Type != "" {
 			series = append(series, payload)
 		}
-	}
+		return true
+	})
 
 	if len(series) == 0 {
 		return nil

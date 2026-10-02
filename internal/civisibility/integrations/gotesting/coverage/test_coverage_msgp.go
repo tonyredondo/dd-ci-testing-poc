@@ -3,7 +3,7 @@
 package coverage
 
 import (
-	"github.com/tinylib/msgp/msgp"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/msgp"
 )
 
 // DecodeMsg implements msgp.Decodable

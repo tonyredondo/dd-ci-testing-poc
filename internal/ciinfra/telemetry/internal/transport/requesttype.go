@@ -13,24 +13,16 @@ const (
 	// client, containing the configuration loaded at startup
 	RequestTypeAppStarted RequestType = "app-started"
 
-	// RequestTypeAppHeartbeat is sent periodically by the client to indicate
-	// that the app is still running
-	RequestTypeAppHeartbeat RequestType = "app-heartbeat"
-
 	// RequestTypeGenerateMetrics contains count, gauge, or rate metrics accumulated by the
-	// client, and is sent periodically along with the heartbeat
+	// client, and is sent periodically at flush
 	RequestTypeGenerateMetrics RequestType = "generate-metrics"
 
 	// RequestTypeDistributions is to send distribution type metrics accumulated by the
-	// client, and is sent periodically along with the heartbeat
+	// client, and is sent periodically at flush
 	RequestTypeDistributions RequestType = "distributions"
 
 	// RequestTypeAppClosing is sent when the telemetry client is stopped
 	RequestTypeAppClosing RequestType = "app-closing"
-
-	// RequestTypeAppDependenciesLoaded is sent if DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED
-	// is enabled. Sent when Start is called for the telemetry client.
-	RequestTypeAppDependenciesLoaded RequestType = "app-dependencies-loaded"
 
 	// RequestTypeAppClientConfigurationChange is sent if there are changes
 	// to the client library configuration
@@ -46,13 +38,6 @@ const (
 	// RequestTypeMessageBatch is a wrapper over a list of payloads
 	RequestTypeMessageBatch RequestType = "message-batch"
 
-	// RequestTypeAppExtendedHeartBeat This event will be used as a failsafe if there are any catastrophic data failure.
-	// The data will be used to reconstruct application records in our db.
-	RequestTypeAppExtendedHeartBeat RequestType = "app-extended-heartbeat"
-
 	// RequestTypeLogs is used to send logs to the backend
 	RequestTypeLogs RequestType = "logs"
-
-	// RequestTypeAppEndpoints is used to send endpoints to the backend
-	RequestTypeAppEndpoints RequestType = "app-endpoints"
 )

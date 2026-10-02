@@ -3,33 +3,46 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
 // Copyright 2016 Datadog, Inc.
 
-// Package globalconfig stores configuration which applies globally to both the tracer
-// and integrations.
+// Package globalconfig stores immutable CI process and session identifiers.
 package globalconfig
 
 import (
-	"math"
+	"crypto/rand"
+	"encoding/hex"
 	"os"
-	"sync"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/env"
-
-	"github.com/google/uuid"
 )
 
 const rootSessionIDEnvVar = "_DD_ROOT_GO_SESSION_ID"
 
 var cfg = newConfig()
 
+type config struct{ runtimeID, rootSessionID string }
+
 func newConfig() *config {
-	runtimeID := uuid.New().String()
-	return &config{
-		analyticsRate: math.NaN(),
-		runtimeID:     runtimeID,
-		rootSessionID: getRootSessionID(runtimeID),
-		headersAsTags: internal.NewLockMap(map[string]string{}),
+	id := newRuntimeID()
+	return &config{runtimeID: id, rootSessionID: getRootSessionID(id)}
+}
+func RuntimeID() string     { return cfg.runtimeID }
+func RootSessionID() string { return cfg.rootSessionID }
+
+// newRuntimeID creates a UUIDv4 with the same wire format as the SDK runtime ID.
+func newRuntimeID() string {
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		panic(err)
 	}
+	id[6] = id[6]&0x0f | 0x40
+	id[8] = id[8]&0x3f | 0x80
+	var encoded [36]byte
+	hex.Encode(encoded[0:8], id[0:4])
+	hex.Encode(encoded[9:13], id[4:6])
+	hex.Encode(encoded[14:18], id[6:8])
+	hex.Encode(encoded[19:23], id[8:10])
+	hex.Encode(encoded[24:36], id[10:16])
+	encoded[8], encoded[13], encoded[18], encoded[23] = '-', '-', '-', '-'
+	return string(encoded[:])
 }
 
 func getRootSessionID(runtimeID string) string {
@@ -39,123 +52,6 @@ func getRootSessionID(runtimeID string) string {
 	}
 	os.Setenv(rootSessionIDEnvVar, id) // propagate to child processes
 	return id
-}
-
-type config struct {
-	mu            sync.RWMutex
-	analyticsRate float64
-	serviceName   string
-	runtimeID     string
-	rootSessionID string
-	headersAsTags *internal.LockMap
-	dogstatsdAddr string
-	statsTags     []string
-}
-
-// AnalyticsRate returns the sampling rate at which events should be marked. It uses
-// synchronizing mechanisms, meaning that for optimal performance it's best to read it
-// once and store it.
-func AnalyticsRate() float64 {
-	cfg.mu.RLock()
-	defer cfg.mu.RUnlock()
-	return cfg.analyticsRate
-}
-
-// SetAnalyticsRate sets the given event sampling rate globally.
-func SetAnalyticsRate(rate float64) {
-	cfg.mu.Lock()
-	defer cfg.mu.Unlock()
-	cfg.analyticsRate = rate
-}
-
-// ServiceName returns the default service name used by non-client integrations such as servers and frameworks.
-func ServiceName() string {
-	cfg.mu.RLock()
-	defer cfg.mu.RUnlock()
-	return cfg.serviceName
-}
-
-// SetServiceName sets the global service name set for this application.
-func SetServiceName(name string) {
-	cfg.mu.Lock()
-	defer cfg.mu.Unlock()
-	cfg.serviceName = name
-}
-
-// DogstatsdAddr returns the destination for tracer and contrib statsd clients
-func DogstatsdAddr() string {
-	cfg.mu.RLock()
-	defer cfg.mu.RUnlock()
-	return cfg.dogstatsdAddr
-}
-
-// SetDogstatsdAddr sets the destination for statsd clients to be used by tracer and contrib packages
-func SetDogstatsdAddr(addr string) {
-	cfg.mu.Lock()
-	defer cfg.mu.Unlock()
-	cfg.dogstatsdAddr = addr
-}
-
-// StatsTags returns a list of tags that apply to statsd payloads for both tracer and contribs
-func StatsTags() []string {
-	cfg.mu.RLock()
-	defer cfg.mu.RUnlock()
-	// Copy the slice before returning it, so that callers cannot pollute the underlying array
-	tags := make([]string, len(cfg.statsTags))
-	copy(tags, cfg.statsTags)
-	return tags
-}
-
-// SetStatsTags configures the list of tags that should be applied to contribs' statsd.Client as global tags
-// It should only be called by the tracer package
-func SetStatsTags(tags []string) {
-	cfg.mu.Lock()
-	defer cfg.mu.Unlock()
-	// Copy the slice before setting it, so that any changes to the slice provided to SetStatsTags does not pollute the underlying array of statsTags
-	statsTags := make([]string, len(tags))
-	copy(statsTags, tags)
-	cfg.statsTags = statsTags
-}
-
-// RuntimeID returns this process's unique runtime id.
-func RuntimeID() string {
-	cfg.mu.RLock()
-	defer cfg.mu.RUnlock()
-	return cfg.runtimeID
-}
-
-// RootSessionID returns the root session ID for this process tree.
-func RootSessionID() string {
-	cfg.mu.RLock()
-	defer cfg.mu.RUnlock()
-	return cfg.rootSessionID
-}
-
-// HeaderTagMap returns the mappings of headers to their tag values
-func HeaderTagMap() *internal.LockMap {
-	return cfg.headersAsTags
-}
-
-// HeaderTag returns the configured tag for a given header.
-// This function exists for testing purposes, for performance you may want to use `HeaderTagMap`
-func HeaderTag(header string) string {
-	return cfg.headersAsTags.Get(header)
-}
-
-// SetHeaderTag adds config for header `from` with tag value `to`
-func SetHeaderTag(from, to string) {
-	cfg.headersAsTags.Set(from, to)
-}
-
-// HeaderTagsLen returns the length of globalconfig's headersAsTags map, 0 for empty map
-func HeaderTagsLen() int {
-	return cfg.headersAsTags.Len()
-}
-
-// ClearHeaderTags assigns headersAsTags to a new, empty map
-// It is invoked when WithHeaderTags is called, in order to overwrite the config
-func ClearHeaderTags() {
-	cfg.headersAsTags.Clear()
 }
 
 // InstrumentationInstallID returns the install ID as described in DD_INSTRUMENTATION_INSTALL_ID

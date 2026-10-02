@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	infra "github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra"
@@ -102,25 +103,36 @@ func (t *Transport) Send(ctx context.Context, payload []byte) error {
 	}
 	body := payload
 	if t.config.Agentless {
-		var buffer bytes.Buffer
-		writer := gzip.NewWriter(&buffer)
-		if _, err := writer.Write(payload); err != nil {
+		compressor := gzipCompressors.Get().(*gzipCompressor)
+		defer releaseCompressor(compressor)
+		compressor.buffer.Reset()
+		compressor.writer.Reset(&compressor.buffer)
+		if _, err := compressor.writer.Write(payload); err != nil {
 			return err
 		}
-		if err := writer.Close(); err != nil {
+		if err := compressor.writer.Close(); err != nil {
 			return err
 		}
-		body = buffer.Bytes()
+		body = compressor.buffer.Bytes()
 	}
+	// net/http may close request bodies asynchronously, even after Do returns.
+	// Seal every reader before returning the payload or compressor to its owner.
+	owner := &bodyOwner{}
+	defer owner.seal()
 	var last error
 	for attempt := 0; attempt < t.config.Attempts; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.config.Endpoint, bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.config.Endpoint, owner.reader(body))
 		if err != nil {
 			return errors.New("cannot create CI Visibility request")
 		}
+		req.ContentLength = int64(len(body))
+		if len(body) == 0 {
+			req.Body = http.NoBody
+		}
+		req.GetBody = func() (io.ReadCloser, error) { return owner.reader(body), nil }
 		req.Header.Set("Content-Type", "application/msgpack")
 		req.Header.Set("Datadog-Meta-Lang", "go")
 		req.Header.Set("Datadog-Meta-Lang-Version", strings.TrimPrefix(runtime.Version(), "go"))
@@ -186,3 +198,54 @@ func wait(ctx context.Context, d time.Duration) error {
 
 // CloseIdleConnections releases this transport's idle connections after flush.
 func (t *Transport) CloseIdleConnections() { t.client.CloseIdleConnections() }
+
+// Compressor reuse avoids allocating flate's tables for every CI batch. Large
+// output buffers are discarded so one unusually large payload is not retained.
+type gzipCompressor struct {
+	buffer bytes.Buffer
+	writer *gzip.Writer
+}
+
+var gzipCompressors = sync.Pool{New: func() any {
+	compressor := &gzipCompressor{}
+	compressor.writer = gzip.NewWriter(&compressor.buffer)
+	return compressor
+}}
+
+func releaseCompressor(compressor *gzipCompressor) {
+	if compressor.buffer.Cap() > TestCycleFlushBytes {
+		compressor.buffer = bytes.Buffer{}
+	} else {
+		compressor.buffer.Reset()
+	}
+	gzipCompressors.Put(compressor)
+}
+
+type bodyOwner struct {
+	mu     sync.Mutex
+	sealed bool
+}
+type ownedBody struct {
+	owner  *bodyOwner
+	source *bytes.Reader
+	closed bool
+}
+
+func (owner *bodyOwner) reader(data []byte) *ownedBody {
+	return &ownedBody{owner: owner, source: bytes.NewReader(data)}
+}
+func (owner *bodyOwner) seal() { owner.mu.Lock(); owner.sealed = true; owner.mu.Unlock() }
+func (body *ownedBody) Read(destination []byte) (int, error) {
+	body.owner.mu.Lock()
+	defer body.owner.mu.Unlock()
+	if body.closed || body.owner.sealed {
+		return 0, io.EOF
+	}
+	return body.source.Read(destination)
+}
+func (body *ownedBody) Close() error {
+	body.owner.mu.Lock()
+	body.closed = true
+	body.owner.mu.Unlock()
+	return nil
+}

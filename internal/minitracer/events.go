@@ -1,14 +1,21 @@
 // Derived from dd-trace-go v2.11.0-rc.1, Apache-2.0.
 //
-//go:generate env GOWORK=off go run github.com/tinylib/msgp@v1.6.4 -file=events.go -unexported -marshal=false -o=events_msgp.go -tests=false
+//go:generate go run ../../scripts/msgpackgen -file=events.go -unexported -marshal=false -o=events_msgp.go -tests=false
 package minitracer
 
-import "github.com/tinylib/msgp/msgp"
+import "github.com/tonyredondo/dd-ci-testing-poc/internal/msgp"
 
 type ciTestCyclePayload struct {
 	Version  int32                        `msg:"version"`
 	Metadata map[string]map[string]string `msg:"metadata"`
 	Events   msgp.Raw                     `msg:"events"`
+}
+
+// ciTestCycleBatch encodes events directly into the envelope, without an intermediate array buffer.
+type ciTestCycleBatch struct {
+	Version  int32                        `msg:"version"`
+	Metadata map[string]map[string]string `msg:"metadata"`
+	Events   ciVisibilityEvents           `msg:"events"`
 }
 type ciTestCyclePayloadList []*ciTestCyclePayload
 type ciVisibilityEvents []*ciVisibilityEvent

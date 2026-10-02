@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"strings"
 
-	"golang.org/x/sys/windows/registry"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/platform/registry"
 )
 
 func init() {

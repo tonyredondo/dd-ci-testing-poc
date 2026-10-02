@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tinylib/msgp/msgp"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/msgp"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/log"
 )

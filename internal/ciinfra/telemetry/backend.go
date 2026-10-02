@@ -13,8 +13,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/puzpuzpuz/xsync/v4"
-
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/stacktrace"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/telemetry/internal/transport"
 )
@@ -57,7 +55,8 @@ type formatter struct {
 }
 
 type loggerBackend struct {
-	store *xsync.Map[loggerKey, *loggerValue]
+	mu    sync.Mutex
+	store map[loggerKey]*loggerValue
 
 	distinctLogs       atomic.Int32
 	maxDistinctLogs    int32
@@ -68,7 +67,7 @@ type loggerBackend struct {
 
 func newLoggerBackend(maxDistinctLogs int32) *loggerBackend {
 	return &loggerBackend{
-		store:           xsync.NewMap[loggerKey, *loggerValue](),
+		store:           make(map[loggerKey]*loggerValue),
 		maxDistinctLogs: maxDistinctLogs,
 
 		formatters: &sync.Pool{
@@ -118,13 +117,16 @@ func (logger *loggerBackend) add(record Record, opts ...LogOption) {
 		opt(&key, nil)
 	}
 
-	if value, ok := logger.store.Load(key); ok {
+	logger.mu.Lock()
+	if value, ok := logger.store[key]; ok {
 		value.count.Add(1)
+		logger.mu.Unlock()
 		return
 	}
+	logger.mu.Unlock()
 
 	// Create the record at capture time, not send time. Capture before entering
-	// LoadOrCompute so third-party map frames do not precede the log call site.
+	// the registry lock so callbacks and stack capture run outside it.
 	candidate := &loggerValue{
 		record: record,
 	}
@@ -138,22 +140,32 @@ func (logger *loggerBackend) add(record Record, opts ...LogOption) {
 		candidate.rawStack = stacktrace.CaptureRaw(telemetryStackSkip)
 	}
 
-	value, _ := logger.store.LoadOrCompute(key, func() (*loggerValue, bool) {
+	logger.mu.Lock()
+	value, loaded := logger.store[key]
+	if !loaded {
+		value = candidate
+		logger.store[key] = value
 		logger.distinctLogs.Add(1)
-		return candidate, false
-	})
+	}
 	value.count.Add(1)
+	logger.mu.Unlock()
 }
 
 func (logger *loggerBackend) Payload() transport.Payload {
-	logs := make([]transport.LogMessage, 0, logger.store.Size()+1)
-	// NOTE: this uses Range (at-most-once visitation) rather than DeleteMatching
-	// on purpose. distinctLogs must be decremented exactly once per entry, and
-	// DeleteMatching may re-visit a key if the map resizes mid-iteration, which
-	// would double-decrement the counter and duplicate the log message.
-	logger.store.Range(func(key loggerKey, value *loggerValue) bool {
-		logger.store.Delete(key)
-		logger.distinctLogs.Add(-1)
+	// Detach the batch while additions are excluded. A concurrent Add either
+	// increments this batch before detachment or enters the next one.
+	logger.mu.Lock()
+	entries := logger.store
+	if len(entries) == 0 {
+		logger.mu.Unlock()
+		return nil
+	}
+	logger.store = make(map[loggerKey]*loggerValue)
+	logger.distinctLogs.Add(-int32(len(entries)))
+	logger.mu.Unlock()
+
+	logs := make([]transport.LogMessage, 0, len(entries))
+	for key, value := range entries {
 		msg := transport.LogMessage{
 			Message:    logger.formatMessage(value.record),
 			Level:      key.level,
@@ -165,8 +177,7 @@ func (logger *loggerBackend) Payload() transport.Payload {
 			msg.StackTrace = stacktrace.Format(value.rawStack.SymbolicateWithRedaction())
 		}
 		logs = append(logs, msg)
-		return true
-	})
+	}
 
 	if len(logs) == 0 {
 		return nil

@@ -14,9 +14,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/tinylib/msgp/msgp"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/bazel"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/msgp"
 )
 
 func TestCIByteBatchingAndCompression(t *testing.T) {

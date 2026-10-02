@@ -143,8 +143,8 @@ func withRawStacktrace(raw stacktrace.RawStackTrace) LogOption {
 
 // wantsStacktrace reports whether options includes a [WithStacktrace]
 // request, by applying each option's value-phase against a throwaway
-// loggerValue — the same phase loggerBackend.add applies for real inside
-// its LoadOrCompute closure.
+// loggerValue — the same phase loggerBackend.add applies when preparing
+// a candidate log entry.
 func wantsStacktrace(options []LogOption) bool {
 	var probe loggerValue
 	for _, opt := range options {

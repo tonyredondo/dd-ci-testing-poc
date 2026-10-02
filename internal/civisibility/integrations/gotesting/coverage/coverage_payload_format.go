@@ -3,11 +3,11 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
 // Copyright 2024 Datadog, Inc.
 
-//go:generate go run github.com/tinylib/msgp -unexported -marshal=false -o=test_coverage_msgp.go -tests=false
+//go:generate go run ../../../../../scripts/msgpackgen -unexported -marshal=false -o=test_coverage_msgp.go -tests=false
 
 package coverage
 
-import "github.com/tinylib/msgp/msgp"
+import "github.com/tonyredondo/dd-ci-testing-poc/internal/msgp"
 
 type (
 	// ciTestCoveragePayloads represents a list of test code coverage payloads.

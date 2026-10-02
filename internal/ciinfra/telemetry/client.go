@@ -11,11 +11,8 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/puzpuzpuz/xsync/v4"
-
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/log"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/telemetry/internal"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/telemetry/internal/knownmetrics"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/telemetry/internal/mapper"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/telemetry/internal/transport"
 )
@@ -51,31 +48,24 @@ func newClient(tracerConfig internal.TracerConfig, config ClientConfig) (*client
 		clientConfig: config,
 		payloadQueue: internal.NewRingQueue[transport.Payload](config.PayloadQueueSize),
 
-		dependencies: dependencies{
-			DependencyLoader: config.DependencyLoader,
-		},
 		metrics: metrics{
-			store:         xsync.NewMap[metricKey, metricHandle](xsync.WithPresize(knownmetrics.SizeWithFilter(func(decl knownmetrics.Declaration) bool { return decl.Type != transport.DistMetric }))),
 			skipAllowlist: config.Debug,
 		},
 		distributions: distributions{
-			store:         xsync.NewMap[metricKey, *distribution](xsync.WithPresize(knownmetrics.SizeWithFilter(func(decl knownmetrics.Declaration) bool { return decl.Type == transport.DistMetric }))),
 			pool:          internal.NewSyncPool(func() []float64 { return make([]float64, config.DistributionsSize.Min) }),
 			skipAllowlist: config.Debug,
 			queueSize:     config.DistributionsSize,
 		},
-		appEndpoints: appEndpoints{isFirst: true},
-		backend:      newLoggerBackend(config.MaxDistinctLogs),
+
+		backend: newLoggerBackend(config.MaxDistinctLogs),
 	}
 
-	client.flushMapper = mapper.NewDefaultMapper(config.HeartbeatInterval, config.ExtendedHeartbeatInterval, client.configuration.All)
+	client.flushMapper = mapper.NewDefaultMapper()
 
 	client.dataSources = append(client.dataSources,
 		&client.integrations,
 		&client.products,
 		&client.configuration,
-		&client.dependencies,
-		&client.appEndpoints,
 	)
 
 	if config.LogsEnabled {
@@ -105,11 +95,9 @@ type client struct {
 	integrations  integrations
 	products      products
 	configuration configuration
-	dependencies  dependencies
 	backend       *loggerBackend
 	metrics       metrics
 	distributions distributions
-	appEndpoints  appEndpoints
 
 	// flushMapper is the transformer to use for the next flush on the gathered bodies on this tick
 	flushMapper   mapper.Mapper
@@ -212,10 +200,6 @@ func (c *client) Config() ClientConfig {
 	return c.clientConfig
 }
 
-func (c *client) RegisterAppEndpoint(opName string, resName string, attrs AppEndpointAttributes) {
-	c.appEndpoints.Add(opName, resName, attrs)
-}
-
 // Flush sends all the data sources before calling flush
 // This function is called by the flushTicker so it should not panic, or it will crash the whole customer application.
 // If a panic occurs, we stop the telemetry and log the error.
@@ -248,19 +232,7 @@ func (c *client) Flush() {
 
 	nbBytes, err := c.flush(payloads)
 	if err != nil {
-		// We check if the failure is about telemetry or appsec data to log the error at the right level
-		var dependenciesFound bool
-		for _, payload := range payloads {
-			if payload.RequestType() == transport.RequestTypeAppDependenciesLoaded {
-				dependenciesFound = true
-				break
-			}
-		}
-		if dependenciesFound {
-			log.Warn("appsec: error while flushing SCA Security Data: %s", err.Error())
-		} else {
-			log.Debug("telemetry: error while flushing telemetry data: %s", err.Error())
-		}
+		log.Debug("telemetry: error while flushing CI telemetry data: %s", err.Error())
 
 		return
 	}

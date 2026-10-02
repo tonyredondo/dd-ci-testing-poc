@@ -10,13 +10,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/puzpuzpuz/xsync/v4"
-
 	globalinternal "github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/log"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/stacktrace"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/telemetry/internal"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/telemetry/internal/knownmetrics"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/telemetry/internal/transport"
 )
 
@@ -33,7 +30,7 @@ var (
 	globalClientRecorder = internal.NewRecorder[Client]()
 
 	// metricsHandleSwappablePointers contains all the swappableMetricHandle, used to replay actions done before the actual MetricHandle is set
-	metricsHandleSwappablePointers = xsync.NewMap[metricKey, *swappableMetricHandle](xsync.WithPresize(knownmetrics.Size()))
+	metricsHandleSwappablePointers sync.Map // metricKey -> func() *swappableMetricHandle
 
 	// startAppFlushWg tracks the goroutine launched by StartApp so StopApp can
 	// wait for it to finish before proceeding with the shutdown flush.
@@ -100,8 +97,9 @@ func SwapClient(client Client) Client {
 
 	globalClientRecorder.Replay(client)
 	// Swap all metrics hot pointers to the new MetricHandle
-	metricsHandleSwappablePointers.Range(func(_ metricKey, value *swappableMetricHandle) bool {
-		value.swap(value.maker(client))
+	metricsHandleSwappablePointers.Range(func(_, value any) bool {
+		handle := value.(func() *swappableMetricHandle)()
+		handle.swap(handle.maker(client))
 		return true
 	})
 
@@ -241,15 +239,6 @@ func RegisterAppConfigs(kvs ...Configuration) {
 	})
 }
 
-// RegisterAppEndpoint reports a new REST endpoint exposed by the application.
-// This can be called multiple times and endpoints will be accumulated
-// additively by the backend.
-func RegisterAppEndpoint(opName string, resName string, attrs AppEndpointAttributes) {
-	globalClientCall(func(client Client) {
-		client.RegisterAppEndpoint(opName, resName, attrs)
-	})
-}
-
 // MarkIntegrationAsLoaded marks an integration as loaded in the telemetry. If telemetry is disabled
 // or the client has not started yet it will record the action and replay it once the client is started.
 func MarkIntegrationAsLoaded(integration Integration) {
@@ -305,7 +294,12 @@ func globalClientNewMetric(namespace Namespace, kind transport.MetricType, name 
 	}
 
 	key := newMetricKey(namespace, kind, name, tags)
-	hotPtr, _ := metricsHandleSwappablePointers.LoadOrCompute(key, func() (*swappableMetricHandle, bool) {
+	if factory, ok := metricsHandleSwappablePointers.Load(key); ok {
+		return factory.(func() *swappableMetricHandle)()
+	}
+	// Only the winning initializer may record startup actions or install a
+	// client handle. Losing registrations must not duplicate those effects.
+	factory := sync.OnceValue(func() *swappableMetricHandle {
 		maker := func(client Client) MetricHandle {
 			switch kind {
 			case transport.CountMetric:
@@ -327,7 +321,8 @@ func globalClientNewMetric(namespace Namespace, kind transport.MetricType, name 
 		globalClientCall(func(client Client) {
 			wrapper.swap(maker(client))
 		})
-		return wrapper, false
+		return wrapper
 	})
-	return hotPtr
+	actual, _ := metricsHandleSwappablePointers.LoadOrStore(key, factory)
+	return actual.(func() *swappableMetricHandle)()
 }

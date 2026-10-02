@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/puzpuzpuz/xsync/v4"
-
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/log"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/telemetry/internal"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/telemetry/internal/knownmetrics"
@@ -18,7 +16,8 @@ import (
 )
 
 type distributions struct {
-	store         *xsync.Map[metricKey, *distribution]
+	store         sync.Map // metricKey -> *distribution
+	initMu        sync.Mutex
 	pool          *internal.SyncPool[[]float64]
 	queueSize     internal.Range[int]
 	skipAllowlist bool // Debugging feature to skip the allowlist of known metrics
@@ -28,28 +27,37 @@ type distributions struct {
 func (d *distributions) LoadOrStore(namespace Namespace, name string, tags []string) MetricHandle {
 	kind := transport.DistMetric
 	key := newMetricKey(namespace, kind, name, tags)
-	handle, loaded := d.store.LoadOrCompute(key, func() (*distribution, bool) {
-		return &distribution{
+	if handle, ok := d.store.Load(key); ok {
+		return handle.(*distribution)
+	}
+	d.initMu.Lock()
+	handle, loaded := d.store.Load(key)
+	if !loaded {
+		handle = &distribution{
 			key:    key,
 			values: internal.NewRingQueueWithPool[float64](d.queueSize, d.pool),
-		}, false
-	})
+		}
+		d.store.Store(key, handle)
+	}
+	d.initMu.Unlock()
+
 	if !loaded && !d.skipAllowlist { // The metric is new: validate and log issues about it
 		if err := validateMetricKey(namespace, kind, name, tags); err != nil {
 			log.Warn("telemetry: %s", err.Error())
 		}
 	}
 
-	return handle
+	return handle.(*distribution)
 }
 
 func (d *distributions) Payload() transport.Payload {
-	series := make([]transport.DistributionSeries, 0, d.store.Size())
-	for _, handle := range d.store.All() {
-		if payload := handle.payload(); payload.Namespace != "" {
+	var series []transport.DistributionSeries
+	d.store.Range(func(_, value any) bool {
+		if payload := value.(*distribution).payload(); payload.Namespace != "" {
 			series = append(series, payload)
 		}
-	}
+		return true
+	})
 
 	if len(series) == 0 {
 		return nil

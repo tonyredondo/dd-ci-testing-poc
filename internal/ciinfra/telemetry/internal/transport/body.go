@@ -124,24 +124,16 @@ func unmarshalPayload(bytes json.RawMessage, requestType RequestType) (Payload, 
 		payload = new(AppProductChange)
 	case RequestTypeAppIntegrationsChange:
 		payload = new(AppIntegrationChange)
-	case RequestTypeAppHeartbeat:
-		payload = new(AppHeartbeat)
 	case RequestTypeAppStarted:
 		payload = new(AppStarted)
 	case RequestTypeAppClosing:
 		payload = new(AppClosing)
-	case RequestTypeAppExtendedHeartBeat:
-		payload = new(AppExtendedHeartbeat)
-	case RequestTypeAppDependenciesLoaded:
-		payload = new(AppDependenciesLoaded)
 	case RequestTypeDistributions:
 		payload = new(Distributions)
 	case RequestTypeGenerateMetrics:
 		payload = new(GenerateMetrics)
 	case RequestTypeLogs:
 		payload = new(Logs)
-	case RequestTypeAppEndpoints:
-		payload = new(AppEndpoints)
 	}
 
 	if err := json.Unmarshal(bytes, payload); err != nil {

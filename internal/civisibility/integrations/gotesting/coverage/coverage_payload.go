@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tinylib/msgp/msgp"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/msgp"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/log"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/civisibility/utils/telemetry"

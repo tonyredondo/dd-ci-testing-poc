@@ -1,6 +1,6 @@
 {
   "sdk": "github.com/DataDog/dd-trace-go/v2@v2.11.0-rc.1",
-  "full_file_count": 65,
+  "full_file_count": 61,
   "full_ci_test_file_count": 59,
   "selected_test_or_helper_files": 3,
   "assertion_policy": "Preserve upstream assertions and synthetic input semantics; adapt repository/namespace and replace APM mock bootstrap for the native runtime. End-to-end wire tests verify actual delivery separately.",
@@ -177,9 +177,9 @@
       "source": "internal/civisibility/utils/net/coverage_test.go",
       "destination": "internal/civisibility/utils/net/coverage_test.go",
       "source_sha256": "80c6a5bf050c5e46e326ebde53e6e7a85e2a085c58abf44efa6d841568150dc3",
-      "adapted_sha256": "f86fd25e41e3ea54608abcdc179b7a480b49942cbbcc418ba9e37a0443a5ee6d",
+      "adapted_sha256": "a4c19e18bede2335f53be17210f03a8913c7c3a856344901d76211d88d8df37e",
       "kind": "full",
-      "adaptation": "Internal import relocation only"
+      "adaptation": "Internal import relocation, including the vendored MessagePack runtime; upstream assertions preserved."
     },
     {
       "source": "internal/civisibility/utils/net/http_test.go",
@@ -353,9 +353,9 @@
       "source": "internal/civisibility/integrations/gotesting/coverage/coverage_payload_test.go",
       "destination": "internal/civisibility/integrations/gotesting/coverage/coverage_payload_test.go",
       "source_sha256": "3123d88edd7e19dcbac9ad55ec0222b9f91c2ef94d5511fb5d854e9cfd5b1ccb",
-      "adapted_sha256": "100b329e1af6c10783124dcf322f25cfda3d3a5ab8426370634df7fc88ddd4c9",
+      "adapted_sha256": "0989cb029965ad5f2b78194f1cd5b9d95598e3c389046d7523aaccbe5ab18ba9",
       "kind": "full",
-      "adaptation": "Internal import relocation only"
+      "adaptation": "Internal import relocation, including the vendored MessagePack runtime; upstream assertions preserved."
     },
     {
       "source": "internal/civisibility/integrations/gotesting/coverage/coverage_writer_test.go",
@@ -377,9 +377,9 @@
       "source": "internal/civisibility/integrations/gotesting/coverage/process_coverage_test.go",
       "destination": "internal/civisibility/integrations/gotesting/coverage/process_coverage_test.go",
       "source_sha256": "b15c366e141a0063219a29dd8d8be393ae821b3367c8c787bc04249ff4739294",
-      "adapted_sha256": "108a7af97e4e4fd0705ffe2751f4aa22d52818436d95c18207d1c8b0b25f8668",
+      "adapted_sha256": "c5055b761c66943241da58425b05bc8112c268265934ddc90a048e1ec9aa84f9",
       "kind": "full",
-      "adaptation": "Internal import relocation only"
+      "adaptation": "Internal import relocation, including the vendored MessagePack runtime; upstream assertions preserved."
     },
     {
       "source": "internal/civisibility/integrations/gotesting/coverage/reflections_test.go",
@@ -401,25 +401,25 @@
       "source": "internal/bazel/bazel_test.go",
       "destination": "internal/ciinfra/bazel/bazel_test.go",
       "source_sha256": "2f11987f5b4d386ed1fd95ad91b416ae19e6648c0078fe8632005c2cb54b5254",
-      "adapted_sha256": "93effa327794872c4b8da01b085218a7d2d74829728f627d3ea65ae24f643415",
+      "adapted_sha256": "8d346303bd2517a35910a2bbcc018b3026660688c093ac41c4fef65d7e0901ab",
       "kind": "full",
-      "adaptation": "Internal import relocation only"
+      "adaptation": "Internal import relocation, including the vendored MessagePack runtime; upstream assertions preserved."
     },
     {
       "source": "internal/telemetry/telemetrytest/capture.go",
       "destination": "internal/ciinfra/telemetry/telemetrytest/capture.go",
       "source_sha256": "1b9d5489ee545d6861da90c033ce8b36b66897b14fb3c751ec456881cb724746",
-      "adapted_sha256": "d0001cab4d7a306960145eb598106b591055f01d6c508614877c2737d74232e3",
-      "kind": "full",
-      "adaptation": "Internal import relocation only"
+      "adapted_sha256": "372225015184dfbfa4a2b8a050261bde18965dc7849d92e6dfd1f488e4a41336",
+      "kind": "adapted",
+      "adaptation": "Internal import relocation and removal of the retired APM dependency loader or endpoint-inventory API. CI recording assertions retained."
     },
     {
       "source": "internal/telemetry/telemetrytest/capture_test.go",
       "destination": "internal/ciinfra/telemetry/telemetrytest/capture_test.go",
       "source_sha256": "efe097c2eb80d2214c3e7043d6856b6afafd811447ddcf4f3518965af40ca86f",
-      "adapted_sha256": "809a862a1bee6a8b1f0db417e292ade0f926e08429f98f576d00b0cd16877c28",
-      "kind": "full",
-      "adaptation": "Internal import relocation only"
+      "adapted_sha256": "246e9663e6e0fe09f08b66560785d7250bdd98a06fb1092cb19f278a21605bdc",
+      "kind": "replacement",
+      "adaptation": "Retired upstream APM endpoint-inventory test with its removed feature; replacement asserts CI metrics delivery and absence of heartbeat, dependencies and endpoints."
     },
     {
       "source": "internal/telemetry/telemetrytest/globalclient_test.go",
@@ -433,17 +433,17 @@
       "source": "internal/telemetry/telemetrytest/mock.go",
       "destination": "internal/ciinfra/telemetry/telemetrytest/mock.go",
       "source_sha256": "eed7d0e64995054a97437633e95b25fc5cc133c32da4444a70d4e5ccac5b4f4b",
-      "adapted_sha256": "5572de618578b75fdd1d5196618624da98026504f0bbe83bb16347260a956cda",
-      "kind": "full",
-      "adaptation": "Internal import relocation only"
+      "adapted_sha256": "4f91915d861cdaedc78b493a2422d2d24c7737ab4d0fc33d9d4e1232f633a666",
+      "kind": "adapted",
+      "adaptation": "Internal import relocation and removal of the retired APM dependency loader or endpoint-inventory API. CI recording assertions retained."
     },
     {
       "source": "internal/telemetry/telemetrytest/record.go",
       "destination": "internal/ciinfra/telemetry/telemetrytest/record.go",
       "source_sha256": "888b312dba9690a42c0082720a536da540be91532748357dbd1f7b802ff9dfc6",
-      "adapted_sha256": "a886378dbbca8f46e058c9dd27e50a71659c262044280fc28d16d9117dbc2238",
-      "kind": "full",
-      "adaptation": "Internal import relocation only"
+      "adapted_sha256": "a03fd068319a607e633908878e387a2933b0101c02c2f9da07138da661facf92",
+      "kind": "adapted",
+      "adaptation": "Internal import relocation and removal of the retired APM dependency loader or endpoint-inventory API. CI recording assertions retained."
     },
     {
       "source": "internal/civisibility/integrations/manual_api_sourcecache_adjacent_literal_fixture_test.go",
@@ -581,5 +581,6 @@
     "internal/civisibility/integrations/manual_api_mocktracer_test.go",
     "internal/civisibility/integrations/manual_api_test.go"
   ],
-  "not_fully_ported_scope": "APM mock/span-count tests, Orchestrion-specific fixtures, subprocess control and platform cases are not represented as a complete upstream suite. Existing native/SDK end-to-end tests cover pass/skip/fail/panic/timeout, retries, EFD, ITR, quarantine and attempt-to-fix. testify/suite is outside the testing-only instrumentator scope."
+  "not_fully_ported_scope": "APM mock/span-count tests, Orchestrion-specific fixtures, subprocess control and platform cases are not represented as a complete upstream suite. Existing native/SDK end-to-end tests cover pass/skip/fail/panic/timeout, retries, EFD, ITR, quarantine and attempt-to-fix. testify/suite is outside the testing-only instrumentator scope.",
+  "ci_only_cleanup": "The retired APM endpoint test is explicitly marked replacement; reduced telemetry helpers are marked adapted. Full CI test-file count is unchanged."
 }
