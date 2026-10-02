@@ -10,19 +10,33 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/bazel"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/locking"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/civisibility/utils"
 	civisibilitynet "github.com/tonyredondo/dd-ci-testing-poc/internal/civisibility/utils/net"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/locking"
 )
 
 func TestReadCachePreservesAdditionalFeatureInitialization(t *testing.T) {
+	// The writer-free bootstrap tests in this package launch asynchronous workers.
+	// Keep this backend-count/cache contract isolated from their global resets.
+	if os.Getenv("DD_CI_POC_READ_CACHE_CHILD") != "1" {
+		executable, err := os.Executable()
+		require.NoError(t, err)
+		command := exec.Command(executable, "-test.run=^TestReadCachePreservesAdditionalFeatureInitialization$", "-test.v")
+		command.Env = append(os.Environ(), "DD_CI_POC_READ_CACHE_CHILD=1")
+		output, err := command.CombinedOutput()
+		require.NoError(t, err, "%s", output)
+		return
+	}
+
 	resetCIVisibilityStateForTesting()
 	t.Cleanup(resetCIVisibilityStateForTesting)
 

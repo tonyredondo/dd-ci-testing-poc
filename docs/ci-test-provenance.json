@@ -41,9 +41,9 @@
       "source": "internal/civisibility/integrations/civisibility_read_cache_test.go",
       "destination": "internal/civisibility/integrations/civisibility_read_cache_test.go",
       "source_sha256": "b9b701d9ef9dc29c4d85b7665b68678330b7558244ae188b505a758b54c12ed4",
-      "adapted_sha256": "cabc38be14fc39f5acef2e07e1c244e8cdcf6590e5d1d97b2b14c838f59538a9",
+      "adapted_sha256": "f645ed8e69a215ef9480378e4787b9aa8731044d79a4939cc4a5275ba3387e26",
       "kind": "full",
-      "adaptation": "Internal import relocation only"
+      "adaptation": "Internal import relocation; run all read-cache assertions in a fresh subprocess to isolate backend counts from asynchronous mock bootstrap workers"
     },
     {
       "source": "internal/civisibility/integrations/civisibility_signal_handler_test.go",

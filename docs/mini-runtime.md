@@ -202,3 +202,20 @@ complete files from selected tests/helpers and list what is not fully ported.
 The port does not claim to reproduce every SDK test: APM mock/span-count and
 Orchestrion-specific harnesses have different prerequisites. Actual native
 spans and wire integration tests supply the corresponding runtime evidence.
+
+### Compatibility harness portability
+
+Fixture preparation accepts LF and CRLF checkouts. Parallel/retry coverage
+checks use the current Go toolchain's independent `go tool cover` ranges rather
+than Go 1.27-specific byte constants, retaining exact per-test bitmap checks.
+The copied backend-count/read-cache test runs its complete assertions in a
+fresh process so mock bootstrap workers from preceding tests cannot reuse its
+package globals.
+
+The SDK starts feature discovery asynchronously. Its initial session event can
+omit capabilities or ITR correlation while its test events contain them. Mini
+retains these session attributes. The comparator fills only missing session
+values from consistent attributes of that session's actual test events; it
+never drops a CI attribute, changes a present value, crosses session identities
+or fills a missing test attribute. Unit checks reject conflicts and omissions.
+This is semantic inheritance parity, not byte-identical event placement.

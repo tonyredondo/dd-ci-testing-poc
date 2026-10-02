@@ -8,15 +8,52 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
 )
 
+// Capabilities and ITR correlation are inherited session attributes. SDK
+// bootstrap discovers them asynchronously, so its session span can precede
+// them while all test events carry them. Normalize only missing session values
+// from consistent test attributes; retain conflicts and every test attribute.
+func sessionCITags(events []map[string]any) map[string]map[string]any {
+	result := map[string]map[string]any{}
+	for _, event := range events {
+		if event["type"] != "test" {
+			continue
+		}
+		content := event["content"].(map[string]any)
+		id := fmt.Sprint(content["test_session_id"])
+		if id == "<nil>" || id == "0" {
+			continue
+		}
+		meta, _ := content["meta"].(map[string]any)
+		values := map[string]any{}
+		for key, value := range meta {
+			if strings.HasPrefix(key, "_dd.library_capabilities.") || key == "itr_correlation_id" {
+				values[key] = value
+			}
+		}
+		if existing, ok := result[id]; ok {
+			for key, value := range existing {
+				if other, present := values[key]; !present || !reflect.DeepEqual(value, other) {
+					delete(existing, key)
+				}
+			}
+		} else {
+			result[id] = values
+		}
+	}
+	return result
+}
+
 // Compare all event attributes except known APM enrichment and process-local
 // identities/timings. CI attributes (including _dd.test.*) are never excluded.
 func ciWireEvents(events []map[string]any) []string {
+	inherited := sessionCITags(events)
 	ignoredMeta := map[string]bool{"runtime-id": true, "language": true, "_dd.p.tid": true, "_dd.p.dm": true, "_dd.base_service": true, "_dd.trace_span_attribute_schema": true, "_dd.tags.process": true, "_dd.git.commit.sha": true, "_dd.git.repository_url": true, "test_session_id": true, "test_module_id": true, "test_suite_id": true}
 	ignoredMetrics := map[string]bool{"process_id": true, "_sampling_priority_v1": true, "_dd.top_level": true, "_dd.agent_psr": true, "_dd.rule_psr": true, "_dd.limit_psr": true, "_dd.tracer_kr": true, "_dd.profiling.enabled": true, "_dd.trace_span_attribute_schema": true}
 	var out []string
@@ -37,6 +74,14 @@ func ciWireEvents(events []map[string]any) []string {
 						v = canonicalMiniStack(v.(string))
 					}
 					attrs[k] = v
+				}
+			}
+
+			if field == "meta" && event["type"] == "test_session_end" {
+				for key, value := range inherited[fmt.Sprint(c["test_session_id"])] {
+					if _, present := attrs[key]; !present {
+						attrs[key] = value
+					}
 				}
 			}
 			row[field] = attrs
@@ -95,6 +140,38 @@ func TestCIComparatorRetainsProductAttributes(t *testing.T) {
 	}
 }
 
+func TestCIComparatorSessionInheritance(t *testing.T) {
+	key := "_dd.library_capabilities.auto_test_retries"
+	events := func(sessionValue, testValue string) []map[string]any {
+		sessionMeta, testMeta := map[string]any{}, map[string]any{}
+		if sessionValue != "" {
+			sessionMeta[key] = sessionValue
+			sessionMeta["itr_correlation_id"] = sessionValue
+		}
+		if testValue != "" {
+			testMeta[key] = testValue
+			testMeta["itr_correlation_id"] = testValue
+		}
+		return []map[string]any{
+			{"type": "test_session_end", "version": uint64(1), "content": map[string]any{"test_session_id": uint64(1), "meta": sessionMeta}},
+			{"type": "test", "version": uint64(2), "content": map[string]any{"test_session_id": uint64(1), "meta": testMeta}},
+		}
+	}
+	baseline := ciWireEvents(events("1", "1"))
+	if !reflect.DeepEqual(baseline, ciWireEvents(events("", "1"))) {
+		t.Fatal("asynchronous session inheritance differs")
+	}
+	for _, candidate := range [][]map[string]any{events("wrong", "1"), events("1", ""), events("unexpected", "")} {
+		if reflect.DeepEqual(baseline, ciWireEvents(candidate)) {
+			t.Fatal("conflicting or missing CI value masked")
+		}
+	}
+	other := events("", "1")
+	other[0]["content"].(map[string]any)["test_session_id"] = uint64(2)
+	if reflect.DeepEqual(baseline, ciWireEvents(other)) {
+		t.Fatal("inheritance crossed session identities")
+	}
+}
 func ciWireMetadata(t *testing.T, c *miniWireCapture) string {
 	t.Helper()
 	validateCIFieldDuplicates(t, c.events)
@@ -242,6 +319,42 @@ func coverageAttemptRows(t *testing.T, c *miniWireCapture) []string {
 	sort.Strings(rows)
 	return rows
 }
+
+// Use the toolchain's independent coverage ranges as the oracle. Go 1.26
+// includes the function declaration line; Go 1.27 starts at the first statement.
+// The fixture has one block per function, in declaration order.
+func nativeCoverageBitmaps(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	generated := filepath.Join(t.TempDir(), "covered.go")
+	out, stderr, code := command(t, dir, testEnv(), "go", "tool", "cover", "-mode=atomic", "-var=POCCover", "-o", generated, filepath.Join(dir, "coverage_cases.go"))
+	if code != 0 {
+		t.Fatalf("native coverage oracle: %d %s %s", code, out, stderr)
+	}
+	source, err := os.ReadFile(generated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocks := regexp.MustCompile(`(?m)^\s*(\d+),\s*(\d+),\s*0x[0-9a-f]+,\s*// \[(\d+)\]`).FindAllStringSubmatch(string(source), -1)
+	names := []string{"CoverageFirst", "CoverageSecond", "CoverageRetryFirst", "CoverageRetrySecond"}
+	if len(blocks) != len(names) {
+		t.Fatalf("unexpected native coverage blocks: %s", source)
+	}
+	result := map[string]string{}
+	for i, block := range blocks {
+		start, _ := strconv.Atoi(block[1])
+		end, _ := strconv.Atoi(block[2])
+		index, _ := strconv.Atoi(block[3])
+		if index != i || start <= 0 || end < start {
+			t.Fatalf("invalid native coverage range: %v", block)
+		}
+		bitmap := make([]byte, (end+7)/8)
+		for line := start; line <= end; line++ {
+			bitmap[(line-1)/8] |= 128 >> ((line - 1) % 8)
+		}
+		result[names[i]] = fmt.Sprintf("%x", bitmap)
+	}
+	return result
+}
 func TestMiniParallelAndRetryCoverageAttribution(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
 	if err := os.WriteFile(filepath.Join(dir, "coverage_cases.go"), []byte(parallelCoverageSource), 0600); err != nil {
@@ -255,6 +368,7 @@ func TestMiniParallelAndRetryCoverageAttribution(t *testing.T) {
 	if err = os.WriteFile(p, append(body, []byte(parallelCoverageTests)...), 0600); err != nil {
 		t.Fatal(err)
 	}
+	expectedBitmaps := nativeCoverageBitmaps(t, dir)
 	bins := compileMiniPair(t, dir, driver, "-race", "-cover", "-covermode=atomic", "-coverpkg=./...")
 	for _, tc := range []struct {
 		name  string
@@ -273,12 +387,14 @@ func TestMiniParallelAndRetryCoverageAttribution(t *testing.T) {
 				t.Fatalf("attribution SDK %v MINI %v", a, b)
 			}
 			if tc.retry {
-				if len(b) != 1 || b[0] != "TestCoverageRetry retry=false status=fail 0018" {
+				if len(b) != 1 || b[0] != "TestCoverageRetry retry=false status=fail "+expectedBitmaps["CoverageRetryFirst"] {
 					t.Fatalf("retry coverage leaked or initial attempt missing: %v", b)
 				}
 				assertMiniEquivalent(t, execution{code: 0, events: normalizedEvents(want.events)}, execution{code: 0, events: normalizedEvents(got.events)})
 			} else {
-				expected := []string{"TestCoverageParallelFirst retry=false status=pass 18", "TestCoverageParallelFirst retry=false status=pass 18", "TestCoverageParallelSecond retry=false status=pass 0180", "TestCoverageParallelSecond retry=false status=pass 0180"}
+				first := "TestCoverageParallelFirst retry=false status=pass " + expectedBitmaps["CoverageFirst"]
+				second := "TestCoverageParallelSecond retry=false status=pass " + expectedBitmaps["CoverageSecond"]
+				expected := []string{first, first, second, second}
 				if !reflect.DeepEqual(b, expected) {
 					t.Fatalf("cross-test attribution: %v", b)
 				}

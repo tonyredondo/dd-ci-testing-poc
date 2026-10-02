@@ -30,11 +30,28 @@ func prepareMiniFixture(t *testing.T) (string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data = []byte(strings.ReplaceAll(string(data), "\t_ \"github.com/DataDog/dd-trace-go/v2/civisibility\"\n", ""))
+	data = neutralMiniFixture(data)
 	if err := os.WriteFile(fixture, data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	return dir, driver
+}
+
+// Git can check the fixture out with CRLF on Windows. Normalize its line
+// endings before removing the runtime import; source line numbers stay intact.
+func neutralMiniFixture(data []byte) []byte {
+	text := strings.ReplaceAll(string(data), "\r\n", "\n")
+	return []byte(strings.ReplaceAll(text, "\t_ \"github.com/DataDog/dd-trace-go/v2/civisibility\"\n", ""))
+}
+func TestMiniFixtureRuntimeImportLineEndings(t *testing.T) {
+	source := "package fixture_test\nimport (\n\t_ \"github.com/DataDog/dd-trace-go/v2/civisibility\"\n\t\"testing\"\n)\n"
+	want := strings.ReplaceAll(source, "\t_ \"github.com/DataDog/dd-trace-go/v2/civisibility\"\n", "")
+	for _, ending := range []string{"\n", "\r\n"} {
+		got := string(neutralMiniFixture([]byte(strings.ReplaceAll(source, "\n", ending))))
+		if got != want {
+			t.Fatalf("newline %q: got %q, want %q", ending, got, want)
+		}
+	}
 }
 func compileMiniPair(t *testing.T, dir, driver string, flags ...string) []string {
 	t.Helper()
