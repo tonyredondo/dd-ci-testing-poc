@@ -14,9 +14,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/bazel"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/msgp"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
 )
 
 func TestCIByteBatchingAndCompression(t *testing.T) {
@@ -44,8 +44,8 @@ func TestCIByteBatchingAndCompression(t *testing.T) {
 				if len(data) > citransport.TestCycleMaxPayloadBytes {
 					t.Errorf("oversized body: %d", len(data))
 				}
-				var envelope ciTestCyclePayload
-				var events ciVisibilityEvents
+				var envelope testCyclePayload
+				var events ciEvents
 				if err = msgp.Decode(bytes.NewReader(data), &envelope); err != nil {
 					t.Error(err)
 					return
@@ -90,8 +90,8 @@ func TestLargeBatchFailureRetainedAndOversizedEventRejected(t *testing.T) {
 			w.WriteHeader(401)
 			return
 		}
-		var envelope ciTestCyclePayload
-		var events ciVisibilityEvents
+		var envelope testCyclePayload
+		var events ciEvents
 		if err := msgp.Decode(r.Body, &envelope); err != nil {
 			t.Error(err)
 			return

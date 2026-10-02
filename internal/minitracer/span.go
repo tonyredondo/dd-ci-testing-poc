@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/ext"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/ddtrace/ext"
 	"github.com/tonyredondo/dd-ci-testing-poc/propagation"
 )
 
@@ -19,7 +19,7 @@ type Span struct {
 	mu           sync.Mutex
 	client       *Client
 	identity     propagation.Context
-	content      tslvSpan
+	content      eventContent
 	finished     bool
 	hierarchy    [3]string
 	hierarchySet uint8
@@ -70,11 +70,9 @@ func (s *Span) SetTag(key string, value any) {
 	}
 	switch v := value.(type) {
 	case string:
-		s.setMeta(key, v)
-		delete(s.content.Metrics, key)
+		s.setTextTag(key, v)
 	case bool:
-		s.setMeta(key, strconv.FormatBool(v))
-		delete(s.content.Metrics, key)
+		s.setTextTag(key, strconv.FormatBool(v))
 	case int:
 		s.setMetric(key, float64(v))
 	case int8:
@@ -85,8 +83,7 @@ func (s *Span) SetTag(key string, value any) {
 		s.setMetric(key, float64(v))
 	case int64:
 		if v > (1<<53)-1 || v < -(1<<53)+1 {
-			s.setMeta(key, strconv.FormatInt(v, 10))
-			delete(s.content.Metrics, key)
+			s.setTextTag(key, strconv.FormatInt(v, 10))
 		} else {
 			s.setMetric(key, float64(v))
 		}
@@ -100,8 +97,7 @@ func (s *Span) SetTag(key string, value any) {
 		s.setMetric(key, float64(v))
 	case uint64:
 		if v > (1<<53)-1 {
-			s.setMeta(key, strconv.FormatUint(v, 10))
-			delete(s.content.Metrics, key)
+			s.setTextTag(key, strconv.FormatUint(v, 10))
 		} else {
 			s.setMetric(key, float64(v))
 		}
@@ -110,10 +106,17 @@ func (s *Span) SetTag(key string, value any) {
 	case float64:
 		s.setMetric(key, v)
 	default:
-		s.setMeta(key, fmt.Sprint(v))
-		delete(s.content.Metrics, key)
+		s.setTextTag(key, fmt.Sprint(v))
 	}
 }
+
+// Text tags replace numeric metrics of the same name. Hierarchy IDs remain
+// outside the metadata map so serialization never mutates finished spans.
+func (s *Span) setTextTag(key, value string) {
+	s.setMeta(key, value)
+	delete(s.content.Metrics, key)
+}
+
 func hierarchyIndex(key string) int {
 	switch key {
 	case "test_session_id":
@@ -178,7 +181,7 @@ func (s *Span) Finish(options ...FinishOption) {
 	if content.Duration < 0 {
 		content.Duration = 0
 	}
-	event := &ciVisibilityEvent{Type: content.Type, Version: 1, Content: content}
+	event := &ciEvent{Type: content.Type, Version: 1, Content: content}
 	event.Content.SessionID, _ = strconv.ParseUint(s.hierarchy[0], 10, 64)
 	event.Content.ModuleID, _ = strconv.ParseUint(s.hierarchy[1], 10, 64)
 	event.Content.SuiteID, _ = strconv.ParseUint(s.hierarchy[2], 10, 64)
@@ -216,7 +219,7 @@ func newSpan(client *Client, ctx context.Context, name string, options ...StartS
 	if client != nil {
 		capacity += len(client.tags)
 	}
-	s := &Span{client: client, identity: identity, content: tslvSpan{Name: name, Resource: name, Start: time.Now().UnixNano(), SpanID: identity.SpanID, TraceID: binary.BigEndian.Uint64(identity.TraceID[8:]), ParentID: parent, Meta: make(map[string]string, capacity)}}
+	s := &Span{client: client, identity: identity, content: eventContent{Name: name, Resource: name, Start: time.Now().UnixNano(), SpanID: identity.SpanID, TraceID: binary.BigEndian.Uint64(identity.TraceID[8:]), ParentID: parent, Meta: make(map[string]string, capacity)}}
 	if client != nil {
 		s.content.Service = client.service
 		for k, v := range client.tags {

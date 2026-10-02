@@ -31,6 +31,11 @@ jobs:
           reference="$(go env GOPATH)/bin/orchestrion"
           if [[ "$RUNNER_OS" == "Windows" ]]; then reference="$reference.exe"; fi
           echo "ORCHESTRION_BIN=$reference" >> "$GITHUB_ENV"
+      - name: Verify incorporated sources and licenses
+        shell: bash
+        run: |
+          python scripts/upstream.py verify
+          python -m unittest discover -s scripts -p "test_upstream.py"
       - name: Verify modules and driver dependency boundary
         shell: bash
         run: |

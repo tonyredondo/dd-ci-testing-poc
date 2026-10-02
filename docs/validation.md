@@ -1,7 +1,7 @@
 # Validation contract
 
 The default SDK runtime is the unchanged public dd-trace-go SDK, pinned to
-[v2.11.0-rc.1](https://github.com/DataDog/dd-trace-go/tree/v2.11.0-rc.1).
+[main at 96aedb31048c](https://github.com/DataDog/dd-trace-go/tree/96aedb31048c07e29e7a20a4333dc3b8d289c52d).
 The reference is Orchestrion commit
 [5c24783fcd76](https://github.com/DataDog/orchestrion/commit/5c24783fcd76f00cd1ff21c418a6662785d6c811),
 installed as `v1.13.2-0.20260917114356-5c24783fcd76`.
@@ -97,7 +97,7 @@ the oracle; fewer APM fields is intentional.
 | Bazel output and offline mode | `TestMiniBazelOfflineAndPayloadFiles`: real manifest/cache, test/coverage/telemetry JSON files versus SDK, zero HTTP requests; native file writer error propagation tested separately |
 | Parallel and retry coverage attribution | `TestMiniParallelAndRetryCoverageAttribution`: both runtimes compiled with `-race -covermode=atomic`, exact distinct-function bitmaps and initial-attempt-only retry policy |
 | CI product metadata | Expanded pass/error/policy comparison retains capability tags and ITR correlation; delayed session enrichment is checked |
-| Original CI assertions | Ported SDK tests, including retry runtime/parallel ownership, coverage writer/profile, ITR backfill, source metadata and lifecycle; [exact provenance](ci-test-provenance.json) |
+| Original CI assertions | Ported SDK tests, including retry runtime/parallel ownership, coverage writer/profile, ITR backfill, source metadata and lifecycle; [exact provenance](../internal/thirdparty/dd-trace-go/TESTS.json) |
 
 Actual Bazel compiler invocation, real Datadog intake/UI acceptance and the
 remote Linux/macOS/Windows matrix remain unverified for this local branch.

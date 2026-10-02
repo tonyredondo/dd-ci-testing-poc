@@ -2,8 +2,8 @@
 
 A testing-only CI Visibility instrumentator using native Go build overlays.
 The driver uses the Go standard library only. The default `sdk` backend uses the
-**unmodified `github.com/DataDog/dd-trace-go/v2 v2.11.0-rc.1`** SDK. The experimental
-`mini` backend uses the extracted CI logic and a native event client without the
+**unmodified `dd-trace-go` SDK** selected by the target module. The experimental
+`mini` backend uses the CI logic ported from the SDK default branch and a native event client without the
 APM dependency graph. See [native runtime usage and contracts](docs/mini-runtime.md).
 
 ```sh
@@ -127,3 +127,13 @@ not incomplete CPU accounting. Two cold rounds and five warm/edit rounds are
 exploratory data; this small fixture does not establish savings for your application.
 
 See [validation scope](docs/validation.md) and [results](docs/results.md).
+
+## Source maintenance
+
+Incorporated sources live in [`internal/thirdparty`](internal/thirdparty/README.md).
+Every origin records its repository, exact upstream SHA, licenses and file hashes.
+The current SDK extraction base is `dd-trace-go/main` at
+`96aedb31048c07e29e7a20a4333dc3b8d289c52d`; differential fixtures use the same
+version. The native client/transport remain separate from the upstream subsets.
+Run `python3 scripts/upstream.py verify` to audit the source record offline.
+The benchmark tables above describe their explicitly recorded historical revisions.

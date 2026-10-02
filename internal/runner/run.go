@@ -14,9 +14,10 @@ import (
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/instrument"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
-const SDKVersion = "v2.11.0-rc.1"
+const SDKVersion = version.SDKVersion
 const sdkPackage = "github.com/DataDog/dd-trace-go/v2/civisibility"
 const miniPackage = "github.com/tonyredondo/dd-ci-testing-poc/testopt"
 

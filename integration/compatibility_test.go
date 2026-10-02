@@ -21,7 +21,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/runner"
 )
+
+const sdkVersion = runner.SDKVersion
 
 const orchestrionVersion = "v1.13.2-0.20260917114356-5c24783fcd76"
 
@@ -187,7 +191,7 @@ func prepareFixture(t *testing.T, baseline bool) (string, string) {
 		if err = json.Unmarshal([]byte(out), &module); err != nil {
 			t.Fatal(err)
 		}
-		if module.Version != "v2.11.0-rc.1" {
+		if module.Version != sdkVersion {
 			t.Fatalf("baseline changed SDK: %s", module.Version)
 		}
 		yaml, err := os.ReadFile(filepath.Join(module.Dir, "internal/civisibility/integrations/gotesting/orchestrion.yml"))

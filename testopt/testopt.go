@@ -4,11 +4,12 @@ package testopt
 
 import (
 	"context"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/civisibility/integrations/gotesting"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer"
 	"testing"
 	"time"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations/gotesting"
 )
 
 // Config controls the native event client.

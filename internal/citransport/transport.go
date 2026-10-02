@@ -2,23 +2,17 @@
 package citransport
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"runtime"
 	"strconv"
-	"strings"
-	"sync"
 	"time"
 
-	infra "github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/ciinfra/bazel"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/civisibility/utils/telemetry"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/telemetry"
 )
 
 // TestCycleMaxPayloadBytes and TestCycleFlushBytes match the CI Visibility
@@ -124,31 +118,9 @@ func (t *Transport) Send(ctx context.Context, payload []byte) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.config.Endpoint, owner.reader(body))
+		req, err := t.newRequest(ctx, body, owner)
 		if err != nil {
-			return errors.New("cannot create CI Visibility request")
-		}
-		req.ContentLength = int64(len(body))
-		if len(body) == 0 {
-			req.Body = http.NoBody
-		}
-		req.GetBody = func() (io.ReadCloser, error) { return owner.reader(body), nil }
-		req.Header.Set("Content-Type", "application/msgpack")
-		req.Header.Set("Datadog-Meta-Lang", "go")
-		req.Header.Set("Datadog-Meta-Lang-Version", strings.TrimPrefix(runtime.Version(), "go"))
-		req.Header.Set("Datadog-Meta-Lang-Interpreter", runtime.Compiler+"-"+runtime.GOARCH+"-"+runtime.GOOS)
-		req.Header.Set("Datadog-Meta-Tracer-Version", t.config.Version)
-		if id := infra.ContainerID(); id != "" {
-			req.Header.Set("Datadog-Container-ID", id)
-		}
-		if id := infra.EntityID(); id != "" {
-			req.Header.Set("Datadog-Entity-ID", id)
-		}
-		if t.config.Agentless {
-			req.Header.Set("dd-api-key", t.config.APIKey)
-			req.Header.Set("Content-Encoding", "gzip")
-		} else {
-			req.Header.Set("X-Datadog-EVP-Subdomain", "citestcycle-intake")
+			return err
 		}
 		requestStart := time.Now()
 		resp, err := t.client.Do(req)
@@ -198,54 +170,3 @@ func wait(ctx context.Context, d time.Duration) error {
 
 // CloseIdleConnections releases this transport's idle connections after flush.
 func (t *Transport) CloseIdleConnections() { t.client.CloseIdleConnections() }
-
-// Compressor reuse avoids allocating flate's tables for every CI batch. Large
-// output buffers are discarded so one unusually large payload is not retained.
-type gzipCompressor struct {
-	buffer bytes.Buffer
-	writer *gzip.Writer
-}
-
-var gzipCompressors = sync.Pool{New: func() any {
-	compressor := &gzipCompressor{}
-	compressor.writer = gzip.NewWriter(&compressor.buffer)
-	return compressor
-}}
-
-func releaseCompressor(compressor *gzipCompressor) {
-	if compressor.buffer.Cap() > TestCycleFlushBytes {
-		compressor.buffer = bytes.Buffer{}
-	} else {
-		compressor.buffer.Reset()
-	}
-	gzipCompressors.Put(compressor)
-}
-
-type bodyOwner struct {
-	mu     sync.Mutex
-	sealed bool
-}
-type ownedBody struct {
-	owner  *bodyOwner
-	source *bytes.Reader
-	closed bool
-}
-
-func (owner *bodyOwner) reader(data []byte) *ownedBody {
-	return &ownedBody{owner: owner, source: bytes.NewReader(data)}
-}
-func (owner *bodyOwner) seal() { owner.mu.Lock(); owner.sealed = true; owner.mu.Unlock() }
-func (body *ownedBody) Read(destination []byte) (int, error) {
-	body.owner.mu.Lock()
-	defer body.owner.mu.Unlock()
-	if body.closed || body.owner.sealed {
-		return 0, io.EOF
-	}
-	return body.source.Read(destination)
-}
-func (body *ownedBody) Close() error {
-	body.owner.mu.Lock()
-	body.closed = true
-	body.owner.mu.Unlock()
-	return nil
-}

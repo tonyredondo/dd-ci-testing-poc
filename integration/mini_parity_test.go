@@ -131,7 +131,7 @@ func assertMiniCIAttributes(t *testing.T, want, got []map[string]any) {
 // Validate Mini's complete set against the frozen SDK's declarations, and allow
 // only missing SDK session values. Every other wire attribute stays unchanged.
 func sessionOnlyCIWireEvents(events []map[string]any, allowMissingCapabilities bool) ([]string, error) {
-	// dd-trace-go/v2@v2.11.0-rc.1, civisibility_features.go:347-353.
+	// Frozen SDK capability declarations; see the dd-trace-go source manifest.
 	capabilities := map[string]string{
 		"_dd.library_capabilities.early_flake_detection":          "1",
 		"_dd.library_capabilities.auto_test_retries":              "1",

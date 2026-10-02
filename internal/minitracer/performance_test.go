@@ -3,11 +3,12 @@ package minitracer
 import (
 	"context"
 	"fmt"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
 )
 
 type benchmarkTransport struct{}

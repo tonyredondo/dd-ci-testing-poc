@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/scripts/internal/messagepack"
 )
 
 type entry struct{ Source, Destination, SHA256, AdaptedSHA256 string }
@@ -21,7 +23,7 @@ func main() {
 	must(err)
 	root := strings.TrimSpace(string(cache))
 	var entries []entry
-	for _, p := range []struct{ module, version, subdir, dest, license string }{{"github.com/tinylib/msgp", "v1.6.4", "msgp", "internal/msgp", "LICENSE"}, {"github.com/philhofer/fwd", "v1.2.0", "", "internal/fwd", "LICENSE.md"}} {
+	for _, p := range []struct{ module, version, subdir, dest, license string }{{"github.com/tinylib/msgp", messagepack.Version, "msgp", "internal/thirdparty/msgp/msgp", "LICENSE"}, {"github.com/philhofer/fwd", messagepack.FwdVersion, "", "internal/thirdparty/fwd", "LICENSE.md"}} {
 		src := filepath.Join(root, filepath.FromSlash(p.module+"@"+p.version))
 		base := filepath.Join(src, p.subdir)
 		must(filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
@@ -57,24 +59,42 @@ func main() {
 		}))
 		raw, err := os.ReadFile(filepath.Join(src, p.license))
 		must(err)
-		must(os.WriteFile(filepath.Join(p.dest, p.license), raw, 0644))
+		must(os.WriteFile(filepath.Join(licenseDirectory(p.dest), p.license), raw, 0644))
 	}
 	goroot, err := exec.Command("go", "env", "GOROOT").Output()
 	must(err)
 	license, err := os.ReadFile(filepath.Join(strings.TrimSpace(string(goroot)), "LICENSE"))
 	must(err)
-	must(os.WriteFile("internal/msgp/LICENSE-go", license, 0644))
+	must(os.WriteFile("internal/thirdparty/msgp/LICENSE-go", license, 0644))
 
-	b, err := json.MarshalIndent(entries, "", "  ")
-	must(err)
-	must(os.WriteFile("docs/messagepack-provenance.json", append(b, '\n'), 0644))
+	for _, origin := range []string{"msgp", "fwd"} {
+		var selected []entry
+		prefix := "internal/thirdparty/" + origin + "/"
+		for _, item := range entries {
+			if strings.HasPrefix(item.Destination, prefix) {
+				selected = append(selected, item)
+			}
+		}
+		b, err := json.MarshalIndent(selected, "", "  ")
+		must(err)
+		must(os.WriteFile(filepath.Join("internal/thirdparty", origin, "COPY.json"), append(b, '\n'), 0644))
+	}
+	fmt.Println("Run the provenance rehash/audit after reviewing regenerated source changes.")
 	fmt.Printf("Copied %d pinned source files; import paths and test generator directive relocated.\n", len(entries))
 }
 func rewrite(b []byte) []byte {
-	b = bytes.ReplaceAll(b, []byte("//go:generate msgp -o=defgen_test.go -tests=false"), []byte("//go:generate go run ../../scripts/msgpackgen -file=defs_test.go -o=defgen_test.go -tests=false"))
-	b = bytes.ReplaceAll(b, []byte("github.com/tinylib/msgp/msgp"), []byte("github.com/tonyredondo/dd-ci-testing-poc/internal/msgp"))
-	return bytes.ReplaceAll(b, []byte("github.com/philhofer/fwd"), []byte("github.com/tonyredondo/dd-ci-testing-poc/internal/fwd"))
+	b = bytes.ReplaceAll(b, []byte("//go:generate msgp -o=defgen_test.go -tests=false"), []byte("//go:generate go run ../../../../scripts/msgpackgen -file=defs_test.go -o=defgen_test.go -tests=false"))
+	return messagepack.RelocateImports(b)
 }
+
+// Runtime sources keep their original msgp/ subtree; licenses live at its origin root.
+func licenseDirectory(destination string) string {
+	if destination == "internal/thirdparty/msgp/msgp" {
+		return filepath.Dir(destination)
+	}
+	return destination
+}
+
 func must(e error) {
 	if e != nil {
 		panic(e)

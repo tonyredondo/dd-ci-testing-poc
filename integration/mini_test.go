@@ -102,18 +102,37 @@ func canonicalMiniEvents(events []string) []string {
 func canonicalMiniStack(stack string) string {
 	lines := strings.Split(stack, "\n")
 	for i, line := range lines {
-		for _, prefix := range []string{"github.com/DataDog/dd-trace-go/v2/internal/civisibility/", "github.com/tonyredondo/dd-ci-testing-poc/internal/civisibility/"} {
+		for _, prefix := range []string{"github.com/DataDog/dd-trace-go/v2/internal/civisibility/", "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/"} {
 			if strings.HasPrefix(line, prefix) {
 				lines[i] = "ci-runtime/" + strings.TrimPrefix(line, prefix)
 				if i+1 < len(lines) {
-					if offset := strings.Index(lines[i+1], "/internal/civisibility/"); offset >= 0 {
-						lines[i+1] = "\t" + lines[i+1][offset+1:]
+					for _, sourceRoot := range []string{"/internal/civisibility/", "/internal/thirdparty/dd-trace-go/civisibility/"} {
+						if offset := strings.Index(lines[i+1], sourceRoot); offset >= 0 {
+							lines[i+1] = "\tinternal/civisibility/" + lines[i+1][offset+len(sourceRoot):]
+							break
+						}
 					}
 				}
 			}
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// Canonicalization must be limited to the relocated library namespace/root.
+func TestCanonicalMiniStackRetainsApplicationFrames(t *testing.T) {
+	sdk := "github.com/DataDog/dd-trace-go/v2/internal/civisibility/utils.CaptureError()\n\t/cache/sdk/internal/civisibility/utils/error.go:42\nexample.com/app.TestFailure()\n\t/work/app_test.go:17"
+	mini := "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils.CaptureError()\n\t/work/poc/internal/thirdparty/dd-trace-go/civisibility/utils/error.go:42\nexample.com/app.TestFailure()\n\t/work/app_test.go:17"
+	want := canonicalMiniStack(sdk)
+	if got := canonicalMiniStack(mini); got != want {
+		t.Fatalf("relocation mismatch:\n%s\n%s", want, got)
+	}
+	if !strings.Contains(want, "example.com/app.TestFailure()\n\t/work/app_test.go:17") {
+		t.Fatal("application frame changed")
+	}
+	if canonicalMiniStack(strings.ReplaceAll(mini, "error.go:42", "error.go:43")) == want {
+		t.Fatal("library source line was hidden")
+	}
 }
 
 func TestMiniTestingCompatibility(t *testing.T) {

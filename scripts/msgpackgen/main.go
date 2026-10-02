@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/scripts/internal/messagepack"
 )
 
 func main() {
@@ -46,7 +48,7 @@ func generate(args []string) error {
 
 go 1.24
 
-require github.com/tinylib/msgp v1.6.4
+require github.com/tinylib/msgp `+messagepack.Version+`
 `), 0600); err != nil {
 		return err
 	}
@@ -70,7 +72,7 @@ require github.com/tinylib/msgp v1.6.4
 // The generator can collect both the source's internal import and its own public
 // runtime import. Deduplicate them after relocation so regeneration stays valid.
 func relocate(data []byte) ([]byte, error) {
-	data = bytes.ReplaceAll(data, []byte("github.com/tinylib/msgp/msgp"), []byte("github.com/tonyredondo/dd-ci-testing-poc/internal/msgp"))
+	data = messagepack.RelocateImports(data)
 	fileset := token.NewFileSet()
 	file, err := parser.ParseFile(fileset, "generated.go", data, parser.ParseComments)
 	if err != nil {

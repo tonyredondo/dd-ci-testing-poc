@@ -1,8 +1,9 @@
 package runner
 
 import (
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/instrument"
 	"strings"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/instrument"
 )
 
 // Runtime selects the test event implementation. SDK remains the default.
@@ -15,7 +16,7 @@ const (
 
 func hooksForRuntime(runtime Runtime) string {
 	if runtime == Mini {
-		return strings.ReplaceAll(instrument.Hooks, "github.com/DataDog/dd-trace-go/v2/internal/civisibility/", "github.com/tonyredondo/dd-ci-testing-poc/internal/civisibility/")
+		return strings.ReplaceAll(instrument.Hooks, "github.com/DataDog/dd-trace-go/v2/internal/civisibility/", "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/")
 	}
 	return instrument.Hooks
 }

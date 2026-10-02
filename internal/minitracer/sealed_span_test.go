@@ -3,11 +3,12 @@ package minitracer
 import (
 	"context"
 	"fmt"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
 )
 
 func TestFinishedSpanSharesSealedMaps(t *testing.T) {

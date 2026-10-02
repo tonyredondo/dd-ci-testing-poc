@@ -1,7 +1,8 @@
 # Native CI runtime
 
 The experimental `mini` backend keeps the testing hooks and CI policies extracted
-from `dd-trace-go/v2@v2.11.0-rc.1`, replacing its general tracer with a native CI
+from `dd-trace-go/main` at `96aedb31048c07e29e7a20a4333dc3b8d289c52d`,
+replacing its general tracer with a native CI
 event client. The SDK backend remains the default and uses the original module.
 Neither the original SDK nor target sources are edited.
 
@@ -97,7 +98,7 @@ credentials for the native event client and does not send event HTTP requests.
 The SDK-derived settings loader still requires a nonempty API key to consume
 a settings cache; the offline differential fixture supplies a synthetic key.
 The test verifies zero HTTP requests with all three payload types present.
-The Linux mini runtime imports 256 packages including the standard library,
+The historical dependency snapshot records 256 Linux packages including the standard library,
 versus 511 for the historical original SDK public-runtime snapshot. There are
 no external runtime modules. A fresh consumer's `go get` and `go mod tidy` add
 only `github.com/tonyredondo/dd-ci-testing-poc` to its `go.mod`; the consumer also
@@ -177,6 +178,11 @@ toolchain copy outside that cache. The CLI does not relocate toolchains.
 
 ## Source ownership
 
+Extracted CI code is grouped in `internal/thirdparty/dd-trace-go/`, retaining
+upstream package paths below the top `internal/` level. All origins carry a README,
+exact commit, original license and source/local hashes; see the
+[update procedure](../internal/thirdparty/README.md).
+
 Extracted CI code and helper files retain their upstream Apache 2.0 copyright
 headers. Adaptations change internal import paths, bind span calls to the native
 client, replace private metadata linknames with direct access, and remove APM
@@ -216,13 +222,13 @@ are retained. The earlier README matrix measures the SDK backend, not mini.
 
 ## Reused upstream CI tests
 
-59 complete CI test files from the pinned SDK are ported, along with
+60 complete CI test files from the pinned SDK are ported, along with
 Bazel mode and telemetry-recorder tests and selected concurrency assertions.
 They cover configuration, CI providers and session naming, source/trimpath and
 CODEOWNERS metadata, Git fixtures, impacted tests, networking, coverage writers
 and profiles, retry runtime ownership/lifecycle, feature selection, ITR
 backfill, offline cache, HTTP lifecycle, signals and CI telemetry.
-[Source hashes and exact adaptations](ci-test-provenance.json) distinguish
+[Source hashes and exact adaptations](../internal/thirdparty/dd-trace-go/TESTS.json) distinguish
 complete files from selected tests/helpers and list what is not fully ported.
 The port does not claim to reproduce every SDK test: APM mock/span-count and
 Orchestrion-specific harnesses have different prerequisites. Actual native
@@ -253,17 +259,17 @@ events and all other CI attribute differences remain failures.
 
 ## Internal MessagePack runtime
 
-`msgp` v1.6.4 and `fwd` v1.2.0 are incorporated under `internal/`, preserving
+`msgp` v1.6.4 and `fwd` v1.2.0 are incorporated under `internal/thirdparty/`, preserving
 upstream runtime implementations, original tests, copyright notices and licenses.
 This is source incorporation: consumers do not depend on their external modules,
 and a library-local `vendor/` directory is not required. It moves maintenance
 responsibility here; it does not itself reduce codec instructions or linked bytes.
-The source/hash manifest is [messagepack-provenance.json](messagepack-provenance.json).
+The source/hash manifest is [messagepack-provenance.json](../internal/thirdparty/msgp/SOURCE.json).
 Regenerate reproducibly with:
 
 ```sh
 go run ./scripts/vendor-msgpack
-go generate ./internal/msgp ./internal/minitracer ./internal/civisibility/integrations/gotesting/coverage
+go generate ./internal/thirdparty/msgp/msgp ./internal/minitracer ./internal/thirdparty/dd-trace-go/civisibility/integrations/gotesting/coverage
 ```
 
 The generator runs in an isolated, pinned tool module. Its dependencies are
@@ -285,7 +291,7 @@ Windows DLL loading remains restricted to the system directory through the same
 standard-runtime hook used by `x/sys`; application-controlled DLL paths are not
 searched. This hook and the Solaris trampoline must be rechecked when supported
 Go versions change. The upstream BSD license is retained in
-`internal/platform/LICENSE`; [platform-provenance.json](platform-provenance.json)
+`internal/thirdparty/xsys/LICENSE`; [platform-provenance.json](../internal/thirdparty/xsys/EXTRACTION.json)
 records pinned sources, adaptations and destination hashes.
 
 Local Go 1.27.1 verification passed the full Linux suite, project race checks,

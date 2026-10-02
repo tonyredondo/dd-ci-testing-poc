@@ -12,25 +12,25 @@ import (
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/msgp"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
 	"github.com/tonyredondo/dd-ci-testing-poc/propagation"
 )
 
 func TestNativeEventsConcurrentFinishAndHierarchy(t *testing.T) {
 	var mu sync.Mutex
-	var received []*ciVisibilityEvent
+	var received []*ciEvent
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Error(err)
 			return
 		}
-		var envelope ciTestCyclePayload
+		var envelope testCyclePayload
 		if err = msgp.Decode(bytes.NewReader(data), &envelope); err != nil {
 			t.Error(err)
 			return
 		}
-		var events ciVisibilityEvents
+		var events ciEvents
 		if err = msgp.Decode(bytes.NewReader(envelope.Events), &events); err != nil {
 			t.Error(err)
 			return
@@ -93,12 +93,12 @@ func TestFailedFlushRetainsBatch(t *testing.T) {
 			w.WriteHeader(401)
 			return
 		}
-		var envelope ciTestCyclePayload
+		var envelope testCyclePayload
 		if err := msgp.Decode(r.Body, &envelope); err != nil {
 			t.Error(err)
 			return
 		}
-		var batch ciVisibilityEvents
+		var batch ciEvents
 		if err := msgp.Decode(bytes.NewReader(envelope.Events), &batch); err != nil {
 			t.Error(err)
 			return
@@ -161,12 +161,12 @@ func TestQueueBoundAndConcurrentBackpressure(t *testing.T) {
 			w.WriteHeader(401)
 			return
 		}
-		var envelope ciTestCyclePayload
+		var envelope testCyclePayload
 		if err := msgp.Decode(r.Body, &envelope); err != nil {
 			t.Error(err)
 			return
 		}
-		var events ciVisibilityEvents
+		var events ciEvents
 		if err := msgp.Decode(bytes.NewReader(envelope.Events), &events); err != nil {
 			t.Error(err)
 			return
