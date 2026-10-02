@@ -19,6 +19,11 @@ marked `local` in its manifest. They must not be mistaken for upstream files.
 
 ## Audit and update
 
+The [maintenance guide](../../docs/maintenance.md) explains the manifests, a
+three-way SDK update, codec regeneration and platform validation. These commands
+are the short reference; `rehash` updates local hashes and does not advance the
+upstream revision.
+
 From the repository root:
 
 ```sh

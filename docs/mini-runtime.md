@@ -1,5 +1,8 @@
 # Native CI runtime
 
+For implementation details, read [architecture](architecture.md),
+[maintenance](maintenance.md) and [performance](performance.md).
+
 The experimental `mini` backend keeps the testing hooks and CI policies extracted
 from `dd-trace-go/main` at `96aedb31048c07e29e7a20a4333dc3b8d289c52d`,
 replacing its general tracer with a native CI
@@ -167,8 +170,9 @@ Agent tests use a loopback EVP implementation, not a deployed agent. Bazel
 manifest/payload-file contracts are checked against the SDK using a real offline
 manifest, read cache and output files; an actual Bazel build/toolchain invocation
 has not been run. Full fuzz campaigns and `testify/suite` integration remain
-outside the instrumentator's verified scope. Cross-platform runtime proof
-requires the existing GitHub Actions matrix after publication.
+outside the instrumentator's verified scope. The
+[verified CI revision](validation.md#verified-ci-revision) covers native Linux,
+macOS and Windows execution; other platforms require their own runtime evidence.
 The exact local checks and their limits are recorded in
 [the validation contract](validation.md#mini-runtime-follow-up).
 
@@ -264,7 +268,10 @@ upstream runtime implementations, original tests, copyright notices and licenses
 This is source incorporation: consumers do not depend on their external modules,
 and a library-local `vendor/` directory is not required. It moves maintenance
 responsibility here; it does not itself reduce codec instructions or linked bytes.
-The source/hash manifest is [messagepack-provenance.json](../internal/thirdparty/msgp/SOURCE.json).
+The canonical records are the [msgp manifest](../internal/thirdparty/msgp/SOURCE.json)
+and [fwd manifest](../internal/thirdparty/fwd/SOURCE.json). The
+[codec maintenance procedure](maintenance.md#codecs-and-generated-files) explains
+when to recopy sources and when to regenerate serializers.
 Regenerate reproducibly with:
 
 ```sh
@@ -291,7 +298,8 @@ Windows DLL loading remains restricted to the system directory through the same
 standard-runtime hook used by `x/sys`; application-controlled DLL paths are not
 searched. This hook and the Solaris trampoline must be rechecked when supported
 Go versions change. The upstream BSD license is retained in
-`internal/thirdparty/xsys/LICENSE`; [platform-provenance.json](../internal/thirdparty/xsys/EXTRACTION.json)
+`internal/thirdparty/xsys/LICENSE`; the
+[platform extraction record](../internal/thirdparty/xsys/EXTRACTION.json)
 records pinned sources, adaptations and destination hashes.
 
 Local Go 1.27.1 verification passed the full Linux suite, project race checks,
@@ -302,7 +310,9 @@ against pinned `x/sys` for amd64, 386 and arm64. Native Windows tests and retry
 integration tests cross-link on all three architectures. OS metadata tests also
 cross-link for Darwin, Linux, FreeBSD, NetBSD, OpenBSD, DragonFly, Solaris,
 illumos and AIX. These builds do not prove native execution on those platforms.
-Windows/macOS native execution and Go 1.26 validation remain pending CI.
+The [verified CI revision](validation.md#verified-ci-revision) also passed native
+Windows/macOS execution and Linux Go 1.26. The remaining cross-linked platforms
+have build evidence only.
 
 BSD metadata reads do not use the two-step `syscall.Sysctl` size/read API. They
 retain Uname's single fixed-buffer read and partial-data error behavior. Numeric

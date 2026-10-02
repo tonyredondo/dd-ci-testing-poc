@@ -21,6 +21,11 @@ events before the final flush. Readers are sealed by `citransport` before buffer
 or compressors are reused. Keep these invariants together when changing code;
 the ownership, failed-delivery and race tests cover the consuming paths.
 
+The [architecture guide](../../docs/architecture.md#native-event-ownership)
+shows the event and delivery lifetimes. The
+[performance guide](../../docs/performance.md#the-ownership-rules-behind-reuse)
+explains the allocation changes and the constraints behind buffer reuse.
+
 No APM sampler, security, profiling or remote configuration is hosted here.
 An explicit client does not inherit process-global environment configuration.
 Changing this code does not update upstream copies automatically; see the

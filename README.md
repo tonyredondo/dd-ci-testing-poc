@@ -1,10 +1,16 @@
 # dd-ci-testing-poc
 
-A testing-only CI Visibility instrumentator using native Go build overlays.
+A testing-only CI Visibility tool built on native Go build overlays.
 The driver uses the Go standard library only. The default `sdk` backend uses the
-**unmodified `dd-trace-go` SDK** selected by the target module. The experimental
-`mini` backend uses the CI logic ported from the SDK default branch and a native event client without the
-APM dependency graph. See [native runtime usage and contracts](docs/mini-runtime.md).
+**unmodified `dd-trace-go` SDK** at the exact revision pinned in
+[`internal/version`](internal/version/version.go). The experimental `mini` backend
+uses the SDK-derived CI logic and a native event client with a smaller dependency
+graph. See [native runtime usage and contracts](docs/mini-runtime.md).
+
+For maintainers, start with the [documentation guide](docs/README.md):
+[architecture and diagrams](docs/architecture.md),
+[source updates](docs/maintenance.md) and
+[performance and profiling](docs/performance.md).
 
 ```sh
 go build -o bin/ddtest ./cmd/ddtest
@@ -136,4 +142,6 @@ The current SDK extraction base is `dd-trace-go/main` at
 `96aedb31048c07e29e7a20a4333dc3b8d289c52d`; differential fixtures use the same
 version. The native client/transport remain separate from the upstream subsets.
 Run `python3 scripts/upstream.py verify` to audit the source record offline.
-The benchmark tables above describe their explicitly recorded historical revisions.
+The [maintenance guide](docs/maintenance.md) covers three-way SDK updates, codec
+regeneration, platform changes and the required checks. The benchmark tables
+above describe their explicitly recorded historical revisions.

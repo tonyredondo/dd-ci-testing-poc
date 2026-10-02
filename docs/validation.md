@@ -99,15 +99,35 @@ the oracle; fewer APM fields is intentional.
 | CI product metadata | Expanded pass/error/policy comparison retains capability tags and ITR correlation; delayed session enrichment is checked |
 | Original CI assertions | Ported SDK tests, including retry runtime/parallel ownership, coverage writer/profile, ITR backfill, source metadata and lifecycle; [exact provenance](../internal/thirdparty/dd-trace-go/TESTS.json) |
 
-Actual Bazel compiler invocation, real Datadog intake/UI acceptance and the
-remote Linux/macOS/Windows matrix remain unverified for this local branch.
-No staging, commit or publication is included in this follow-up.
+Actual Bazel compiler invocation and real Datadog intake/UI acceptance remain
+unverified. Native platform evidence is recorded below and is tied to its tested
+revisions.
 
-Local verification passed on development Go 1.27: the full normal suite and full
-`-race` suite, followed by focused race checks after strengthening the
+Before the SDK refresh, local verification passed on development Go 1.27:
+the full normal suite and full `-race` suite, followed by focused race checks after strengthening the
 parallel/retry CI assertions. Go 1.27.1 with `-trimpath` passed the new
 configuration, byte-batching, Bazel, coverage-attribution and source-metadata
 contracts. `go vet ./...` and both modules' `go mod verify` passed. The dependency
 check confirms 266 mini runtime packages versus 511 SDK packages and excludes
 `testify` from runtime imports. These checks do not establish real intake
 acceptance or full upstream SDK-suite/platform parity.
+
+## Verified CI revision
+
+On 2026-10-02, [branch CI](https://github.com/tonyredondo/dd-ci-testing-poc/actions/runs/37035170311)
+passed all four jobs for commit `fa7657f2f11e5d4f06cf006d7fb3e2f3a442e4e1`.
+[PR CI](https://github.com/tonyredondo/dd-ci-testing-poc/actions/runs/37035175247)
+also passed all four jobs for merge revision
+`913f359cdddd00736f13e5a36b78f3b659fa58dc`, combining that head with
+`main` at `e46c2dc1c94ff1f24038415726401c55f8d5cb2c`. Job checkout logs confirmed
+those inputs.
+
+The matrix ran the full compatibility suite on Linux with Go 1.26 and 1.27,
+and on macOS and Windows with Go 1.27. Both Linux jobs also passed the full
+`-race` suite. Source/license audits, their Python contract tests, module
+verification and `go vet` passed. This closes the previously pending native
+platform checks for that implementation, not for future code or SDK changes.
+
+See the [maintenance guide](maintenance.md#verification-before-publication)
+for checks to repeat after an update. Historical performance artifacts remain
+unchanged; these CI runs did not repeat the build benchmark matrix.
