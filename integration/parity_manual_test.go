@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The hierarchy API is internal in the SDK. Temporary module paths satisfy
@@ -31,6 +32,7 @@ import (
 
 func main() {
 	session := api.CreateTestSession(api.WithTestSessionCommand("manual parity"), api.WithTestSessionWorkingDirectory("."), api.WithTestSessionFramework("manual", "1.0"))
+	ORACLE_READY
 	for _, moduleName := range []string{"manual-a", "manual-b"} {
 		module := session.GetOrCreateModule(moduleName)
 		if module.ModuleID() != session.GetOrCreateModule(moduleName).ModuleID() {
@@ -87,7 +89,14 @@ func main() {
 		if err = os.WriteFile(filepath.Join(probe, "go.mod"), []byte(module), 0600); err != nil {
 			t.Fatal(err)
 		}
-		body := strings.ReplaceAll(strings.ReplaceAll(source, "API_IMPORT", apiImport), "TRACER_IMPORT", tracerImport)
+		// The SDK may otherwise omit capabilities on every manual event. Wait
+		// through its existing feature API before using it as the oracle. Mini
+		// deliberately has no barrier: the delayed server proves its early tags.
+		ready := "_ = api.GetKnownTests()"
+		if backend == "mini" {
+			ready = "// Mini emits without waiting for remote settings."
+		}
+		body := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(source, "API_IMPORT", apiImport), "TRACER_IMPORT", tracerImport), "ORACLE_READY", ready)
 		if err = os.WriteFile(filepath.Join(probe, "main.go"), []byte(body), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +105,7 @@ func main() {
 		if code != 0 {
 			t.Fatalf("manual compile: %s %s", out, stderr)
 		}
-		receiver, result := runParityCase(t, probe, bin, parityCase{Logs: true})
+		receiver, result := runParityCase(t, probe, bin, parityCase{Logs: true, Policy: policySettings{SettingsDelay: 100 * time.Millisecond}})
 		if result.code != 0 {
 			t.Fatalf("manual hierarchy: %s %s", result.out, result.stderr)
 		}

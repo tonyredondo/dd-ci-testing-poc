@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
@@ -31,6 +32,7 @@ type policySettings struct {
 	Quarantined         bool
 	AttemptToFix        bool
 	ManagementTarget    string
+	SettingsDelay       time.Duration
 	SettingsFailure     bool
 	Impacted            bool
 	RequireGit          bool
@@ -152,6 +154,9 @@ func (c *parityReceiver) handler(w http.ResponseWriter, r *http.Request) {
 	c.sideMu.Unlock()
 	switch {
 	case strings.HasSuffix(path, "/setting"):
+		if c.policy.SettingsDelay > 0 {
+			time.Sleep(c.policy.SettingsDelay)
+		}
 		if c.policy.SettingsFailure {
 			w.WriteHeader(http.StatusForbidden)
 			return

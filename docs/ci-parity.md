@@ -118,7 +118,8 @@ Only declared differences are normalized:
   sender's requests because batching can differ. All other captured CI semantic
   counters compare exactly.
 - Relocated SDK library stack paths are canonicalized. For the six `testing`
-  failure methods, Orchestrion's `<generated>:1` frame and the toolchain's
+  failure methods, Orchestrion's `<generated>:1` frame (bare on Go 1.26, prefixed on Go 1.27)
+  and the toolchain's
   `testing.go` frame are equivalent by method name. Application frames, their
   source lines, error text and frame order remain compared.
 
@@ -126,6 +127,13 @@ The span fixture explicitly marks both runtimes' spans as `ciapp-test`. Mini
 adds that origin automatically; SDK public span creation does not automatically
 copy it to each span. This is an intentional CI-only enrichment difference.
 The fixture does not stand in for an external APM integration.
+
+The manual fixture waits through the SDK's existing `GetKnownTests` initialization
+barrier before creating modules and tests. Without it, the SDK can omit capability
+metadata from the entire hierarchy on fast runners. Mini deliberately has no
+barrier; a delayed settings response verifies its static capabilities are already
+available. This stabilizes the reference without changing the SDK or filling
+missing test attributes in the comparator.
 
 ## Run and maintain the gate
 

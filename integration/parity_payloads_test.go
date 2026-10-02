@@ -204,7 +204,7 @@ func comparableOracleEvents(t *testing.T, events []map[string]any) []map[string]
 				continue
 			}
 			line := strings.ReplaceAll(lines[j+1], "\\", "/")
-			if line == "\torchestrion/src/testing/<generated>:1" || strings.Contains(line, "/src/testing/testing.go:") {
+			if (line == "\t<generated>:1" || line == "\torchestrion/src/testing/<generated>:1") || strings.Contains(line, "/src/testing/testing.go:") {
 				lines[j+1] = "\ttesting/common source location"
 			}
 		}
@@ -231,13 +231,20 @@ func TestOracleStackComparisonRetainsApplication(t *testing.T) {
 	wrap := func(stack string) []map[string]any {
 		return []map[string]any{{"type": "test", "content": map[string]any{"meta": map[string]any{"error.stack": stack}}}}
 	}
-	sdk := wrap("testing.(*common).Error\n\torchestrion/src/testing/<generated>:1\napp.TestFailure\n\t/work/app_test.go:42")
 	mini := wrap("testing.(*common).Error\n\t/go/src/testing/testing.go:1349\napp.TestFailure\n\t/work/app_test.go:42")
-	if !reflect.DeepEqual(comparableOracleEvents(t, sdk), comparableOracleEvents(t, mini)) {
-		t.Fatal("artificial testing frame mismatch")
+	for _, generated := range []string{"<generated>:1", "orchestrion/src/testing/<generated>:1"} {
+		sdk := wrap("testing.(*common).Error\n\t" + generated + "\napp.TestFailure\n\t/work/app_test.go:42")
+		if !reflect.DeepEqual(comparableOracleEvents(t, sdk), comparableOracleEvents(t, mini)) {
+			t.Fatal("artificial testing frame mismatch")
+		}
+		changed := wrap("testing.(*common).Error\n\t/go/src/testing/testing.go:1349\napp.TestFailure\n\t/work/app_test.go:43")
+		if reflect.DeepEqual(comparableOracleEvents(t, sdk), comparableOracleEvents(t, changed)) {
+			t.Fatal("application source line hidden")
+		}
 	}
-	changed := wrap("testing.(*common).Error\n\t/go/src/testing/testing.go:1349\napp.TestFailure\n\t/work/app_test.go:43")
-	if reflect.DeepEqual(comparableOracleEvents(t, sdk), comparableOracleEvents(t, changed)) {
-		t.Fatal("application source line hidden")
+	appGenerated := wrap("app.Error\n\t<generated>:1")
+	appSource := wrap("app.Error\n\t/go/src/testing/testing.go:1349")
+	if reflect.DeepEqual(comparableOracleEvents(t, appGenerated), comparableOracleEvents(t, appSource)) {
+		t.Fatal("non-testing generated frame hidden")
 	}
 }
