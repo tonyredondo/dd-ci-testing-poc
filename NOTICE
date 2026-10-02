@@ -1,4 +1,6 @@
-The testing hook advice is adapted from DataDog/dd-trace-go v2.11.0-rc.1,
-internal/civisibility/integrations/gotesting/orchestrion.yml.
-Copyright 2023-present Datadog, Inc. Licensed under Apache License 2.0.
-The dd-trace-go SDK itself is used unmodified and is not vendored here.
+The testing hook advice and the mini runtime's CI Visibility implementation
+are adapted from DataDog/dd-trace-go v2.11.0-rc.1, licensed under Apache 2.0.
+Copyright 2023-present Datadog, Inc. Upstream copyright headers are retained.
+
+The SDK backend uses the original dd-trace-go module without modifications.
+The mini backend contains extracted CI code and a separate native event client.

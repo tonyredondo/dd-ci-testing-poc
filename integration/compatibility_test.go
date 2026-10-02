@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha1"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -268,6 +269,7 @@ type execution struct {
 	out, stderr string
 	code        int
 	events      []string
+	wireEvents  []map[string]any
 }
 
 func execute(t *testing.T, dir, bin string, args []string, enabled, retry bool) execution {
@@ -279,8 +281,9 @@ func executeProfile(t *testing.T, dir, bin string, args []string, enabled, retry
 	receiver := &capture{retry: retry, profile: profile}
 	server := httptest.NewServer(http.HandlerFunc(receiver.handler))
 	defer server.Close()
-	retryPath := filepath.Join(t.TempDir(), "retry-counter")
-	env := testEnv(fmt.Sprintf("DD_CIVISIBILITY_ENABLED=%t", enabled), "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_TRACE_AGENT_URL="+server.URL, "DD_API_KEY=poc-not-a-real-key", "POC_RETRY_COUNTER="+retryPath)
+	executionDir := t.TempDir()
+	retryPath := filepath.Join(executionDir, "retry-counter")
+	env := testEnv(fmt.Sprintf("DD_CIVISIBILITY_ENABLED=%t", enabled), "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_TRACE_AGENT_URL="+server.URL, "DD_API_KEY=poc-not-a-real-key", "POC_RETRY_COUNTER="+retryPath, "TMPDIR="+executionDir, "TMP="+executionDir, "TEMP="+executionDir, "XDG_CACHE_HOME="+executionDir, fmt.Sprintf("DD_GIT_COMMIT_SHA=%x", sha1.Sum([]byte(dir+"|"+profile))))
 	if retry {
 		env = append(env, "DD_CIVISIBILITY_FLAKY_RETRY_ENABLED=true", "DD_CIVISIBILITY_FLAKY_RETRY_COUNT=1", "DD_CIVISIBILITY_TOTAL_FLAKY_RETRY_COUNT=2", "DD_CIVISIBILITY_RETRY_EXECUTION_MODE=process")
 	}
@@ -293,7 +296,7 @@ func executeProfile(t *testing.T, dir, bin string, args []string, enabled, retry
 	if len(receiver.failures) > 0 {
 		t.Fatalf("wire protocol: %v", receiver.failures)
 	}
-	return execution{normalizedOutput(out), stderr, code, normalizedEvents(receiver.events)}
+	return execution{out: normalizedOutput(out), stderr: stderr, code: code, events: normalizedEvents(receiver.events), wireEvents: receiver.events}
 }
 
 func TestTestingCompatibility(t *testing.T) {

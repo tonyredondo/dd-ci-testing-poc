@@ -1,8 +1,10 @@
 # dd-ci-testing-poc
 
 A testing-only CI Visibility instrumentator using native Go build overlays.
-The driver uses the Go standard library only. Test binaries use the **unmodified
-`github.com/DataDog/dd-trace-go/v2 v2.11.0-rc.1`** SDK and its existing hooks.
+The driver uses the Go standard library only. The default `sdk` backend uses the
+**unmodified `github.com/DataDog/dd-trace-go/v2 v2.11.0-rc.1`** SDK. The experimental
+`mini` backend uses the extracted CI logic and a native event client without the
+APM dependency graph. See [native runtime usage and contracts](docs/mini-runtime.md).
 
 ```sh
 go build -o bin/ddtest ./cmd/ddtest
@@ -30,7 +32,7 @@ Existing overlays are merged. Missing or ambiguous hooks and conflicting `-toole
 configuration fail before compilation. Explicit `.go` file mode, `-C`, SDK
 replacements, standard-library test targets and `testify/suite` are outside this
 POC. Run from the desired module directory. Runtime configuration and intentional
-retry/skip/quarantine behavior remain in the SDK.
+retry/skip/quarantine behavior remain in the selected runtime.
 
 ## Reproduce verification
 
@@ -57,6 +59,10 @@ allowing native parallel completion order and elapsed times to differ.
 GitHub Actions is configured to run the differential suite on Go 1.26/1.27 Linux and Go 1.27
 macOS/Windows. A green Go version is compatibility evidence for that tested
 version; it does not imply support for every future toolchain or SDK.
+
+The first [mini runtime compile-only comparison](docs/mini-runtime.md#initial-compile-only-comparison)
+includes native, Orchestrion, POC SDK and POC Mini. The matrix below remains the
+previous SDK-backend measurement.
 
 ## Compilation performance
 

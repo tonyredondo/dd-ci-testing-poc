@@ -1,0 +1,288 @@
+package integration
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"reflect"
+	"sort"
+	"strconv"
+	"strings"
+	"testing"
+)
+
+// Compare all event attributes except known APM enrichment and process-local
+// identities/timings. CI attributes (including _dd.test.*) are never excluded.
+func ciWireEvents(events []map[string]any) []string {
+	ignoredMeta := map[string]bool{"runtime-id": true, "language": true, "_dd.p.tid": true, "_dd.p.dm": true, "_dd.base_service": true, "_dd.trace_span_attribute_schema": true, "_dd.tags.process": true, "_dd.git.commit.sha": true, "_dd.git.repository_url": true, "test_session_id": true, "test_module_id": true, "test_suite_id": true}
+	ignoredMetrics := map[string]bool{"process_id": true, "_sampling_priority_v1": true, "_dd.top_level": true, "_dd.agent_psr": true, "_dd.rule_psr": true, "_dd.limit_psr": true, "_dd.tracer_kr": true, "_dd.profiling.enabled": true, "_dd.trace_span_attribute_schema": true}
+	var out []string
+	for _, event := range events {
+		c := event["content"].(map[string]any)
+		row := map[string]any{"type": event["type"], "version": event["version"]}
+		for _, key := range []string{"name", "service", "resource", "type", "error", "itr_correlation_id"} {
+			row[key] = c[key]
+		}
+		for _, field := range []string{"meta", "metrics"} {
+			attrs := map[string]any{}
+			if values, ok := c[field].(map[string]any); ok {
+				for k, v := range values {
+					if field == "meta" && (ignoredMeta[k] || k == "test.execution.order") || field == "metrics" && ignoredMetrics[k] {
+						continue
+					}
+					if k == "error.stack" {
+						v = canonicalMiniStack(v.(string))
+					}
+					attrs[k] = v
+				}
+			}
+			row[field] = attrs
+		}
+		raw, _ := json.Marshal(row)
+		out = append(out, string(raw))
+	}
+	sort.Strings(out)
+	return out
+}
+
+// Duplicate APM representations can be omitted only when they agree with CI.
+func validateCIFieldDuplicates(t *testing.T, events []map[string]any) {
+	t.Helper()
+	for _, event := range events {
+		content := event["content"].(map[string]any)
+		meta, _ := content["meta"].(map[string]any)
+		for _, key := range []string{"test_session_id", "test_module_id", "test_suite_id"} {
+			if value, ok := meta[key]; ok {
+				id, err := strconv.ParseUint(fmt.Sprint(value), 10, 64)
+				if err != nil || fmt.Sprint(content[key]) != strconv.FormatUint(id, 10) {
+					t.Fatalf("inconsistent CI identity %s: meta=%v native=%v", key, value, content[key])
+				}
+			}
+		}
+		for alias, key := range map[string]string{"_dd.git.commit.sha": "git.commit.sha", "_dd.git.repository_url": "git.repository_url"} {
+			if value, ok := meta[alias]; ok && meta[key] != nil && value != meta[key] {
+				t.Fatalf("inconsistent Git metadata %s: %v/%v", alias, value, meta[key])
+			}
+		}
+	}
+}
+func assertMiniCIAttributes(t *testing.T, want, got []map[string]any) {
+	t.Helper()
+	validateCIFieldDuplicates(t, want)
+	validateCIFieldDuplicates(t, got)
+	if a, b := ciWireEvents(want), ciWireEvents(got); !reflect.DeepEqual(a, b) {
+		t.Fatalf("CI attributes SDK %v MINI %v", a, b)
+	}
+}
+func TestCIComparatorRetainsProductAttributes(t *testing.T) {
+	event := func(meta map[string]any, metrics map[string]any) []map[string]any {
+		return []map[string]any{{"type": "test", "version": uint64(2), "content": map[string]any{"meta": meta, "metrics": metrics}}}
+	}
+	base := ciWireEvents(event(map[string]any{}, map[string]any{}))
+	for _, key := range []string{"version", "test.status", "test.session", "_dd.library_capabilities.auto_test_retries", "git.commit.sha", "custom"} {
+		if reflect.DeepEqual(base, ciWireEvents(event(map[string]any{key: "present"}, map[string]any{}))) {
+			t.Fatalf("CI attribute excluded: %s", key)
+		}
+	}
+	if reflect.DeepEqual(base, ciWireEvents(event(map[string]any{}, map[string]any{"_dd.host.vcpu_count": 8}))) {
+		t.Fatal("CI metric excluded")
+	}
+	if !reflect.DeepEqual(base, ciWireEvents(event(map[string]any{"_dd.p.dm": "-0"}, map[string]any{"_dd.profiling.enabled": 1}))) {
+		t.Fatal("APM enrichment retained")
+	}
+}
+
+func ciWireMetadata(t *testing.T, c *miniWireCapture) string {
+	t.Helper()
+	validateCIFieldDuplicates(t, c.events)
+	var expected string
+	for _, payload := range c.payloads {
+		metadata := payload["metadata"].(map[string]any)
+		copy := map[string]any{}
+		for kind, value := range metadata {
+			attrs := map[string]any{}
+			for key, v := range value.(map[string]any) {
+				if kind == "*" && (key == "runtime-id" || key == "library_version") {
+					if v == "" {
+						t.Fatalf("missing %s", key)
+					}
+					continue
+				}
+				attrs[key] = v
+			}
+			copy[kind] = attrs
+		}
+		raw, _ := json.Marshal(copy)
+		if expected != "" && expected != string(raw) {
+			t.Fatal("metadata differs across batches")
+		}
+		expected = string(raw)
+	}
+	if expected == "" {
+		t.Fatal("no metadata")
+	}
+	return expected
+}
+func runCIWireCase(t *testing.T, dir, bin string, args, overrides []string, unsetSession, retry bool) *miniWireCapture {
+	t.Helper()
+	c := &miniWireCapture{}
+	c.profile = "coverage"
+	c.retry = retry
+	server := httptest.NewServer(http.HandlerFunc(c.handler))
+	defer server.Close()
+	scratch := t.TempDir()
+	env := testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_TRACE_AGENT_URL="+server.URL, "DD_API_KEY=fixture", "TMPDIR="+scratch, "XDG_CACHE_HOME="+scratch, "POC_RETRY_COUNTER="+filepath.Join(scratch, "counter"), "DD_CIVISIBILITY_CODE_COVERAGE_ENABLED=true")
+	if unsetSession {
+		var filtered []string
+		for _, v := range env {
+			if !strings.HasPrefix(v, "DD_TEST_SESSION_NAME=") {
+				filtered = append(filtered, v)
+			}
+		}
+		env = filtered
+	}
+	if retry {
+		env = append(env, "DD_CIVISIBILITY_FLAKY_RETRY_ENABLED=true", "DD_CIVISIBILITY_FLAKY_RETRY_COUNT=1", "DD_CIVISIBILITY_TOTAL_FLAKY_RETRY_COUNT=2", "DD_CIVISIBILITY_RETRY_EXECUTION_MODE=process")
+	}
+	env = append(env, overrides...)
+	out, stderr, code := command(t, dir, env, bin, args...)
+	if code != 0 {
+		t.Fatalf("fixture: %d %s %s", code, out, stderr)
+	}
+	if len(c.failures) > 0 {
+		t.Fatal(c.failures)
+	}
+	return c
+}
+func TestMiniCIConfigurationWireParity(t *testing.T) {
+	dir, driver := prepareMiniFixture(t)
+	bins := compileMiniPair(t, dir, driver)
+	for _, tc := range []struct {
+		name  string
+		extra []string
+		unset bool
+	}{
+		{"explicit", []string{"DD_VERSION=app-1.2.3", "DD_TAGS=team:ci,custom:preserved"}, false},
+		{"automatic-command", nil, true},
+		{"automatic-job", []string{"GITHUB_ACTIONS=true", "GITHUB_JOB=unit-tests", "GITHUB_REPOSITORY=tonyredondo/dd-ci-testing-poc", "GITHUB_RUN_ID=123"}, true},
+		{"explicit-empty", []string{"DD_TEST_SESSION_NAME="}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			want := runCIWireCase(t, dir, bins[0], []string{"-test.run=^TestPass$"}, tc.extra, tc.unset, false)
+			got := runCIWireCase(t, dir, bins[1], []string{"-test.run=^TestPass$"}, tc.extra, tc.unset, false)
+			if a, b := ciWireMetadata(t, want), ciWireMetadata(t, got); a != b {
+				t.Fatalf("metadata SDK %s MINI %s", a, b)
+			}
+			if a, b := ciWireEvents(want.events), ciWireEvents(got.events); !reflect.DeepEqual(a, b) {
+				t.Fatalf("CI events SDK %v MINI %v", a, b)
+			}
+			validateMiniHierarchy(t, want)
+			validateMiniHierarchy(t, got)
+		})
+	}
+}
+
+const parallelCoverageSource = `package fixture
+
+func CoverageFirst() int {
+ return 11
+}
+
+func CoverageSecond() int {
+ return 22
+}
+
+func CoverageRetryFirst() int {
+ return 33
+}
+
+func CoverageRetrySecond() int {
+ return 44
+}
+`
+const parallelCoverageTests = `
+func TestCoverageParallelFirst(t *testing.T) {t.Parallel();if fixture.CoverageFirst()!=11 {t.Fatal("first")}}
+func TestCoverageParallelSecond(t *testing.T) {t.Parallel();if fixture.CoverageSecond()!=22 {t.Fatal("second")}}
+func TestCoverageRetry(t *testing.T) {
+ path:=os.Getenv("POC_RETRY_COUNTER")
+ if _,err:=os.Stat(path);os.IsNotExist(err) {
+  _=fixture.CoverageRetryFirst()
+  if err=os.WriteFile(path,[]byte("attempt"),0600);err!=nil {t.Fatal(err)}
+  t.Error("first attempt fails")
+ } else {_=fixture.CoverageRetrySecond()}
+}
+`
+
+func coverageAttemptRows(t *testing.T, c *miniWireCapture) []string {
+	t.Helper()
+	names := map[uint64]string{}
+	for _, event := range c.events {
+		if event["type"] == "test" {
+			v := event["content"].(map[string]any)
+			m := v["meta"].(map[string]any)
+			names[v["span_id"].(uint64)] = fmt.Sprintf("%s retry=%v status=%s", m["test.name"], m["test.is_retry"] == "true", m["test.status"])
+		}
+	}
+	var rows []string
+	for _, entry := range c.coverages {
+		name, ok := names[entry["span_id"].(uint64)]
+		if !ok {
+			t.Fatal("coverage has no test event")
+		}
+		for _, item := range entry["files"].([]any) {
+			v := item.(map[string]any)
+			if filepath.Base(v["filename"].(string)) == "coverage_cases.go" {
+				rows = append(rows, fmt.Sprintf("%s %x", name, v["bitmap"]))
+			}
+		}
+	}
+	sort.Strings(rows)
+	return rows
+}
+func TestMiniParallelAndRetryCoverageAttribution(t *testing.T) {
+	dir, driver := prepareMiniFixture(t)
+	if err := os.WriteFile(filepath.Join(dir, "coverage_cases.go"), []byte(parallelCoverageSource), 0600); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, "sample_test.go")
+	body, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(p, append(body, []byte(parallelCoverageTests)...), 0600); err != nil {
+		t.Fatal(err)
+	}
+	bins := compileMiniPair(t, dir, driver, "-race", "-cover", "-covermode=atomic", "-coverpkg=./...")
+	for _, tc := range []struct {
+		name  string
+		args  []string
+		retry bool
+	}{
+		{"parallel", []string{"-test.run=^TestCoverageParallel", "-test.shuffle=42", "-test.parallel=8", "-test.count=2"}, false},
+		{"retry", []string{"-test.run=^TestCoverageRetry$"}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			want := runCIWireCase(t, dir, bins[0], tc.args, nil, false, tc.retry)
+			got := runCIWireCase(t, dir, bins[1], tc.args, nil, false, tc.retry)
+			assertMiniCIAttributes(t, want.events, got.events)
+			a, b := coverageAttemptRows(t, want), coverageAttemptRows(t, got)
+			if len(b) == 0 || !reflect.DeepEqual(a, b) {
+				t.Fatalf("attribution SDK %v MINI %v", a, b)
+			}
+			if tc.retry {
+				if len(b) != 1 || b[0] != "TestCoverageRetry retry=false status=fail 0018" {
+					t.Fatalf("retry coverage leaked or initial attempt missing: %v", b)
+				}
+				assertMiniEquivalent(t, execution{code: 0, events: normalizedEvents(want.events)}, execution{code: 0, events: normalizedEvents(got.events)})
+			} else {
+				expected := []string{"TestCoverageParallelFirst retry=false status=pass 18", "TestCoverageParallelFirst retry=false status=pass 18", "TestCoverageParallelSecond retry=false status=pass 0180", "TestCoverageParallelSecond retry=false status=pass 0180"}
+				if !reflect.DeepEqual(b, expected) {
+					t.Fatalf("cross-test attribution: %v", b)
+				}
+			}
+		})
+	}
+}
