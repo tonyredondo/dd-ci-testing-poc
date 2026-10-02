@@ -323,6 +323,20 @@ func logSettingsFetchError(err error) {
 	log.Error("civisibility: error getting CI visibility settings: empty response")
 }
 
+// libraryCapabilities is independent of remote settings. Publish it before
+// creating spans so a fast manual caller cannot outrun feature initialization.
+func libraryCapabilities() map[string]string {
+	return map[string]string{
+		constants.LibraryCapabilitiesEarlyFlakeDetection:        "1",
+		constants.LibraryCapabilitiesAutoTestRetries:            "1",
+		constants.LibraryCapabilitiesCoverageReportUpload:       "1",
+		constants.LibraryCapabilitiesTestImpactAnalysis:         "1",
+		constants.LibraryCapabilitiesTestManagementQuarantine:   "1",
+		constants.LibraryCapabilitiesTestManagementDisable:      "1",
+		constants.LibraryCapabilitiesTestManagementAttemptToFix: "5",
+	}
+}
+
 // ensureAdditionalFeaturesInitialization loads CI Visibility features that depend on the previously fetched settings.
 func ensureAdditionalFeaturesInitialization(_ string) {
 	if additionalFeaturesInitialized.Load() && !additionalFeaturesResetting.Load() {
@@ -347,22 +361,13 @@ func ensureAdditionalFeaturesInitialization(_ string) {
 		}
 
 		// map to store the additional tags we want to add (Capabilities and CorrelationId)
-		additionalTags := make(map[string]string)
+		additionalTags := libraryCapabilities()
 		defer func() {
 			if len(additionalTags) > 0 {
 				log.Debug("civisibility: adding additional tags: %v", additionalTags) //nolint:gocritic // Map structure logging for debugging
 				utils.AddCITagsMap(additionalTags)
 			}
 		}()
-
-		// set the default values for the additional tags
-		additionalTags[constants.LibraryCapabilitiesEarlyFlakeDetection] = "1"
-		additionalTags[constants.LibraryCapabilitiesAutoTestRetries] = "1"
-		additionalTags[constants.LibraryCapabilitiesCoverageReportUpload] = "1"
-		additionalTags[constants.LibraryCapabilitiesTestImpactAnalysis] = "1"
-		additionalTags[constants.LibraryCapabilitiesTestManagementQuarantine] = "1"
-		additionalTags[constants.LibraryCapabilitiesTestManagementDisable] = "1"
-		additionalTags[constants.LibraryCapabilitiesTestManagementAttemptToFix] = "5"
 
 		// mutex to protect the additional tags map
 		var aTagsMutex sync.Mutex

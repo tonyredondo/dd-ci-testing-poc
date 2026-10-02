@@ -115,6 +115,10 @@ func internalCiVisibilityInitialization(tracerInitializer func([]tracer.StartOpt
 		// Preload the CodeOwner file
 		_ = utils.GetCodeOwners()
 
+		// Capabilities are static and must be available even before the async
+		// settings request completes. Manual spans may start immediately.
+		utils.AddCITagsMap(libraryCapabilities())
+
 		// Preload all CI, Git, and CodeOwners tags.
 		ciTags := utils.GetCITags()
 		_ = utils.GetCIMetrics()

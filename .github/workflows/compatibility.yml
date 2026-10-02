@@ -47,13 +47,21 @@ jobs:
         run: |
           mkdir -p artifacts
           set -o pipefail
-          go test -v -timeout=20m ./... 2>&1 | tee artifacts/compatibility.log
+          PARITY_REPORT_PATH="$PWD/artifacts/parity.json" go test -v -timeout=20m ./... 2>&1 | tee artifacts/compatibility.log
       - name: Race-check the driver and test harness
         if: runner.os == 'Linux'
         shell: bash
         run: |
           set -o pipefail
-          go test -race -timeout=20m ./... 2>&1 | tee artifacts/race.log
+          PARITY_REPORT_PATH="$PWD/artifacts/parity-race.json" go test -race -timeout=20m ./... 2>&1 | tee artifacts/race.log
+      - name: Publish CI feature parity evidence
+        shell: bash
+        run: |
+          python scripts/parity_report.py artifacts/parity.json --output artifacts/parity.md
+          cat artifacts/parity.md >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            python scripts/parity_report.py artifacts/parity-race.json --output artifacts/parity-race.md
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:

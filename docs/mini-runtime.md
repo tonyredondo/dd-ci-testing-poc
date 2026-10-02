@@ -141,6 +141,11 @@ or exactly-once delivery mechanism.
 
 ## Verification and boundaries
 
+See the [feature parity inventory](ci-parity.md) for policy combinations, event
+counts, the Testify gap and CI evidence. Fast manual hierarchy calls publish static
+capabilities before asynchronous settings loading, so emitted events retain them.
+
+
 The local suite checks real loopback payloads against the SDK, preserving test
 attributes, statuses, error messages, stack frames and source lines. Only the
 relocated library namespace and its source root are canonicalized in mini stack

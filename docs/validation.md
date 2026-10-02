@@ -28,6 +28,13 @@ Go's choice: explicitly select packages for result caching, and use `-count=1`
 when fresh CI events are required. `-work` preserves Go's own work directory, but
 the POC overlay is still removed; this POC does not provide retained overlay debugging.
 
+## CI feature parity
+
+The [feature inventory and differential matrix](ci-parity.md) compare Mini against
+the full SDK/Orchestrion testing configuration. CI exports per-scenario counts
+and supplemental hierarchy/span/telemetry evidence. Testify remains a recorded
+instrumentation gap.
+
 ## Runtime checks
 
 The tests compile actual native, POC and Orchestrion binaries using the same
@@ -47,7 +54,7 @@ read directly from the installed SDK. The SDK backend reads the original module;
 | Test-result cache | Second package-mode run is cached; count=1 runs again |
 | Existing overlay | Both command flag and GOFLAGS preserve an intentional test failure |
 | Race and atomic coverage | Actual instrumented fixture builds/runs; SDK events compared to Orchestrion |
-| Benchmark, Example and fuzz seed | Native execution and reference SDK event semantics; no full fuzz campaign |
+| Benchmark, Example and fuzz seed | Native execution and reference SDK event semantics; one-iteration campaign in the parity inventory |
 | Process retries | First attempt fails, second passes; reference events and process exit |
 | EFD, ITR, disabled, quarantine, attempt-to-fix | Real SDK requests against loopback policy responses and reference event equivalence |
 | Panic, Goexit and timeout | Abnormal exit and diagnostic marker; enabled/disabled reference event equivalence |
@@ -61,7 +68,8 @@ Events are captured over loopback using a synthetic key.
 The comparison retains event type, name, resource, error flag, semantic test
 attributes, error stacks and source positions. It excludes generated IDs,
 durations, timestamps, execution order and invocation names. It does not prove
-identity of binaries, generated source bytes, or the event ID parent graph.
+identity of binaries or generated source bytes. The added parity matrix validates
+the event ID hierarchy and additional CI span parentage independently.
 Parallel child completion order and elapsed times may differ in native output;
 line content and multiplicity are retained.
 

@@ -11,6 +11,7 @@ the optimizations in the code and how to measure a proposed change.
 | Update the SDK, MessagePack codecs or platform subset | [Source updates and maintenance](maintenance.md) |
 | Change allocations, batching, compression or build preparation | [Performance and ownership constraints](performance.md) |
 | Configure Mini or use its public API | [Native runtime usage](mini-runtime.md) |
+| Compare CI features and policy combinations with the SDK | [Feature parity and event counts](ci-parity.md) |
 | Check what compatibility tests establish | [Validation contract](validation.md) |
 | Find original timings and their limitations | [Results](results.md) and [compile-only tables](../README.md#compilation-performance) |
 

@@ -10,7 +10,8 @@ graph. See [native runtime usage and contracts](docs/mini-runtime.md).
 For maintainers, start with the [documentation guide](docs/README.md):
 [architecture and diagrams](docs/architecture.md),
 [source updates](docs/maintenance.md) and
-[performance and profiling](docs/performance.md).
+[performance and profiling](docs/performance.md), and
+[CI feature parity, combinations and remaining gaps](docs/ci-parity.md).
 
 ```sh
 go build -o bin/ddtest ./cmd/ddtest

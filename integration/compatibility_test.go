@@ -178,33 +178,7 @@ func prepareFixture(t *testing.T, baseline bool) (string, string) {
 		t.Fatal(err)
 	}
 	if baseline {
-		// Both compilers use this SAME temporary module graph, including any MVS
-		// upgrades introduced by the reference tool. The SDK version stays fixed.
-		if out, e, code := command(t, dir, testEnv(), "go", "get", "github.com/DataDog/orchestrion@"+orchestrionVersion); code != 0 {
-			t.Fatalf("prepare common graph: %s\n%s", out, e)
-		}
-		out, e, code := command(t, dir, testEnv(), "go", "list", "-m", "-json", "github.com/DataDog/dd-trace-go/v2")
-		if code != 0 {
-			t.Fatalf("SDK: %s", e)
-		}
-		var module struct{ Dir, Version string }
-		if err = json.Unmarshal([]byte(out), &module); err != nil {
-			t.Fatal(err)
-		}
-		if module.Version != sdkVersion {
-			t.Fatalf("baseline changed SDK: %s", module.Version)
-		}
-		yaml, err := os.ReadFile(filepath.Join(module.Dir, "internal/civisibility/integrations/gotesting/orchestrion.yml"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err = os.WriteFile(filepath.Join(dir, "orchestrion.yml"), yaml, 0644); err != nil {
-			t.Fatal(err)
-		}
-		tool := "//go:build tools\n\npackage fixture\nimport _ \"github.com/DataDog/orchestrion\"\n"
-		if err = os.WriteFile(filepath.Join(dir, "orchestrion.tool.go"), []byte(tool), 0644); err != nil {
-			t.Fatal(err)
-		}
+		configureReferenceFixture(t, dir)
 	}
 	bin := filepath.Join(t.TempDir(), executableName("ddtest"))
 	out, e, code := command(t, root, testEnv(), "go", "build", "-o", bin, "./cmd/ddtest")
@@ -418,4 +392,35 @@ func TestTestingCompatibility(t *testing.T) {
 			}
 		}
 	})
+}
+
+func configureReferenceFixture(t *testing.T, dir string) {
+	t.Helper()
+	// Both compilers use this SAME temporary module graph, including any MVS
+	// upgrades introduced by the reference tool. The SDK version stays fixed.
+	if out, e, code := command(t, dir, testEnv(), "go", "get", "github.com/DataDog/orchestrion@"+orchestrionVersion); code != 0 {
+		t.Fatalf("prepare common graph: %s\n%s", out, e)
+	}
+	out, e, code := command(t, dir, testEnv(), "go", "list", "-m", "-json", "github.com/DataDog/dd-trace-go/v2")
+	if code != 0 {
+		t.Fatalf("SDK: %s", e)
+	}
+	var module struct{ Dir, Version string }
+	if err := json.Unmarshal([]byte(out), &module); err != nil {
+		t.Fatal(err)
+	}
+	if module.Version != sdkVersion {
+		t.Fatalf("baseline changed SDK: %s", module.Version)
+	}
+	yaml, err := os.ReadFile(filepath.Join(module.Dir, "internal/civisibility/integrations/gotesting/orchestrion.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(dir, "orchestrion.yml"), yaml, 0644); err != nil {
+		t.Fatal(err)
+	}
+	tool := "//go:build tools\n\npackage fixture\nimport _ \"github.com/DataDog/orchestrion\"\n"
+	if err = os.WriteFile(filepath.Join(dir, "orchestrion.tool.go"), []byte(tool), 0644); err != nil {
+		t.Fatal(err)
+	}
 }
