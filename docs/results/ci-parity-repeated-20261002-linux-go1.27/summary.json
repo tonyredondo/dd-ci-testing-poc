@@ -1,0 +1,91 @@
+{
+  "identity": {
+    "sdk_commit": "96aedb31048c07e29e7a20a4333dc3b8d289c52d",
+    "sdk_version": "v2.12.0-dev.3.0.20261002145613-96aedb31048c",
+    "sdk_instrumentation": "orchestrion",
+    "go": "go1.27.1",
+    "os": "linux",
+    "architecture": "amd64"
+  },
+  "scenario_count": 65,
+  "samples": [
+    {
+      "report": "docs/results/ci-parity-repeated-20261002-linux-go1.27/round-01.json",
+      "order": [
+        "sdk",
+        "mini"
+      ],
+      "scope": "65-scenario continuous block: receiver setup, process execution and shutdown/flush; excludes compilation and comparisons",
+      "sdk_wall_ns": 1780028169,
+      "mini_wall_ns": 1525106626
+    },
+    {
+      "report": "docs/results/ci-parity-repeated-20261002-linux-go1.27/round-02.json",
+      "order": [
+        "mini",
+        "sdk"
+      ],
+      "scope": "65-scenario continuous block: receiver setup, process execution and shutdown/flush; excludes compilation and comparisons",
+      "sdk_wall_ns": 1773130286,
+      "mini_wall_ns": 1553497534
+    },
+    {
+      "report": "docs/results/ci-parity-repeated-20261002-linux-go1.27/round-03.json",
+      "order": [
+        "sdk",
+        "mini"
+      ],
+      "scope": "65-scenario continuous block: receiver setup, process execution and shutdown/flush; excludes compilation and comparisons",
+      "sdk_wall_ns": 1762911789,
+      "mini_wall_ns": 1543043667
+    },
+    {
+      "report": "docs/results/ci-parity-repeated-20261002-linux-go1.27/round-04.json",
+      "order": [
+        "mini",
+        "sdk"
+      ],
+      "scope": "65-scenario continuous block: receiver setup, process execution and shutdown/flush; excludes compilation and comparisons",
+      "sdk_wall_ns": 2021734259,
+      "mini_wall_ns": 1569163041
+    },
+    {
+      "report": "docs/results/ci-parity-repeated-20261002-linux-go1.27/round-05.json",
+      "order": [
+        "sdk",
+        "mini"
+      ],
+      "scope": "65-scenario continuous block: receiver setup, process execution and shutdown/flush; excludes compilation and comparisons",
+      "sdk_wall_ns": 1760365685,
+      "mini_wall_ns": 1524501816
+    },
+    {
+      "report": "docs/results/ci-parity-repeated-20261002-linux-go1.27/round-06.json",
+      "order": [
+        "mini",
+        "sdk"
+      ],
+      "scope": "65-scenario continuous block: receiver setup, process execution and shutdown/flush; excludes compilation and comparisons",
+      "sdk_wall_ns": 1786440277,
+      "mini_wall_ns": 1626493869
+    }
+  ],
+  "statistics": {
+    "sdk": {
+      "median_seconds": 1.7765792275,
+      "mean_seconds": 1.8141017441666667,
+      "min_seconds": 1.760365685,
+      "max_seconds": 2.021734259,
+      "cv_percent": 5.142781346422008
+    },
+    "mini": {
+      "median_seconds": 1.5482706005,
+      "mean_seconds": 1.5569677588333333,
+      "min_seconds": 1.524501816,
+      "max_seconds": 1.626493869,
+      "cv_percent": 2.2337993983281836
+    }
+  },
+  "median_delta_percent": -12.851024230496922,
+  "median_paired_delta_percent": -12.935222721606127
+}

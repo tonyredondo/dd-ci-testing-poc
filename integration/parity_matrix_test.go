@@ -351,14 +351,25 @@ func validateEventGraph(events []map[string]any) error {
 	return nil
 }
 
+// These observations include initialization, settings, test/retry execution and
+// final flush. Compilation, receiver setup and comparisons are not timed.
+const binaryTimingScope = "prebuilt binary: startup, settings, execution and shutdown/flush"
+
+type parityTiming struct {
+	Scope      string `json:"scope"`
+	SDKWallNS  int64  `json:"sdk_wall_ns"`
+	MiniWallNS int64  `json:"mini_wall_ns"`
+}
+
 type parityResult struct {
-	Scenario string      `json:"scenario"`
-	Features []string    `json:"features"`
-	Status   string      `json:"status"`
-	SDK      eventCounts `json:"sdk"`
-	Mini     eventCounts `json:"mini"`
-	SDKExit  int         `json:"sdk_exit"`
-	MiniExit int         `json:"mini_exit"`
+	Scenario string       `json:"scenario"`
+	Features []string     `json:"features"`
+	Status   string       `json:"status"`
+	SDK      eventCounts  `json:"sdk"`
+	Mini     eventCounts  `json:"mini"`
+	SDKExit  int          `json:"sdk_exit"`
+	MiniExit int          `json:"mini_exit"`
+	Timing   parityTiming `json:"timing"`
 }
 
 func runParityCase(t *testing.T, dir, bin string, tc parityCase) (*parityReceiver, execution) {
@@ -375,24 +386,29 @@ func runParityCase(t *testing.T, dir, bin string, tc parityCase) (*parityReceive
 		env = append(env, "DD_CIVISIBILITY_LOGS_ENABLED=true")
 	}
 	env = append(env, tc.Env...)
-	out, stderr, code := command(t, dir, env, bin, tc.Args...)
+	out, stderr, code, wall := commandWithTiming(t, dir, env, bin, tc.Args...)
 	receiver.mu.Lock()
 	defer receiver.mu.Unlock()
 	if len(receiver.failures) != 0 {
 		t.Fatal(receiver.failures)
 	}
-	return receiver, execution{code: code, out: normalizedOutput(out), stderr: stderr, wireEvents: receiver.events}
+	return receiver, execution{code: code, out: normalizedOutput(out), stderr: stderr, wireEvents: receiver.events, wall: wall}
 }
 
-// The report contains counts and scenario outcomes, not raw logs or credentials.
+// The report contains counts, scenario outcomes and process walltimes, not raw logs or credentials.
 // CI uploads one file per invocation; race and non-race runs use separate paths.
-func writeParityReport(t *testing.T, results []parityResult) {
+func writeParityReport(t *testing.T, results []parityResult, block *parityTiming, order []string) {
 	t.Helper()
 	path := os.Getenv("PARITY_REPORT_PATH")
 	if path == "" {
 		return
 	}
+	schema := 2
+	if block != nil {
+		schema = 3
+	}
 	data, err := json.MarshalIndent(struct {
+		SchemaVersion      int            `json:"schema_version"`
 		SDKVersion         string         `json:"sdk_version"`
 		SDKCommit          string         `json:"sdk_commit"`
 		Go                 string         `json:"go"`
@@ -400,7 +416,9 @@ func writeParityReport(t *testing.T, results []parityResult) {
 		Architecture       string         `json:"architecture"`
 		SDKInstrumentation string         `json:"sdk_instrumentation"`
 		Scenarios          []parityResult `json:"scenarios"`
-	}{sdkVersion, version.SDKCommit, runtime.Version(), runtime.GOOS, runtime.GOARCH, sdkOracleName(), results}, "", "  ")
+		ExecutionBlock     *parityTiming  `json:"execution_block,omitempty"`
+		ExecutionOrder     []string       `json:"execution_order,omitempty"`
+	}{schema, sdkVersion, version.SDKCommit, runtime.Version(), runtime.GOOS, runtime.GOARCH, sdkOracleName(), results, block, order}, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -477,86 +495,153 @@ func TestParityUnskippable(t *testing.T) { t.Log("must run") }
 		}
 	}
 	var results []parityResult
-	defer func() { writeParityReport(t, results) }()
+	var block *parityTiming
+	var order []string
+	defer func() { writeParityReport(t, results, block, order) }()
+	if mode := os.Getenv("PARITY_EXECUTION_ORDER"); mode != "" {
+		switch mode {
+		case "sdk-first":
+			order = []string{"sdk", "mini"}
+		case "mini-first":
+			order = []string{"mini", "sdk"}
+		default:
+			t.Fatal("PARITY_EXECUTION_ORDER must be sdk-first or mini-first")
+		}
+		results, block = runGroupedParityCases(t, dir, oracle, bins[1], cases, order)
+		return
+	}
 	for _, tc := range cases {
 		t.Run(tc.Name, func(t *testing.T) {
 			row := parityResult{Scenario: tc.Name, Features: tc.Features, Status: "failed"}
 			defer func() { results = append(results, row) }()
 			want, sdk := runParityCase(t, dir, oracle, tc)
 			got, mini := runParityCase(t, dir, bins[1], tc)
-			row.SDKExit, row.MiniExit = sdk.code, mini.code
-			var err error
-			row.SDK, err = countCIEvents(want.events)
-			if err != nil {
-				t.Fatal(err)
-			}
-			row.Mini, err = countCIEvents(got.events)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if row.SDK != row.Mini || sdk.code != mini.code {
-				t.Fatalf("counts/exit differ: %+v\nSDK:%s\nMini:%s", row, sdk.stderr, mini.stderr)
-			}
-			if sdk.code != tc.WantExit || row.SDK.Tests < tc.MinTests || row.SDK.Sessions != 1 {
-				t.Fatalf("scenario not exercised: %+v; want exit %d and >=%d tests\n%s", row, tc.WantExit, tc.MinTests, sdk.stderr)
-			}
-			for _, receiver := range []*parityReceiver{want, got} {
-				if err := validateEventGraph(receiver.events); err != nil {
-					t.Fatal(err)
-				}
-				if tc.RequireEndpoint != "" {
-					found := false
-					for path, n := range receiver.requests {
-						found = found || strings.HasSuffix(path, tc.RequireEndpoint) && n > 0
-					}
-					if !found {
-						t.Fatalf("missing %s request: %v", tc.RequireEndpoint, receiver.requests)
-					}
-				}
-				if tc.RequiredTag != "" {
-					found := false
-					for _, event := range receiver.events {
-						content := event["content"].(map[string]any)
-						meta, _ := content["meta"].(map[string]any)
-						kind := tc.RequiredEvent
-						if kind == "" {
-							kind = "test"
-						}
-						found = found || event["type"] == kind && meta[tc.RequiredTag] == tc.RequiredValue
-					}
-					if !found {
-						t.Fatalf("scenario never emitted %s=%s", tc.RequiredTag, tc.RequiredValue)
-					}
-				}
-				if tc.Logs || tc.Policy.CoverageReport {
-					endpoint := "/logs"
-					if tc.Policy.CoverageReport {
-						endpoint = "/cicovreprt"
-					}
-					found := false
-					for path, bodies := range receiver.side {
-						found = found || strings.HasSuffix(path, endpoint) && len(bodies) > 0
-					}
-					if !found {
-						t.Fatalf("no %s upload: %v\n%s", endpoint, receiver.requests, sdk.stderr)
-					}
-				}
-			}
-			assertMiniCIAttributes(t, comparableOracleEvents(t, want.events), comparableOracleEvents(t, got.events))
-			assertSidePayloadParity(t, want, got)
-			if len(want.payloads) > 0 && ciWireMetadata(t, &want.miniWireCapture) != ciWireMetadata(t, &got.miniWireCapture) {
-				t.Fatal("envelope metadata differs")
-			}
-			if tc.Coverage {
-				a, b := normalizedMiniCoverage(t, &want.miniWireCapture), normalizedMiniCoverage(t, &got.miniWireCapture)
-				if !reflect.DeepEqual(a, b) {
-					t.Fatalf("coverage differs: SDK %v Mini %v", a, b)
-				}
-			}
-			row.Status = "passed"
-			t.Logf("SDK = Mini: sessions=%d modules=%d suites=%d tests=%d spans=%d", row.SDK.Sessions, row.SDK.Modules, row.SDK.Suites, row.SDK.Tests, row.SDK.Spans)
+			row = assertParityCase(t, tc, want, got, sdk, mini)
 		})
 	}
+}
+
+func assertParityCase(t *testing.T, tc parityCase, want, got *parityReceiver, sdk, mini execution) parityResult {
+	t.Helper()
+	row := parityResult{Scenario: tc.Name, Features: tc.Features, Status: "failed"}
+	row.SDKExit, row.MiniExit = sdk.code, mini.code
+	row.Timing = parityTiming{binaryTimingScope, sdk.wall.Nanoseconds(), mini.wall.Nanoseconds()}
+	var err error
+	row.SDK, err = countCIEvents(want.events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row.Mini, err = countCIEvents(got.events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.SDK != row.Mini || sdk.code != mini.code {
+		t.Fatalf("counts/exit differ: %+v\nSDK:%s\nMini:%s", row, sdk.stderr, mini.stderr)
+	}
+	if sdk.code != tc.WantExit || row.SDK.Tests < tc.MinTests || row.SDK.Sessions != 1 {
+		t.Fatalf("scenario not exercised: %+v; want exit %d and >=%d tests\n%s", row, tc.WantExit, tc.MinTests, sdk.stderr)
+	}
+	for _, receiver := range []*parityReceiver{want, got} {
+		if err := validateEventGraph(receiver.events); err != nil {
+			t.Fatal(err)
+		}
+		if tc.RequireEndpoint != "" {
+			found := false
+			for path, n := range receiver.requests {
+				found = found || strings.HasSuffix(path, tc.RequireEndpoint) && n > 0
+			}
+			if !found {
+				t.Fatalf("missing %s request: %v", tc.RequireEndpoint, receiver.requests)
+			}
+		}
+		if tc.RequiredTag != "" {
+			found := false
+			for _, event := range receiver.events {
+				content := event["content"].(map[string]any)
+				meta, _ := content["meta"].(map[string]any)
+				kind := tc.RequiredEvent
+				if kind == "" {
+					kind = "test"
+				}
+				found = found || event["type"] == kind && meta[tc.RequiredTag] == tc.RequiredValue
+			}
+			if !found {
+				t.Fatalf("scenario never emitted %s=%s", tc.RequiredTag, tc.RequiredValue)
+			}
+		}
+		if tc.Logs || tc.Policy.CoverageReport {
+			endpoint := "/logs"
+			if tc.Policy.CoverageReport {
+				endpoint = "/cicovreprt"
+			}
+			found := false
+			for path, bodies := range receiver.side {
+				found = found || strings.HasSuffix(path, endpoint) && len(bodies) > 0
+			}
+			if !found {
+				t.Fatalf("no %s upload: %v\n%s", endpoint, receiver.requests, sdk.stderr)
+			}
+		}
+	}
+	assertMiniCIAttributes(t, comparableOracleEvents(t, want.events), comparableOracleEvents(t, got.events))
+	assertSidePayloadParity(t, want, got)
+	if len(want.payloads) > 0 && ciWireMetadata(t, &want.miniWireCapture) != ciWireMetadata(t, &got.miniWireCapture) {
+		t.Fatal("envelope metadata differs")
+	}
+	if tc.Coverage {
+		a, b := normalizedMiniCoverage(t, &want.miniWireCapture), normalizedMiniCoverage(t, &got.miniWireCapture)
+		if !reflect.DeepEqual(a, b) {
+			t.Fatalf("coverage differs: SDK %v Mini %v", a, b)
+		}
+	}
+	row.Status = "passed"
+	t.Logf("SDK = Mini: sessions=%d modules=%d suites=%d tests=%d spans=%d", row.SDK.Sessions, row.SDK.Modules, row.SDK.Suites, row.SDK.Tests, row.SDK.Spans)
+	return row
+}
+
+// Group each runtime into one continuous execution block. Compile and compare
+// outside these timers; do not approximate a block by summing child timings.
+func runGroupedParityCases(t *testing.T, dir, sdkBin, miniBin string, cases []parityCase, order []string) ([]parityResult, *parityTiming) {
+	t.Helper()
+	type observation struct {
+		receiver *parityReceiver
+		result   execution
+	}
+	sdk := make([]observation, len(cases))
+	mini := make([]observation, len(cases))
+	block := &parityTiming{Scope: fmt.Sprintf("%d-scenario continuous block: receiver setup, process execution and shutdown/flush; excludes compilation and comparisons", len(cases))}
+	for _, backend := range order {
+		bin, observations := sdkBin, sdk
+		if backend == "mini" {
+			bin, observations = miniBin, mini
+		}
+		start := time.Now()
+		ok := t.Run("execute-"+backend, func(t *testing.T) {
+			for i, tc := range cases {
+				t.Run(tc.Name, func(t *testing.T) {
+					observations[i].receiver, observations[i].result = runParityCase(t, dir, bin, tc)
+				})
+			}
+		})
+		wall := time.Since(start).Nanoseconds()
+		if backend == "sdk" {
+			block.SDKWallNS = wall
+		} else {
+			block.MiniWallNS = wall
+		}
+		if !ok {
+			return nil, block
+		}
+	}
+	var results []parityResult
+	for i, tc := range cases {
+		t.Run("compare-"+tc.Name, func(t *testing.T) {
+			row := parityResult{Scenario: tc.Name, Features: tc.Features, Status: "failed"}
+			defer func() { results = append(results, row) }()
+			row = assertParityCase(t, tc, sdk[i].receiver, mini[i].receiver, sdk[i].result, mini[i].result)
+		})
+	}
+	return results, block
 }
 
 func TestParityGraphRejectsLostEvents(t *testing.T) {

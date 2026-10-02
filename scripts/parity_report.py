@@ -17,14 +17,33 @@ def cell(value):
     return str(value).replace("|", "\\|").replace("\n", " ")
 
 
+def timing_cells(item, required):
+    timing = item.get("timing")
+    if timing is None:
+        if required:
+            raise ValueError("missing SDK/Mini timing observation")
+        return ("Not recorded", "Not recorded", "Not recorded")
+    if not isinstance(timing.get("scope"), str) or not timing["scope"]:
+        raise ValueError("missing timing scope")
+    sdk, mini = timing["sdk_wall_ns"], timing["mini_wall_ns"]
+    if any(type(value) is not int or value <= 0 for value in (sdk, mini)):
+        raise ValueError("walltimes must be positive integer nanoseconds")
+    return (f"{sdk / 1e9:.6f}", f"{mini / 1e9:.6f}", f"{(mini / sdk - 1) * 100:+.1f}%")
+
+
 def render(path):
     report = json.loads(path.read_text())
     rows = report["scenarios"]
+    schema = report.get("schema_version", 1)
+    if type(schema) is not int or schema not in (1, 2, 3):
+        raise ValueError("unsupported parity report schema")
+    require_timing = schema >= 2
     if report["sdk_instrumentation"] != "orchestrion":
         raise ValueError("full SDK/Orchestrion reference was not executed")
     if len(rows) < 65 or len({row["scenario"] for row in rows}) != len(rows):
         raise ValueError("missing or duplicated matrix scenarios")
     for row in rows:
+        timing_cells(row, require_timing)
         if row["status"] != "passed" or row["sdk"] != row["mini"] or row["sdk_exit"] != row["mini_exit"]:
             raise ValueError("failed scenario: " + row["scenario"])
 
@@ -35,6 +54,7 @@ def render(path):
     for name in names:
         evidence[name] = json.loads(path.with_name(path.stem + "-" + name + ".json").read_text())
     for name, item in evidence.items():
+        timing_cells(item, require_timing)
         if name == "telemetry":
             if not item["semantic_counts_equal"] or not item["request_counts_match_http"]:
                 raise ValueError("CI telemetry comparison was not verified")
@@ -43,6 +63,11 @@ def render(path):
     testify = evidence["testify"]
     if testify["status"] != "gap":
         raise ValueError("Testify status changed; review and update the parity contract")
+
+    if schema == 3:
+        timing_cells({"timing": report["execution_block"]}, True)
+        if report["execution_order"] not in (["sdk", "mini"], ["mini", "sdk"]):
+            raise ValueError("invalid grouped execution order")
 
     totals = {key: sum(row["sdk"][key] for row in rows) for key in COUNT_FIELDS}
     lines = [
@@ -54,18 +79,47 @@ def render(path):
         "also compares CI attributes, exit status and hierarchy references;",
         "coverage and side payloads are checked when that feature is selected.", "",
         f"Matrix: {len(rows)} passing scenarios; aggregate SDK = Mini `{counts(totals)}`.", "",
-        "| Scenario | Features | SDK | Mini | Result |",
-        "| --- | --- | --- | --- | --- |",
+        "Child walltimes are seconds for one observation per variant per case.",
+        "They include startup, settings, execution/retries and shutdown/flush of",
+        "the prebuilt binary. Compilation and harness comparison are excluded.",
+        "Mini versus SDK is `(Mini / SDK - 1) * 100`; a negative value is shorter.",
+        "These functional fixtures have no timing pass/fail threshold.", "",
+        "| Scenario | Features | SDK events | Mini events | SDK wall (s) | Mini wall (s) | Mini vs SDK | Result |",
+        "| --- | --- | --- | --- | ---: | ---: | ---: | --- |",
     ]
+    if schema == 3:
+        sdk_wall, mini_wall, delta = timing_cells({"timing": report["execution_block"]}, True)
+        # Insert the block measurement before the individual scenario table.
+        lines[-2:-2] = [
+            "Execution order: " + " then ".join(report["execution_order"]) + ".", "",
+            "| Entire 65-scenario block | SDK wall (s) | Mini wall (s) | Mini vs SDK |",
+            "| --- | ---: | ---: | ---: |",
+            f"| Continuous walltime | {sdk_wall} | {mini_wall} | {delta} |", "",
+            "Measured scope: " + report["execution_block"]["scope"] + ".", "",
+        ]
     for row in rows:
-        lines.append(f"| {cell(row['scenario'])} | {cell(', '.join(row['features']))} | {counts(row['sdk'])} | {counts(row['mini'])} | Passed |")
+        sdk_wall, mini_wall, delta = timing_cells(row, require_timing)
+        lines.append(f"| {cell(row['scenario'])} | {cell(', '.join(row['features']))} | {counts(row['sdk'])} | {counts(row['mini'])} | {sdk_wall} | {mini_wall} | {delta} | Passed |")
     lines += ["", "## Additional fixtures", "",
-              "| Fixture | SDK | Mini | Scope |", "| --- | --- | --- | --- |"]
+              "| Fixture | SDK events | Mini events | Scope |", "| --- | --- | --- | --- |"]
     for name in names:
         if name in ("telemetry", "testify"):
             continue
         item = evidence[name]
         lines.append(f"| {name} | {counts(item['sdk'])} | {counts(item['mini'])} | {cell(item['scope'])} |")
+    lines += ["", "### Additional fixture walltimes", "",
+              "Scopes differ: the packages fixture also prepares and compiles via the CLI.",
+              "The manual fixture injects a settings delay; Testify retains a known grouping gap.",
+              "Use the scope recorded in each JSON observation when comparing runs.", "",
+              "| Fixture | SDK wall (s) | Mini wall (s) | Mini vs SDK | Measured scope |",
+              "| --- | ---: | ---: | ---: | --- |"]
+    for name in names:
+        item = evidence[name]
+        sdk_wall, mini_wall, delta = timing_cells(item, require_timing)
+        scope = item.get("timing", {}).get("scope", "Not recorded")
+        if name == "testify":
+            scope += "; SDK column uses full Orchestrion reference"
+        lines.append(f"| {name} | {sdk_wall} | {mini_wall} | {delta} | {cell(scope)} |")
     lines += ["", "CI telemetry: semantic count/rate metrics match; request counts are",
               "checked against each sender's actual HTTP requests. Batch sizes and",
               "timings may differ. Distributions are outside this counter fixture.", "",

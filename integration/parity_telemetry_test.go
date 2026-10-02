@@ -117,6 +117,6 @@ func TestCIVisibilityTelemetryInventory(t *testing.T) {
 	if len(sa) == 0 || !reflect.DeepEqual(sa, sb) {
 		t.Fatalf("CI telemetry mismatch SDK %v Mini %v", a, b)
 	}
-	writeParityEvidence(t, "telemetry", map[string]any{"sdk": a, "mini": b, "semantic_counts_equal": true, "request_counts_match_http": true})
+	writeParityEvidence(t, "telemetry", map[string]any{"timing": parityTiming{binaryTimingScope, sdk.wall.Nanoseconds(), mini.wall.Nanoseconds()}, "sdk": a, "mini": b, "semantic_counts_equal": true, "request_counts_match_http": true})
 	t.Logf("CI telemetry inventory: SDK %v Mini %v", a, b)
 }

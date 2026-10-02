@@ -22,6 +22,7 @@ func TestCIVisibilityUnixAgent(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(socketDir) })
 	socket := filepath.Join(socketDir, "agent.sock")
 	var captures []*parityReceiver
+	var wallNS []int64
 	for _, bin := range bins {
 		receiver := &parityReceiver{side: map[string][][]byte{}, requests: map[string]int{}, policy: policySettings{Coverage: true}}
 		listener, err := net.Listen("unix", socket)
@@ -33,7 +34,7 @@ func TestCIVisibilityUnixAgent(t *testing.T) {
 		go func() { done <- server.Serve(listener) }()
 		scratch := t.TempDir()
 		env := testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=false", "DD_TRACE_AGENT_URL=unix://"+socket, "DD_API_KEY=fixture", "TMPDIR="+scratch, "TMP="+scratch, "TEMP="+scratch, "XDG_CACHE_HOME="+scratch)
-		out, stderr, code := command(t, dir, env, bin, "-test.run=^TestPass$")
+		out, stderr, code, wall := commandWithTiming(t, dir, env, bin, "-test.run=^TestPass$")
 		server.Close()
 		<-done
 		if code != 0 {
@@ -53,7 +54,8 @@ func TestCIVisibilityUnixAgent(t *testing.T) {
 			t.Fatal(err)
 		}
 		captures = append(captures, receiver)
+		wallNS = append(wallNS, wall.Nanoseconds())
 	}
 	assertMiniCIAttributes(t, captures[0].events, captures[1].events)
-	writeParityEvidence(t, "uds", map[string]any{"status": "passed", "sdk": eventCounts{1, 1, 1, 1, 0}, "mini": eventCounts{1, 1, 1, 1, 0}, "scope": "Unix Agent: settings and test-cycle delivery over a real socket"})
+	writeParityEvidence(t, "uds", map[string]any{"timing": parityTiming{binaryTimingScope, wallNS[0], wallNS[1]}, "status": "passed", "sdk": eventCounts{1, 1, 1, 1, 0}, "mini": eventCounts{1, 1, 1, 1, 0}, "scope": "Unix Agent: settings and test-cycle delivery over a real socket"})
 }

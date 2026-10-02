@@ -94,6 +94,6 @@ func TestParitySuite(t *testing.T) { suite.Run(t, new(ParitySuite)) }
 			t.Fatal(err)
 		}
 	}
-	writeParityEvidence(t, "testify", map[string]any{"status": "gap", "reason": "missing testify.suite.Run advice; method suite/source metadata differ", "sdk_with_orchestrion": fullCounts, "sdk_with_poc": sdkCounts, "mini": miniCounts})
+	writeParityEvidence(t, "testify", map[string]any{"timing": parityTiming{binaryTimingScope, fullResult.wall.Nanoseconds(), miniResult.wall.Nanoseconds()}, "poc_sdk_wall_ns": sdkResult.wall.Nanoseconds(), "status": "gap", "reason": "missing testify.suite.Run advice; method suite/source metadata differ", "sdk_with_orchestrion": fullCounts, "sdk_with_poc": sdkCounts, "mini": miniCounts})
 	t.Logf("Known Testify gap: full SDK %+v, POC SDK %+v, Mini %+v", fullCounts, sdkCounts, miniCounts)
 }

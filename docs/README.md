@@ -13,6 +13,7 @@ the optimizations in the code and how to measure a proposed change.
 | Configure Mini or use its public API | [Native runtime usage](mini-runtime.md) |
 | Compare CI features and policy combinations with the SDK | [Feature parity and event counts](ci-parity.md) |
 | Check what compatibility tests establish | [Validation contract](validation.md) |
+| Compare repeated execution of the complete CI matrix | [Whole-matrix timing](ci-parity.md#repeated-whole-matrix-timing) |
 | Find original timings and their limitations | [Results](results.md) and [compile-only tables](../README.md#compilation-performance) |
 
 The source record lives beside each incorporated library in

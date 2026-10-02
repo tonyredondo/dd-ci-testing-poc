@@ -76,6 +76,7 @@ func main() {
 }
 `
 	var captures []*parityReceiver
+	var wallNS []int64
 	for _, backend := range []string{"sdk", "mini"} {
 		modulePath := "github.com/DataDog/dd-trace-go/v2/parityprobe"
 		apiImport := "github.com/DataDog/dd-trace-go/v2/internal/civisibility/integrations"
@@ -120,8 +121,9 @@ func main() {
 			t.Fatal(err)
 		}
 		captures = append(captures, receiver)
+		wallNS = append(wallNS, result.wall.Nanoseconds())
 	}
 	assertMiniCIAttributes(t, captures[0].events, captures[1].events)
 	assertSidePayloadParity(t, captures[0], captures[1])
-	writeParityEvidence(t, "manual", map[string]any{"status": "passed", "sdk": eventCounts{1, 2, 4, 12, 1}, "mini": eventCounts{1, 2, 4, 12, 1}, "scope": "internal hierarchy API: repeated lookup/close, statuses, custom tags/metrics, errors, logs and child span"})
+	writeParityEvidence(t, "manual", map[string]any{"timing": parityTiming{binaryTimingScope, wallNS[0], wallNS[1]}, "status": "passed", "sdk": eventCounts{1, 2, 4, 12, 1}, "mini": eventCounts{1, 2, 4, 12, 1}, "scope": "internal hierarchy API: repeated lookup/close, statuses, custom tags/metrics, errors, logs and child span"})
 }

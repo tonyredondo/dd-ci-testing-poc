@@ -47,7 +47,6 @@ func (c *Client) add(event *ciEvent) {
 	if c.closed {
 		c.lastErr = errors.New("event finished after CI client closed")
 		c.dropped++
-		telemetry.EndpointPayloadDropped(telemetry.TestCycleEndpointType)
 		c.mu.Unlock()
 		return
 	}
@@ -64,12 +63,11 @@ func (c *Client) reject(err error) {
 	c.mu.Lock()
 	c.lastErr = err
 	c.dropped++
-	telemetry.EndpointPayloadDropped(telemetry.TestCycleEndpointType)
 	c.mu.Unlock()
 }
 
-// DroppedEvents reports events rejected after closure or while delivery failed
-// with a full queue. Successful later flushes do not erase this counter.
+// DroppedEvents reports rejected events and events abandoned at final closure.
+// This event count is separate from the payload-drop telemetry counter.
 func (c *Client) DroppedEvents() uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -108,11 +106,15 @@ func (c *Client) flushLocked(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.lastErr = err
-	if err != nil {
+	if err != nil && !c.closed {
 		c.events = batch
 		c.queuedBytes = batchBytes
 	} else {
-		clear(batch)
+		if err != nil {
+			c.discardBatchLocked(batch)
+		} else {
+			clear(batch)
+		}
 		c.events = batch[:0]
 	}
 	if c.payload.Cap() > citransport.TestCycleFlushBytes {
@@ -121,12 +123,35 @@ func (c *Client) flushLocked(ctx context.Context) error {
 	return err
 }
 
+// discardBatchLocked records one abandoned payload, regardless of its event
+// count. The caller holds mu; retryable flush failures never call this method.
+func (c *Client) discardBatchLocked(batch []*ciEvent) {
+	if len(batch) == 0 {
+		return
+	}
+	c.dropped += uint64(len(batch))
+	telemetry.EndpointPayloadDropped(telemetry.TestCycleEndpointType)
+	clear(batch)
+}
+
 // Close seals the client, performs a final flush and releases connections.
+// An unsuccessful final flush abandons its batch once. Earlier Flush failures
+// remain retryable; a closed client cannot later resend an abandoned payload.
 func (c *Client) Close(ctx context.Context) error {
 	c.mu.Lock()
 	c.closed = true
 	c.mu.Unlock()
 	err := c.Flush(ctx)
+	if err != nil {
+		c.mu.Lock()
+		// If acquiring sendMu was canceled, the queued batch still needs to
+		// be abandoned. An in-flight batch is owned by flushLocked instead.
+		c.discardBatchLocked(c.events)
+		c.events = nil
+		c.queuedBytes = 0
+		c.lastErr = err
+		c.mu.Unlock()
+	}
 	c.transport.CloseIdleConnections()
 	return err
 }

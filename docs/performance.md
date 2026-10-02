@@ -69,7 +69,7 @@ persistent cache of instrumented binaries or prepared overlays.
 | Metadata capacity estimate | Repeated map growth while applying common tags | Include per-event and client tags in the estimate |
 | Lazy metric maps | A map allocation for events without numeric metrics | Tag type transitions must retain their existing semantics |
 | Direct event encoding | An intermediate encoded event array and its payload copy | Preserve field names, event versions and byte limits |
-| Queue and payload reuse | Fresh backing storage after every successful batch | Failed batches retain events; cleared slots release references |
+| Queue and payload reuse | Fresh backing storage after every successful batch | Retryable flush failures retain events; final closure discards a failed batch once |
 | Gzip writer and buffer pooling | New compression state for each agentless batch | Seal all request readers before returning storage to a pool |
 | Bounded buffer retention | Long-lived oversized buffers after large payloads | Payload and gzip capacities above 2.5 MiB are discarded |
 | Standard-library telemetry maps | An external concurrent-map module | Preserve registration, startup replay and log counts under concurrency |

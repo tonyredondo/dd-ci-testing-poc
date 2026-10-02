@@ -127,15 +127,18 @@ with delivery. Setters become no-ops and getters remain available. Native CI
 hierarchy IDs are stored separately, so serialization never deletes tag entries.
 Metadata maps are sized up front; metrics maps are allocated only when needed.
 Events encode directly into one reusable, bounded payload buffer; the queue
-capacity is reused after successful delivery. Failed batches retain their events.
+capacity is reused after successful delivery. Failed flushes retain their events
+while the client remains open.
 Agentless gzip compressors and bounded output buffers are reused. Request bodies
 are sealed before those buffers can be reused, including asynchronous HTTP errors
 and replay readers. APM `process_id` enrichment is omitted.
-`Flush` and `Close` report delivery errors. Failed batches stay queued for a later
-flush. A full queue applies
-backpressure and rejects incoming events if delivery fails; `DroppedEvents`
-reports those rejections, including events finished after closure. Hook-driven
-shutdown logs delivery failures and rejected counts without changing test results.
+`Flush` and `Close` report delivery errors. A failed `Flush` keeps its batch for a
+later attempt while the client is open. `Close` seals the client; if final delivery
+fails, it abandons that batch and reports one `endpoint_payload.dropped` sample,
+regardless of the number of events or HTTP attempts. Rejected events before
+batching or after closure do not increment that payload metric. `DroppedEvents`
+counts rejected events and events in an abandoned batch. Hook-driven shutdown
+logs delivery failures and lost event counts without changing test results.
 An ambiguous HTTP failure can lead to a repeated delivery; this is not a durable
 or exactly-once delivery mechanism.
 

@@ -117,6 +117,13 @@ func testEnv(extra ...string) []string {
 }
 func command(t *testing.T, dir string, env []string, name string, args ...string) (string, string, int) {
 	t.Helper()
+	out, stderr, code, _ := commandWithTiming(t, dir, env, name, args...)
+	return out, stderr, code
+}
+
+// Measure only the child process. Fixture setup and result comparisons stay outside.
+func commandWithTiming(t *testing.T, dir string, env []string, name string, args ...string) (string, string, int, time.Duration) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -125,7 +132,9 @@ func command(t *testing.T, dir string, env []string, name string, args ...string
 	var out, errout bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errout
+	start := time.Now()
 	err := cmd.Run()
+	wall := time.Since(start)
 	code := 0
 	if err != nil {
 		if e, ok := err.(*exec.ExitError); ok {
@@ -137,7 +146,7 @@ func command(t *testing.T, dir string, env []string, name string, args ...string
 	if ctx.Err() != nil {
 		t.Fatalf("command timed out: %s %v", name, args)
 	}
-	return out.String(), errout.String(), code
+	return out.String(), errout.String(), code, wall
 }
 func copyTree(t *testing.T, from, to string) {
 	t.Helper()
@@ -248,6 +257,7 @@ type execution struct {
 	code        int
 	events      []string
 	wireEvents  []map[string]any
+	wall        time.Duration
 }
 
 func execute(t *testing.T, dir, bin string, args []string, enabled, retry bool) execution {

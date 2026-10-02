@@ -135,10 +135,13 @@ stateDiagram-v2
     Sealed --> Queued: Client accepts event
     Sealed --> Rejected: Client rejects event
     Queued --> Sending: Flush or batch threshold
-    Sending --> Queued: Serialization or delivery fails
+    Sending --> Queued: Failure while client is open
+    Sending --> Abandoned: Final delivery fails after Close
+    Queued --> Abandoned: Close cannot start final delivery
     Sending --> Delivered: Delivery succeeds
     Rejected --> [*]
     Delivered --> [*]
+    Abandoned --> [*]
 ```
 
 `Finish` seals the span under its mutex. It copies the event's scalar fields and
@@ -149,9 +152,9 @@ A span without a client can still carry context, but it is not queued.
 The client has two synchronization boundaries. `mu` protects queue, closure,
 error and drop state. `sendMu` is a context-aware token that serializes event
 acceptance and delivery, including ownership of the payload buffer. Slow delivery
-can therefore block concurrent finishers. A failed flush restores the older
-batch; when that batch fills the bounds and cannot be delivered, a new event is
-rejected and counted.
+can therefore block concurrent finishers. While the client is open, a failed
+flush restores the older batch; when it fills the bounds and cannot be delivered,
+a new event is rejected and counted.
 
 The default event-count limit is 1,000. Byte accounting includes the envelope
 and uses generated `Msgsize()` upper bounds. The flush threshold is 2.5 MiB and
@@ -162,8 +165,11 @@ the Mini client has no periodic flush worker.
 `Close` prevents new events, performs a final flush and releases idle HTTP
 connections. Explicit clients report errors through `Flush`, `Close`,
 `LastError` and `DroppedEvents`. Hook-driven shutdown logs failures while
-preserving the test result. Events retained after a failed final delivery are
-not persisted across process exit.
+preserving the test result. A final delivery failure abandons the pending batch,
+releases its events and increments `endpoint_payload.dropped` once. Transport
+attempts, event count and rejected events do not multiply that payload counter.
+`DroppedEvents` separately includes rejected events and those in abandoned
+batches. Repeated close/flush calls cannot resend or recount an abandoned batch.
 
 ## Delivery and compression
 

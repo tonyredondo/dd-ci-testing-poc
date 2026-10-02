@@ -41,6 +41,7 @@ func TestSpans(t *testing.T) {
 }
 `
 	var captures []*parityReceiver
+	var wallNS []int64
 	for _, backend := range []string{"sdk", "mini"} {
 		runtimeImport := `tracer "github.com/DataDog/dd-trace-go/v2/ddtrace/tracer"
  _ "github.com/DataDog/dd-trace-go/v2/civisibility"`
@@ -103,7 +104,8 @@ func TestSpans(t *testing.T) {
 			}
 		}
 		captures = append(captures, capture)
+		wallNS = append(wallNS, result.wall.Nanoseconds())
 	}
 	assertMiniCIAttributes(t, captures[0].events, captures[1].events)
-	writeParityEvidence(t, "spans", map[string]any{"status": "passed", "sdk": eventCounts{1, 1, 1, 1, 2}, "mini": eventCounts{1, 1, 1, 1, 2}, "scope": "root/child spans attached to the active test context; external APM integration uses propagation"})
+	writeParityEvidence(t, "spans", map[string]any{"timing": parityTiming{binaryTimingScope, wallNS[0], wallNS[1]}, "status": "passed", "sdk": eventCounts{1, 1, 1, 1, 2}, "mini": eventCounts{1, 1, 1, 1, 2}, "scope": "root/child spans attached to the active test context; external APM integration uses propagation"})
 }

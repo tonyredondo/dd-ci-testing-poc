@@ -57,7 +57,7 @@ policy combinations and counts are exported by every workflow run.
 | Manual hierarchy API | Two modules/four suites/twelve tests; repeated lookup/close, statuses, error/custom tags/metrics, logs and child span | Verified internal API; no new public API added |
 | Additional CI spans | Two explicitly CI-marked spans attached to the active test context, including test → parent → child identity; manual hierarchy child span | Verified internal span API; automatic APM integration is outside Mini |
 | Context propagation | W3C and Datadog carriers, 128-bit identity, extraction by SDK propagator | Verified carrier compatibility; in-process APM shim not implemented |
-| CI telemetry | Original CI instrumentation/unit assertions; wire fixture compares semantic CI count/rate metrics and validates request counters against actual HTTP requests | Partial: representative wire counts verified; distributions/policy cross-product unverified |
+| CI telemetry | Original CI instrumentation/unit assertions; wire fixture compares semantic CI count/rate metrics and validates request counters against actual HTTP requests | Partial: representative wire counts verified; distributions/policy cross-product unverified; failure counters have known differences |
 | `testify/suite` | Full SDK/Orchestrion compared with both POC backends | Missing `testify.suite.Run` advice: module/suite grouping and method source metadata differ |
 
 The inventory follows the SDK's CI integrations, manual API, coverage, feature
@@ -158,10 +158,134 @@ but Testify is skipped and the report renderer rejects a full parity report.
 [`compatibility.yml`](../.github/workflows/compatibility.yml) runs the suite on
 Linux Go 1.26/1.27 and macOS/Windows Go 1.27. Linux also runs the race harness.
 Each job uploads JSON counts, supplemental evidence, logs and a Markdown table;
-the table also appears in the GitHub job summary. Missing evidence, a failed
-comparison or an omitted reference fails the report step. The Testify fixture
+the table also appears in the GitHub job summary. Artifacts are retained for seven
+days; download them before expiry to keep a run beyond that period. Missing
+evidence, a failed comparison or an omitted reference fails the report step. The Testify fixture
 freezes its known gap and reports it explicitly, so green CI never means complete
 parity. A change to that gap requires review and conversion to strict comparison.
+
+### Per-case duration records
+
+The [recorded Linux Go 1.27 run](results/ci-parity-20261002-linux-go1.27/README.md)
+includes all scenario durations and supplemental fixtures. Its adjacent JSON files
+preserve the raw observations; `run.json` records the command, execution order,
+reference versions and hashes of the tested harness. This is one observed run,
+not a performance baseline with a stability threshold.
+
+Schemas 2 and 3 record `timing.sdk_wall_ns` and `timing.mini_wall_ns` for every matrix
+scenario and additional fixture. The renderer adds separate SDK/Mini walltimes
+in seconds and the signed difference `(Mini / SDK - 1) * 100`. JSON keeps the
+integer nanoseconds returned by the monotonic clock, without table rounding.
+Missing or invalid observations fail the current report. Schema 1 reports remain
+readable and show `Not recorded`; their logs cannot reconstruct separate times.
+
+The matrix times the prebuilt child binary from process start to exit. This
+includes initialization, settings requests, tests/retries and shutdown/flush.
+It excludes compilation, fixture setup and the comparator. The multiple-package
+fixture times the CLI and includes preparation and compilation; its JSON scope
+and separate table identify that difference. The manual fixture deliberately
+uses a 100 ms settings delay. Testify times the full Orchestrion reference against
+Mini despite its known grouping gap; the POC SDK time is also kept in that JSON.
+
+Each invocation records one observation per variant. The default matrix runs SDK first
+and Mini second; the Testify fixture runs POC SDK, Mini, then full Orchestrion.
+These are diagnostic durations from compatibility tests, with no speed threshold.
+A performance claim needs repeated, balanced runs with the same inputs and
+enough context to separate host load, compilation and SDK work. The compile-only cold/incremental benchmarks in the README measure another contract.
+
+### Repeated whole-matrix timing
+
+The [six-round Linux comparison](results/ci-parity-repeated-20261002-linux-go1.27/README.md)
+keeps every input report, the run manifest and a separate continuous wall clock
+for the entire 65-scenario SDK block and Mini block. A full warmup runs first and
+is excluded from the six measured rounds. All seven supplemental fixtures also
+run in every round and retain their own times; they have different compilation
+and initialization contracts and are outside the main block.
+
+Set `PARITY_EXECUTION_ORDER=sdk-first` or `mini-first` to use grouped execution.
+Each variant runs all matrix cases before their differential comparisons. The
+block timer includes receiver setup, child-process execution and shutdown/flush;
+it excludes compilation and comparison. This is a measured interval, not the
+sum of the individual child clocks. Schema 3 exports `execution_block` and
+`execution_order`. The normal job uses SDK first; Linux race validation uses
+Mini first so both paths are exercised by CI. Both commands use `-count=1` to
+regenerate their evidence instead of reusing a Go test-result cache entry.
+
+For repeated timing, run an unmeasured warmup, then six fresh invocations with
+three in each order. Use the same Go version, build cache, flags, fixture and
+GOMAXPROCS for every round. Keep output prefixes distinct:
+
+```sh
+# ORCHESTRION_BIN and the pinned SDK must be configured as above.
+PARITY_EXECUTION_ORDER=sdk-first PARITY_REPORT_PATH="$PWD/artifacts/warmup.json" \
+  go test -count=1 -run '^TestCIVisibility' ./integration
+for round in 1 2 3 4 5 6; do
+  order=sdk-first
+  if [ $((round % 2)) -eq 0 ]; then order=mini-first; fi
+  PARITY_EXECUTION_ORDER="$order" \
+    PARITY_REPORT_PATH="$PWD/artifacts/round-$round.json" \
+    go test -count=1 -run '^TestCIVisibility' ./integration || exit 1
+done
+python scripts/parity_series.py artifacts/round-*.json \
+  --output artifacts/series.md --json-output artifacts/series.json
+```
+
+The summary checks all matrix and supplemental evidence, identical references
+and scenario contracts, distinct report paths and balanced execution orders.
+It shows median, mean, range, coefficient of variation (standard deviation over
+mean), every block observation and the paired percentage differences. The local
+manifest also preserves the elapsed time of each complete SDK-and-Mini harness
+invocation, including compilation and comparison; that combined clock cannot
+be interpreted as either variant's runtime. The seven supplemental fixtures
+retain their existing SDK-first order, except the separate Testify reference.
+
+### Completing CI telemetry parity
+
+The incorporated CI distribution helpers match all 24 definitions in the pinned
+SDK except their import path. Mini's native writer also calls the test-cycle
+size, event-count, serialization-time and request-time helpers. The current wire
+fixture reads only count/rate metrics; it does not prove distribution delivery
+or every policy/error interaction. Collection concurrency already has unit/race
+checks, which do not replace that differential wire evidence.
+
+| Work | Required evidence |
+| --- | --- |
+| Metric inventory | Map each CI metric to its kind, tags, unit and emission site in the pinned SDK and Mini. Preserve count versus rate and distribution schema fields; compare only the `civisibility` namespace. |
+| Distribution capture | Decode `distributions` inside telemetry message batches and save the actual samples for each variant. Assert required metric/tag sets and finite, nonnegative values, including valid zero millisecond measurements. |
+| Semantic comparisons | Compare deterministic samples such as returned test/file counts against fixture responses. For payload bytes, event counts and request latency, validate each sender against its own captured payloads and attempts. Batching and retry serialization differ, so latency or payload-size samples must not be required to be identical. |
+| Policy interactions | Enable telemetry on selected existing ATR/EFD/ITR, test-management, coverage/report, impacted-test and Git-upload combinations, including both retry modes and parallel execution. Route Agent and Agentless telemetry to local capture endpoints; keep real credentials out of fixtures. |
+| Delivery failures | Exercise successful retry, exhausted retry, permanent HTTP failure, network error, cancellation and oversized rejection. Distinguish one logical batch from its HTTP attempts and one discarded batch from its events. |
+| Aggregation and shutdown | Replay deterministic metric samples, submit concurrently with collection, and verify final flush sends each accepted sample once. Add missing differential proof alongside the existing collector race tests. |
+| Offline output | Decode Bazel telemetry files with the same assertions and prove telemetry-disabled runs emit none. This covers the file contract; an actual Bazel invocation remains a separate gate. |
+| Regression gate | Export metric inventories/samples and outcomes per case. Fail on missing Mini metrics or changed CI kinds/tags; run on the existing Linux/macOS/Windows matrix and Linux race harness. |
+
+The payload-drop unit is now aligned with the SDK. One known production
+difference remains before a complete telemetry-parity claim:
+
+- SDK `ciVisibilityTransport.send` returns network failures before incrementing
+  `endpoint_payload.requests_errors`; Mini records them with `error_type:network`.
+  The fixture must expose this difference rather than discard it as an APM metric.
+
+SDK and Mini now increment `endpoint_payload.dropped` once per abandoned batch.
+Mini keeps a failed `Flush` batch for recovery while open; final `Close` failure
+abandons it. HTTP attempts and the number of events do not multiply that count.
+Rejected or oversized individual events increment `DroppedEvents()` only. Tests
+cover retry exhaustion, later recovery, buffered and in-flight cancellation,
+concurrent repeated close/flush, post-close rejection and oversized rejection.
+This verifies the Mini contract and unit; the full differential failure-policy
+cross-product remains open.
+
+Both implementations increment `endpoint_payload.requests` once per logical
+send, outside their retry loops. The current fixture can compare it with HTTP
+requests because there are no transport retries in that fixture. A retry fixture
+must check logical batches and attempts separately. The SDK also serializes and
+emits payload-size/event-count samples on each attempt; Mini encodes a batch once
+and reuses it. Validate those samples against the actual serialization/send
+operations without removing that optimization.
+
+No sampling, heartbeat, security, remote configuration or other APM functionality
+is needed to close this CI telemetry work. Implementation differences and missing
+proof remain separate entries until their contracts and tests are resolved.
 
 When updating the SDK, follow [maintenance](maintenance.md#updating-the-sdk-base).
 Review the upstream testing YAML and CI production/test inventory as well as the

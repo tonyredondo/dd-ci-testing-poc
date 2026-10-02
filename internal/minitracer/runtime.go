@@ -89,7 +89,7 @@ func Stop() {
 			log.Error("CI event close failed: %s", err.Error())
 		}
 		if dropped := c.DroppedEvents(); dropped != 0 {
-			log.Error("CI mini tracer rejected %d events", dropped)
+			log.Error("CI mini tracer lost %d events", dropped)
 		}
 	}
 }
