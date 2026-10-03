@@ -123,16 +123,16 @@ git -C "$SDK_CHECKOUT" diff --name-status "$OLD_SHA" "$NEW_SHA" -- internal/civi
 
 ```mermaid
 flowchart TB
-    Old["Recorded upstream base"] --> Upstream["Review old-to-new upstream changes"]
-    New["New default-branch snapshot"] --> Upstream
-    Old --> Adaptations["Review old-to-local adaptations"]
+    Old["Recorded upstream<br/>base"] --> Upstream["Review old-to-new<br/>upstream changes"]
+    New["New default-branch<br/>snapshot"] --> Upstream
+    Old --> Adaptations["Review old-to-local<br/>adaptations"]
     Local["Current CI-only port"] --> Adaptations
-    Upstream --> Merge["Merge selected changes into the local port"]
+    Upstream --> Merge["Merge selected<br/>changes into the<br/>local port"]
     Adaptations --> Merge
-    Merge --> Records["Update source records, pins and test inventory"]
-    Records --> Generate["Regenerate affected serializers"]
-    Generate --> Audit["Audit hashes, licenses and dependency boundary"]
-    Audit --> Tests["Differential, coverage, race and platform checks"]
+    Merge --> Records["Update source<br/>records, pins and<br/>test inventory"]
+    Records --> Generate["Regenerate affected<br/>serializers"]
+    Generate --> Audit["Audit hashes,<br/>licenses and<br/>dependency boundary"]
+    Audit --> Tests["Differential,<br/>coverage, race and<br/>platform checks"]
 ```
 
 4. Update the SDK `SOURCE.json` repository/version/commit fields, original

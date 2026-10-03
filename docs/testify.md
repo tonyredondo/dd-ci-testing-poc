@@ -15,23 +15,23 @@ have dedicated version fixtures. A v2 module needs a separate review.
 
 ```mermaid
 flowchart TD
-    Resolve["Existing package query and test imports"] --> Known{"Suite already reachable?"}
-    Known -->|Yes| Find["go list -find: selected suite metadata"]
-    Known -->|No| Unknown{"Nonstandard test imports to resolve?"}
-    Unknown -->|Yes| Deps["go list -deps: include external helpers"]
+    Resolve["Existing package<br/>query and test<br/>imports"] --> Known{"Suite already<br/>reachable?"}
+    Known -->|Yes| Find["go list -find:<br/>selected suite<br/>metadata"]
+    Known -->|No| Unknown{"Nonstandard test<br/>imports to resolve?"}
+    Unknown -->|Yes| Deps["go list -deps:<br/>include external<br/>helpers"]
     Unknown -->|No| Coverage
     Deps --> Found{"Suite found?"}
     Found -->|No| Coverage
-    Found -->|Yes| Prepare["Validate API/version before cache lookup; prepare Run entry hook"]
+    Found -->|Yes| Prepare["Validate API/version<br/>before cache lookup;<br/>prepare Run entry<br/>hook"]
     Find --> Prepare
-    Prepare --> Fingerprint["Put transformation fingerprint in testing export data"]
-    Fingerprint --> Coverage{"Testify or covered rewritten testing sources?"}
-    Coverage -->|Neither| Native["go test with overlay; no toolexec"]
-    Coverage -->|Either| Tool["go test with one selective tool wrapper"]
+    Prepare --> Fingerprint["Put transformation<br/>fingerprint in<br/>testing export data"]
+    Fingerprint --> Coverage{"Testify or covered<br/>rewritten testing<br/>sources?"}
+    Coverage -->|Neither| Native["go test with<br/>overlay; no toolexec"]
+    Coverage -->|Either| Tool["go test with one<br/>selective tool<br/>wrapper"]
     Tool --> Dispatch{"Tool and package"}
-    Dispatch -->|compile: testify/suite| Entry["Substitute prepared source or edit covered Run entry"]
-    Dispatch -->|cover: testing| Bridge["Read the overlay's effective testing sources"]
-    Dispatch -->|Anything else| Bypass["Delegate without reading the plan"]
+    Dispatch -->|compile: testify/suite| Entry["Substitute prepared<br/>source or edit<br/>covered Run entry"]
+    Dispatch -->|cover: testing| Bridge["Read the overlay's<br/>effective testing<br/>sources"]
+    Dispatch -->|Anything else| Bypass["Delegate without<br/>reading the plan"]
 ```
 
 A requirement in `go.mod` does not enable `-toolexec`. Importing `testify/assert`

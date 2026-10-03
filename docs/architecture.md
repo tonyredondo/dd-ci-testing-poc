@@ -19,17 +19,17 @@ does not need the CLI.
 ```mermaid
 flowchart TB
     subgraph build["Build time"]
-        CLI["ddtest test: choose sdk or mini"] --> Plan["Resolve packages and prepare overlay"]
-        Plan --> Selection{"Suite or covered testing sources?"}
-        Selection -->|Yes| Tools["Selective compiler/coverage wrapper"]
-        Selection -->|No| Go["Native go test: compile and link"]
+        CLI["ddtest test: choose<br/>sdk or mini"] --> Plan["Resolve packages and<br/>prepare overlay"]
+        Plan --> Selection{"Suite or covered<br/>testing sources?"}
+        Selection -->|Yes| Tools["Selective<br/>compiler/coverage<br/>wrapper"]
+        Selection -->|No| Go["Native go test:<br/>compile and link"]
         Tools --> Go
     end
-    Go --> Binary["Instrumented test binary"]
+    Go --> Binary["Instrumented test<br/>binary"]
     subgraph execution["When the binary runs"]
         Binary --> Testing["testing entry points"]
-        Testing --> Hooks["CI testing hooks and policies"]
-        Hooks --> Runtime["SDK or Mini, fixed when the binary was built"]
+        Testing --> Hooks["CI testing hooks and<br/>policies"]
+        Hooks --> Runtime["SDK or Mini, fixed<br/>when the binary was<br/>built"]
         Runtime --> Output["CI event delivery"]
     end
 ```
@@ -157,8 +157,8 @@ stateDiagram-v2
     Sealed --> Rejected: Client rejects event
     Queued --> Sending: Flush or batch threshold
     Sending --> Queued: Failure while client is open
-    Sending --> Abandoned: Final delivery fails after Close
-    Queued --> Abandoned: Close cannot start final delivery
+    Sending --> Abandoned: Delivery fails on Close
+    Queued --> Abandoned: Cannot send on Close
     Sending --> Delivered: Delivery succeeds
     Rejected --> [*]
     Delivered --> [*]
@@ -253,7 +253,7 @@ an outbound request.
 ```mermaid
 flowchart LR
     Test["Test"] --> Context["Active Mini context"]
-    Context --> Headers["W3C or Datadog headers"]
+    Context --> Headers["W3C or Datadog<br/>headers"]
     Headers -->|HTTP| Extract["APM extracts parent"]
     Extract --> Span["Service span"]
 ```

@@ -17,13 +17,13 @@ from that SDK checkout, including its Testify rule. Comparing only the POC's
 
 ```mermaid
 flowchart LR
-    Fixture["Same fixture and policy responses"] --> SDK["Orchestrion + pinned SDK"]
+    Fixture["Same fixture and<br/>policy responses"] --> SDK["Orchestrion + pinned<br/>SDK"]
     Fixture --> Mini["POC + Mini"]
-    SDK --> Capture["Loopback events and payloads"]
+    SDK --> Capture["Loopback events and<br/>payloads"]
     Mini --> Capture
-    Capture --> Compare["Counts, ancestry and CI attributes"]
-    Compare --> Report["Runner JSON and Markdown evidence"]
-    Testify["Testify policy and lifecycle fixtures"] --> Report
+    Capture --> Compare["Counts, ancestry and<br/>CI attributes"]
+    Compare --> Report["Runner JSON and<br/>Markdown evidence"]
+    Testify["Testify policy and<br/>lifecycle fixtures"] --> Report
 ```
 
 ## Feature inventory

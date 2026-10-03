@@ -9,15 +9,15 @@ Measure those paths separately.
 
 ```mermaid
 flowchart TB
-    Start["ddtest invocation"] --> Prepare["Front-end preparation"]
-    Prepare --> Compile["Native compilation and linking"]
-    Compile --> Run["Test execution, unless -c"]
-    Run --> Finish["Event creation and finalization"]
-    Finish --> Send["Serialization, compression and delivery"]
-    Prepare -.-> P["Inspect go list, source parsing and file writes"]
-    Compile -.-> C["Inspect compiler and linker processes"]
-    Finish -.-> F["Inspect allocations, map work and contention"]
-    Send -.-> S["Inspect codec, gzip, network and flush latency"]
+    Start["ddtest invocation"] --> Prepare["Front-end<br/>preparation"]
+    Prepare --> Compile["Native compilation<br/>and linking"]
+    Compile --> Run["Test execution,<br/>unless -c"]
+    Run --> Finish["Event creation and<br/>finalization"]
+    Finish --> Send["Serialization,<br/>compression and<br/>delivery"]
+    Prepare -.-> P["Inspect go list,<br/>source parsing and<br/>file writes"]
+    Compile -.-> C["Inspect compiler and<br/>linker processes"]
+    Finish -.-> F["Inspect allocations,<br/>map work and<br/>contention"]
+    Send -.-> S["Inspect codec, gzip,<br/>network and flush<br/>latency"]
 ```
 
 Runtime work can overlap test execution and can happen when a batch fills.
