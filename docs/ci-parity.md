@@ -1,8 +1,9 @@
 # CI Visibility feature parity
 
-Mini has a confirmed instrumentation gap in `testify/suite`. Its native `testing`
-path passes a 65-scenario comparison against the unmodified SDK instrumented by
-Orchestrion. Additional fixtures exercise manual hierarchy calls, CI child spans,
+Mini registers `testify/suite` at its original entry, including callers in external
+modules. A 26-case Testify comparison checks the original runner, lifecycle,
+policies and covered helpers. Its native `testing` path passes a 65-scenario
+comparison against the unmodified SDK instrumented by Orchestrion. Additional fixtures exercise manual hierarchy calls, CI child spans,
 multiple package binaries, Unix sockets, a bounded fuzz campaign and CI telemetry.
 This evidence does not establish complete product parity.
 
@@ -22,7 +23,7 @@ flowchart LR
     Mini --> Capture
     Capture --> Compare["Counts, ancestry and CI attributes"]
     Compare --> Report["Runner JSON and Markdown evidence"]
-    Testify["Testify gap fixture"] --> Report
+    Testify["Testify policy and lifecycle fixtures"] --> Report
 ```
 
 ## Feature inventory
@@ -58,7 +59,7 @@ policy combinations and counts are exported by every workflow run.
 | Additional CI spans | Two explicitly CI-marked spans attached to the active test context, including test → parent → child identity; manual hierarchy child span | Verified internal span API; automatic APM integration is outside Mini |
 | Context propagation | W3C and Datadog carriers, 128-bit identity, extraction by SDK propagator | Verified carrier compatibility; in-process APM shim not implemented |
 | CI telemetry | Original CI instrumentation/unit assertions; wire fixture compares semantic CI count/rate metrics and validates request counters against actual HTTP requests | Partial: representative wire counts verified; distributions/policy cross-product unverified; failure counters have known differences |
-| `testify/suite` | Full SDK/Orchestrion compared with both POC backends | Missing `testify.suite.Run` advice: module/suite grouping and method source metadata differ |
+| `testify/suite` | 26 Mini cases against full SDK/Orchestrion, plus a POC SDK pass/skip control; version fixtures v1.11.1/v1.12.1, aliases, helpers, lifecycle, retries, management and race/coverage | Verified for local and external-module callers; method-level ITR retains the SDK limitation |
 
 The inventory follows the SDK's CI integrations, manual API, coverage, feature
 selection, Git/settings clients, telemetry and testing YAML. The source and test
@@ -84,7 +85,7 @@ a test event, while their module/suite/session are closed once by the controller
 | Empty selection / list / examples and seeds | 1 | 0 | 0 | 0 | 0 | Equal SDK limitation |
 | Manual hierarchy | 1 | 2 | 4 | 12 | 1 | Equal |
 | Test with CI parent/child spans | 1 | 1 | 1 | 1 | 2 | Equal |
-| Testify suite with pass/skip methods | 1 | SDK: 1; Mini: 2 | SDK: 2; Mini: 3 | 3 | 0 | Gap in hierarchy and source metadata |
+| Testify suite with pass/skip methods | 1 | 1 | 2 | 3 | 0 | Equal, including hierarchy and method source metadata |
 
 The 65 matrix scenarios total **65 sessions, 62 modules, 63 suites and 142 test
 events** in each runtime, with no extra spans. Additional span fixtures deliberately
@@ -153,7 +154,8 @@ On Windows set `ORCHESTRION_BIN` to `orchestrion.exe`. Linux race validation use
 coverage test explicitly compiles the fixture with `-race -covermode=atomic`;
 the outer harness's `-race` alone would not make every child binary a race build.
 Without the Orchestrion variable, the matrix can run against the POC SDK backend,
-but Testify is skipped and the report renderer rejects a full parity report.
+including Testify, but the report renderer rejects a full parity report without
+the independent Orchestrion reference.
 
 [`compatibility.yml`](../.github/workflows/compatibility.yml) runs the suite on
 Linux Go 1.26/1.27 and macOS/Windows Go 1.27. Linux also runs the race harness.
@@ -161,8 +163,8 @@ Each job uploads JSON counts, supplemental evidence, logs and a Markdown table;
 the table also appears in the GitHub job summary. Artifacts are retained for seven
 days; download them before expiry to keep a run beyond that period. Missing
 evidence, a failed comparison or an omitted reference fails the report step. The Testify fixture
-freezes its known gap and reports it explicitly, so green CI never means complete
-parity. A change to that gap requires review and conversion to strict comparison.
+requires every Testify policy case, timing and count comparison to pass. Historical
+reports retain their original gap records; new evidence does not rewrite old runs.
 
 ### Per-case duration records
 
@@ -185,10 +187,12 @@ It excludes compilation, fixture setup and the comparator. The multiple-package
 fixture times the CLI and includes preparation and compilation; its JSON scope
 and separate table identify that difference. The manual fixture deliberately
 uses a 100 ms settings delay. Testify times the full Orchestrion reference against
-Mini despite its known grouping gap; the POC SDK time is also kept in that JSON.
+Mini for every Testify combination; the POC SDK pass/skip time is also kept in
+that JSON. Historical reports still show the former grouping gap.
 
 Each invocation records one observation per variant. The default matrix runs SDK first
-and Mini second; the Testify fixture runs POC SDK, Mini, then full Orchestrion.
+and Mini second; Testify cases run the reference SDK, then Mini, with a separate
+POC SDK check for pass/skip.
 These are diagnostic durations from compatibility tests, with no speed threshold.
 A performance claim needs repeated, balanced runs with the same inputs and
 enough context to separate host load, compilation and SDK work. The compile-only cold/incremental benchmarks in the README measure another contract.
@@ -302,6 +306,6 @@ native Linux, macOS and Windows; other cross-linked targets still have build
 evidence only. The current suite samples feature interactions rather than
 enumerating their unbounded flags, environments and failure timings.
 
-`testify/suite` needs a targeted transformation for its suite registration advice.
-This belongs to the instrumentator and affects both POC runtimes. It cannot be
-fixed by changing event serialization or by dropping the differing attributes.
+[Testify support](testify.md) adds suite registration in the instrumentator for
+both runtimes, including callers in external modules. Method-level ITR retains
+the pinned SDK limitation.

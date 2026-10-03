@@ -1,0 +1,32 @@
+{
+  "base": "15727c1c469c7faf21551bf638424420125d234b",
+  "branch": "feat/ci-minitracer",
+  "files": {
+    "README.md": "b6dda2465793213f1e5ba5a019e01c09c05eecbbc5ce1ffb24e3bfe9fd1e9ed4",
+    "cmd/ddtest/main.go": "5e00353a3563faf9d76c0751b0146f125119c032119a22f1be9776a4adf31b84",
+    "docs/README.md": "583d25e1fcf5c3b9a4e862c165ee7e7c640926f95627d95621c96abb4eb1cff6",
+    "docs/architecture.md": "55bd48258e7ae0b4d209647772535f3fc85a714f8b86efbfbf0a6bd58a3ba497",
+    "docs/ci-parity.md": "aff185e85c56baba394617f39da0bb196b78fadf5ff405dcc1e791b76b45885a",
+    "docs/maintenance.md": "24d7809349e68775d3734261945bfdb548f03350cf83aa0cf1d40b72356befbb",
+    "docs/validation.md": "7a9e0cddddfe945c4da1dfe6fb83c2cbf53ab411a2852664566f6120055838a2",
+    "integration/parity_matrix_test.go": "65825ce3ebfae0cf7da85b8b5faea05e82fc794faaa5b1c187984f383112d447",
+    "integration/parity_testify_test.go": "916db017d50bbf501ef75e9f2403ce848ff073d0b6ce7eba3a32bc6479dd8348",
+    "internal/runner/options.go": "73ff29f12305ef81334b41987cb7f3258e03a27c3a34087b468247e319bd1b90",
+    "internal/runner/run.go": "0283f62ee518a664cc9344c0a3bf70f635ffd4a5e74df88858e870436d0a7bfe",
+    "scripts/parity_report.py": "fa0588205e42f4fbb6a5df2b65a4d0960b059f5058b2300123efd155175c4093",
+    "scripts/parity_series.py": "81c60c2cec2a9d838623b714b7c01fb523a8bb86a35864cfaadc90113e0fe535",
+    "scripts/test_parity_report.py": "05f9646b66a2986ccd71226fdf4c4c4f90da58616f29882e91bf2e49aa992ffe",
+    "docs/testify.md": "195e8a1b585d2756c59f23a3e5bfd424d8dedc24b8dc16f4c31c49d18d810f15",
+    "integration/testdata/testify/helpers/run.go": "a5ea86e04e94c9484908a1b20bd9323c03a9ff02984ac4755c89e2b993711b5f",
+    "integration/testdata/testify/testify_alias_test.go": "8c39177638ab06db9406e3a7518aed0af933b46ce97f1d1c09c4028966988e37",
+    "integration/testdata/testify/testify_cases_test.go": "d4270997c558836d4a6ce50ead4e34482f79348614a671f2f6f3585cc5eb25b2",
+    "integration/testdata/testify/testify_dot_test.go": "87f34af81091aec8a0c09720a1dae97d1532cd5dd5a6cae4b2558253dad23f2f",
+    "integration/testdata/testify/testify_internal_test.go": "5cd8d32b5cc27cdcecb24ef6e412b1f3aa786626b822494c62482fa5d3509713",
+    "integration/testdata/testify/testify_tagged_test.go": "ea8816979ae8a87c9a57be1aceb447132d96e50bbf6abf429eaef30a793e934d",
+    "internal/instrument/testify.go": "51817d339a5c13e3c18ccff5a34a5026f3e3f43a63732bf0adf4877f77e1dfdc",
+    "internal/instrument/testify_test.go": "f77a6600a6619c99996f45bf5f0e07e0bd7fc5d566f75d4fc66355cfd56dc933",
+    "internal/runner/cover.go": "e85975485763036a79751d1063b21037c844ca0a44692dd95cf4415b0d785fbc",
+    "internal/runner/cover_test.go": "6a8edea0f53042ca7563c5edff057b758e7d2fcc601a245354722208f86b8a62",
+    "internal/runner/testify.go": "8a78f361e7556339a229380f5879668dda0d30b816c5f290af5e69a0a3701bab"
+  }
+}

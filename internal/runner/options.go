@@ -8,6 +8,8 @@ import (
 type options struct {
 	packages, buildFlags []string
 	overlay              string
+	coverage             bool
+	coverPatterns        []string
 }
 
 var buildBool = words("race msan asan cover trimpath buildvcs v a n x work")
@@ -72,6 +74,7 @@ func parseOptions(args []string, goflags string) (options, error) {
 		if name == "overlay" {
 			o.overlay = value
 		}
+		o.coverFlag(name, value)
 	}
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -94,6 +97,7 @@ func parseOptions(args []string, goflags string) (options, error) {
 			return o, fmt.Errorf("run ddtest from the target directory; -C is not supported by this POC")
 		}
 		if buildBool[name] || testBool[name] {
+			o.coverFlag(name, value)
 			if buildBool[name] && !strings.HasPrefix(a, "-test.") {
 				o.buildFlags = append(o.buildFlags, a)
 			}
@@ -114,6 +118,7 @@ func parseOptions(args []string, goflags string) (options, error) {
 		if name == "overlay" {
 			o.overlay = value
 		}
+		o.coverFlag(name, value)
 		if buildValue[name] {
 			o.buildFlags = append(o.buildFlags, flagArgs...)
 		}
@@ -122,4 +127,19 @@ func parseOptions(args []string, goflags string) (options, error) {
 		o.packages = []string{"."}
 	}
 	return o, nil
+}
+
+func (o *options) coverFlag(name, value string) {
+	switch name {
+	case "cover":
+		o.coverage = value != "false"
+	case "covermode", "coverprofile":
+		o.coverage = true
+	case "coverpkg":
+		o.coverage = true
+		o.coverPatterns = nil
+		if value != "" {
+			o.coverPatterns = strings.Split(value, ",")
+		}
+	}
 }

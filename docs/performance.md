@@ -47,7 +47,8 @@ DST decoration or type-checking pass in this front-end. Files are sorted for a
 deterministic transformation, and unchanged files do not become overlay outputs.
 
 [`PrepareRuntime`](../internal/runner/run.go) requests only the package fields
-it needs from one `go list`. It decodes JSON from `bytes.NewReader(data)`,
+it needs from a targeted `go list`. Testify discovery can add one metadata or
+dependency query, as described below. It decodes JSON from `bytes.NewReader(data)`,
 avoiding a complete conversion to a string. It still buffers the subprocess
 output; this is not streaming directly from Go's stdout.
 
@@ -59,6 +60,41 @@ discovery can still grow with package count.
 
 This sharing ends when the plan is removed. The POC uses Go's caches and has no
 persistent cache of instrumented binaries or prepared overlays.
+
+## Testify discovery and tool overhead
+
+The [Testify contract](testify.md) selects `-toolexec` from actual reachability,
+not the presence of a module requirement. Plain tests and assert-only targets
+omit it unless coverage includes rewritten `testing` sources. Known suite
+reachability uses `go list -find`; unknown nonstandard test imports use `-deps`
+so external helpers remain covered. The selected-version/API check stays in
+preparation, before a warm cache can skip the compiler.
+
+Unrelated tools dispatch without opening the plan. On Unix the CLI replaces
+itself with the native tool; Windows delegates through a child. The dispatch
+branch measured about 12.5 ns with zero allocations, while the real wrapper
+added about 1.1 ms to a compiler version probe on this Linux host. The
+[isolated probe results](results/selective-tools-20261003-linux-go1.27/README.md#isolated-bypass)
+measure process startup as well as dispatch. A microbenchmark of the branch
+alone cannot predict a build-wide saving.
+
+The [4/32 CPU strategy experiment](results/tool-strategies-20261003-linux-go1.27/README.md)
+retains 660 compile-only observations. For a directly imported suite, the
+selected `-find` branch reduced unchanged median wall time from 120.31 to
+110.34 ms at 4 CPUs and from 133.74 to 120.24 ms at 32 CPUs. Cold differences
+were small and their ranges overlap. These fixtures measure preparation and
+compilation; they do not execute tests or the event runtime.
+
+A one-query `-deps -test` prototype also passed compatibility and cache checks,
+but added about 8 ms to unchanged plain tests and needed more test-variant
+handling. Always-on and hybrid prototypes that deferred validation failed a
+warm-vendor version counterexample. The repository applies only `-find` for
+known suites; the other strategies remain outside the implementation.
+
+Compiler/linker version identities stay native. The exported suite fingerprint
+in `testing` carries instrumentation inputs into Go's package keys. No custom
+binary cache was added. Coverage of rewritten `testing` sources has its own
+versioned bridge; ordinary client-only coverage needs no bridge.
 
 ## Mini runtime optimizations
 
@@ -167,7 +203,7 @@ Define the scenario before interpreting its result:
 
 | Scenario | Cache and output condition |
 | --- | --- |
-| Cold build | Independent empty build cache per variant; downloaded modules and OS page cache may still be warm |
+| Cold build | Independent empty build cache per variant and no output binary; downloaded modules and OS page cache may still be warm |
 | Unchanged build | Reuse that variant's cache and existing output binary |
 | Forced link | Reuse compiled dependencies and set a fresh linker `-buildid` for each repetition |
 | Real edit | Change the same executed test or application body for every variant, retaining its own cache |
@@ -177,6 +213,12 @@ generated-main compilation can still contribute. A real-edit scenario must
 change an executed test or application body; comment and unused-constant edits
 belong in separate diagnostic scenarios. Keep separate output paths so one
 variant cannot overwrite another's reusable binary.
+
+An empty `GOCACHE` alone does not establish a cold link: an existing output
+binary can let Go skip it. Remove only the experiment's output before each cold
+observation, then inspect `-x` for actual compiler and linker invocations. Check
+unique edits also compile; keep comment/unused-constant diagnostics distinct
+from reachable body edits.
 
 Alternate order, retain every sample and add native-versus-native controls.
 Record CPU affinity, `GOMAXPROCS`, `-p`, SMT use and other host workloads.
@@ -208,9 +250,11 @@ The [README tables](../README.md#compilation-performance),
 [original fixture results](results.md),
 [early Mini comparison](mini-runtime.md#initial-compile-only-comparison) and
 their raw JSON files retain the revisions and conditions they measured.
-Those timings predate the latest SDK extraction and source reorganization.
-The current optimizations are present in the code, but their current build
-wall time has not been remeasured.
+Those older timings predate the latest SDK extraction and source reorganization.
+The [results index](results.md#later-experiments) links the refreshed four-variant
+Gin/Chi matrix and the subsequent selective-tool/strategy experiments, each with
+its measured inputs. The latest strategy matrix measures Mini fixtures, not a
+new native/Orchestrion/Gin/Chi comparison.
 
 Further profiling can examine MessagePack encoding, tag construction, telemetry
 lookups and time spent waiting for `sendMu`. A proposed change needs before/after

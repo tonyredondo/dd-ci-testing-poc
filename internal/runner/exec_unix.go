@@ -1,0 +1,25 @@
+//go:build !windows
+
+package runner
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"syscall"
+)
+
+// ExecNativeTool replaces the wrapper: no second process, wait loop or plan I/O.
+// It is only for the CLI entrypoint, never an in-process library caller.
+func ExecNativeTool(args []string) int {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "ddtest: missing tool executable")
+		return 2
+	}
+	executable, err := exec.LookPath(args[0])
+	if err == nil {
+		err = syscall.Exec(executable, args, os.Environ())
+	}
+	fmt.Fprintln(os.Stderr, err)
+	return 2
+}

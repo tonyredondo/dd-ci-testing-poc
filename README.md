@@ -26,8 +26,9 @@ the CLI; runtime normalization remains the SDK's responsibility.
 
 The tool prepares the SDK's nine `testing` aspects, injects an external test
 file importing `dd-trace-go/v2/civisibility`, then calls native `go test` with an
-overlay. Project sources, GOROOT and the SDK are not rewritten. Temporary
-sources are removed after Go finishes. Go owns compilation and cache invalidation.
+overlay. Original project sources, GOROOT and the SDK are not modified on
+disk. Temporary sources are removed after Go finishes. Go owns compilation and
+cache invalidation.
 The exact SDK ownership marker and linkname ABI are retained, including process
 retry control and abnormal finalization.
 
@@ -37,9 +38,14 @@ count/shuffle, JSON, benchmarks, race and coverage. It forwards native flags and
 preserves the user's result-cache choice; use `-count=1` for fresh CI events.
 Existing overlays are merged. Missing or ambiguous hooks and conflicting `-toolexec`
 configuration fail before compilation. Explicit `.go` file mode, `-C`, SDK
-replacements, standard-library test targets and `testify/suite` are outside this
-POC. Run from the desired module directory. Runtime configuration and intentional
-retry/skip/quarantine behavior remain in the selected runtime.
+replacements and standard-library test targets are outside this POC.
+[Testify suite support](docs/testify.md) covers v1.11.1 and newer v1 releases,
+including callers in external dependencies. A selective `-toolexec` hook is
+activated only for reachable Testify suites or covered rewritten `testing`
+sources. Other builds use the overlay directly. Preparation validates the selected
+Testify version and API even when Go can reuse a cached archive. Version fixtures
+cover v1.11.1 and v1.12.1. Run from the desired module directory. Runtime
+configuration and retry/skip/quarantine behavior remain in the selected runtime.
 
 ## Reproduce verification
 
@@ -67,9 +73,13 @@ GitHub Actions is configured to run the differential suite on Go 1.26/1.27 Linux
 macOS/Windows. A green Go version is compatibility evidence for that tested
 version; it does not imply support for every future toolchain or SDK.
 
-The first [mini runtime compile-only comparison](docs/mini-runtime.md#initial-compile-only-comparison)
-includes native, Orchestrion, POC SDK and POC Mini. The matrix below remains the
-previous SDK-backend measurement.
+The [results index](docs/results.md) links each experiment with its source inputs.
+The [refreshed Gin/Chi comparison](docs/results/compile-20261002-linux-go1.27/README.md)
+includes Native, Orchestrion, POC SDK and POC Mini at 4/32 CPUs. The later
+[Testify strategy experiment](docs/results/tool-strategies-20261003-linux-go1.27/README.md)
+retains all 660 compile-only observations, cache checks and the selected `-find`
+optimization. Those small Mini fixtures are separate from the Gin/Chi comparison.
+The tables below retain the earlier SDK-backend measurement.
 
 ## Compilation performance
 

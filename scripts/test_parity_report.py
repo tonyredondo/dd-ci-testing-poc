@@ -40,6 +40,37 @@ class ParityReportTests(unittest.TestCase):
             self.path.with_name(f"parity-{name}.json").write_text(json.dumps(item))
         return parity_report.render(self.path)
 
+    def test_testify_passed_contract_and_counts(self):
+        item = self.evidence["testify"]
+        item["status"] = "passed"
+        item["scenarios"] = self.report["scenarios"][:25]
+        self.assertIn("Testify parity passes", self.render())
+        item["sdk_with_poc"] = dict(item["sdk_with_poc"], suites=2)
+        with self.assertRaisesRegex(ValueError, "Testify event counts differ"):
+            self.render()
+
+    def test_failed_testify_case_is_rejected(self):
+        self.evidence["testify"]["status"] = "passed"
+        self.evidence["testify"]["scenarios"] = [dict(self.report["scenarios"][0], status="failed")] + self.report["scenarios"][1:25]
+        with self.assertRaisesRegex(ValueError, "failed Testify scenario"):
+            self.render()
+
+    def test_incomplete_testify_evidence_is_rejected(self):
+        self.evidence["testify"].update(status="passed", scenarios=[])
+        with self.assertRaisesRegex(ValueError, "missing or duplicated Testify"):
+            self.render()
+
+    def test_external_testify_claim_requires_case(self):
+        item = self.evidence["testify"]
+        item["status"] = "passed"
+        item["scenarios"] = self.report["scenarios"][:25]
+        item["external_callers"] = True
+        with self.assertRaisesRegex(ValueError, "missing external-module"):
+            self.render()
+        row = dict(item["scenarios"][0], scenario="external-module-helper")
+        item["scenarios"] = item["scenarios"] + [row]
+        self.assertIn("external-module callers covered", self.render())
+
     def test_reports_seconds_delta_and_measured_scope(self):
         text = self.render()
         self.assertIn("0.200000 | 0.100000 | -50.0%", text)

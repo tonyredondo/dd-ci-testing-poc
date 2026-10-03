@@ -1,5 +1,9 @@
 # Repeated CI parity execution
 
+This is a historical report from before Testify entry instrumentation. The gap
+recorded here is covered by the [current Testify comparison](../../testify.md);
+these timings and event observations remain unchanged.
+
 Runner: `linux/amd64`, `go1.27.1`.
 SDK: `96aedb31048c07e29e7a20a4333dc3b8d289c52d`; instrumentation: `orchestrion`.
 

@@ -8,12 +8,19 @@ installed as `v1.13.2-0.20260917114356-5c24783fcd76`.
 
 ## Architecture and dependency boundary
 
-The driver imports only the Go standard library and its own packages. It performs one targeted `go list`,
-parses native `testing` sources with `go/parser`, and writes an overlay containing
-only changed standard-library files, the SDK linkname declarations, and an
-external SDK import for each selected test package. Native Go performs the build.
-There is no configuration loader, daemon, nested dependency build, or per-compiler
-wrapper in the POC.
+The driver imports only the Go standard library and its own packages. A targeted
+`go list` supplies native `testing`, runtime and selected client-package metadata.
+Preparation parses `testing` with `go/parser` and writes an overlay containing
+changed sources, private hook declarations and an external runtime import for
+each selected test package. Native Go performs the build.
+
+If suites are already known to be reachable, a `go list -find` query supplies
+Testify source/module metadata. Unknown nonstandard test imports require `-deps`
+to discover suites through helpers. Version and API validation happen before
+the native build-cache lookup. A selective compiler wrapper transforms only
+`testify/suite`; a coverage bridge handles rewritten `testing` sources when
+coverage includes them. Builds needing neither omit `-toolexec`. The POC has
+no configuration engine, build daemon or nested dependency build.
 
 The nine SDK aspects are retained: M.Run, T.Run, B.Run, Fail, FailNow, formatted
 errors, formatted skips, SkipNow and Parallel. Formatting wraps the already
@@ -32,8 +39,10 @@ the POC overlay is still removed; this POC does not provide retained overlay deb
 
 The [feature inventory and differential matrix](ci-parity.md) compare Mini against
 the full SDK/Orchestrion testing configuration. CI exports per-scenario counts
-and supplemental hierarchy/span/telemetry evidence. Testify remains a recorded
-instrumentation gap.
+and supplemental hierarchy/span/telemetry evidence. [Testify validation](testify.md)
+adds 26 policy/lifecycle cases plus selected-version, workspace, covered-library,
+fast-bypass and cache-invalidation tests. Both local and external-module callers
+reach the same original runner.
 
 ## Runtime checks
 
@@ -77,8 +86,10 @@ line content and multiplicity are retained.
 
 The default backend supports module packages with the exact unreplaced SDK.
 The optional mini backend requires this module instead. Standard
-library test targets, explicit Go file mode, `-C`, custom flags before `-args`,
-testify/suite instrumentation and other APM integrations are outside the POC.
+library test targets, explicit Go file mode, `-C` and custom flags before `-args`
+are unsupported. Testify callers in client and external modules use the original
+selected runner; dedicated version fixtures cover v1.11.1 and v1.12.1.
+Other APM integrations remain outside the POC.
 The AST transformer validates hook presence and ambiguity and selected shape
 constraints; future Go source/ABI changes still require a new compatibility run.
 Go 1.26 and 1.27 are selected from the current [official releases](https://go.dev/dl/).
@@ -139,3 +150,23 @@ platform checks for that implementation, not for future code or SDK changes.
 See the [maintenance guide](maintenance.md#verification-before-publication)
 for checks to repeat after an update. Historical performance artifacts remain
 unchanged; these CI runs did not repeat the build benchmark matrix.
+
+## Selective-tool validation
+
+The final selected implementation passed the complete Linux suite on Go 1.26.8
+and the complete `-race` suite on Go 1.27.1. Each run included all 26 Testify
+cases against the full SDK/Orchestrion reference. The [tool-strategy report](results/tool-strategies-20261003-linux-go1.27/README.md)
+retains these event reports, source hashes and full local logs. The CLI also
+cross-compiled for Windows/amd64 and macOS/arm64. Those local checks do not
+establish native execution on either platform; publication must be followed
+through the compatibility workflow.
+
+[`TestTestifyVersionGuardWithWarmVendoredSources`](../integration/vendor_cache_test.go)
+warms the build cache with supported vendored sources, then changes consistent
+replacement metadata to an unsupported release while keeping source bytes
+identical. Preparation must reject it even if Go would reuse the suite archive.
+Other [selective-tool tests](../integration/selective_tools_test.go) check native
+compiler/linker identities, bypass exit status, Unix process replacement,
+coverage, workspaces and fingerprint invalidation. The compile-only matrix
+records unchanged cache hits and cross-strategy reuse separately from runtime
+feature comparisons.

@@ -32,6 +32,7 @@ type policySettings struct {
 	Quarantined         bool
 	AttemptToFix        bool
 	ManagementTarget    string
+	ManagementSuite     string
 	SettingsDelay       time.Duration
 	SettingsFailure     bool
 	Impacted            bool
@@ -173,6 +174,9 @@ func (c *parityReceiver) handler(w http.ResponseWriter, r *http.Request) {
 			target = "TestManaged"
 		} else {
 			suite = "parity_cases_test.go"
+		}
+		if c.policy.ManagementSuite != "" {
+			suite = c.policy.ManagementSuite
 		}
 		properties := map[string]bool{"disabled": c.policy.Disabled, "quarantined": c.policy.Quarantined, "attempt_to_fix": c.policy.AttemptToFix}
 		modules := map[string]any{"example.com/dd-ci-testing-fixture_test": map[string]any{"suites": map[string]any{suite: map[string]any{"tests": map[string]any{target: map[string]any{"properties": properties}}}}}}

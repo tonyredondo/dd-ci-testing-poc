@@ -20,7 +20,10 @@ does not need the CLI.
 flowchart TB
     subgraph build["Build time"]
         CLI["ddtest test: choose sdk or mini"] --> Plan["Resolve packages and prepare overlay"]
-        Plan --> Go["Native go test: compile and link"]
+        Plan --> Selection{"Suite or covered testing sources?"}
+        Selection -->|Yes| Tools["Selective compiler/coverage wrapper"]
+        Selection -->|No| Go["Native go test: compile and link"]
+        Tools --> Go
     end
     Go --> Binary["Instrumented test binary"]
     subgraph execution["When the binary runs"]
@@ -39,7 +42,7 @@ invocation, so compiler processes do not each load an instrumentation engine.
 | --- | --- |
 | [`cmd/ddtest`](../cmd/ddtest/main.go) | CLI entry point, runtime selection, activation and interrupt handling |
 | [`internal/runner`](../internal/runner/run.go) | Go flags, package discovery, overlay merging, temporary files and child exit status |
-| [`internal/instrument`](../internal/instrument/transform.go) | Validation and source edits for native `testing` |
+| [`internal/instrument`](../internal/instrument/transform.go) | Validation and source edits for native `testing` and the original Testify suite entry |
 | [Extracted `gotesting`](../internal/thirdparty/dd-trace-go/civisibility/integrations/gotesting) | Test callbacks, parallel ownership, retries and CI policies |
 | [`internal/minitracer`](../internal/minitracer/README.md) | Event fields, identities, byte accounting and batching |
 | [`internal/citransport`](../internal/citransport/transport.go) | Test-cycle delivery, retries, compression and request-body lifetime |
@@ -59,12 +62,18 @@ sequenceDiagram
     participant AST as Transformer
     participant Plan as Overlay files
     CLI->>CLI: Parse flags and apply activation default
-    CLI->>Go: One targeted go list
-    Go-->>CLI: Package metadata
+    CLI->>Go: Targeted go list for testing, runtime and client packages
+    Go-->>CLI: Package metadata and test imports
+    opt Suite known or nonstandard test imports need resolution
+        CLI->>Go: go list -find for known suite, otherwise -deps
+        Go-->>CLI: Selected suite source and module metadata
+        CLI->>AST: Validate suite version/API and prepare entry hook
+        AST-->>CLI: Suite edit, hook and content fingerprint
+    end
     CLI->>AST: Effective testing sources
     AST-->>CLI: Validated source edits
     CLI->>Plan: Hooks, imports and overlay JSON
-    CLI->>Go: go test -overlay=plan
+    CLI->>Go: go test -overlay=plan, with selective tools when needed
     Note over Go: Native build and cache decisions
     Go-->>CLI: Output and exit status
     CLI->>Plan: Remove files after Go exits
@@ -80,6 +89,18 @@ Existing overlays are merged before transformation. Generated-path collisions,
 missing or ambiguous hooks, already instrumented sources and conflicting
 `-toolexec` settings fail during preparation. The [flag parser](../internal/runner/options.go)
 also rejects explicit Go-file mode, `-C` and unknown flags before `-args`.
+
+[Testify preparation](testify.md) detects the suite package in the actual test
+import graph and prepares a registration call at its original `Run` entry.
+One private `-toolexec` hook substitutes compiler inputs for that package,
+including covered sources. It also bridges covered rewritten `testing` sources
+when needed. Unrelated calls bypass plan loading and replace the wrapper with
+the native tool on Unix. Builds needing neither feature omit `-toolexec`.
+The suite fingerprint travels through `testing` export data; compiler and
+linker identities remain native, so unrelated packages share Go's cache. The
+selected version and API are checked before Go can reuse a cached suite. A
+coverage bridge has its own version contract. Its dispatch, cache invalidation
+and source ownership are described in [Testify instrumentation](testify.md).
 
 The plan lives for one invocation. Identical generated content shares a backing
 file within that plan. Go still owns its build cache and test-result cache; use

@@ -145,7 +145,7 @@ or exactly-once delivery mechanism.
 ## Verification and boundaries
 
 See the [feature parity inventory](ci-parity.md) for policy combinations, event
-counts, the Testify gap and CI evidence. Fast manual hierarchy calls publish static
+counts, Testify compatibility and CI evidence. Fast manual hierarchy calls publish static
 capabilities before asynchronous settings loading, so emitted events retain them.
 
 
@@ -177,8 +177,9 @@ This is a POC. Real Datadog intake acceptance and UI behavior are unverified.
 Agent tests use a loopback EVP implementation, not a deployed agent. Bazel
 manifest/payload-file contracts are checked against the SDK using a real offline
 manifest, read cache and output files; an actual Bazel build/toolchain invocation
-has not been run. Full fuzz campaigns and `testify/suite` integration remain
-outside the instrumentator's verified scope. The
+has not been run. Full fuzz campaigns remain unverified. The
+[Testify comparison](testify.md) checks suite entry registration, external callers,
+lifecycle, policies and coverage against the original SDK/Orchestrion runner. The
 [verified CI revision](validation.md#verified-ci-revision) covers native Linux,
 macOS and Windows execution; other platforms require their own runtime evidence.
 The exact local checks and their limits are recorded in

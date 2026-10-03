@@ -11,6 +11,20 @@ import (
 )
 
 func main() {
+	if len(os.Args) >= 5 && os.Args[1] == "tool-overlay" {
+		mode, plan, args := os.Args[2], os.Args[3], os.Args[4:]
+		if mode != "testify" && mode != "cover" && mode != "testify-cover" {
+			fmt.Fprintln(os.Stderr, "ddtest: invalid tool mode")
+			os.Exit(2)
+		}
+		if !runner.ToolNeedsPlan(mode, args, os.Getenv("TOOLEXEC_IMPORTPATH")) {
+			os.Exit(runner.ExecNativeTool(args))
+		}
+		os.Exit(runner.RunTool(context.Background(), plan, args, os.Stdin, os.Stdout, os.Stderr))
+	}
+	if len(os.Args) >= 3 && os.Args[1] == "cover-overlay" {
+		os.Exit(runner.RunCoverTool(context.Background(), os.Args[2], os.Args[3:], os.Stdin, os.Stdout, os.Stderr))
+	}
 	if len(os.Args) < 2 || os.Args[1] != "test" {
 		fmt.Fprintln(os.Stderr, "usage: ddtest test [--runtime=sdk|mini] [go test flags] [packages]")
 		os.Exit(2)

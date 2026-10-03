@@ -253,3 +253,36 @@ For a docs-only change, check local links, code paths, command examples and
 Mermaid rendering. Diagrams are editable `mermaid` fences rendered by
 [GitHub](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams).
 Update an invariant's description when its implementation changes.
+
+## Updating Testify instrumentation
+
+The Testify source belongs to the client; it is not an incorporated source subset.
+The [Testify design and validation notes](testify.md) describe the version floor,
+ABI guard, selective tool dispatch, cache fingerprint and coverage bridge. Review
+the SDK's Testify advice and registration
+hook together with a Testify version update. Add the version to
+`TestTestifySupportedVersionsAndNativeSemantics` and run the full Orchestrion
+comparison, including covered library/helpers, external callers, user overlays,
+GOFLAGS and both retry modes. Keep the SDK/Orchestrion reference independent of
+both POC backends. No Testify source is vendored into this repository.
+
+`testifyContractVersion` in [`runner/testify.go`](../internal/runner/testify.go)
+versions compiler-side edits. Bump it when the transformation changes without
+changing the prepared source or hook; otherwise Go can reuse an older
+instrumented object. `coverContractVersion` in
+[`runner/cover.go`](../internal/runner/cover.go) versions the coverage bridge.
+Prepared content fingerprints omit temporary paths. Preserve native compiler
+and linker `-V=full` responses and check unchanged builds avoid both tools.
+
+Run [`TestTestifyVersionGuardWithWarmVendoredSources`](../integration/vendor_cache_test.go)
+when changing detection or version validation. Its source bytes stay constant
+while module/vendor metadata changes, so compile-time-only guards cannot pass
+it. Also run [`TestTestifyContractInvalidatesOnlyTestingDependents`](../integration/selective_tools_test.go)
+when changing the marker or tool identity: Testify must rebuild while unrelated
+standard-library packages remain cached. The [strategy experiment](results/tool-strategies-20261003-linux-go1.27/README.md)
+explains the rejected deferred-validation approaches and preserves all runs.
+
+After a platform change, check Unix `exec` replacement and Windows child exit
+status separately. A cross-compiled CLI is build proof; the workflow must run
+the integration fixtures natively on that platform. Update the architecture,
+Testify contract, validation inventory and performance guide together.

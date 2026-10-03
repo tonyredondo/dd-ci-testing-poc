@@ -61,8 +61,20 @@ def render(path):
         elif name != "testify" and (item["status"] != "passed" or item["sdk"] != item["mini"]):
             raise ValueError("failed additional fixture: " + name)
     testify = evidence["testify"]
-    if testify["status"] != "gap":
-        raise ValueError("Testify status changed; review and update the parity contract")
+    if testify["status"] not in ("gap", "passed"):
+        raise ValueError("Testify comparison was not verified")
+    if testify["status"] == "passed":
+        if not (testify["sdk_with_orchestrion"] == testify["sdk_with_poc"] == testify["mini"]):
+            raise ValueError("Testify event counts differ")
+        testify_rows = testify.get("scenarios", [])
+        if len(testify_rows) < 25 or len({row["scenario"] for row in testify_rows}) != len(testify_rows):
+            raise ValueError("missing or duplicated Testify scenarios")
+        if testify.get("external_callers") and not any(row["scenario"] == "external-module-helper" for row in testify_rows):
+            raise ValueError("missing external-module Testify evidence")
+        for row in testify_rows:
+            timing_cells(row, require_timing)
+            if row["status"] != "passed" or row["sdk"] != row["mini"] or row["sdk_exit"] != row["mini_exit"]:
+                raise ValueError("failed Testify scenario: " + row["scenario"])
 
     if schema == 3:
         timing_cells({"timing": report["execution_block"]}, True)
@@ -72,7 +84,10 @@ def render(path):
     totals = {key: sum(row["sdk"][key] for row in rows) for key in COUNT_FIELDS}
     lines = [
         "# CI Visibility parity evidence", "",
-        "Complete feature parity: **no**. The Testify instrumentation gap remains.", "",
+        ("Complete feature parity: **no**. The Testify instrumentation gap remains."
+         if testify["status"] == "gap" else
+         ("Testify parity passes for local and external-module callers. Complete product parity remains unverified."
+          if testify.get("external_callers") else "Testify parity passes for local callers and helpers. Complete product parity remains unverified.")), "",
         f"SDK base: `{report['sdk_commit']}` (`{report['sdk_version']}`).",
         f"Runner: `{report['os']}/{report['architecture']}`, `{report['go']}`.", "",
         "Counts below are sessions/modules/suites/tests/spans. Every matrix row",
@@ -109,7 +124,7 @@ def render(path):
         lines.append(f"| {name} | {counts(item['sdk'])} | {counts(item['mini'])} | {cell(item['scope'])} |")
     lines += ["", "### Additional fixture walltimes", "",
               "Scopes differ: the packages fixture also prepares and compiles via the CLI.",
-              "The manual fixture injects a settings delay; Testify retains a known grouping gap.",
+              "The manual fixture injects a settings delay; historical Testify records may retain a grouping gap.",
               "Use the scope recorded in each JSON observation when comparing runs.", "",
               "| Fixture | SDK wall (s) | Mini wall (s) | Mini vs SDK | Measured scope |",
               "| --- | ---: | ---: | ---: | --- |"]
@@ -124,10 +139,19 @@ def render(path):
               "checked against each sender's actual HTTP requests. Batch sizes and",
               "timings may differ. Distributions are outside this counter fixture.", "",
               f"Testify: full SDK `{counts(testify['sdk_with_orchestrion'])}`, POC SDK `{counts(testify['sdk_with_poc'])}`, Mini `{counts(testify['mini'])}`.",
-              f"Known gap: {cell(testify['reason'])}.", "",
+              (f"Known gap: {cell(testify['reason'])}." if testify["status"] == "gap" else
+               f"Testify: {len(testify.get('scenarios', []))} passing scenarios; " + ("external-module callers covered." if testify.get("external_callers") else "external dependency call sites remain outside the overlay boundary.")), "",
               "This is loopback protocol evidence. Real intake/UI acceptance, an actual",
               "Bazel toolchain run and an external APM shim are unverified. Read",
               "`docs/ci-parity.md` for the exclusions and remaining feature coverage.", ""]
+    if testify["status"] == "passed":
+        lines += ["## Testify combinations", "",
+                  "| Scenario | SDK events | Mini events | SDK wall (s) | Mini wall (s) | Mini vs SDK |",
+                  "| --- | --- | --- | ---: | ---: | ---: |"]
+        for row in testify_rows:
+            sdk_wall, mini_wall, delta = timing_cells(row, require_timing)
+            lines.append(f"| {cell(row['scenario'])} | {counts(row['sdk'])} | {counts(row['mini'])} | {sdk_wall} | {mini_wall} | {delta} |")
+        lines.append("")
     return "\n".join(lines)
 
 

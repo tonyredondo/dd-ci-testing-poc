@@ -1,0 +1,91 @@
+{
+  "baseline": {
+    "internal/runner/options.go": "73ff29f12305ef81334b41987cb7f3258e03a27c3a34087b468247e319bd1b90",
+    "internal/runner/options_test.go": "017e5b8573ec5c3104c1b7743410a37e749bdab852c75dea6cb14d8549f95e4f",
+    "internal/runner/run.go": "6e7b03b876d497f0c99a8ed0d7b4ce29f52571c7eef630bcc6b4bd3ff9734302",
+    "internal/runner/runtime.go": "79c6db32257f32071ddedc1d2c039bc51a22514256e91467154102615ec85b60",
+    "internal/runner/testify.go": "3c638ede5fe4fa3e6a7a1f09eecd2083decfb6e3005fe764875ea880fd9121a4",
+    "internal/runner/cover.go": "4efbccd6515cf90282f2b33f1a069380244eb59d2eaf450ce26967aac48b79a9",
+    "internal/runner/cover_test.go": "d053406ff09214e2829a2b4722f74ec7227e45771ad4ad8ba4c4db78102c6661",
+    "internal/runner/tool.go": "da18b935d63d31ea2c8641bb6610c3f15b6e854877a698b6c5ba0b69e5d73925",
+    "internal/runner/exec_unix.go": "18adba5e315246621023f4157fa5134c19a142079f05b6704961e6d03a6e529c",
+    "internal/runner/exec_windows.go": "174417c1b04322edc22ecb58a1442d521a0afbe4b0754308c09ac8540c1759e7",
+    "internal/runner/tool_test.go": "2cfc6c50ba9f0365d959aa3754c4073137f1a80eebc3d6cce134e7242f31669f",
+    "internal/instrument/hooks.go": "d33751b672f4ca47f48180416866e310ed7d579e52ec15cde657a5e8867435a1",
+    "internal/instrument/transform.go": "d50ea21b1fa6eaace9c3f297b2e49f85738173a9c1b2252f4708b893887108e1",
+    "internal/instrument/transform_test.go": "28a678a3ed111e651ddf1b3e14ea758d1ac7878273b07d14a21f89d9e301af7a",
+    "internal/instrument/testify.go": "8e62a3bf55dfcb799337f5a6ebc5900b71981c42a0aef2d145d194bbe4138885",
+    "internal/instrument/testify_test.go": "d32659c0b4331a6f6feda81843a04ed0ca164b98103f0865b6532b7a599c463e",
+    "internal/instrument/testify_entry.go": "72f26f459d8567a1f8a66baf8e8c56b13cc2769812768acabeea307f351aceae",
+    "internal/instrument/testify_entry_test.go": "fc9e80e0e9375304648c099474d0b0a3844e46fa18db31d82c0bb819c43df48f",
+    "cmd/ddtest/main.go": "1b240d9ee02cc8a3f9b1a7767c6f935b43f516820276104e2b7865eca743fabc",
+    "integration/activation_test.go": "7655071036cd3c53119df2505fec7c855332abf74653c97e1bbaa57f0fa2385b",
+    "integration/cache_overlay_test.go": "8a102ff9db7b63892e9317aed024835ccd3b402494b7044e462e505fd771d0b1",
+    "integration/compatibility_test.go": "ccdbdef431c0c5d1934fdd38bff332cd117eacaf37768b501c81ca205376e83b",
+    "integration/features_test.go": "13152be3d056d73cbc3d3061e6f97f4db577df17d8e3da4b3fc46372ef01049c",
+    "integration/msgpack_test.go": "ca8993fef76ab88e6ecb6d9fda9600a7f52ef112fde43fe945ec5eecaca2d873",
+    "integration/normalize_test.go": "0617317a2cdd473b7be12088054e8358b19965253d9d7a6fa648757dc9e601ac",
+    "integration/sharing_test.go": "30e495441e128f6b0f3607f4f39dee677b85b2f74ee1c6c8ea4f37ccc225a403",
+    "integration/variants_test.go": "4f791442bbcd1507ba432935f10bc924caf4694c2fe4aea99505a8d34975e907",
+    "integration/wire_test.go": "a6c07cd9a6dfeec389fb3b10821a6c783955fe66dfb874f0876be63f4e28487e",
+    "integration/mini_test.go": "a4f4892768beeff038d8bd405a754a4a478700dc918d7c5030c82ec1434bcf89",
+    "integration/mini_wire_test.go": "fb01623cef21d7ee7042a72883973f1f588b61ff917dc37cc857d16a19f6edd0",
+    "integration/mini_cli_test.go": "d8937865a83f59fd59005f40005d63ff6c22bf65373db446bc68aa931adc7bb6",
+    "integration/mini_parity_test.go": "f07692b2497b095cc2ebd7676ec0f380d13745fb17605e90d87caa20f0a5b04a",
+    "integration/mini_bazel_test.go": "eab3c465a29dc3b587c48cb3ca996434e189cefb3d849c0c11541963ca226ad3",
+    "integration/mini_dependencies_test.go": "edf27452e63390468b2eddd5298a60711da2583658ca0a0b2d2b80e8e91f3127",
+    "integration/parity_matrix_test.go": "65825ce3ebfae0cf7da85b8b5faea05e82fc794faaa5b1c187984f383112d447",
+    "integration/parity_payloads_test.go": "21145939de82ddd72d0cdf6bc892cb73829e54d4a6a579399d5f7360233b9091",
+    "integration/parity_git_test.go": "64ca210ebbf499081b40817a59cc13eb94c9f9d27851a6d305f38e9ae477d8c0",
+    "integration/parity_spans_test.go": "edcf7d184327098ff89d27276d43f3d86793622c13232ebbe7d70fddff052c21",
+    "integration/parity_telemetry_test.go": "74406444afeff8ebce30ab6d028f3cb81420d30ffacfca6413d849f2b51d9006",
+    "integration/parity_testify_test.go": "2345bdf0be5fd4ccaab52e11621a8fb9f4d7b0fe007e434328e84563d7a14293",
+    "integration/parity_packages_test.go": "0772c2bd6c375e6a664b2e2273e810148bf5bd2d08bdc79014a23c15db7a3e6f",
+    "integration/parity_manual_test.go": "b266b8a26fe3212063dbb18ef83626191981b108dc0a787208bcfa69a8bcf823",
+    "integration/parity_uds_test.go": "e76e421b254f1de39d9f46f7083483b1a9d1cb45653fe1c46b499477d6d3c598",
+    "integration/selective_tools_test.go": "fb860c926e0dd07ee617fb98a9b71b086488f47efbb5938f550c991a3a450344",
+    "integration/testdata/testify/testify_cases_test.go": "d4270997c558836d4a6ce50ead4e34482f79348614a671f2f6f3585cc5eb25b2",
+    "integration/testdata/testify/testify_alias_test.go": "8c39177638ab06db9406e3a7518aed0af933b46ce97f1d1c09c4028966988e37",
+    "integration/testdata/testify/testify_dot_test.go": "87f34af81091aec8a0c09720a1dae97d1532cd5dd5a6cae4b2558253dad23f2f",
+    "integration/testdata/testify/testify_internal_test.go": "5cd8d32b5cc27cdcecb24ef6e412b1f3aa786626b822494c62482fa5d3509713",
+    "integration/testdata/testify/testify_tagged_test.go": "ea8816979ae8a87c9a57be1aceb447132d96e50bbf6abf429eaef30a793e934d",
+    "integration/testdata/testify/testify_external_test.go": "4d6f79bcd061148ddbea32cde64967484e42f39ab67ca8a97bb59cacde59eea4",
+    "integration/testdata/testify/helpers/run.go": "a5ea86e04e94c9484908a1b20bd9323c03a9ff02984ac4755c89e2b993711b5f"
+  },
+  "prototype_sources": {
+    "exact": {
+      "prototype/exact/testify.go": "c7b04951aaf4dc8eedd1f01d0ea7567c424945f02053566bd65b5d486fe5e7f3",
+      "prototype/exact/run.go": "05766923eef01df3c9984a8b55c60d03a56cca6e387fc5826e2977c0be094ca9",
+      "prototype/exact/tool.go": "e86ea69008def00080356386bf027df8ff03ae2c6ee7dd67783c0795d22ab49a",
+      "prototype/exact/overlay.json": "3a25f34a565d3f60ef3986e521fd8d25d5f6ef852ab2a800e2e5d8f193243f99"
+    },
+    "always": {
+      "prototype/always/testify.go": "e3c116e841050bf6f1a610d29ed3209dd36414eb360016052a4dce947f587059",
+      "prototype/always/run.go": "05766923eef01df3c9984a8b55c60d03a56cca6e387fc5826e2977c0be094ca9",
+      "prototype/always/tool.go": "e86ea69008def00080356386bf027df8ff03ae2c6ee7dd67783c0795d22ab49a",
+      "prototype/always/overlay.json": "8bc3e7c67040ba84be4ae2496ddb0db756d45f7b310b75497bac2c32894f0a95"
+    },
+    "hybrid": {
+      "prototype/hybrid/testify.go": "589ae1edda4187ce4513692ed1790fdda5dcc77d8cdb8b3dacc1ca049515136e",
+      "prototype/hybrid/run.go": "05766923eef01df3c9984a8b55c60d03a56cca6e387fc5826e2977c0be094ca9",
+      "prototype/hybrid/tool.go": "e86ea69008def00080356386bf027df8ff03ae2c6ee7dd67783c0795d22ab49a",
+      "prototype/hybrid/overlay.json": "7cddcf9c8fffdcbab3ec03d1b1cc59b61e809ee0b1bbe919a106d14bbe1843ec"
+    },
+    "find": {
+      "prototype/find/testify.go": "bcd580434cd9610668084160e8a9ddec1a5123df9030b4598c759383b3b10e9b",
+      "prototype/find/overlay.json": "db8a497524a8f47f69b667bb468b5b96768dfab15151ace753ac4d789d554ad6",
+      "prototype/find/compatibility_test.go": "b92012260ff8572f3ef9bb04efee3fbaea554d2029eabc8578b722100d04e018",
+      "prototype/find/test-overlay.json": "e447623614eb96561c732d637292a200554f5353835c868777480b14e82857c4"
+    },
+    "one-pass": {
+      "prototype/one-pass/testify.go": "3dd8c0fce636435fa038717115ae84982fb1f71547ed21f1d1147f22afa4a7fb",
+      "prototype/one-pass/run.go": "27a65cd34a03376d48481517d24ae92448317b1be8cd8779d72e8bc599110b3b",
+      "prototype/one-pass/overlay.json": "6641a72452be03bff226fa673977cd23a45059e8f2920c73abecfcae826e6a25",
+      "prototype/one-pass/compatibility_test.go": "10cc7dc60f152d2f120216a86323c3779a68092f15eaa3ddf7af7ea4f0aa9278",
+      "prototype/one-pass/test-overlay.json": "117c9f8f08130182c867400ae999c2a2fd35062e9124b95717217e39d6bde6bd"
+    }
+  },
+  "harness": "5747ff70657e4de37fce7988306ac9b340af787cdd348cd907472bda55baf09a",
+  "sdk": "96aedb31048c07e29e7a20a4333dc3b8d289c52d",
+  "orchestrion": "e219ac2cd33df4c1ac5ba564584014ad22185594d68aafa0ee36fcfbe5479753"
+}

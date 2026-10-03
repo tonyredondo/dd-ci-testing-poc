@@ -77,7 +77,7 @@ def markdown(summary):
         sdk, mini = sample["sdk_wall_ns"] / 1e9, sample["mini_wall_ns"] / 1e9
         lines.append(f"| {i} | {' then '.join(sample['order'])} | {sdk:.6f} | {mini:.6f} | {(mini / sdk - 1) * 100:+.1f}% |")
     lines += ["", "Individual reports retain event counts, CI-attribute comparisons, case durations",
-              "and the known Testify gap. Compilation time and per-fixture clocks are not interchangeable",
+              "and the separate Testify comparison. Compilation time and per-fixture clocks are not interchangeable",
               "with the continuous execution clock. These are local loopback results, not real-intake measurements.", ""]
     return "\n".join(lines)
 

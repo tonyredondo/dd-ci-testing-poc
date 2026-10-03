@@ -24,17 +24,26 @@ const miniPackage = "github.com/tonyredondo/dd-ci-testing-poc/testopt"
 type goPackage struct {
 	Dir, Name, ImportPath              string
 	GoFiles, TestGoFiles, XTestGoFiles []string
+	Imports, TestImports, XTestImports []string
+	Deps                               []string
 	Module                             *struct {
 		Path, Version string
-		Replace       *struct{ Dir string }
+		Replace       *struct{ Dir, Version string }
 	}
 	Error *struct{ Err string }
 }
-type Overlay struct{ Replace map[string]string }
+type Overlay struct {
+	Replace map[string]string
+	// CoverExclude lists owned adapter files; they must not affect user coverage.
+	CoverExclude []string     `json:",omitempty"`
+	Testify      *TestifyTool `json:",omitempty"`
+}
 
 type Plan struct {
 	File, Dir                       string
 	InstrumentedFiles, TestPackages int
+	coverOverlay                    bool
+	testify                         bool
 }
 
 // Prepare creates a complete plan before native Go compilation starts. Callers
@@ -83,7 +92,7 @@ func PrepareRuntime(ctx context.Context, dir string, args []string, runtime Runt
 			replacements[filepath.Clean(from)] = to
 		}
 	}
-	listArgs := append([]string{"list", "-json=Dir,Name,ImportPath,GoFiles,TestGoFiles,XTestGoFiles,Module,Error"}, opts.buildFlags...)
+	listArgs := append([]string{"list", "-json=Dir,Name,ImportPath,GoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,Deps,Module,Error"}, opts.buildFlags...)
 	listArgs = append(listArgs, opts.packages...)
 	listArgs = append(listArgs, "testing", runtimePackage)
 	cmd := exec.CommandContext(ctx, "go", listArgs...)
@@ -157,7 +166,7 @@ func PrepareRuntime(ctx context.Context, dir string, args []string, runtime Runt
 			_ = os.RemoveAll(temp)
 		}
 	}()
-	// Backing files are immutable and shared only within this plan.
+	// Backing files are shared only within this plan and finalized before Go starts.
 	backingByContent := map[string]string{}
 	add := func(logical, content string) error {
 		if _, exists := replacements[logical]; exists {
@@ -202,9 +211,32 @@ func PrepareRuntime(ctx context.Context, dir string, args []string, runtime Runt
 		}
 		plan.TestPackages++
 	}
+	testify, e := prepareTestify(ctx, dir, opts, packages, replacements, runtime, temp)
+	if e != nil {
+		return plan, e
+	}
+	plan.testify = testify != nil
+	if testify != nil {
+		// Exported marker changes testing's content ID, which suite imports.
+		// Native compiler identity can then be shared with uninstrumented packages.
+		marker := replacements[filepath.Join(native.Dir, "zz_dd_ci_visibility_hooks.go")]
+		file, e := os.OpenFile(marker, os.O_APPEND|os.O_WRONLY, 0600)
+		if e != nil {
+			return plan, e
+		}
+		_, e = file.WriteString(instrument.TestifyCacheMarker(testify.Fingerprint))
+		closeErr := file.Close()
+		if e == nil {
+			e = closeErr
+		}
+		if e != nil {
+			return plan, e
+		}
+	}
+	plan.coverOverlay = needsCoverOverlay(dir, opts, packages, []goPackage{*native})
 	plan.File = filepath.Join(temp, "overlay.json")
 	plan.InstrumentedFiles = len(rewritten)
-	encoded, e := json.Marshal(Overlay{Replace: replacements})
+	encoded, e := json.Marshal(Overlay{Replace: replacements, Testify: testify})
 	if e != nil {
 		return plan, e
 	}
@@ -234,6 +266,19 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 	}
 	defer os.RemoveAll(plan.Dir)
 	forwarded := []string{"test", "-overlay=" + plan.File}
+	if plan.coverOverlay || plan.testify {
+		executable, e := os.Executable()
+		if e != nil {
+			fmt.Fprintln(stderr, e)
+			return 2
+		}
+		tool, e := toolCommand(executable, plan.File, plan.toolMode())
+		if e != nil {
+			fmt.Fprintln(stderr, e)
+			return 2
+		}
+		forwarded = append(forwarded, "-toolexec="+tool)
+	}
 	// The merged overlay replaces only the user's overlay flag, never test flags.
 	for i := 0; i < len(args); i++ {
 		if args[i] == "-args" {
