@@ -160,7 +160,13 @@ defer func() {
 		}
 		sort.Slice(edits, func(i, j int) bool { return edits[i].start < edits[j].start })
 		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "//line %s:1\n", name)
+		header := "//line " + name + ":1\n"
+		size := len(src) + len(header)
+		for _, e := range edits {
+			size += len(e.text) - (e.end - e.start)
+		}
+		buf.Grow(size)
+		buf.WriteString(header)
 		cursor := 0
 		for _, e := range edits {
 			if e.start < cursor {

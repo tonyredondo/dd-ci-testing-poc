@@ -32,6 +32,11 @@ ported assertions and adaptations. The platform
 selected declarations and their origins. These records need to agree with
 `SOURCE.json` after an update.
 
+The SDK's [performance adaptation record](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md)
+explains each hot-path change, its ownership/lifetime rules and the regression
+checks required during synchronization. Review it alongside the generated patch;
+hashes identify changed bytes but do not explain why those changes exist.
+
 SDK `internal/<path>` maps to `internal/thirdparty/dd-trace-go/<path>`.
 Its `ddtrace/ext/` subtree keeps that relative path. Removing only the top
 upstream `internal/` avoids a second Go visibility boundary. Codec files retain

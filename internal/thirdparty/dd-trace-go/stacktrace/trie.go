@@ -10,12 +10,12 @@ package stacktrace
 // providing better memory efficiency and potentially faster lookups for module paths.
 //
 // Concurrency: This trie follows a write-once-read-many (WORM) pattern where all writes
-// occur during package initialization (init function) before any concurrent access begins.
+// occur inside a sync.OnceValue initializer, before the trie is published.
 // After initialization, the trie is effectively immutable and can be safely read by multiple
 // goroutines without synchronization.
 type segmentPrefixTrie struct {
 	root *segmentTrieNode
-	// No mutex needed - structure is immutable after init()
+	// No mutex needed - structure is immutable after initialization.
 }
 
 // segmentTrieNode represents a single path segment node in the trie

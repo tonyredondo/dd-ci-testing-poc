@@ -10,6 +10,11 @@
   ],
   "files": [
     {
+      "path": "ADAPTATIONS.md",
+      "sha256": "f06d8619eb347210c58f42cdd66ff0e8cf9a146ebae038162fe88b1f46943ced",
+      "role": "local"
+    },
+    {
       "path": "LICENSE",
       "sha256": "71af67b41ee226793c67e48f29be03eecf0bca592993fb8bbd3de84f1e1475f0",
       "role": "license",
@@ -25,12 +30,12 @@
     },
     {
       "path": "README.md",
-      "sha256": "3bf014d05c86b467f89a4cba2b5765a08377c6a0b7c6b9bf5ec06d511be4c052",
+      "sha256": "4869276012c925facda49a16037ba74eaa372788c54c9cacb6b2b7c958847a17",
       "role": "local"
     },
     {
       "path": "TESTS.json",
-      "sha256": "08d080c04bb763889a3dbe7acd7f383c7faaa1e240d2e0c97162987cdf968ae2",
+      "sha256": "0b02b4f7ff549568eb9082f99161ba858df335152abcc717a28dd0ee3284fecd",
       "role": "local"
     },
     {
@@ -547,8 +552,8 @@
     },
     {
       "path": "civisibility/integrations/gotesting/testify.go",
-      "sha256": "25105ea7f1a1d46c78c639de90bf61a925c3942adb45dc73dbbdc6fe7e0248c1",
-      "role": "upstream",
+      "sha256": "3ef8b04c096b82fe146358c4b0866f76a4d92bae287614d28ce6ee00d0b21523",
+      "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testify.go",
       "source_sha256": "25105ea7f1a1d46c78c639de90bf61a925c3942adb45dc73dbbdc6fe7e0248c1"
     },
@@ -673,7 +678,7 @@
     },
     {
       "path": "civisibility/integrations/manual_api_sourcecache.go",
-      "sha256": "22276b0c97f99162550c3f0c99c6b630a4511c09f39455797eb961e9d084b431",
+      "sha256": "fadb9f3a0fb0c35795595c7ca1104f44ab0f5a4901a89da71531d1ca9e490e34",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/manual_api_sourcecache.go",
       "source_sha256": "6b0f586904032e1839cd96cc40de9cdb0aa2f55f2b76808b7b7fa5cb51542942"
@@ -1091,7 +1096,7 @@
     },
     {
       "path": "civisibility/utils/telemetry/telemetry_count.go",
-      "sha256": "d1cf036ca40c9cf6cb8341a8b047184bc6dde663c253c1c99a0aa1f74c33ed95",
+      "sha256": "54c946b4a3b5a573418ea2e8090e052367944bbd1d2eb42f8d566bbb2feaf35a",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/telemetry/telemetry_count.go",
       "source_sha256": "c102dd58d35fa03a8d5899bb8089fc3713ef5cb978cdbe25eb58c0e3e30adc95"
@@ -1105,8 +1110,8 @@
     },
     {
       "path": "civisibility/utils/telemetry/telemetry_test.go",
-      "sha256": "4f82821b0c6d1e7c933c92ba17ff19d31a05520c9a5aa187346420cd5b307145",
-      "role": "upstream",
+      "sha256": "2e2f441f9ae72d8b47d0e76c8e4905b5fc97dbbfb6154464746e3788cfd7152f",
+      "role": "adapted",
       "source_path": "internal/civisibility/utils/telemetry/telemetry_test.go",
       "source_sha256": "4f82821b0c6d1e7c933c92ba17ff19d31a05520c9a5aa187346420cd5b307145"
     },
@@ -1349,6 +1354,13 @@
       "source_sha256": "db4db2bce3452b70640b00e9ae3ef4e1b91bee137cdd80df8a4ee2332d98554d"
     },
     {
+      "path": "env.go",
+      "sha256": "903e322b4ac21e7aa34b3ef1ab719e3e141ed9858961e545619c8343e9ccd88f",
+      "role": "adapted",
+      "source_path": "internal/env.go",
+      "source_sha256": "a25103c602ceed1385180637f00c17f3ecaafc9b2738d872296c098e515b207b"
+    },
+    {
       "path": "env/env.go",
       "sha256": "b45a93a28a50c6ba481ad2ff213b3ede8ddfed22daa1838558861b0bcec0e518",
       "role": "adapted",
@@ -1368,13 +1380,6 @@
       "role": "adapted",
       "source_path": "internal/env/supported_configurations.go",
       "source_sha256": "7bd2b32aa93e6e9b8d3e741e0a044ee392adf0e4416a06f5f9dfaff1a9b01a34"
-    },
-    {
-      "path": "env.go",
-      "sha256": "903e322b4ac21e7aa34b3ef1ab719e3e141ed9858961e545619c8343e9ccd88f",
-      "role": "adapted",
-      "source_path": "internal/env.go",
-      "source_sha256": "a25103c602ceed1385180637f00c17f3ecaafc9b2738d872296c098e515b207b"
     },
     {
       "path": "globalconfig/globalconfig.go",
@@ -1501,6 +1506,11 @@
       "source_sha256": "721549ef9184169aa82ef849c463f45e25181520b0634ea8f5dcbe2d7718e112"
     },
     {
+      "path": "stacktrace/classification_test.go",
+      "sha256": "edd78698aebf6b297751d10d090e14555d74818fea0c40129ab57a3a6f6c26ea",
+      "role": "local"
+    },
+    {
       "path": "stacktrace/contribs_generated.go",
       "sha256": "d759dd6bcedb68cf4d044fa144ebcb19ffde02ff2b72281735271e8dfb46c929",
       "role": "upstream",
@@ -1509,15 +1519,15 @@
     },
     {
       "path": "stacktrace/stacktrace.go",
-      "sha256": "cb782788767d316d2e31f0c753107537d2cee98ee5039a326cb37c218cd057bd",
+      "sha256": "4cab050a71b8fdb5b6065b8872b2912f69f90741b4beeeabb954a8e9a38d48da",
       "role": "adapted",
       "source_path": "internal/stacktrace/stacktrace.go",
       "source_sha256": "360529c3bbbc04fda98b12026ef2ecfa23278927cf63ce1652be6a020896c0a7"
     },
     {
       "path": "stacktrace/trie.go",
-      "sha256": "16de3b053c3021530b5c91f7e0312e7a919eeb178d9e1a4707f5c083269889d5",
-      "role": "upstream",
+      "sha256": "c4571d0dcfddc53891096903ef7086de354e7880c8c0135abb84e10718555743",
+      "role": "adapted",
       "source_path": "internal/stacktrace/trie.go",
       "source_sha256": "16de3b053c3021530b5c91f7e0312e7a919eeb178d9e1a4707f5c083269889d5"
     },
@@ -1551,7 +1561,7 @@
     },
     {
       "path": "telemetry/concurrency_test.go",
-      "sha256": "a54f88ec8854debaa4cda1f093357c64e2b95782a15f72fce2481caaeb5a63dc",
+      "sha256": "8fcc2da24e0d7b237158bbb7fbb5fcff542329633738c42ec61605feaaf6aa7f",
       "role": "local"
     },
     {
@@ -1570,7 +1580,7 @@
     },
     {
       "path": "telemetry/globalclient.go",
-      "sha256": "e63306dc2d918cb335fd598fbff2e7ac8d12d8769be181dc4a489106fc1d568d",
+      "sha256": "5372fb1d68608866a2c8bceb8ebdad5d83c5a2b697ea25d129c0a995e628cacc",
       "role": "adapted",
       "source_path": "internal/telemetry/globalclient.go",
       "source_sha256": "87bbf0ba701f4310d520cfdc44d212e9069bf15974de95f10e53403100899d86"
@@ -1794,14 +1804,14 @@
     },
     {
       "path": "telemetry/metrichandle.go",
-      "sha256": "9d0e59b5aeae72f51b3a825479ecdaee3828f46aad5169baa4e5a3ecf30057a4",
+      "sha256": "0993ac80332eacfb5f99bb25785419e091fde8f4f8e3351b927a6e4b32db7e99",
       "role": "adapted",
       "source_path": "internal/telemetry/metrichandle.go",
       "source_sha256": "6a572b5da4419ad1f1368704d164ebe055041c7aabbd0687f9a0b9db8da436c6"
     },
     {
       "path": "telemetry/metrics.go",
-      "sha256": "a73129b9f8377f74bf8be6030252dde56976e0eaddcb8fbdcf346dfa0d4c3b10",
+      "sha256": "6a5620f4076197676d4ff0837c53791294204f36ea7ac332b6e3a71a2582c897",
       "role": "adapted",
       "source_path": "internal/telemetry/metrics.go",
       "source_sha256": "5e1664994afaef8f356e2985a6718ae1f4505cc823094f3af0e19844b9c90b9d"

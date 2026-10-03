@@ -24,6 +24,14 @@ func CheckTestifyNames(name string, src []byte) error {
 	if err != nil {
 		return err
 	}
+	return checkTestifyNames(name, src, file)
+}
+
+func checkTestifyNames(name string, src []byte, file *ast.File) error {
+	if !bytes.Contains(src, []byte(TestifyRegisterName)) {
+		return nil
+	}
+	var err error
 	ast.Inspect(file, func(n ast.Node) bool {
 		if id, ok := n.(*ast.Ident); ok && id.Name == TestifyRegisterName {
 			err = fmt.Errorf("%s: reserved Testify instrumentation name %s", name, id.Name)
@@ -37,7 +45,11 @@ func CheckTestifyNames(name string, src []byte) error {
 func applyTestifyEdits(name string, src []byte, edits []edit) ([]byte, error) {
 	sort.Slice(edits, func(i, j int) bool { return edits[i].start < edits[j].start })
 	var out bytes.Buffer
-	out.Grow(len(src) + len(edits)*len(TestifyRegisterName))
+	size := len(src)
+	for _, e := range edits {
+		size += len(e.text) - (e.end - e.start)
+	}
+	out.Grow(size)
 
 	cursor := 0
 	for _, e := range edits {
@@ -55,12 +67,20 @@ func applyTestifyEdits(name string, src []byte, edits []edit) ([]byte, error) {
 // TestifyAPI validates the library entry without loading a type checker or
 // parsing client sources. The package's own compiler still checks its types.
 func TestifyAPI(files map[string][]byte) error {
-	validRun := false
+	var parsed []*ast.File
 	for name, src := range files {
 		file, err := parser.ParseFile(token.NewFileSet(), name, src, parser.SkipObjectResolution)
 		if err != nil {
 			return err
 		}
+		parsed = append(parsed, file)
+	}
+	return validateTestifyAPI(parsed)
+}
+
+func validateTestifyAPI(files []*ast.File) error {
+	validRun := false
+	for _, file := range files {
 		testingAlias := ""
 		for _, spec := range file.Imports {
 			path, err := strconv.Unquote(spec.Path.Value)

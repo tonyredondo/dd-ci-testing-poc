@@ -1,11 +1,13 @@
 package telemetry
 
 import (
+	"math"
 	"net/http"
 	"runtime"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry/internal"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry/internal/transport"
@@ -142,6 +144,99 @@ func TestGlobalRegistrationReplaysAndSwapsOnce(t *testing.T) {
 	handles[0].Submit(7)
 	if got := second.Count(NamespaceCIVisibility, "events_enqueued_for_serialization", nil).Get(); got != 7 {
 		t.Fatalf("swapped handle submitted %v, want 7", got)
+	}
+}
+
+func TestMetricPointLifecycle(t *testing.T) {
+	key := newMetricKey(NamespaceCIVisibility, transport.CountMetric, "events_enqueued_for_serialization", nil)
+	c := &count{metric: metric{key: key}}
+	if !math.IsNaN(c.Get()) || c.Payload().Type != "" {
+		t.Fatal("an unused counter emitted a point")
+	}
+	before := time.Now().Unix()
+	for _, value := range []float64{2.5, -1, 0} {
+		c.Submit(value)
+	}
+	p := c.Payload()
+	if p.Metric != key.name || p.Namespace != key.namespace || p.Type != transport.CountMetric || len(p.Points) != 1 || p.Points[0][1] != 1.5 {
+		t.Fatalf("counter payload = %+v", p)
+	}
+	if timestamp := p.Points[0][0].(int64); timestamp < before || timestamp > time.Now().Unix() {
+		t.Fatalf("counter timestamp = %d", timestamp)
+	}
+	if !math.IsNaN(c.Get()) || c.Payload().Type != "" {
+		t.Fatal("collection did not reset the counter")
+	}
+	c.Submit(math.NaN())
+	if !math.IsNaN(c.Payload().Points[0][1].(float64)) {
+		t.Fatal("NaN counter semantics changed")
+	}
+	c.Submit(0)
+	if p := c.Payload(); p.Type != transport.CountMetric || p.Points[0][1] != float64(0) {
+		t.Fatalf("zero submission lost after reset: %+v", p)
+	}
+	g := &gauge{metric: metric{key: metricKey{namespace: key.namespace, kind: transport.GaugeMetric, name: "fixture"}}}
+	g.Submit(2.5)
+	g.Submit(-1)
+	if g.Get() != -1 || g.Payload().Points[0][1] != float64(-1) || !math.IsNaN(g.Get()) {
+		t.Fatal("gauge overwrite/reset semantics changed")
+	}
+	r := &rate{count: count{metric: metric{key: metricKey{namespace: key.namespace, kind: transport.RateMetric, name: "fixture"}}}}
+	now := time.Now()
+	r.intervalStart.Store(&now)
+	r.Submit(5)
+	if !math.IsNaN(r.Get()) || r.Payload().Type != "" || r.count.Get() != 5 {
+		t.Fatal("a short rate interval consumed its count")
+	}
+	start := time.Now().Add(-2 * time.Second)
+	r.intervalStart.Store(&start)
+	p = r.Payload()
+	if p.Type != transport.RateMetric || p.Interval != 2 || math.Abs(p.Points[0][1].(float64)-2.5) > 0.1 || !math.IsNaN(r.count.Get()) {
+		t.Fatalf("rate interval/reset = %+v", p)
+	}
+}
+
+func TestBoundCountReplaysSwapsAndResets(t *testing.T) {
+	restore := MockClient(nil)
+	defer restore()
+	makeClient := func() Client {
+		c, err := NewClient("fixture", "test", "1", ClientConfig{AgentURL: "http://fixture.invalid", HTTPClient: &http.Client{Transport: benchmarkHTTP{}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { c.Close() })
+		return c
+	}
+	tags := []string{"event_type:test", "test_framework:testing"}
+	h := BindCount(NamespaceCIVisibility, "event_created", tags)
+	tags[0] = "event_type:changed"
+	runConcurrent(128, func(int) { h.Submit(2) })
+	first := makeClient()
+	SwapClient(first)
+	metric := func(c Client) MetricHandle {
+		return c.Count(NamespaceCIVisibility, "event_created", []string{"test_framework:testing", "event_type:test"})
+	}
+	if got := metric(first).Get(); got != 256 {
+		t.Fatalf("bound startup replay/tag ownership = %v, want 256", got)
+	}
+	second := makeClient()
+	SwapClient(second)
+	h.Submit(7)
+	if got := metric(second).Get(); got != 7 {
+		t.Fatalf("bound client swap = %v, want 7", got)
+	}
+	third := makeClient()
+	restoreMock := MockClient(third)
+	h.Submit(3)
+	if got := metric(third).Get(); got != 3 {
+		t.Fatalf("bound mock reset = %v, want 3", got)
+	}
+	restoreMock()
+	h.Submit(11)
+	// MockClient clears the global registration cache, not the old client's
+	// counter. Restoring that client must retain its earlier seven increments.
+	if got := metric(second).Get(); got != 18 {
+		t.Fatalf("bound mock restoration = %v, want 18", got)
 	}
 }
 

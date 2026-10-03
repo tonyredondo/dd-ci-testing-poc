@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -18,6 +19,44 @@ func TransformTestifyEntry(name string, src []byte) ([]byte, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
+	return transformTestifyEntry(name, src, fs, file)
+}
+
+// TransformTestifyPackage validates and rewrites the selected library using one
+// AST per file. ASTs live only for this preparation; covered compiler inputs are
+// parsed independently by TransformTestifyEntry.
+func TransformTestifyPackage(files map[string][]byte) (map[string][]byte, error) {
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	output := map[string][]byte{}
+	for _, name := range names {
+		src := files[name]
+		fs := token.NewFileSet()
+		file, err := parser.ParseFile(fs, name, src, parser.SkipObjectResolution)
+		if err != nil {
+			return nil, err
+		}
+		if err := checkTestifyNames(name, src, file); err != nil {
+			return nil, err
+		}
+		out, changed, err := transformTestifyEntry(name, src, fs, file)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			output[name] = out
+		}
+	}
+	if len(output) == 0 {
+		return nil, fmt.Errorf("unsupported Testify API: expected suite.Run(*testing.T, TestingSuite)")
+	}
+	return output, nil
+}
+
+func transformTestifyEntry(name string, src []byte, fs *token.FileSet, file *ast.File) ([]byte, bool, error) {
 	var run *ast.FuncDecl
 	for _, decl := range file.Decls {
 		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Name.Name == "Run" {
@@ -28,10 +67,10 @@ func TransformTestifyEntry(name string, src []byte) ([]byte, bool, error) {
 	if run == nil {
 		return nil, false, nil
 	}
-	if err := TestifyAPI(map[string][]byte{name: src}); err != nil {
+	if err := validateTestifyAPI([]*ast.File{file}); err != nil {
 		return nil, false, err
 	}
-	if err := CheckTestifyNames(name, src); err != nil {
+	if err := checkTestifyNames(name, src, file); err != nil {
 		return nil, false, err
 	}
 	if run.Body == nil {

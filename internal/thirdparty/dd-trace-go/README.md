@@ -25,6 +25,11 @@ platform calls use the adjacent `xsys` subset. Our runtime version is owned by
 `internal/version`, independently of the SDK base. The MessagePack schema,
 mini client and HTTP transport are owned outside this origin.
 
+[ADAPTATIONS.md](ADAPTATIONS.md) records the performance changes retained on top
+of this base: bound CI counters, coherent inline metric points, source-parser
+flags, Testify prefix matching and lazy stack tables. It lists their invariants
+and the checks to run when updating these upstream paths.
+
 Static library capabilities are published before asynchronous settings loading.
 This keeps fast manual hierarchy calls from losing capabilities while the
 network request is still running; feature decisions still wait for settings.

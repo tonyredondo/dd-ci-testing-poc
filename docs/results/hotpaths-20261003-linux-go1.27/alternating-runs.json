@@ -1,0 +1,272 @@
+[
+  {
+    "round": 1,
+    "variant": "before",
+    "group": "runtime",
+    "command": [
+      "before.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Count|CIMetrics)$",
+      "-test.benchtime=500ms",
+      "-test.cpu=1,8",
+      "-test.count=1"
+    ],
+    "wall_s": 6.724127994035371,
+    "log": "before-1-runtime.log"
+  },
+  {
+    "round": 1,
+    "variant": "before",
+    "group": "prepare",
+    "command": [
+      "before.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkPrepare$",
+      "-test.benchtime=10x",
+      "-test.cpu=4",
+      "-test.count=1"
+    ],
+    "wall_s": 2.7676035090116784,
+    "log": "before-1-prepare.log"
+  },
+  {
+    "round": 1,
+    "variant": "before",
+    "group": "transform",
+    "command": [
+      "before.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkTestingTransform$",
+      "-test.benchtime=500ms",
+      "-test.cpu=4",
+      "-test.count=1"
+    ],
+    "wall_s": 0.8146257259650156,
+    "log": "before-1-transform.log"
+  },
+  {
+    "round": 1,
+    "variant": "after",
+    "group": "runtime",
+    "command": [
+      "after.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Count|CIMetrics)$",
+      "-test.benchtime=500ms",
+      "-test.cpu=1,8",
+      "-test.count=1"
+    ],
+    "wall_s": 5.673760397941805,
+    "log": "after-1-runtime.log"
+  },
+  {
+    "round": 1,
+    "variant": "after",
+    "group": "prepare",
+    "command": [
+      "after.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkPrepare$",
+      "-test.benchtime=10x",
+      "-test.cpu=4",
+      "-test.count=1"
+    ],
+    "wall_s": 2.6675783650716767,
+    "log": "after-1-prepare.log"
+  },
+  {
+    "round": 1,
+    "variant": "after",
+    "group": "transform",
+    "command": [
+      "after.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkTestingTransform$",
+      "-test.benchtime=500ms",
+      "-test.cpu=4",
+      "-test.count=1"
+    ],
+    "wall_s": 0.8652200079523027,
+    "log": "after-1-transform.log"
+  },
+  {
+    "round": 2,
+    "variant": "after",
+    "group": "runtime",
+    "command": [
+      "after.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Count|CIMetrics)$",
+      "-test.benchtime=500ms",
+      "-test.cpu=1,8",
+      "-test.count=1"
+    ],
+    "wall_s": 5.4721981070470065,
+    "log": "after-2-runtime.log"
+  },
+  {
+    "round": 2,
+    "variant": "after",
+    "group": "prepare",
+    "command": [
+      "after.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkPrepare$",
+      "-test.benchtime=10x",
+      "-test.cpu=4",
+      "-test.count=1"
+    ],
+    "wall_s": 2.667413315968588,
+    "log": "after-2-prepare.log"
+  },
+  {
+    "round": 2,
+    "variant": "after",
+    "group": "transform",
+    "command": [
+      "after.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkTestingTransform$",
+      "-test.benchtime=500ms",
+      "-test.cpu=4",
+      "-test.count=1"
+    ],
+    "wall_s": 0.8147519479971379,
+    "log": "after-2-transform.log"
+  },
+  {
+    "round": 2,
+    "variant": "before",
+    "group": "runtime",
+    "command": [
+      "before.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Count|CIMetrics)$",
+      "-test.benchtime=500ms",
+      "-test.cpu=1,8",
+      "-test.count=1"
+    ],
+    "wall_s": 6.723194604972377,
+    "log": "before-2-runtime.log"
+  },
+  {
+    "round": 2,
+    "variant": "before",
+    "group": "prepare",
+    "command": [
+      "before.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkPrepare$",
+      "-test.benchtime=10x",
+      "-test.cpu=4",
+      "-test.count=1"
+    ],
+    "wall_s": 2.8177948540542275,
+    "log": "before-2-prepare.log"
+  },
+  {
+    "round": 2,
+    "variant": "before",
+    "group": "transform",
+    "command": [
+      "before.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkTestingTransform$",
+      "-test.benchtime=500ms",
+      "-test.cpu=4",
+      "-test.count=1"
+    ],
+    "wall_s": 0.8648150529479608,
+    "log": "before-2-transform.log"
+  },
+  {
+    "round": 3,
+    "variant": "before",
+    "group": "runtime",
+    "command": [
+      "before.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Count|CIMetrics)$",
+      "-test.benchtime=500ms",
+      "-test.cpu=1,8",
+      "-test.count=1"
+    ],
+    "wall_s": 6.724236730951816,
+    "log": "before-3-runtime.log"
+  },
+  {
+    "round": 3,
+    "variant": "before",
+    "group": "prepare",
+    "command": [
+      "before.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkPrepare$",
+      "-test.benchtime=10x",
+      "-test.cpu=4",
+      "-test.count=1"
+    ],
+    "wall_s": 2.767795715946704,
+    "log": "before-3-prepare.log"
+  },
+  {
+    "round": 3,
+    "variant": "before",
+    "group": "transform",
+    "command": [
+      "before.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkTestingTransform$",
+      "-test.benchtime=500ms",
+      "-test.cpu=4",
+      "-test.count=1"
+    ],
+    "wall_s": 0.8649485020432621,
+    "log": "before-3-transform.log"
+  },
+  {
+    "round": 3,
+    "variant": "after",
+    "group": "runtime",
+    "command": [
+      "after.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Count|CIMetrics)$",
+      "-test.benchtime=500ms",
+      "-test.cpu=1,8",
+      "-test.count=1"
+    ],
+    "wall_s": 5.672413588967174,
+    "log": "after-3-runtime.log"
+  },
+  {
+    "round": 3,
+    "variant": "after",
+    "group": "prepare",
+    "command": [
+      "after.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkPrepare$",
+      "-test.benchtime=10x",
+      "-test.cpu=4",
+      "-test.count=1"
+    ],
+    "wall_s": 2.667446389910765,
+    "log": "after-3-prepare.log"
+  },
+  {
+    "round": 3,
+    "variant": "after",
+    "group": "transform",
+    "command": [
+      "after.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkTestingTransform$",
+      "-test.benchtime=500ms",
+      "-test.cpu=4",
+      "-test.count=1"
+    ],
+    "wall_s": 0.8147680280962959,
+    "log": "after-3-transform.log"
+  }
+]

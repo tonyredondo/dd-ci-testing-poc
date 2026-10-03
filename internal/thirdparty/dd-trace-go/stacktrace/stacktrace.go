@@ -7,9 +7,9 @@ package stacktrace
 
 import (
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var (
@@ -24,19 +24,20 @@ var (
 		"github.com/DataDog/orchestrion",
 	}
 
-	// knownThirdPartyLibraries contains third-party library patterns for stack frame classification.
-	// This list is automatically generated from contrib/ directory structure at build time,
-	// with some fallback patterns for libraries not covered by contrib integrations.
-	knownThirdPartyLibraries = generatedThirdPartyLibraries()
-
-	// thirdPartyTrie provides fast O(m) prefix matching for third-party libraries
-	// where m is the length of the string being checked, rather than O(n) linear search
-	// where n is the number of prefixes (765+ libraries). This provides significant
-	// performance improvements especially for stack trace generation.
-	thirdPartyTrie *segmentPrefixTrie
-
-	// internalPrefixTrie provides fast prefix matching for internal package prefixes
-	internalPrefixTrie *segmentPrefixTrie
+	// Classification tables are immutable after their first use. Raw capture and
+	// applications that never classify a stack do not need the generated library
+	// list or its trie. Keep internal filtering independent of third-party lookup.
+	thirdPartyTrie = sync.OnceValue(func() *segmentPrefixTrie {
+		trie := newSegmentPrefixTrie()
+		trie.InsertAll(generatedThirdPartyLibraries())
+		trie.Insert("golang.org/")
+		return trie
+	})
+	internalPrefixTrie = sync.OnceValue(func() *segmentPrefixTrie {
+		trie := newSegmentPrefixTrie()
+		trie.InsertAll(internalSymbolPrefixes)
+		return trie
+	})
 )
 
 // Redaction-specific frame types for secure logging
@@ -52,14 +53,6 @@ const (
 
 	redactedPlaceholder = "REDACTED"
 )
-
-func init() {
-	thirdPartyTrie = newSegmentPrefixTrie()
-	thirdPartyTrie.InsertAll(slices.Concat(knownThirdPartyLibraries, []string{"golang.org/"}))
-
-	internalPrefixTrie = newSegmentPrefixTrie()
-	internalPrefixTrie.InsertAll(internalSymbolPrefixes)
-}
 
 type (
 	// StackTrace is intended to be sent over the span tag `_dd.stack`, the first frame is the current frame
@@ -563,7 +556,7 @@ func (it *framesIterator) skipFrame(frame runtime.Frame) bool {
 	}
 
 	if it.frameOpts.skipInternalFrames {
-		if internalPrefixTrie.HasPrefix(frame.Function) {
+		if internalPrefixTrie().HasPrefix(frame.Function) {
 			return true
 		}
 	}
@@ -634,7 +627,7 @@ func Format(stack StackTrace) string {
 
 // isKnownThirdPartyLibrary checks if a package is a known third-party library
 func isKnownThirdPartyLibrary(pkg string) bool {
-	return thirdPartyTrie.HasPrefix(pkg)
+	return thirdPartyTrie().HasPrefix(pkg)
 }
 
 // isStandardLibraryPackage checks if a package is from Go's standard library

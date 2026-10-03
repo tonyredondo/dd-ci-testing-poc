@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -117,7 +116,7 @@ func registerTestifySuite(t *testing.T, suite any) {
 		methodName := method.Name
 
 		// filter out non Test methods
-		if ok, _ := regexp.MatchString("^Test", methodName); !ok {
+		if !strings.HasPrefix(methodName, "Test") {
 			continue
 		}
 

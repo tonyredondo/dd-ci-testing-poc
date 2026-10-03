@@ -1,7 +1,6 @@
 package runner
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -97,30 +96,18 @@ func PrepareRuntime(ctx context.Context, dir string, args []string, runtime Runt
 	listArgs = append(listArgs, "testing", runtimePackage)
 	cmd := exec.CommandContext(ctx, "go", listArgs...)
 	cmd.Dir = dir
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-	data, e := cmd.Output()
-	if e != nil {
-		if runtime == SDK {
-			return plan, fmt.Errorf("resolve packages (SDK %s must already be required): %w\n%s", SDKVersion, e, stderr.String())
-		}
-		return plan, fmt.Errorf("resolve packages (runtime %s must already be required): %w\n%s", runtimePackage, e, stderr.String())
+	failureContext := fmt.Sprintf("resolve packages (runtime %s must already be required)", runtimePackage)
+	if runtime == SDK {
+		failureContext = fmt.Sprintf("resolve packages (SDK %s must already be required)", SDKVersion)
 	}
-	var packages []goPackage
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	for {
-		var p goPackage
-		e = decoder.Decode(&p)
-		if e == io.EOF {
-			break
-		}
-		if e != nil {
-			return plan, e
-		}
+	packages, e := readPackages(cmd, failureContext)
+	if e != nil {
+		return plan, e
+	}
+	for _, p := range packages {
 		if p.Error != nil {
 			return plan, fmt.Errorf("%s: %s", p.ImportPath, p.Error.Err)
 		}
-		packages = append(packages, p)
 	}
 	var native *goPackage
 	foundRuntime := false

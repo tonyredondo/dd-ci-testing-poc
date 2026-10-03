@@ -1,0 +1,15 @@
+{
+  "head": "95f8f32b7e8898d96cd72f7f4c89f6905031cd9e",
+  "source_and_tool_hashes_unchanged": true,
+  "commands": 953,
+  "primary_samples": 768,
+  "successful_commands": 953,
+  "no_test_binaries_executed": true,
+  "qualified_final_binaries": 64,
+  "trace_cells": 4,
+  "all_children_drained": true,
+  "elapsed_seconds": 4099.220346689224,
+  "artifact_bytes": 1906832980,
+  "time_limit_seconds": 4500,
+  "verified_at": "2026-10-03T14:29:07.116658+00:00"
+}

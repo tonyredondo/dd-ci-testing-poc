@@ -1,12 +1,9 @@
 package runner
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,51 +28,21 @@ type TestifyTool struct {
 
 func prepareTestify(ctx context.Context, dir string, opts options, packages []goPackage, replacements map[string]string, runtime Runtime, temp string) (*TestifyTool, error) {
 	var suite *goPackage
-	requests := map[string]bool{}
-	hasSuite := false
-	standard := map[string]bool{"testing": true}
-	for _, p := range packages {
-		if p.ImportPath == "testing" {
-			for _, path := range p.Deps {
-				standard[path] = true
-			}
-		}
-	}
 	for _, p := range packages {
 		if p.ImportPath == instrument.TestifySuiteImport {
 			copy := p
 			suite = &copy
 			break
 		}
-		if p.ImportPath == "testing" || p.ImportPath == sdkPackage || p.ImportPath == miniPackage {
-			continue
-		}
-		for _, path := range p.Deps {
-			if path == instrument.TestifySuiteImport {
-				hasSuite = true
-			}
-		}
-		for _, path := range append(append([]string{}, p.TestImports...), p.XTestImports...) {
-			if path == instrument.TestifySuiteImport {
-				hasSuite = true
-			}
-			if !standard[path] {
-				requests[path] = true
-			}
-		}
 	}
 	if suite == nil {
+		paths, hasSuite := testifyDependencyImports(packages)
 		if hasSuite {
-			requests = map[string]bool{instrument.TestifySuiteImport: true}
+			paths = []string{instrument.TestifySuiteImport}
 		}
-		if len(requests) == 0 {
+		if len(paths) == 0 {
 			return nil, nil
 		}
-		paths := make([]string, 0, len(requests))
-		for path := range requests {
-			paths = append(paths, path)
-		}
-		sort.Strings(paths)
 		// Walk actual test-import dependencies, including helpers in other modules.
 		// A go.mod requirement or an assert-only import does not enable the wrapper.
 		mode := "-deps"
@@ -89,21 +56,11 @@ func prepareTestify(ctx context.Context, dir string, opts options, packages []go
 		args = append(args, paths...)
 		cmd := exec.CommandContext(ctx, "go", args...)
 		cmd.Dir = dir
-		var stderr strings.Builder
-		cmd.Stderr = &stderr
-		data, err := cmd.Output()
+		dependencies, err := readPackages(cmd, "resolve Testify test dependencies")
 		if err != nil {
-			return nil, fmt.Errorf("resolve Testify test dependencies: %w\n%s", err, stderr.String())
+			return nil, err
 		}
-		decoder := json.NewDecoder(bytes.NewReader(data))
-		for {
-			var p goPackage
-			if err := decoder.Decode(&p); err != nil {
-				if err == io.EOF {
-					break
-				}
-				return nil, err
-			}
+		for _, p := range dependencies {
 			if p.ImportPath == instrument.TestifySuiteImport {
 				copied := p
 				suite = &copied
@@ -138,13 +95,11 @@ func prepareTestify(ctx context.Context, dir string, opts options, packages []go
 		if err != nil {
 			return nil, err
 		}
-		if err := instrument.CheckTestifyNames(logical, src); err != nil {
-			return nil, err
-		}
 		files[logical] = src
 		actualPaths[logical] = actual
 	}
-	if err := instrument.TestifyAPI(files); err != nil {
+	rewritten, err := instrument.TransformTestifyPackage(files)
+	if err != nil {
 		return nil, err
 	}
 	hook := "github.com/DataDog/dd-trace-go/v2/internal/civisibility/integrations/gotesting.instrumentTestifySuiteRun"
@@ -156,19 +111,13 @@ func prepareTestify(ctx context.Context, dir string, opts options, packages []go
 	hash := sha256.New()
 	hash.Write([]byte(testifyContractVersion))
 	hash.Write([]byte(hookSource))
-	names := make([]string, 0, len(files))
-	for name := range files {
+	names := make([]string, 0, len(rewritten))
+	for name := range rewritten {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		src, changed, err := instrument.TransformTestifyEntry(name, files[name])
-		if err != nil {
-			return nil, err
-		}
-		if !changed {
-			continue
-		}
+		src := rewritten[name]
 		backing := filepath.Join(temp, "testify-entry.go")
 		if err := os.WriteFile(backing, src, 0600); err != nil {
 			return nil, err
@@ -185,6 +134,51 @@ func prepareTestify(ctx context.Context, dir string, opts options, packages []go
 	}
 	tool.Fingerprint = fmt.Sprintf("%x", hash.Sum(nil))
 	return tool, nil
+}
+
+// testifyDependencyImports walks only test imports whose dependency closures
+// were not already inspected by the first go list. Unknown imports remain in
+// the query: a helper in another module may call suite.Run on the client's behalf.
+func testifyDependencyImports(packages []goPackage) ([]string, bool) {
+	known := map[string]bool{"testing": true}
+	hasSuite := false
+	for _, p := range packages {
+		if p.ImportPath == sdkPackage || p.ImportPath == miniPackage {
+			// The runtime's graph says nothing about the client's test helpers.
+			continue
+		}
+		known[p.ImportPath] = true
+		for _, path := range p.Deps {
+			known[path] = true
+			if p.ImportPath != "testing" && path == instrument.TestifySuiteImport {
+				hasSuite = true
+			}
+		}
+	}
+	requests := map[string]bool{}
+	for _, p := range packages {
+		if p.ImportPath == "testing" || p.ImportPath == sdkPackage || p.ImportPath == miniPackage {
+			continue
+		}
+		for _, imports := range [][]string{p.TestImports, p.XTestImports} {
+			for _, path := range imports {
+				// Check reachability before pruning: known imports still need
+				// suite metadata and version validation on every invocation.
+				if path == instrument.TestifySuiteImport {
+					hasSuite = true
+				}
+				if !known[path] {
+					requests[path] = true
+				}
+			}
+		}
+	}
+	paths := make([]string, 0, len(requests))
+	for path := range requests {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	return paths, hasSuite
 }
 
 func prepareTestifyCompile(plan *TestifyTool, args []string) ([]string, func(), error) {

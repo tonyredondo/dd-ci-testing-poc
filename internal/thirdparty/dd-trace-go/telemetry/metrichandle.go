@@ -7,6 +7,7 @@ package telemetry
 
 import (
 	"math"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -70,3 +71,46 @@ func (t *swappableMetricHandle) swap(handle MetricHandle) {
 }
 
 var _ MetricHandle = (*swappableMetricHandle)(nil)
+
+// BindCount retains a lazily registered counter for a fixed tag combination.
+// Submit reuses the global swappable handle, including startup replay and client
+// replacement. MockClient's registry reset invalidates the cached registration.
+// The constructor owns a copy of tags; callers may reuse or change their slice.
+func BindCount(namespace Namespace, name string, tags []string) MetricHandle {
+	return &boundCountHandle{namespace: namespace, name: name, tags: slices.Clone(tags)}
+}
+
+type boundCountState struct {
+	generation uint64
+	handle     MetricHandle
+}
+
+type boundCountHandle struct {
+	namespace Namespace
+	name      string
+	tags      []string
+	mu        sync.Mutex // only initial registration and test resets
+	state     atomic.Pointer[boundCountState]
+}
+
+func (h *boundCountHandle) handle() MetricHandle {
+	if Disabled() {
+		return noopMetricHandleInstance
+	}
+	generation := metricRegistryGeneration.Load()
+	if state := h.state.Load(); state != nil && state.generation == generation {
+		return state.handle
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	generation = metricRegistryGeneration.Load()
+	if state := h.state.Load(); state != nil && state.generation == generation {
+		return state.handle
+	}
+	state := &boundCountState{generation: generation, handle: Count(h.namespace, h.name, slices.Clone(h.tags))}
+	h.state.Store(state)
+	return state.handle
+}
+
+func (h *boundCountHandle) Submit(value float64) { h.handle().Submit(value) }
+func (h *boundCountHandle) Get() float64         { return h.handle().Get() }

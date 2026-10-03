@@ -48,9 +48,15 @@ deterministic transformation, and unchanged files do not become overlay outputs.
 
 [`PrepareRuntime`](../internal/runner/run.go) requests only the package fields
 it needs from a targeted `go list`. Testify discovery can add one metadata or
-dependency query, as described below. It decodes JSON from `bytes.NewReader(data)`,
-avoiding a complete conversion to a string. It still buffers the subprocess
-output; this is not streaming directly from Go's stdout.
+dependency query, as described below. Both queries decode JSON directly from
+Go's stdout. The front-end retains decoded package records without a second
+complete JSON buffer. It drains and waits for the subprocess even after malformed
+output; command failures and their stderr take precedence over partial JSON.
+
+Rewritten-source buffers reserve the final size, including line directives and
+inserted advice. Testify preparation parses each selected library file once and
+uses that AST for its API/collision checks and entry rewrite. Covered compiler
+inputs have different bytes and receive their own validation.
 
 Generated files are immutable and shared by identical content within one plan.
 Many packages with the same package name can share an import-only backing file.
@@ -68,7 +74,13 @@ not the presence of a module requirement. Plain tests and assert-only targets
 omit it unless coverage includes rewritten `testing` sources. Known suite
 reachability uses `go list -find`; unknown nonstandard test imports use `-deps`
 so external helpers remain covered. The selected-version/API check stays in
-preparation, before a warm cache can skip the compiler.
+preparation, before a warm cache can skip the compiler. The dependency query
+excludes selected packages and dependency closures already inspected by the
+first query. Unknown test-only imports stay in the query, including standard
+packages outside those known closures and helpers in other modules. Runtime
+dependencies are not evidence of a client's test-helper graph. Suite reachability
+is checked before pruning, so a known suite still receives its metadata query
+and version validation.
 
 Unrelated tools dispatch without opening the plan. On Unix the CLI replaces
 itself with the native tool; Windows delegates through a child. The dispatch
@@ -109,12 +121,33 @@ versioned bridge; ordinary client-only coverage needs no bridge.
 | Gzip writer and buffer pooling | New compression state for each agentless batch | Seal all request readers before returning storage to a pool |
 | Bounded buffer retention | Long-lived oversized buffers after large payloads | Payload and gzip capacities above 2.5 MiB are discarded |
 | Standard-library telemetry maps | An external concurrent-map module | Preserve registration, startup replay and log counts under concurrency |
+| Bound ordinary CI counters | Repeated tag slices, key joining and registry lookup | Preserve startup replay, client swaps, disabled telemetry and feature-tag fallback |
+| Inline metric points | A heap allocation on every count/gauge submission | Collect each value/timestamp together; retain zero, NaN, reset and rate semantics |
+| Literal Testify prefix check | Compiling `^Test` for each suite method | Match exactly the same method names |
+| Source parser without object resolution | Unused identifier objects in metadata lookup | Retain ITR comments, function ranges and parse errors |
+| Direct high trace-ID hex encoding | General-purpose integer formatting | Retain 16 lowercase hex digits, including leading zeros |
+| Lazy classification tries | Eager construction of stack-prefix tables | Preserve internal filtering, third-party matching and redaction; publish immutable tries once |
 | Internal codec/platform subsets | External runtime module requirements | Preserve original semantics, licenses and source provenance |
 
 Copying a codec into the repository does not itself make its encoder faster.
 The dependency reduction comes from changing the runtime graph; the allocation
 changes come from event ownership and buffer reuse. Test-only `testify` and its
 dependencies remain in the repository without entering Mini's runtime imports.
+
+The SDK-specific implementation rules are recorded in
+[ADAPTATIONS.md](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md). Common
+lifecycle counters keep bound handles only for the existing framework/hierarchy
+tag combinations. Events with retry, EFD, quarantine or other extra tags use the
+general registry path. `MockClient` resets invalidate a binding; normal client
+swaps retain the existing swappable handle.
+
+Counts and gauges keep their value/timestamp inline under a short mutex. A flush
+detaches the whole point under that mutex, then encodes it after releasing the
+lock. This removes per-submission snapshots while preserving collection boundaries.
+
+The [2026-10-03 optimization measurements](results/hotpaths-20261003-linux-go1.27/README.md)
+retain alternating before/after observations for preparation, transformation and
+counter updates. They are separate from the frozen four-variant compile matrix.
 
 ## The ownership rules behind reuse
 
@@ -135,11 +168,32 @@ block finishing goroutines and reject new events when an older full batch
 cannot be delivered. That is observable backpressure, so a throughput change
 must check errors and drops as well as ns/op.
 
+`Client.add` creates a timeout with `FlushTimeout` (10 seconds by default). It
+bounds acquisition of the delivery permit and any flush triggered by a full
+batch. Expiry rejects the incoming event, increments `DroppedEvents` and records
+the error. Delaying timer creation would be a separate optimization: an
+uncontended enqueue need not wait, but a concurrent sender and a full queue still
+need that deadline and the same drop/error semantics.
+
 [Sealed-span tests](../internal/minitracer/sealed_span_test.go),
 [batching tests](../internal/minitracer/batching_test.go),
 [queue/concurrency tests](../internal/minitracer/client_test.go) and
 [transport reuse tests](../internal/citransport/reuse_test.go) exercise these
 contracts. Preserve them when changing synchronization or pooling.
+
+Common-span metadata sharing is still a proposal. Today every span has a private
+copy of the client's tag entries; Go already shares the strings' underlying data.
+A shared immutable base could hold repeated values
+such as the repository URL, commit and runtime ID, while the span stores only
+its own test name/status and overrides. Reads and serialization would merge the
+base with those overrides; every event would still carry the same CI fields.
+Changing a string tag to a numeric metric would also need to hide the inherited
+string. That ownership/type-transition work has not been applied.
+
+The compression-level experiment also remains outside the implementation.
+`gzip.BestSpeed` produces ordinary gzip with less compression work and larger
+payloads. The current pooled writer keeps Go's default compression level; changing
+the level would need delivery and payload-size checks across representative data.
 
 ## Profiling the native event path
 
@@ -238,6 +292,13 @@ The example is arithmetic, not a measurement. Compute percentages from
 unrounded medians. A negative first value means the POC took less time than
 Orchestrion; a positive second value means it took more time than native.
 
+The [build benchmark guide](build-benchmarks.md) documents
+[`scripts/build_benchmark.py`](../scripts/build_benchmark.py), which runs all four
+variants across the five scenarios, assigns affinity, measures exclusive cgroups
+and qualifies the outputs. Its `report` command regenerates the
+[full 2026-10-03 tables](results/compile-matrix-20261003-linux-go1.27/README.md)
+from every retained CSV observation, without Go or network access.
+
 [`scripts/benchmark.py`](../scripts/benchmark.py) is a smaller fixture runner
 for native, POC SDK and Orchestrion with `GOMAXPROCS=8`. It keeps bounded
 cold/warm/edit samples and wall times. It does not exercise Mini, force a link
@@ -253,8 +314,10 @@ their raw JSON files retain the revisions and conditions they measured.
 Those older timings predate the latest SDK extraction and source reorganization.
 The [results index](results.md#later-experiments) links the refreshed four-variant
 Gin/Chi matrix and the subsequent selective-tool/strategy experiments, each with
-its measured inputs. The latest strategy matrix measures Mini fixtures, not a
-new native/Orchestrion/Gin/Chi comparison.
+its measured inputs. The later [full compilation matrix](results/compile-matrix-20261003-linux-go1.27/README.md)
+covers all four variants, Gin/Chi, direct and external Testify, race and coverage.
+It preserves the observed variation and separates the unused-constant diagnostic
+from the reachable test-body edit.
 
 Further profiling can examine MessagePack encoding, tag construction, telemetry
 lookups and time spent waiting for `sendMu`. A proposed change needs before/after

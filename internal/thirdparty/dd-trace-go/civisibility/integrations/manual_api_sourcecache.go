@@ -265,7 +265,7 @@ func parseSourceFileMetadata(absolutePath string) sourceFileMetadata {
 
 	// Parse comments as well because source-level ITR hints are encoded in comments.
 	fset := token.NewFileSet()
-	fileNode, err := parser.ParseFile(fset, absolutePath, nil, parser.AllErrors|parser.ParseComments)
+	fileNode, err := parser.ParseFile(fset, absolutePath, nil, parser.AllErrors|parser.ParseComments|parser.SkipObjectResolution)
 	if err != nil {
 		// Keep the parse error in the cache so later calls can preserve the existing debug log
 		// without reparsing the same missing or invalid file on every SetTestFunc invocation.

@@ -1,0 +1,25 @@
+{
+  "status": "verified",
+  "head": "95f8f32b7e8898d96cd72f7f4c89f6905031cd9e",
+  "tables": 5,
+  "rows_per_table": 48,
+  "measured_observations": 6224,
+  "controls_and_trace_checks": 889,
+  "completed_commands": 7113,
+  "censored_attempts": 1,
+  "retained_test_binaries": 432,
+  "tests_executed": false,
+  "report": "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/FULL-REPORT.md",
+  "raw_csv": "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/all-observations.csv",
+  "report_sha256": "5b8a075da5c0cee8ccdd52e21e6e3e1857b1563437b4ad0735fbcc3583ac4d88",
+  "csv_sha256": "9bdabf4c1b57e6d0fd2231393541d058d20d6813edd4aa61b2d34c8071c331c1",
+  "report_rows": 240,
+  "comparative_percentages_verified": 960,
+  "artifact_bytes": 11262625867,
+  "cleanup": {
+    "owned_control_cache_removed": "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/caches/control-1",
+    "bytes": 373006026,
+    "stopped_scope_failed_state_cleared": "ddci-build-3153254-3713.scope"
+  },
+  "finished_at": "2026-10-03T19:05:25.203874+00:00"
+}

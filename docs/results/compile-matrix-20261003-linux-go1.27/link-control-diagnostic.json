@@ -1,0 +1,378 @@
+{
+  "reason": "Initial forced-link A/A failure; same CPU but 0.7s I/O pressure increase. Recheck all five controls after prior cold-cache writes have settled, without changing thresholds or excluding samples.",
+  "samples": [
+    {
+      "command": [
+        "/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/bin/go",
+        "test",
+        "-p=4",
+        "-mod=readonly",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/outputs/gin-cpu4/native/",
+        "-ldflags=-w -buildid=diagnostic-0",
+        "./..."
+      ],
+      "returncode": 0,
+      "wall_s": 1.1867786860093474,
+      "cpu_s": 2.179077,
+      "user_s": 1.829731,
+      "system_s": 0.349347,
+      "peak_bytes": 344612864,
+      "post_exit_wait_s": 0.00025633000768721104,
+      "process_tree_drained": true,
+      "surviving_pids": [],
+      "timeout": false,
+      "affinity": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/ddci-build-1333685-5.scope",
+      "host_load_before": [
+        0.63427734375,
+        0.72509765625,
+        0.40869140625
+      ],
+      "host_load_after": [
+        0.63427734375,
+        0.72509765625,
+        0.40869140625
+      ],
+      "host_pressure_before": {
+        "cpu": "some avg10=0.00 avg60=2.37 avg300=3.03 total=4211409262\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "io": "some avg10=0.43 avg60=1.48 avg300=2.07 total=36925964404\nfull avg10=0.43 avg60=1.41 avg300=1.99 total=35982457351",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=624568689\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=608066899"
+      },
+      "host_pressure_after": {
+        "cpu": "some avg10=0.90 avg60=2.46 avg300=3.05 total=4211526695\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "io": "some avg10=1.99 avg60=1.73 avg300=2.12 total=36926371908\nfull avg10=1.80 avg60=1.62 avg300=2.03 total=35982840069",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=624568690\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=608066899"
+      },
+      "project": "gin",
+      "cpus": 4,
+      "variant": "native",
+      "scenario": "diagnostic-link",
+      "iteration": 0,
+      "validation_only": true,
+      "cache": "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/caches/control-1",
+      "cold_output_removed": false,
+      "wall_including_scope_launch_s": 1.2235923580592498,
+      "scope_launcher_exit": 0,
+      "binary_names": [
+        "binding.test",
+        "bytesconv.test",
+        "fs.test",
+        "gin.test",
+        "ginS.test",
+        "render.test"
+      ],
+      "binary_bytes": 97070351
+    },
+    {
+      "command": [
+        "/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/bin/go",
+        "test",
+        "-p=4",
+        "-mod=readonly",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/outputs/gin-cpu4/native/",
+        "-ldflags=-w -buildid=diagnostic-1",
+        "./..."
+      ],
+      "returncode": 0,
+      "wall_s": 0.783322309027426,
+      "cpu_s": 2.189777,
+      "user_s": 1.833908,
+      "system_s": 0.35587,
+      "peak_bytes": 338128896,
+      "post_exit_wait_s": 0.0002250709803774953,
+      "process_tree_drained": true,
+      "surviving_pids": [],
+      "timeout": false,
+      "affinity": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/ddci-build-1333685-6.scope",
+      "host_load_before": [
+        0.63427734375,
+        0.72509765625,
+        0.40869140625
+      ],
+      "host_load_after": [
+        0.82373046875,
+        0.76318359375,
+        0.4228515625
+      ],
+      "host_pressure_before": {
+        "cpu": "some avg10=0.90 avg60=2.46 avg300=3.05 total=4211526734\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "io": "some avg10=1.99 avg60=1.73 avg300=2.12 total=36926371946\nfull avg10=1.80 avg60=1.62 avg300=2.03 total=35982840107",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=624568690\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=608066899"
+      },
+      "host_pressure_after": {
+        "cpu": "some avg10=0.90 avg60=2.46 avg300=3.05 total=4211656769\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "io": "some avg10=1.99 avg60=1.73 avg300=2.12 total=36926443672\nfull avg10=1.80 avg60=1.62 avg300=2.03 total=35982893142",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=624568690\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=608066899"
+      },
+      "project": "gin",
+      "cpus": 4,
+      "variant": "native",
+      "scenario": "diagnostic-link",
+      "iteration": 1,
+      "validation_only": true,
+      "cache": "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/caches/control-1",
+      "cold_output_removed": false,
+      "wall_including_scope_launch_s": 0.8180934269912541,
+      "scope_launcher_exit": 0,
+      "binary_names": [
+        "binding.test",
+        "bytesconv.test",
+        "fs.test",
+        "gin.test",
+        "ginS.test",
+        "render.test"
+      ],
+      "binary_bytes": 97070351
+    },
+    {
+      "command": [
+        "/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/bin/go",
+        "test",
+        "-p=4",
+        "-mod=readonly",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/outputs/gin-cpu4/native/",
+        "-ldflags=-w -buildid=diagnostic-2",
+        "./..."
+      ],
+      "returncode": 0,
+      "wall_s": 1.0742727250326425,
+      "cpu_s": 2.186568,
+      "user_s": 1.824778,
+      "system_s": 0.361791,
+      "peak_bytes": 352219136,
+      "post_exit_wait_s": 0.00024670001585036516,
+      "process_tree_drained": true,
+      "surviving_pids": [],
+      "timeout": false,
+      "affinity": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/ddci-build-1333685-7.scope",
+      "host_load_before": [
+        0.82373046875,
+        0.76318359375,
+        0.4228515625
+      ],
+      "host_load_after": [
+        0.82373046875,
+        0.76318359375,
+        0.4228515625
+      ],
+      "host_pressure_before": {
+        "cpu": "some avg10=0.90 avg60=2.46 avg300=3.05 total=4211656865\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "io": "some avg10=1.99 avg60=1.73 avg300=2.12 total=36926443713\nfull avg10=1.80 avg60=1.62 avg300=2.03 total=35982893183",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=624568690\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=608066899"
+      },
+      "host_pressure_after": {
+        "cpu": "some avg10=2.73 avg60=2.74 avg300=3.10 total=4211769022\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "io": "some avg10=5.79 avg60=2.42 avg300=2.26 total=36926767854\nfull avg10=5.10 avg60=2.22 avg300=2.15 total=35983186140",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=624568690\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=608066899"
+      },
+      "project": "gin",
+      "cpus": 4,
+      "variant": "native",
+      "scenario": "diagnostic-link",
+      "iteration": 2,
+      "validation_only": true,
+      "cache": "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/caches/control-1",
+      "cold_output_removed": false,
+      "wall_including_scope_launch_s": 1.1148302149958909,
+      "scope_launcher_exit": 0,
+      "binary_names": [
+        "binding.test",
+        "bytesconv.test",
+        "fs.test",
+        "gin.test",
+        "ginS.test",
+        "render.test"
+      ],
+      "binary_bytes": 97070351
+    },
+    {
+      "command": [
+        "/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/bin/go",
+        "test",
+        "-p=4",
+        "-mod=readonly",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/outputs/gin-cpu4/native/",
+        "-ldflags=-w -buildid=diagnostic-3",
+        "./..."
+      ],
+      "returncode": 0,
+      "wall_s": 0.8435840720776469,
+      "cpu_s": 2.185576,
+      "user_s": 1.839305,
+      "system_s": 0.346271,
+      "peak_bytes": 337727488,
+      "post_exit_wait_s": 0.00022599101066589355,
+      "process_tree_drained": true,
+      "surviving_pids": [],
+      "timeout": false,
+      "affinity": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/ddci-build-1333685-8.scope",
+      "host_load_before": [
+        0.82373046875,
+        0.76318359375,
+        0.4228515625
+      ],
+      "host_load_after": [
+        0.82373046875,
+        0.76318359375,
+        0.4228515625
+      ],
+      "host_pressure_before": {
+        "cpu": "some avg10=2.73 avg60=2.74 avg300=3.10 total=4211769076\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "io": "some avg10=5.79 avg60=2.42 avg300=2.26 total=36926768061\nfull avg10=5.10 avg60=2.22 avg300=2.15 total=35983186347",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=624568690\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=608066899"
+      },
+      "host_pressure_after": {
+        "cpu": "some avg10=2.73 avg60=2.74 avg300=3.10 total=4211898857\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "io": "some avg10=5.79 avg60=2.42 avg300=2.26 total=36926885502\nfull avg10=5.10 avg60=2.22 avg300=2.15 total=35983288133",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=624568690\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=608066899"
+      },
+      "project": "gin",
+      "cpus": 4,
+      "variant": "native",
+      "scenario": "diagnostic-link",
+      "iteration": 3,
+      "validation_only": true,
+      "cache": "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/caches/control-1",
+      "cold_output_removed": false,
+      "wall_including_scope_launch_s": 0.8795219119638205,
+      "scope_launcher_exit": 0,
+      "binary_names": [
+        "binding.test",
+        "bytesconv.test",
+        "fs.test",
+        "gin.test",
+        "ginS.test",
+        "render.test"
+      ],
+      "binary_bytes": 97070351
+    },
+    {
+      "command": [
+        "/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/bin/go",
+        "test",
+        "-p=4",
+        "-mod=readonly",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/outputs/gin-cpu4/native/",
+        "-ldflags=-w -buildid=diagnostic-4",
+        "./..."
+      ],
+      "returncode": 0,
+      "wall_s": 1.3217674830229953,
+      "cpu_s": 2.228078,
+      "user_s": 1.858718,
+      "system_s": 0.369361,
+      "peak_bytes": 356511744,
+      "post_exit_wait_s": 0.0002455910434946418,
+      "process_tree_drained": true,
+      "surviving_pids": [],
+      "timeout": false,
+      "affinity": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/ddci-build-1333685-9.scope",
+      "host_load_before": [
+        0.82373046875,
+        0.76318359375,
+        0.4228515625
+      ],
+      "host_load_after": [
+        0.82373046875,
+        0.76318359375,
+        0.4228515625
+      ],
+      "host_pressure_before": {
+        "cpu": "some avg10=2.73 avg60=2.74 avg300=3.10 total=4211899023\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "io": "some avg10=5.79 avg60=2.42 avg300=2.26 total=36926885618\nfull avg10=5.10 avg60=2.22 avg300=2.15 total=35983288247",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=624568690\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=608066899"
+      },
+      "host_pressure_after": {
+        "cpu": "some avg10=4.59 avg60=3.07 avg300=3.17 total=4212032356\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "io": "some avg10=8.36 avg60=3.00 avg300=2.39 total=36927356764\nfull avg10=7.43 avg60=2.74 avg300=2.26 total=35983728451",
+        "memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=624568690\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=608066899"
+      },
+      "project": "gin",
+      "cpus": 4,
+      "variant": "native",
+      "scenario": "diagnostic-link",
+      "iteration": 4,
+      "validation_only": true,
+      "cache": "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/caches/control-1",
+      "cold_output_removed": false,
+      "wall_including_scope_launch_s": 1.3609328590100631,
+      "scope_launcher_exit": 0,
+      "binary_names": [
+        "binding.test",
+        "bytesconv.test",
+        "fs.test",
+        "gin.test",
+        "ginS.test",
+        "render.test"
+      ],
+      "binary_bytes": 97070351
+    }
+  ],
+  "checks": [
+    {
+      "metric": "wall_s",
+      "values": [
+        1.1867786860093474,
+        0.783322309027426,
+        1.0742727250326425,
+        0.8435840720776469,
+        1.3217674830229953
+      ],
+      "spread_pct": 68.73864918568495,
+      "threshold_pct": 20,
+      "passed": false
+    },
+    {
+      "metric": "cpu_s",
+      "values": [
+        2.179077,
+        2.189777,
+        2.186568,
+        2.185576,
+        2.228078
+      ],
+      "spread_pct": 2.2487043826354025,
+      "threshold_pct": 10,
+      "passed": true
+    }
+  ]
+}

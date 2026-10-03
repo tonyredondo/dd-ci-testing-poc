@@ -1,0 +1,178 @@
+[
+  {
+    "variant": "native",
+    "scenario": "trace-cached",
+    "tools": {
+      "compile": [],
+      "link": [],
+      "cover": []
+    },
+    "wrapper_in_trace": false
+  },
+  {
+    "variant": "native",
+    "scenario": "trace-link",
+    "tools": {
+      "compile": [
+        "/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/compile -o $WORK/b002/_pkg_.a -trimpath \"$WORK/b002=>\" -p main -lang=go1.26 -complete -buildid xoHuP-fkUYd6XjOiHSYr/xoHuP-fkUYd6XjOiHSYr -goversion go1.27.1 -coveragecfg=$WORK/b002/coveragecfg -c=32 -nolocalimports -importcfg $WORK/b002/importcfg -pack $WORK/b002/covervars.go $WORK/b002/_testmain.cover.go"
+      ],
+      "link": [
+        "GOROOT='/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1' /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/link -o $WORK/b002/testify-direct.test -importcfg $WORK/b002/importcfg.link -X=runtime.godebugDefault=tracebacklabels=0,x509sslcertoverrideplatform=0 -buildmode=exe -buildid=5DZn3r9AC7WAKwY0kkMV/xoHuP-fkUYd6XjOiHSYr/SqiFkR0oUBzbSbUhjAI7/5DZn3r9AC7WAKwY0kkMV -w -buildid=extended-trace-testify-direct--cover-client-32 -X testing.testBinary=1 -extld=gcc $WORK/b002/_pkg_.a"
+      ],
+      "cover": [
+        "/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/cover -pkgcfg $WORK/b002/pkgcfg.txt -mode testmain -var goCover_c7d0207e26d8_ -outfilelist $WORK/b002/coveroutfiles.txt $WORK/b002/_testmain.go"
+      ]
+    },
+    "wrapper_in_trace": false
+  },
+  {
+    "variant": "native",
+    "scenario": "trace-body",
+    "tools": {
+      "compile": [
+        "/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/compile -o $WORK/b150/_pkg_.a -trimpath \"/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/edits/testify-direct--cover-client-99.go=>/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/subjects/testify-direct/sample_test.go;/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/edits/testify-direct--cover-client-99.go=>/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/subjects/testify-direct/sample_test.go;$WORK/b150=>\" -p example.com/testify-direct -lang=go1.26 -complete -buildid yvomKVry4T2FFAEa6jlw/yvomKVry4T2FFAEa6jlw -goversion go1.27.1 -coveragecfg=$WORK/b150/coveragecfg -c=32 -nolocalimports -importcfg $WORK/b150/importcfg -pack $WORK/b150/covervars.go $WORK/b150/sample.cover.go /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/edits/testify-direct--cover-client-99.go",
+        "/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/compile -o $WORK/b002/_pkg_.a -trimpath \"$WORK/b002=>\" -p main -lang=go1.26 -complete -buildid foPrQEloEg2X8fjUSmop/foPrQEloEg2X8fjUSmop -goversion go1.27.1 -coveragecfg=$WORK/b002/coveragecfg -c=32 -nolocalimports -importcfg $WORK/b002/importcfg -pack $WORK/b002/covervars.go $WORK/b002/_testmain.cover.go"
+      ],
+      "link": [
+        "GOROOT='/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1' /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/link -o $WORK/b002/testify-direct.test -importcfg $WORK/b002/importcfg.link -X=runtime.godebugDefault=tracebacklabels=0,x509sslcertoverrideplatform=0 -buildmode=exe -buildid=Sg8y6wbEt2cm9j2ejjeE/foPrQEloEg2X8fjUSmop/5xhQfCHgkXwnbJ__GaQ0/Sg8y6wbEt2cm9j2ejjeE -w -X testing.testBinary=1 -extld=gcc $WORK/b002/_pkg_.a"
+      ],
+      "cover": [
+        "/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/cover -pkgcfg $WORK/b150/pkgcfg.txt -mode atomic -var goCover_316ef5b916a8_ -outfilelist $WORK/b150/coveroutfiles.txt /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/subjects/testify-direct/sample.go",
+        "/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/cover -pkgcfg $WORK/b002/pkgcfg.txt -mode testmain -var goCover_c7d0207e26d8_ -outfilelist $WORK/b002/coveroutfiles.txt $WORK/b002/_testmain.go"
+      ]
+    },
+    "wrapper_in_trace": false
+  },
+  {
+    "variant": "orchestrion",
+    "scenario": "trace-cached",
+    "tools": {
+      "compile": [],
+      "link": [],
+      "cover": []
+    },
+    "wrapper_in_trace": false
+  },
+  {
+    "variant": "orchestrion",
+    "scenario": "trace-link",
+    "tools": {
+      "compile": [
+        "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion toolexec /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/compile -o $WORK/b002/_pkg_.a -trimpath \"$WORK/b002=>\" -p main -lang=go1.26 -complete -buildid uUyUylYfEE4i-8aaSUTc/uUyUylYfEE4i-8aaSUTc -goversion go1.27.1 -coveragecfg=$WORK/b002/coveragecfg -c=32 -nolocalimports -importcfg $WORK/b002/importcfg -pack $WORK/b002/covervars.go $WORK/b002/_testmain.cover.go"
+      ],
+      "link": [
+        "GOROOT='/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1' /var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion toolexec /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/link -o $WORK/b002/testify-direct.test -importcfg $WORK/b002/importcfg.link -X=runtime.godebugDefault=tracebacklabels=0,x509sslcertoverrideplatform=0 -buildmode=exe -buildid=mpLWV3ZTHsr2PK90nOv1/uUyUylYfEE4i-8aaSUTc/h-JdY4_mpw_XqaXtF9k2/mpLWV3ZTHsr2PK90nOv1 -w -buildid=extended-trace-testify-direct--cover-client-32 -X testing.testBinary=1 -extld=gcc $WORK/b002/_pkg_.a"
+      ],
+      "cover": [
+        "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion toolexec /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/cover -pkgcfg $WORK/b002/pkgcfg.txt -mode testmain -var goCover_c7d0207e26d8_ -outfilelist $WORK/b002/coveroutfiles.txt $WORK/b002/_testmain.go"
+      ]
+    },
+    "wrapper_in_trace": false
+  },
+  {
+    "variant": "orchestrion",
+    "scenario": "trace-body",
+    "tools": {
+      "compile": [
+        "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion toolexec /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/compile -o $WORK/b150/_pkg_.a -trimpath \"/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/edits/testify-direct--cover-client-99.go=>/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/subjects/testify-direct/sample_test.go;/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/edits/testify-direct--cover-client-99.go=>/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/subjects/testify-direct/sample_test.go;$WORK/b150=>\" -p example.com/testify-direct -lang=go1.26 -complete -buildid kPT9w8JZGqR4yKZApk2j/kPT9w8JZGqR4yKZApk2j -goversion go1.27.1 -coveragecfg=$WORK/b150/coveragecfg -c=32 -nolocalimports -importcfg $WORK/b150/importcfg -pack $WORK/b150/covervars.go $WORK/b150/sample.cover.go /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/edits/testify-direct--cover-client-99.go",
+        "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion toolexec /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/compile -o $WORK/b002/_pkg_.a -trimpath \"$WORK/b002=>\" -p main -lang=go1.26 -complete -buildid YsmtOqWFTceLDl72G438/YsmtOqWFTceLDl72G438 -goversion go1.27.1 -coveragecfg=$WORK/b002/coveragecfg -c=32 -nolocalimports -importcfg $WORK/b002/importcfg -pack $WORK/b002/covervars.go $WORK/b002/_testmain.cover.go"
+      ],
+      "link": [
+        "GOROOT='/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1' /var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion toolexec /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/link -o $WORK/b002/testify-direct.test -importcfg $WORK/b002/importcfg.link -X=runtime.godebugDefault=tracebacklabels=0,x509sslcertoverrideplatform=0 -buildmode=exe -buildid=h97S2HAW_k5boFQwcSOX/YsmtOqWFTceLDl72G438/3NYnvWRAwModedxbwM49/h97S2HAW_k5boFQwcSOX -w -X testing.testBinary=1 -extld=gcc $WORK/b002/_pkg_.a"
+      ],
+      "cover": [
+        "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion toolexec /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/cover -pkgcfg $WORK/b150/pkgcfg.txt -mode atomic -var goCover_316ef5b916a8_ -outfilelist $WORK/b150/coveroutfiles.txt /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/subjects/testify-direct/sample.go",
+        "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion toolexec /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/cover -pkgcfg $WORK/b002/pkgcfg.txt -mode testmain -var goCover_c7d0207e26d8_ -outfilelist $WORK/b002/coveroutfiles.txt $WORK/b002/_testmain.go"
+      ]
+    },
+    "wrapper_in_trace": false
+  },
+  {
+    "variant": "sdk",
+    "scenario": "trace-cached",
+    "tools": {
+      "compile": [],
+      "link": [],
+      "cover": []
+    },
+    "wrapper_in_trace": false
+  },
+  {
+    "variant": "sdk",
+    "scenario": "trace-link",
+    "tools": {
+      "compile": [
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-3595022913/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/compile -o $WORK/b002/_pkg_.a -trimpath \"$WORK/b002=>\" -p main -lang=go1.26 -complete -buildid vpJekJ6T6ErLqPIMXJX1/vpJekJ6T6ErLqPIMXJX1 -goversion go1.27.1 -coveragecfg=$WORK/b002/coveragecfg -c=32 -nolocalimports -importcfg $WORK/b002/importcfg -pack $WORK/b002/covervars.go $WORK/b002/_testmain.cover.go"
+      ],
+      "link": [
+        "GOROOT='/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1' /var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-3595022913/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/link -o $WORK/b002/testify-direct.test -importcfg $WORK/b002/importcfg.link -X=runtime.godebugDefault=tracebacklabels=0,x509sslcertoverrideplatform=0 -buildmode=exe -buildid=pL3CPQXZSw6umozbEwUx/vpJekJ6T6ErLqPIMXJX1/8-5dLqrssQfCEq5bZbs6/pL3CPQXZSw6umozbEwUx -w -buildid=extended-trace-testify-direct--cover-client-32 -X testing.testBinary=1 -extld=gcc $WORK/b002/_pkg_.a"
+      ],
+      "cover": [
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-3595022913/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/cover -pkgcfg $WORK/b002/pkgcfg.txt -mode testmain -var goCover_c7d0207e26d8_ -outfilelist $WORK/b002/coveroutfiles.txt $WORK/b002/_testmain.go"
+      ]
+    },
+    "wrapper_in_trace": true
+  },
+  {
+    "variant": "sdk",
+    "scenario": "trace-body",
+    "tools": {
+      "compile": [
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-4036264628/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/compile -o $WORK/b150/_pkg_.a -trimpath \"/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/edits/testify-direct--cover-client-99.go=>/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/subjects/testify-direct/sample_test.go;/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/edits/testify-direct--cover-client-99.go=>/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/subjects/testify-direct/sample_test.go;/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-4036264628/generated-4.go=>/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/subjects/testify-direct/zz_dd_ci_visibility_test.go;$WORK/b150=>\" -p example.com/testify-direct -lang=go1.26 -complete -buildid GwACOLpx8u_7430vRKQ9/GwACOLpx8u_7430vRKQ9 -goversion go1.27.1 -coveragecfg=$WORK/b150/coveragecfg -c=32 -nolocalimports -importcfg $WORK/b150/importcfg -pack $WORK/b150/covervars.go $WORK/b150/sample.cover.go /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/edits/testify-direct--cover-client-99.go",
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-4036264628/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/compile -o $WORK/b002/_pkg_.a -trimpath \"$WORK/b002=>\" -p main -lang=go1.26 -complete -buildid NvjnPJwbEleaXTtnoIXc/NvjnPJwbEleaXTtnoIXc -goversion go1.27.1 -coveragecfg=$WORK/b002/coveragecfg -c=32 -nolocalimports -importcfg $WORK/b002/importcfg -pack $WORK/b002/covervars.go $WORK/b002/_testmain.cover.go"
+      ],
+      "link": [
+        "GOROOT='/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1' /var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-4036264628/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/link -o $WORK/b002/testify-direct.test -importcfg $WORK/b002/importcfg.link -X=runtime.godebugDefault=tracebacklabels=0,x509sslcertoverrideplatform=0 -buildmode=exe -buildid=IktVVyJPWE1sqHLJyFLW/NvjnPJwbEleaXTtnoIXc/gxWcNXLseGVcBjfwsXBJ/IktVVyJPWE1sqHLJyFLW -w -X testing.testBinary=1 -extld=gcc $WORK/b002/_pkg_.a"
+      ],
+      "cover": [
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-4036264628/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/cover -pkgcfg $WORK/b150/pkgcfg.txt -mode atomic -var goCover_316ef5b916a8_ -outfilelist $WORK/b150/coveroutfiles.txt /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/subjects/testify-direct/sample.go",
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-4036264628/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/cover -pkgcfg $WORK/b002/pkgcfg.txt -mode testmain -var goCover_c7d0207e26d8_ -outfilelist $WORK/b002/coveroutfiles.txt $WORK/b002/_testmain.go"
+      ]
+    },
+    "wrapper_in_trace": true
+  },
+  {
+    "variant": "mini",
+    "scenario": "trace-cached",
+    "tools": {
+      "compile": [],
+      "link": [],
+      "cover": []
+    },
+    "wrapper_in_trace": false
+  },
+  {
+    "variant": "mini",
+    "scenario": "trace-link",
+    "tools": {
+      "compile": [
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-4237987700/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/compile -o $WORK/b002/_pkg_.a -trimpath \"$WORK/b002=>\" -p main -lang=go1.26 -complete -buildid nsrUx0sPPlrGzEFp77Yu/nsrUx0sPPlrGzEFp77Yu -goversion go1.27.1 -coveragecfg=$WORK/b002/coveragecfg -c=32 -nolocalimports -importcfg $WORK/b002/importcfg -pack $WORK/b002/covervars.go $WORK/b002/_testmain.cover.go"
+      ],
+      "link": [
+        "GOROOT='/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1' /var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-4237987700/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/link -o $WORK/b002/testify-direct.test -importcfg $WORK/b002/importcfg.link -X=runtime.godebugDefault=tracebacklabels=0,x509sslcertoverrideplatform=0 -buildmode=exe -buildid=9D7JVuFxl61-y7EWkO4K/nsrUx0sPPlrGzEFp77Yu/lMAccWQszGQcgK_K5av-/9D7JVuFxl61-y7EWkO4K -w -buildid=extended-trace-testify-direct--cover-client-32 -X testing.testBinary=1 -extld=gcc $WORK/b002/_pkg_.a"
+      ],
+      "cover": [
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-4237987700/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/cover -pkgcfg $WORK/b002/pkgcfg.txt -mode testmain -var goCover_c7d0207e26d8_ -outfilelist $WORK/b002/coveroutfiles.txt $WORK/b002/_testmain.go"
+      ]
+    },
+    "wrapper_in_trace": true
+  },
+  {
+    "variant": "mini",
+    "scenario": "trace-body",
+    "tools": {
+      "compile": [
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-4052440651/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/compile -o $WORK/b150/_pkg_.a -trimpath \"/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/edits/testify-direct--cover-client-99.go=>/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/subjects/testify-direct/sample_test.go;/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/edits/testify-direct--cover-client-99.go=>/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/subjects/testify-direct/sample_test.go;/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-4052440651/generated-4.go=>/var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/subjects/testify-direct/zz_dd_ci_visibility_test.go;$WORK/b150=>\" -p example.com/testify-direct -lang=go1.26 -complete -buildid K2GG0e3Bj9GpFJkPyjlC/K2GG0e3Bj9GpFJkPyjlC -goversion go1.27.1 -coveragecfg=$WORK/b150/coveragecfg -c=32 -nolocalimports -importcfg $WORK/b150/importcfg -pack $WORK/b150/covervars.go $WORK/b150/sample.cover.go /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/edits/testify-direct--cover-client-99.go",
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-4052440651/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/compile -o $WORK/b002/_pkg_.a -trimpath \"$WORK/b002=>\" -p main -lang=go1.26 -complete -buildid _jlabzxECv6aCqAftprq/_jlabzxECv6aCqAftprq -goversion go1.27.1 -coveragecfg=$WORK/b002/coveragecfg -c=32 -nolocalimports -importcfg $WORK/b002/importcfg -pack $WORK/b002/covervars.go $WORK/b002/_testmain.cover.go"
+      ],
+      "link": [
+        "GOROOT='/var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1' /var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-4052440651/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/link -o $WORK/b002/testify-direct.test -importcfg $WORK/b002/importcfg.link -X=runtime.godebugDefault=tracebacklabels=0,x509sslcertoverrideplatform=0 -buildmode=exe -buildid=vFOWysLOOEAohWM0BhC2/_jlabzxECv6aCqAftprq/c1I4G_UTOpElp475V0J0/vFOWysLOOEAohWM0BhC2 -w -X testing.testBinary=1 -extld=gcc $WORK/b002/_pkg_.a"
+      ],
+      "cover": [
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-4052440651/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/cover -pkgcfg $WORK/b150/pkgcfg.txt -mode atomic -var goCover_316ef5b916a8_ -outfilelist $WORK/b150/coveroutfiles.txt /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/subjects/testify-direct/sample.go",
+        "/var/tmp/dd-ci-testing-poc-build-repeat-20261003/ddtest tool-overlay testify /var/tmp/dd-ci-testing-poc-build-repeat-20261003/extra/tmp/dd-ci-testing-poc-4052440651/overlay.json /var/tmp/dd-ci-testing-poc-20261001/minitracer/go1.27.1/pkg/tool/linux_amd64/cover -pkgcfg $WORK/b002/pkgcfg.txt -mode testmain -var goCover_c7d0207e26d8_ -outfilelist $WORK/b002/coveroutfiles.txt $WORK/b002/_testmain.go"
+      ]
+    },
+    "wrapper_in_trace": true
+  }
+]

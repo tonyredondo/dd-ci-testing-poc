@@ -4,6 +4,7 @@ package minitracer
 import (
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"runtime/debug"
 	"strconv"
@@ -233,7 +234,7 @@ func newSpan(client *Client, ctx context.Context, name string, options ...StartS
 		}
 	}
 	s.content.Meta["_dd.origin"] = "ciapp-test"
-	s.content.Meta["_dd.p.tid"] = fmt.Sprintf("%016x", binary.BigEndian.Uint64(identity.TraceID[:8]))
+	s.content.Meta["_dd.p.tid"] = hex.EncodeToString(identity.TraceID[:8])
 	for _, option := range options {
 		option(s)
 	}

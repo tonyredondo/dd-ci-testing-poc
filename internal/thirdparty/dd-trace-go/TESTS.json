@@ -265,9 +265,9 @@
       "source": "internal/civisibility/utils/telemetry/telemetry_test.go",
       "destination": "internal/thirdparty/dd-trace-go/civisibility/utils/telemetry/telemetry_test.go",
       "source_sha256": "4f82821b0c6d1e7c933c92ba17ff19d31a05520c9a5aa187346420cd5b307145",
-      "adapted_sha256": "4f82821b0c6d1e7c933c92ba17ff19d31a05520c9a5aa187346420cd5b307145",
+      "adapted_sha256": "2e2f441f9ae72d8b47d0e76c8e4905b5fc97dbbfb6154464746e3788cfd7152f",
       "kind": "full",
-      "adaptation": "Internal import relocation only"
+      "adaptation": "Original assertions retained; local regression checks added for bound lifecycle counters, feature tags and client resets."
     },
     {
       "source": "internal/civisibility/integrations/gotesting/retry_attempt_differential_test.go",
@@ -591,5 +591,19 @@
   ],
   "not_fully_ported_scope": "APM mock/span-count tests, Orchestrion-specific fixtures, subprocess control and platform cases are not represented as a complete upstream suite. Existing native/SDK end-to-end tests cover pass/skip/fail/panic/timeout, retries, EFD, ITR, quarantine and attempt-to-fix. testify/suite is outside the testing-only instrumentator scope.",
   "ci_only_cleanup": "The retired APM endpoint test is explicitly marked replacement; reduced telemetry helpers are marked adapted. Full CI test-file count is unchanged.",
-  "base_commit": "96aedb31048c07e29e7a20a4333dc3b8d289c52d"
+  "base_commit": "96aedb31048c07e29e7a20a4333dc3b8d289c52d",
+  "local_performance_tests": [
+    {
+      "path": "telemetry/concurrency_test.go",
+      "purpose": "Canonical registration, startup replay, swaps and test resets; coherent count/gauge/rate points and collection under concurrent submission."
+    },
+    {
+      "path": "civisibility/utils/telemetry/telemetry_test.go",
+      "purpose": "Original SDK tests plus ordinary/feature-tag metric equivalence across fresh clients."
+    },
+    {
+      "path": "stacktrace/classification_test.go",
+      "purpose": "Concurrent first use preserves internal filtering and third-party/customer classification."
+    }
+  ]
 }

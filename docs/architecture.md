@@ -177,6 +177,13 @@ can therefore block concurrent finishers. While the client is open, a failed
 flush restores the older batch; when it fills the bounds and cannot be delivered,
 a new event is rejected and counted.
 
+Ordinary CI telemetry updates use bound handles for their existing tag
+combinations. The global swappable handle retains startup replay and follows
+client replacement; a test registry reset invalidates the binding. A counter's
+value and timestamp stay together under a short mutex, and collection detaches
+that point before encoding. The [SDK adaptation record](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md)
+describes those lifetimes and the checks needed for an upstream update.
+
 The default event-count limit is 1,000. Byte accounting includes the envelope
 and uses generated `Msgsize()` upper bounds. The flush threshold is 2.5 MiB and
 the maximum uncompressed test-cycle payload is 5 MiB. A single event that cannot

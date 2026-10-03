@@ -74,12 +74,57 @@ macOS/Windows. A green Go version is compatibility evidence for that tested
 version; it does not imply support for every future toolchain or SDK.
 
 The [results index](docs/results.md) links each experiment with its source inputs.
-The [refreshed Gin/Chi comparison](docs/results/compile-20261002-linux-go1.27/README.md)
-includes Native, Orchestrion, POC SDK and POC Mini at 4/32 CPUs. The later
+The [full compile matrix](docs/results/compile-matrix-20261003-linux-go1.27/README.md)
+includes all four variants at 4/32 CPUs, including Testify, race and coverage. The
 [Testify strategy experiment](docs/results/tool-strategies-20261003-linux-go1.27/README.md)
 retains all 660 compile-only observations, cache checks and the selected `-find`
 optimization. Those small Mini fixtures are separate from the Gin/Chi comparison.
-The tables below retain the earlier SDK-backend measurement.
+The latest summaries below are followed by the earlier SDK-backend measurement.
+
+<!-- build-benchmark-summary:start -->
+## Latest four-variant compilation comparison
+
+The [complete matrix](docs/results/compile-matrix-20261003-linux-go1.27/README.md) retains 7,113 completed
+command timings across the selected CPU configurations and five build scenarios.
+Measured POC: `95f8f32b7e8898d96cd72f7f4c89f6905031cd9e`; `go version go1.27.1 linux/amd64`.
+SDK: `v2.12.0-dev.3.0.20261002145613-96aedb31048c`. Test binaries were compiled with `-ldflags=-w`
+and never executed. These excerpts show the cases without extra flags.
+
+Values are medians in seconds. Each POC cell lists its signed change against total
+Orchestrion wall time first, then against Native. For example, `(-50%; +20%)` means
+half Orchestrion time and 20% more than Native. Every sample, including slow runs,
+remains included; small differences need the ranges and uncertainty in the report.
+
+### Cold compilation
+
+| Project | Flags | CPUs | Native | Orchestrion | POC SDK | POC Mini |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Gin | `none` | 4 | 17.984 s | 46.941 s | 27.791 s (-40.8%; +54.5%) | 19.314 s (-58.9%; +7.4%) |
+| Gin | `none` | 32 | 11.155 s | 23.795 s | 14.796 s (-37.8%; +32.6%) | 11.701 s (-50.8%; +4.9%) |
+| Chi | `none` | 4 | 7.758 s | 28.672 s | 18.189 s (-36.6%; +134.5%) | 9.539 s (-66.7%; +23.0%) |
+| Chi | `none` | 32 | 4.615 s | 16.810 s | 9.348 s (-44.4%; +102.5%) | 5.901 s (-64.9%; +27.9%) |
+| Testify Direct | `none` | 4 | 8.068 s | 28.251 s | 17.765 s (-37.1%; +120.2%) | 9.942 s (-64.8%; +23.2%) |
+| Testify Direct | `none` | 32 | 4.706 s | 17.741 s | 9.400 s (-47.0%; +99.7%) | 6.861 s (-61.3%; +45.8%) |
+| Testify External | `none` | 4 | 8.072 s | 28.404 s | 17.837 s (-37.2%; +121.0%) | 9.883 s (-65.2%; +22.4%) |
+| Testify External | `none` | 32 | 4.673 s | 17.106 s | 9.504 s (-44.4%; +103.4%) | 6.053 s (-64.6%; +29.5%) |
+
+### Cached compilation — unchanged output reused
+
+| Project | Flags | CPUs | Native | Orchestrion | POC SDK | POC Mini |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Gin | `none` | 4 | 0.096 s | 0.369 s | 0.240 s (-35.0%; +149.5%) | 0.179 s (-51.6%; +85.7%) |
+| Gin | `none` | 32 | 0.098 s | 0.411 s | 0.253 s (-38.5%; +158.6%) | 0.199 s (-51.7%; +103.2%) |
+| Chi | `none` | 4 | 0.063 s | 0.327 s | 0.189 s (-42.3%; +200.9%) | 0.123 s (-62.4%; +96.3%) |
+| Chi | `none` | 32 | 0.067 s | 0.382 s | 0.199 s (-47.9%; +195.0%) | 0.141 s (-63.2%; +108.8%) |
+| Testify Direct | `none` | 4 | 0.058 s | 0.314 s | 0.172 s (-45.3%; +195.8%) | 0.110 s (-65.0%; +89.4%) |
+| Testify Direct | `none` | 32 | 0.059 s | 0.358 s | 0.177 s (-50.6%; +199.5%) | 0.121 s (-66.3%; +104.4%) |
+| Testify External | `none` | 4 | 0.059 s | 0.315 s | 0.184 s (-41.6%; +212.0%) | 0.121 s (-61.6%; +105.2%) |
+| Testify External | `none` | 32 | 0.060 s | 0.361 s | 0.191 s (-47.2%; +215.9%) | 0.133 s (-63.1%; +121.0%) |
+
+[Run the matrix or regenerate its tables](docs/build-benchmarks.md) with
+`scripts/build_benchmark.py`. The older measurements below preserve their original
+inputs and are separate experiments.
+<!-- build-benchmark-summary:end -->
 
 ## Compilation performance
 

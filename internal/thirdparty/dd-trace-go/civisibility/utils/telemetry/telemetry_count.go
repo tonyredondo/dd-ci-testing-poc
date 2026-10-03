@@ -6,6 +6,8 @@
 package telemetry
 
 import (
+	"sync"
+
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/env"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry"
@@ -93,6 +95,13 @@ func TestSession(providerName string) {
 
 // EventCreated the number of events created by CI Visibility
 func EventCreated(testingFramework string, eventType TestingEventType) {
+	if telemetry.Disabled() {
+		return
+	}
+	if handle := eventCounter(createdEventCounters, testingFramework, eventType); handle != nil {
+		handle.Submit(1)
+		return
+	}
 	tags := make([]string, 0, 1+len(eventType))
 	tags = append(tags, string(getTestingFramework(testingFramework)))
 	tags = append(tags, eventType...)
@@ -101,6 +110,13 @@ func EventCreated(testingFramework string, eventType TestingEventType) {
 
 // EventFinished the number of events finished by CI Visibility
 func EventFinished(testingFramework string, eventType TestingEventType) {
+	if telemetry.Disabled() {
+		return
+	}
+	if handle := eventCounter(finishedEventCounters, testingFramework, eventType); handle != nil {
+		handle.Submit(1)
+		return
+	}
 	tags := make([]string, 0, 1+len(eventType))
 	tags = append(tags, string(getTestingFramework(testingFramework)))
 	tags = append(tags, eventType...)
@@ -125,7 +141,49 @@ func CodeCoverageFinished(testingFramework string, coverageLibraryType CoverageL
 
 // EventsEnqueueForSerialization the number of events enqueued for serialization by CI Visibility
 func EventsEnqueueForSerialization() {
-	telemetry.Count(telemetry.NamespaceCIVisibility, "events_enqueued_for_serialization", nil).Submit(1.0)
+	enqueuedEventCounter.Submit(1.0)
+}
+
+var (
+	createdEventCounters  = sync.OnceValue(func() *[2][4]telemetry.MetricHandle { return bindEventCounters("event_created") })
+	finishedEventCounters = sync.OnceValue(func() *[2][4]telemetry.MetricHandle { return bindEventCounters("event_finished") })
+	enqueuedEventCounter  = telemetry.BindCount(telemetry.NamespaceCIVisibility, "events_enqueued_for_serialization", nil)
+)
+
+func bindEventCounters(name string) *[2][4]telemetry.MetricHandle {
+	handles := new([2][4]telemetry.MetricHandle)
+	for i, framework := range []TestingFramework{GoTestingFramework, UnknownFramework} {
+		for j, event := range []string{"event_type:test", "event_type:suite", "event_type:module", "event_type:session"} {
+			handles[i][j] = telemetry.BindCount(telemetry.NamespaceCIVisibility, name, []string{string(framework), event})
+		}
+	}
+	return handles
+}
+
+// The ordinary hierarchy uses a bounded set of tag combinations. Feature tags
+// (retries, EFD, quarantine, benchmarks, etc.) retain the general registry path.
+// Match tag values, not slice identity: the SDK's exported tag slices are mutable.
+func eventCounter(counters func() *[2][4]telemetry.MetricHandle, framework string, eventType TestingEventType) telemetry.MetricHandle {
+	if len(eventType) != 1 {
+		return nil
+	}
+	var event int
+	switch eventType[0] {
+	case "event_type:test":
+	case "event_type:suite":
+		event = 1
+	case "event_type:module":
+		event = 2
+	case "event_type:session":
+		event = 3
+	default:
+		return nil
+	}
+	var kind int
+	if getTestingFramework(framework) != GoTestingFramework {
+		kind = 1
+	}
+	return counters()[kind][event]
 }
 
 // EndpointPayloadRequests the number of requests sent to the endpoint, regardless of success, tagged by endpoint type

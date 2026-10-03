@@ -16,6 +16,7 @@ the optimizations in the code and how to measure a proposed change.
 | Check what compatibility tests establish | [Validation contract](validation.md) |
 | Compare repeated execution of the complete CI matrix | [Whole-matrix timing](ci-parity.md#repeated-whole-matrix-timing) |
 | Choose a Testify discovery strategy or inspect wrapper overhead | [Tool strategies](results/tool-strategies-20261003-linux-go1.27/README.md) and [selective tools](results/selective-tools-20261003-linux-go1.27/README.md) |
+| Repeat compile benchmarks or regenerate their tables | [Build benchmark runner and protocol](build-benchmarks.md) |
 | Find original timings and their limitations | [Results index](results.md) and [compile-only tables](../README.md#compilation-performance) |
 
 The source record lives beside each incorporated library in
@@ -28,5 +29,7 @@ Documentation describes the checked-in implementation. Timing artifacts describe
 the revisions recorded inside them; updating the SDK or moving code does not
 refresh those measurements.
 
-The latest tool-strategy report retains all 660 compile-only observations at
-4/32 CPUs. Its compatibility reports are separate from the build timings.
+The latest [full compile matrix](results/compile-matrix-20261003-linux-go1.27/README.md)
+retains 7,113 completed commands and all five tables. The earlier tool-strategy
+report has 660 separate observations. Compatibility reports measure a different
+contract from these build timings.

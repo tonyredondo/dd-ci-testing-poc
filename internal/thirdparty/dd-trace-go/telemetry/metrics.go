@@ -87,7 +87,7 @@ func (m *metrics) LoadOrStore(namespace Namespace, kind transport.MetricType, na
 		return handle.(metricHandle)
 	}
 
-	// Serialize only registration. Existing handles and their atomic updates
+	// Serialize only registration. Existing handles and their updates
 	// remain independent of this lock.
 	m.initMu.Lock()
 	handle, loaded := m.store.Load(key)
@@ -141,33 +141,44 @@ type metricPoint struct {
 	time  time.Time
 }
 
-// metric is a meta t
+// metric owns one coherent value/timestamp pair. Submit and collection share a
+// short lock so a flush cannot split the pair or lose a concurrent increment.
+// The point stays inline; updating a counter does not allocate a new snapshot.
 type metric struct {
-	key metricKey
-	ptr atomic.Pointer[metricPoint]
+	key     metricKey
+	mu      sync.Mutex
+	point   metricPoint
+	present bool
 }
 
 func (m *metric) Get() float64 {
-	if ptr := m.ptr.Load(); ptr != nil {
-		return ptr.value
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.present {
+		return m.point.value
 	}
 
 	return math.NaN()
 }
 
 func (m *metric) Payload() transport.MetricData {
-	point := m.ptr.Swap(nil)
-	if point == nil {
+	point, present := m.takePoint()
+	if !present {
 		return transport.MetricData{}
 	}
 	return m.payload(point)
 }
 
-func (m *metric) payload(point *metricPoint) transport.MetricData {
-	if point == nil {
-		return transport.MetricData{}
-	}
+func (m *metric) takePoint() (metricPoint, bool) {
+	m.mu.Lock()
+	point, present := m.point, m.present
+	m.point = metricPoint{}
+	m.present = false
+	m.mu.Unlock()
+	return point, present
+}
 
+func (m *metric) payload(point metricPoint) transport.MetricData {
 	return transport.MetricData{
 		Metric:    m.key.name,
 		Namespace: m.key.namespace,
@@ -186,19 +197,12 @@ type count struct {
 }
 
 func (m *count) Submit(newValue float64) {
-	newPoint := new(metricPoint)
-	newPoint.time = time.Now()
-	for {
-		oldPoint := m.ptr.Load()
-		var oldValue float64
-		if oldPoint != nil {
-			oldValue = oldPoint.value
-		}
-		newPoint.value = oldValue + newValue
-		if m.ptr.CompareAndSwap(oldPoint, newPoint) {
-			return
-		}
-	}
+	now := time.Now()
+	m.mu.Lock()
+	m.point.value += newValue
+	m.point.time = now
+	m.present = true
+	m.mu.Unlock()
 }
 
 // gauge is a metric that represents a single value at a point in time that is not incremental
@@ -207,15 +211,11 @@ type gauge struct {
 }
 
 func (g *gauge) Submit(value float64) {
-	newPoint := new(metricPoint)
-	newPoint.time = time.Now()
-	newPoint.value = value
-	for {
-		oldPoint := g.ptr.Load()
-		if g.ptr.CompareAndSwap(oldPoint, newPoint) {
-			return
-		}
-	}
+	now := time.Now()
+	g.mu.Lock()
+	g.point = metricPoint{value: value, time: now}
+	g.present = true
+	g.mu.Unlock()
 }
 
 // rate is like a count metric but the value sent is divided by an interval of time that is also sent/
@@ -251,8 +251,8 @@ func (r *rate) Payload() transport.MetricData {
 		return transport.MetricData{}
 	}
 
-	point := r.ptr.Swap(nil)
-	if point == nil {
+	point, present := r.takePoint()
+	if !present {
 		return transport.MetricData{}
 	}
 

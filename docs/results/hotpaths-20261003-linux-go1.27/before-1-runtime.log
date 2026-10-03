@@ -1,0 +1,13 @@
+goos: linux
+goarch: amd64
+pkg: github.com/tonyredondo/dd-ci-testing-poc/diagnostic
+cpu: AMD Ryzen 9 5950X 16-Core Processor            
+BenchmarkCount/serial           	10380600	        56.18 ns/op	      32 B/op	       1 allocs/op
+BenchmarkCount/serial-8         	11525574	        51.30 ns/op	      32 B/op	       1 allocs/op
+BenchmarkCount/parallel         	10744168	        55.50 ns/op	      32 B/op	       1 allocs/op
+BenchmarkCount/parallel-8       	 4400394	       142.0 ns/op	      32 B/op	       1 allocs/op
+BenchmarkCIMetrics/serial       	 1219466	       488.4 ns/op	     259 B/op	       7 allocs/op
+BenchmarkCIMetrics/serial-8     	 1282088	       477.0 ns/op	     261 B/op	       7 allocs/op
+BenchmarkCIMetrics/parallel     	 1266540	       471.6 ns/op	     259 B/op	       7 allocs/op
+BenchmarkCIMetrics/parallel-8   	 4359529	       136.3 ns/op	     266 B/op	       7 allocs/op
+PASS

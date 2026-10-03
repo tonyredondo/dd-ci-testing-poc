@@ -1,0 +1,53 @@
+?   	github.com/tonyredondo/dd-ci-testing-poc/cmd/ddtest	[no test files]
+ok  	github.com/tonyredondo/dd-ci-testing-poc/integration	395.302s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/citransport	0.032s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/instrument	0.002s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer	0.578s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/runner	0.078s
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go	[no test files]
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel	0.006s
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility	[no test files]
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants	[no test files]
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/envconfig	0.002s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations	2.249s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations/gotesting	0.043s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations/gotesting/coverage	2.599s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations/logs	0.017s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils	25.808s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/filebitmap	0.002s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/impactedtests	8.754s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/net	15.062s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/telemetry	0.003s
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/ddtrace/ext	[no test files]
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/env	[no test files]
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/globalconfig	0.005s
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/hostname	[no test files]
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/hostname/azure	[no test files]
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/hostname/cachedfetch	[no test files]
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/hostname/ec2	[no test files]
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/hostname/ecs	[no test files]
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/hostname/gce	[no test files]
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/hostname/httputils	[no test files]
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/hostname/validate	[no test files]
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/locking	[no test files]
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log	[no test files]
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/osinfo	0.001s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/stacktrace	0.002s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry	0.005s
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry/internal	[no test files]
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry/internal/knownmetrics	[no test files]
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry/internal/mapper	[no test files]
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry/internal/transport	[no test files]
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry/telemetrytest	0.003s
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/urlsanitizer	[no test files]
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/fwd	0.009s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp	18.947s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp/setof	0.003s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/xsys/unix	0.004s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/xsys/windows/registry	0.002s
+?   	github.com/tonyredondo/dd-ci-testing-poc/internal/version	[no test files]
+ok  	github.com/tonyredondo/dd-ci-testing-poc/propagation	0.002s
+?   	github.com/tonyredondo/dd-ci-testing-poc/scripts/internal/messagepack	[no test files]
+ok  	github.com/tonyredondo/dd-ci-testing-poc/scripts/msgpackgen	0.002s
+?   	github.com/tonyredondo/dd-ci-testing-poc/scripts/vendor-msgpack	[no test files]
+?   	github.com/tonyredondo/dd-ci-testing-poc/testopt	[no test files]

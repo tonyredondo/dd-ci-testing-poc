@@ -1,0 +1,10 @@
+{
+  "authorized_by": "User: Haz mas repeticiones a ver si convergen los tiempos",
+  "first_sample_count": 60,
+  "maximum_sample_count": 100,
+  "cumulative_median_change_limit_pct": 5,
+  "bootstrap_95_width_over_median_limit_pct": 20,
+  "bootstrap_resamples": 4000,
+  "seed": 20261003,
+  "individual_spread": "Retained and reported; user explicitly requested more samples and convergence of estimates rather than discarding outliers."
+}

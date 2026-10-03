@@ -30,3 +30,24 @@ func TestSuiteEntryRetainsLinesAndCoveredLocations(t *testing.T) {
 		}
 	}
 }
+
+func TestTestifyPackageReusesValidationWithoutSkippingFiles(t *testing.T) {
+	run := []byte("package suite\nimport tt \"testing\"\ntype TestingSuite interface{}\nfunc Run(test *tt.T,target TestingSuite){ original() }\n")
+	helper := []byte("package suite\nconst description=\"__dd_ci_registerTestifySuite\"\n")
+	want, _, err := TransformTestifyEntry("suite.go", run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := TransformTestifyPackage(map[string][]byte{"suite.go": run, "helper.go": helper})
+	if err != nil || len(out) != 1 || string(out["suite.go"]) != string(want) {
+		t.Fatalf("package transformation differs: %q, %v", out, err)
+	}
+	for _, bad := range []string{"package suite;var __dd_ci_registerTestifySuite int", "package suite;func broken("} {
+		if _, err := TransformTestifyPackage(map[string][]byte{"suite.go": run, "helper.go": []byte(bad)}); err == nil {
+			t.Fatal("unmodified helper bypassed validation", bad)
+		}
+	}
+	if _, err := TransformTestifyPackage(map[string][]byte{"helper.go": helper}); err == nil {
+		t.Fatal("missing Run accepted")
+	}
+}

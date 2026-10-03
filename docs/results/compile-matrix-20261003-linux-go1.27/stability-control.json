@@ -1,0 +1,46 @@
+[
+  {
+    "scenario": "cold",
+    "metric": "wall_s",
+    "values": [
+      17.804248978965916,
+      17.619520868058316
+    ],
+    "spread_pct": 1.0484286848144952,
+    "limit_pct": 10,
+    "passed": true
+  },
+  {
+    "scenario": "cold",
+    "metric": "cpu_s",
+    "values": [
+      61.559841,
+      62.022688
+    ],
+    "spread_pct": 0.7518651648239283,
+    "limit_pct": 10,
+    "passed": true
+  },
+  {
+    "scenario": "forced-link",
+    "metric": "wall_s",
+    "values": [
+      0.9901354489848018,
+      1.7079824099782854
+    ],
+    "spread_pct": 72.49987481303705,
+    "limit_pct": 20,
+    "passed": false
+  },
+  {
+    "scenario": "forced-link",
+    "metric": "cpu_s",
+    "values": [
+      2.210544,
+      2.196783
+    ],
+    "spread_pct": 0.6264159910196021,
+    "limit_pct": 10,
+    "passed": true
+  }
+]

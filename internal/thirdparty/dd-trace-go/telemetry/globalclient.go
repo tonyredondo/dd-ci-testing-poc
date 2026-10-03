@@ -31,6 +31,9 @@ var (
 
 	// metricsHandleSwappablePointers contains all the swappableMetricHandle, used to replay actions done before the actual MetricHandle is set
 	metricsHandleSwappablePointers sync.Map // metricKey -> func() *swappableMetricHandle
+	// Bound counters refresh their registration when a test clears the registry.
+	// Ordinary client swaps keep the same swappable handles and need no refresh.
+	metricRegistryGeneration atomic.Uint64
 
 	// startAppFlushWg tracks the goroutine launched by StartApp so StopApp can
 	// wait for it to finish before proceeding with the shutdown flush.
@@ -111,6 +114,7 @@ func SwapClient(client Client) Client {
 func MockClient(client Client) func() {
 	globalClientRecorder.Clear()
 	metricsHandleSwappablePointers.Clear()
+	metricRegistryGeneration.Add(1)
 
 	oldClient := SwapClient(client)
 	return func() {
