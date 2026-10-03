@@ -1,0 +1,43 @@
+# CI Visibility extracted from dd-trace-go
+
+- Repository: https://github.com/DataDog/dd-trace-go
+- Default branch: `main`
+- Base commit: `96aedb31048c07e29e7a20a4333dc3b8d289c52d`
+- Go module version: `v2.12.0-dev.3.0.20261002145613-96aedb31048c`
+- Base captured: 2026-10-02; this was the default branch tip when synchronization started.
+- License: original Apache-2.0 text in [LICENSE](LICENSE).
+- Files and hashes: [SOURCE.json](SOURCE.json).
+- Ported test inventory and adaptations: [TESTS.json](TESTS.json).
+
+## Layout and adaptations
+
+Upstream `internal/<path>` maps to `<path>` here; `ddtrace/ext/<path>` keeps its
+original path. Only the top `internal` level is removed: Go's nested-internal
+rule would prevent our native runtime from importing the extracted packages.
+All remaining package and fixture paths are retained. The manifest stores the
+exact original path for every upstream file, including generated sources.
+
+This is a CI-only port. Calls to the general tracer target our native client;
+metadata access is explicit; APM security/profiling/mock hooks, YAML/Fleet,
+telemetry heartbeats, SCA/endpoint inventories and process enrichment are
+excluded. Concurrent telemetry registries use the standard library. Native
+platform calls use the adjacent `xsys` subset. Our runtime version is owned by
+`internal/version`, independently of the SDK base. The MessagePack schema,
+mini client and HTTP transport are owned outside this origin.
+
+Static library capabilities are published before asynchronous settings loading.
+This keeps fast manual hierarchy calls from losing capabilities while the
+network request is still running; feature decisions still wait for settings.
+
+Local tests/adapters are classified separately in the manifest. Original
+assertions are retained when porting tests. Updating the base also updates the
+SDK differential fixture to the same exact version. Historical benchmark
+references remain frozen to the revision they measured.
+
+This synchronization includes the upstream retry environment override,
+ITR missing-line-coverage field/cache-version correction, and serialization
+of the Go runtime coverage emitter, with their regression tests.
+
+Follow the [shared update procedure](../README.md#audit-and-update). A patch
+against the recorded base exposes the complete adaptation diff, instead of
+relying on an import-rewrite script hidden outside the repository.

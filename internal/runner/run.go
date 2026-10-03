@@ -14,30 +14,56 @@ import (
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/instrument"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
-const SDKVersion = "v2.11.0-rc.1"
+const SDKVersion = version.SDKVersion
 const sdkPackage = "github.com/DataDog/dd-trace-go/v2/civisibility"
+const miniPackage = "github.com/tonyredondo/dd-ci-testing-poc/testopt"
 
 type goPackage struct {
 	Dir, Name, ImportPath              string
 	GoFiles, TestGoFiles, XTestGoFiles []string
+	Imports, TestImports, XTestImports []string
+	Deps                               []string
 	Module                             *struct {
 		Path, Version string
-		Replace       *struct{ Dir string }
+		Replace       *struct{ Dir, Version string }
 	}
 	Error *struct{ Err string }
 }
-type Overlay struct{ Replace map[string]string }
+type Overlay struct {
+	Replace map[string]string
+	// CoverExclude lists owned adapter files; they must not affect user coverage.
+	CoverExclude []string     `json:",omitempty"`
+	Testify      *TestifyTool `json:",omitempty"`
+}
 
 type Plan struct {
 	File, Dir                       string
 	InstrumentedFiles, TestPackages int
+	coverOverlay                    bool
+	testify                         bool
 }
 
 // Prepare creates a complete plan before native Go compilation starts. Callers
 // own the plan directory and must remove it after all compiler processes finish.
-func Prepare(ctx context.Context, dir string, args []string) (plan Plan, err error) {
+func Prepare(ctx context.Context, dir string, args []string) (Plan, error) {
+	return PrepareRuntime(ctx, dir, args, SDK)
+}
+
+// PrepareRuntime selects the event runtime without changing Go's test options.
+// The selected runtime must already be required by the target module.
+func PrepareRuntime(ctx context.Context, dir string, args []string, runtime Runtime) (plan Plan, err error) {
+	runtimePackage := sdkPackage
+	switch runtime {
+	case SDK:
+	case Mini:
+		runtimePackage = miniPackage
+	default:
+		return plan, fmt.Errorf("unknown CI runtime: %s", runtime)
+	}
+
 	opts, err := parseOptions(args, os.Getenv("GOFLAGS"))
 	if err != nil {
 		return plan, err
@@ -66,16 +92,19 @@ func Prepare(ctx context.Context, dir string, args []string) (plan Plan, err err
 			replacements[filepath.Clean(from)] = to
 		}
 	}
-	listArgs := append([]string{"list", "-json=Dir,Name,ImportPath,GoFiles,TestGoFiles,XTestGoFiles,Module,Error"}, opts.buildFlags...)
+	listArgs := append([]string{"list", "-json=Dir,Name,ImportPath,GoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,Deps,Module,Error"}, opts.buildFlags...)
 	listArgs = append(listArgs, opts.packages...)
-	listArgs = append(listArgs, "testing", sdkPackage)
+	listArgs = append(listArgs, "testing", runtimePackage)
 	cmd := exec.CommandContext(ctx, "go", listArgs...)
 	cmd.Dir = dir
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	data, e := cmd.Output()
 	if e != nil {
-		return plan, fmt.Errorf("resolve packages (SDK %s must already be required): %w\n%s", SDKVersion, e, stderr.String())
+		if runtime == SDK {
+			return plan, fmt.Errorf("resolve packages (SDK %s must already be required): %w\n%s", SDKVersion, e, stderr.String())
+		}
+		return plan, fmt.Errorf("resolve packages (runtime %s must already be required): %w\n%s", runtimePackage, e, stderr.String())
 	}
 	var packages []goPackage
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -94,21 +123,21 @@ func Prepare(ctx context.Context, dir string, args []string) (plan Plan, err err
 		packages = append(packages, p)
 	}
 	var native *goPackage
-	foundSDK := false
+	foundRuntime := false
 	for i := range packages {
 		p := &packages[i]
 		if p.ImportPath == "testing" {
 			native = p
 		}
-		if p.ImportPath == sdkPackage {
-			if p.Module == nil || p.Module.Version != SDKVersion || p.Module.Replace != nil {
+		if p.ImportPath == runtimePackage {
+			if runtime == SDK && (p.Module == nil || p.Module.Version != SDKVersion || p.Module.Replace != nil) {
 				return plan, fmt.Errorf("POC requires unmodified dd-trace-go %s", SDKVersion)
 			}
-			foundSDK = true
+			foundRuntime = true
 		}
 	}
-	if !foundSDK || native == nil {
-		return plan, fmt.Errorf("missing testing or SDK package")
+	if !foundRuntime || native == nil {
+		return plan, fmt.Errorf("missing testing or selected CI runtime package")
 	}
 	files := map[string][]byte{}
 	for _, file := range native.GoFiles {
@@ -137,7 +166,7 @@ func Prepare(ctx context.Context, dir string, args []string) (plan Plan, err err
 			_ = os.RemoveAll(temp)
 		}
 	}()
-	// Backing files are immutable and shared only within this plan.
+	// Backing files are shared only within this plan and finalized before Go starts.
 	backingByContent := map[string]string{}
 	add := func(logical, content string) error {
 		if _, exists := replacements[logical]; exists {
@@ -166,25 +195,48 @@ func Prepare(ctx context.Context, dir string, args []string) (plan Plan, err err
 		}
 		replacements[logical] = backing
 	}
-	if e = add(filepath.Join(native.Dir, "zz_dd_ci_visibility_hooks.go"), instrument.Hooks); e != nil {
+	if e = add(filepath.Join(native.Dir, "zz_dd_ci_visibility_hooks.go"), hooksForRuntime(runtime)); e != nil {
 		return plan, e
 	}
 	for _, p := range packages {
-		if p.ImportPath == "testing" || p.ImportPath == sdkPackage || len(p.TestGoFiles)+len(p.XTestGoFiles) == 0 {
+		if p.ImportPath == "testing" || p.ImportPath == runtimePackage || len(p.TestGoFiles)+len(p.XTestGoFiles) == 0 {
 			continue
 		}
 		if p.Module == nil {
 			return plan, fmt.Errorf("stdlib tests are outside this POC: %s", p.ImportPath)
 		}
-		content := "package " + p.Name + "_test\nimport _ " + fmt.Sprintf("%q", sdkPackage) + "\n"
+		content := "package " + p.Name + "_test\nimport _ " + fmt.Sprintf("%q", runtimePackage) + "\n"
 		if e = add(filepath.Join(p.Dir, "zz_dd_ci_visibility_test.go"), content); e != nil {
 			return plan, e
 		}
 		plan.TestPackages++
 	}
+	testify, e := prepareTestify(ctx, dir, opts, packages, replacements, runtime, temp)
+	if e != nil {
+		return plan, e
+	}
+	plan.testify = testify != nil
+	if testify != nil {
+		// Exported marker changes testing's content ID, which suite imports.
+		// Native compiler identity can then be shared with uninstrumented packages.
+		marker := replacements[filepath.Join(native.Dir, "zz_dd_ci_visibility_hooks.go")]
+		file, e := os.OpenFile(marker, os.O_APPEND|os.O_WRONLY, 0600)
+		if e != nil {
+			return plan, e
+		}
+		_, e = file.WriteString(instrument.TestifyCacheMarker(testify.Fingerprint))
+		closeErr := file.Close()
+		if e == nil {
+			e = closeErr
+		}
+		if e != nil {
+			return plan, e
+		}
+	}
+	plan.coverOverlay = needsCoverOverlay(dir, opts, packages, []goPackage{*native})
 	plan.File = filepath.Join(temp, "overlay.json")
 	plan.InstrumentedFiles = len(rewritten)
-	encoded, e := json.Marshal(Overlay{Replace: replacements})
+	encoded, e := json.Marshal(Overlay{Replace: replacements, Testify: testify})
 	if e != nil {
 		return plan, e
 	}
@@ -197,18 +249,36 @@ func Prepare(ctx context.Context, dir string, args []string) (plan Plan, err err
 // Run retains native test output, flags, working directory, and exit status.
 // It deliberately preserves the user's test-result caching choice.
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	return RunRuntime(ctx, args, SDK, stdin, stdout, stderr)
+}
+
+// RunRuntime compiles and executes tests using one explicitly selected runtime.
+func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Reader, stdout, stderr io.Writer) int {
 	dir, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	plan, err := Prepare(ctx, dir, args)
+	plan, err := PrepareRuntime(ctx, dir, args, runtime)
 	if err != nil {
 		fmt.Fprintln(stderr, "ddtest:", err)
 		return 2
 	}
 	defer os.RemoveAll(plan.Dir)
 	forwarded := []string{"test", "-overlay=" + plan.File}
+	if plan.coverOverlay || plan.testify {
+		executable, e := os.Executable()
+		if e != nil {
+			fmt.Fprintln(stderr, e)
+			return 2
+		}
+		tool, e := toolCommand(executable, plan.File, plan.toolMode())
+		if e != nil {
+			fmt.Fprintln(stderr, e)
+			return 2
+		}
+		forwarded = append(forwarded, "-toolexec="+tool)
+	}
 	// The merged overlay replaces only the user's overlay flag, never test flags.
 	for i := 0; i < len(args); i++ {
 		if args[i] == "-args" {

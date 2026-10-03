@@ -1,4 +1,25 @@
-# Initial local results
+# Results index
+
+## Later experiments
+
+Each report names the source inputs it measured. Results from different dates,
+projects or flag sets cannot isolate the effect of one optimization.
+
+| Report | What it measures | Evidence retained in the repository |
+| --- | --- | --- |
+| [Tool strategies, 2026-10-03](results/tool-strategies-20261003-linux-go1.27/README.md) | Current, selected `-find` and one-query Mini preparation; six fixtures, 4/32 CPUs, cold/cache/edit scenarios | 660 raw observations, commands, CPU/wall times, cache counters, hashes and compatibility reports |
+| [Selective tools, 2026-10-03](results/selective-tools-20261003-linux-go1.27/README.md) | Caller overlay versus original suite-entry instrumentation; wrapper startup and allocation-free dispatch | Every observation, reproduction script and 26-case SDK comparisons |
+| [Coverage adapter, 2026-10-03](results/testify-coverage-adapter-20261003-linux-go1.27/README.md) | Historical coverage wrapper process cost | Balanced observations, exploratory controls and input manifest; architecture superseded |
+| [Four-variant compile, 2026-10-02](results/compile-20261002-linux-go1.27/README.md) | Native, Orchestrion, POC SDK and Mini on Gin/Chi; 4/32 CPUs, five build scenarios | Published summary tables and conditions; per-command dataset is not part of this snapshot |
+| [Repeated CI matrix, 2026-10-02](results/ci-parity-repeated-20261002-linux-go1.27/README.md) | Continuous execution time of the complete 65-case SDK/Mini block, six rounds | All reports, counts and raw block clocks; predates Testify support |
+
+Build measurements use `go test -c` and never execute the test binary. CI
+compatibility clocks measure real runtime initialization, test policies and
+delivery. Keep those two kinds of observations separate. The current Testify
+contract and remaining parity boundaries live in [Testify support](testify.md)
+and [CI feature parity](ci-parity.md).
+
+## Initial local results
 
 Local checks ran on Arch Linux/amd64 with `go1.27.0-X:nodwarf5`, the unchanged
 SDK `v2.11.0-rc.1`, and frozen Orchestrion commit `5c24783fcd76`. The differential

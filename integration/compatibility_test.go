@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha1"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,7 +21,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/runner"
 )
+
+const sdkVersion = runner.SDKVersion
 
 const orchestrionVersion = "v1.13.2-0.20260917114356-5c24783fcd76"
 
@@ -112,6 +117,13 @@ func testEnv(extra ...string) []string {
 }
 func command(t *testing.T, dir string, env []string, name string, args ...string) (string, string, int) {
 	t.Helper()
+	out, stderr, code, _ := commandWithTiming(t, dir, env, name, args...)
+	return out, stderr, code
+}
+
+// Measure only the child process. Fixture setup and result comparisons stay outside.
+func commandWithTiming(t *testing.T, dir string, env []string, name string, args ...string) (string, string, int, time.Duration) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -120,7 +132,9 @@ func command(t *testing.T, dir string, env []string, name string, args ...string
 	var out, errout bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errout
+	start := time.Now()
 	err := cmd.Run()
+	wall := time.Since(start)
 	code := 0
 	if err != nil {
 		if e, ok := err.(*exec.ExitError); ok {
@@ -132,7 +146,7 @@ func command(t *testing.T, dir string, env []string, name string, args ...string
 	if ctx.Err() != nil {
 		t.Fatalf("command timed out: %s %v", name, args)
 	}
-	return out.String(), errout.String(), code
+	return out.String(), errout.String(), code, wall
 }
 func copyTree(t *testing.T, from, to string) {
 	t.Helper()
@@ -173,33 +187,7 @@ func prepareFixture(t *testing.T, baseline bool) (string, string) {
 		t.Fatal(err)
 	}
 	if baseline {
-		// Both compilers use this SAME temporary module graph, including any MVS
-		// upgrades introduced by the reference tool. The SDK version stays fixed.
-		if out, e, code := command(t, dir, testEnv(), "go", "get", "github.com/DataDog/orchestrion@"+orchestrionVersion); code != 0 {
-			t.Fatalf("prepare common graph: %s\n%s", out, e)
-		}
-		out, e, code := command(t, dir, testEnv(), "go", "list", "-m", "-json", "github.com/DataDog/dd-trace-go/v2")
-		if code != 0 {
-			t.Fatalf("SDK: %s", e)
-		}
-		var module struct{ Dir, Version string }
-		if err = json.Unmarshal([]byte(out), &module); err != nil {
-			t.Fatal(err)
-		}
-		if module.Version != "v2.11.0-rc.1" {
-			t.Fatalf("baseline changed SDK: %s", module.Version)
-		}
-		yaml, err := os.ReadFile(filepath.Join(module.Dir, "internal/civisibility/integrations/gotesting/orchestrion.yml"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err = os.WriteFile(filepath.Join(dir, "orchestrion.yml"), yaml, 0644); err != nil {
-			t.Fatal(err)
-		}
-		tool := "//go:build tools\n\npackage fixture\nimport _ \"github.com/DataDog/orchestrion\"\n"
-		if err = os.WriteFile(filepath.Join(dir, "orchestrion.tool.go"), []byte(tool), 0644); err != nil {
-			t.Fatal(err)
-		}
+		configureReferenceFixture(t, dir)
 	}
 	bin := filepath.Join(t.TempDir(), executableName("ddtest"))
 	out, e, code := command(t, root, testEnv(), "go", "build", "-o", bin, "./cmd/ddtest")
@@ -268,6 +256,8 @@ type execution struct {
 	out, stderr string
 	code        int
 	events      []string
+	wireEvents  []map[string]any
+	wall        time.Duration
 }
 
 func execute(t *testing.T, dir, bin string, args []string, enabled, retry bool) execution {
@@ -279,8 +269,9 @@ func executeProfile(t *testing.T, dir, bin string, args []string, enabled, retry
 	receiver := &capture{retry: retry, profile: profile}
 	server := httptest.NewServer(http.HandlerFunc(receiver.handler))
 	defer server.Close()
-	retryPath := filepath.Join(t.TempDir(), "retry-counter")
-	env := testEnv(fmt.Sprintf("DD_CIVISIBILITY_ENABLED=%t", enabled), "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_TRACE_AGENT_URL="+server.URL, "DD_API_KEY=poc-not-a-real-key", "POC_RETRY_COUNTER="+retryPath)
+	executionDir := t.TempDir()
+	retryPath := filepath.Join(executionDir, "retry-counter")
+	env := testEnv(fmt.Sprintf("DD_CIVISIBILITY_ENABLED=%t", enabled), "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_TRACE_AGENT_URL="+server.URL, "DD_API_KEY=poc-not-a-real-key", "POC_RETRY_COUNTER="+retryPath, "TMPDIR="+executionDir, "TMP="+executionDir, "TEMP="+executionDir, "XDG_CACHE_HOME="+executionDir, fmt.Sprintf("DD_GIT_COMMIT_SHA=%x", sha1.Sum([]byte(dir+"|"+profile))))
 	if retry {
 		env = append(env, "DD_CIVISIBILITY_FLAKY_RETRY_ENABLED=true", "DD_CIVISIBILITY_FLAKY_RETRY_COUNT=1", "DD_CIVISIBILITY_TOTAL_FLAKY_RETRY_COUNT=2", "DD_CIVISIBILITY_RETRY_EXECUTION_MODE=process")
 	}
@@ -293,7 +284,7 @@ func executeProfile(t *testing.T, dir, bin string, args []string, enabled, retry
 	if len(receiver.failures) > 0 {
 		t.Fatalf("wire protocol: %v", receiver.failures)
 	}
-	return execution{normalizedOutput(out), stderr, code, normalizedEvents(receiver.events)}
+	return execution{out: normalizedOutput(out), stderr: stderr, code: code, events: normalizedEvents(receiver.events), wireEvents: receiver.events}
 }
 
 func TestTestingCompatibility(t *testing.T) {
@@ -411,4 +402,35 @@ func TestTestingCompatibility(t *testing.T) {
 			}
 		}
 	})
+}
+
+func configureReferenceFixture(t *testing.T, dir string) {
+	t.Helper()
+	// Both compilers use this SAME temporary module graph, including any MVS
+	// upgrades introduced by the reference tool. The SDK version stays fixed.
+	if out, e, code := command(t, dir, testEnv(), "go", "get", "github.com/DataDog/orchestrion@"+orchestrionVersion); code != 0 {
+		t.Fatalf("prepare common graph: %s\n%s", out, e)
+	}
+	out, e, code := command(t, dir, testEnv(), "go", "list", "-m", "-json", "github.com/DataDog/dd-trace-go/v2")
+	if code != 0 {
+		t.Fatalf("SDK: %s", e)
+	}
+	var module struct{ Dir, Version string }
+	if err := json.Unmarshal([]byte(out), &module); err != nil {
+		t.Fatal(err)
+	}
+	if module.Version != sdkVersion {
+		t.Fatalf("baseline changed SDK: %s", module.Version)
+	}
+	yaml, err := os.ReadFile(filepath.Join(module.Dir, "internal/civisibility/integrations/gotesting/orchestrion.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(dir, "orchestrion.yml"), yaml, 0644); err != nil {
+		t.Fatal(err)
+	}
+	tool := "//go:build tools\n\npackage fixture\nimport _ \"github.com/DataDog/orchestrion\"\n"
+	if err = os.WriteFile(filepath.Join(dir, "orchestrion.tool.go"), []byte(tool), 0644); err != nil {
+		t.Fatal(err)
+	}
 }

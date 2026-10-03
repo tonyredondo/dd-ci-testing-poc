@@ -1,0 +1,145 @@
+{
+  "scope": "Vendored Testify with unchanged source bytes and native compiler/source inputs; replacement version metadata changed from v1.11.1 to v1.10.0 consistently in go.mod and vendor/modules.txt.",
+  "rows": [
+    {
+      "name": "vendor-valid-exact",
+      "mode": "exact",
+      "exit": 0,
+      "elapsed_s": 3.8454678340349346,
+      "compiler_calls": 52,
+      "suite_compiled": true,
+      "error": "",
+      "command": [
+        "/var/tmp/dd-ci-testing-poc-tool-strategies-20261003/ddtest-exact",
+        "test",
+        "--runtime=mini",
+        "-mod=vendor",
+        "-x",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-tool-strategies-20261003/cache-gate/vendored.test",
+        "."
+      ]
+    },
+    {
+      "name": "vendor-valid-warm-always",
+      "mode": "always",
+      "exit": 0,
+      "elapsed_s": 0.20695312693715096,
+      "compiler_calls": 0,
+      "suite_compiled": false,
+      "error": "",
+      "command": [
+        "/var/tmp/dd-ci-testing-poc-tool-strategies-20261003/ddtest-always",
+        "test",
+        "--runtime=mini",
+        "-mod=vendor",
+        "-x",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-tool-strategies-20261003/cache-gate/vendored.test",
+        "."
+      ]
+    },
+    {
+      "name": "vendor-valid-warm-hybrid",
+      "mode": "hybrid",
+      "exit": 0,
+      "elapsed_s": 0.10563913895748556,
+      "compiler_calls": 0,
+      "suite_compiled": false,
+      "error": "",
+      "command": [
+        "/var/tmp/dd-ci-testing-poc-tool-strategies-20261003/ddtest-hybrid",
+        "test",
+        "--runtime=mini",
+        "-mod=vendor",
+        "-x",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-tool-strategies-20261003/cache-gate/vendored.test",
+        "."
+      ]
+    },
+    {
+      "name": "vendor-valid-warm-exact",
+      "mode": "exact",
+      "exit": 0,
+      "elapsed_s": 0.1287399079883471,
+      "compiler_calls": 0,
+      "suite_compiled": false,
+      "error": "",
+      "command": [
+        "/var/tmp/dd-ci-testing-poc-tool-strategies-20261003/ddtest-exact",
+        "test",
+        "--runtime=mini",
+        "-mod=vendor",
+        "-x",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-tool-strategies-20261003/cache-gate/vendored.test",
+        "."
+      ]
+    },
+    {
+      "name": "vendor-unsupported-identical-warm-exact",
+      "mode": "exact",
+      "exit": 2,
+      "elapsed_s": 0.053857735940255225,
+      "compiler_calls": 0,
+      "suite_compiled": false,
+      "error": "ddtest: Testify \"v1.10.0\" is unsupported: suite.Run instrumentation requires >=v1.11.1 and <v2.0.0\n",
+      "command": [
+        "/var/tmp/dd-ci-testing-poc-tool-strategies-20261003/ddtest-exact",
+        "test",
+        "--runtime=mini",
+        "-mod=vendor",
+        "-x",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-tool-strategies-20261003/cache-gate/vendored.test",
+        "."
+      ]
+    },
+    {
+      "name": "vendor-unsupported-identical-warm-always",
+      "mode": "always",
+      "exit": 0,
+      "elapsed_s": 0.4581547810230404,
+      "compiler_calls": 1,
+      "suite_compiled": false,
+      "error": "",
+      "command": [
+        "/var/tmp/dd-ci-testing-poc-tool-strategies-20261003/ddtest-always",
+        "test",
+        "--runtime=mini",
+        "-mod=vendor",
+        "-x",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-tool-strategies-20261003/cache-gate/vendored.test",
+        "."
+      ]
+    },
+    {
+      "name": "vendor-unsupported-identical-warm-hybrid",
+      "mode": "hybrid",
+      "exit": 0,
+      "elapsed_s": 0.10375219397246838,
+      "compiler_calls": 0,
+      "suite_compiled": false,
+      "error": "",
+      "command": [
+        "/var/tmp/dd-ci-testing-poc-tool-strategies-20261003/ddtest-hybrid",
+        "test",
+        "--runtime=mini",
+        "-mod=vendor",
+        "-x",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-tool-strategies-20261003/cache-gate/vendored.test",
+        "."
+      ]
+    }
+  ]
+}

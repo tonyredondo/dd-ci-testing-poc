@@ -1,8 +1,17 @@
 # dd-ci-testing-poc
 
-A testing-only CI Visibility instrumentator using native Go build overlays.
-The driver uses the Go standard library only. Test binaries use the **unmodified
-`github.com/DataDog/dd-trace-go/v2 v2.11.0-rc.1`** SDK and its existing hooks.
+A testing-only CI Visibility tool built on native Go build overlays.
+The driver uses the Go standard library only. The default `sdk` backend uses the
+**unmodified `dd-trace-go` SDK** at the exact revision pinned in
+[`internal/version`](internal/version/version.go). The experimental `mini` backend
+uses the SDK-derived CI logic and a native event client with a smaller dependency
+graph. See [native runtime usage and contracts](docs/mini-runtime.md).
+
+For maintainers, start with the [documentation guide](docs/README.md):
+[architecture and diagrams](docs/architecture.md),
+[source updates](docs/maintenance.md) and
+[performance and profiling](docs/performance.md), and
+[CI feature parity, combinations and remaining gaps](docs/ci-parity.md).
 
 ```sh
 go build -o bin/ddtest ./cmd/ddtest
@@ -17,8 +26,9 @@ the CLI; runtime normalization remains the SDK's responsibility.
 
 The tool prepares the SDK's nine `testing` aspects, injects an external test
 file importing `dd-trace-go/v2/civisibility`, then calls native `go test` with an
-overlay. Project sources, GOROOT and the SDK are not rewritten. Temporary
-sources are removed after Go finishes. Go owns compilation and cache invalidation.
+overlay. Original project sources, GOROOT and the SDK are not modified on
+disk. Temporary sources are removed after Go finishes. Go owns compilation and
+cache invalidation.
 The exact SDK ownership marker and linkname ABI are retained, including process
 retry control and abnormal finalization.
 
@@ -28,9 +38,14 @@ count/shuffle, JSON, benchmarks, race and coverage. It forwards native flags and
 preserves the user's result-cache choice; use `-count=1` for fresh CI events.
 Existing overlays are merged. Missing or ambiguous hooks and conflicting `-toolexec`
 configuration fail before compilation. Explicit `.go` file mode, `-C`, SDK
-replacements, standard-library test targets and `testify/suite` are outside this
-POC. Run from the desired module directory. Runtime configuration and intentional
-retry/skip/quarantine behavior remain in the SDK.
+replacements and standard-library test targets are outside this POC.
+[Testify suite support](docs/testify.md) covers v1.11.1 and newer v1 releases,
+including callers in external dependencies. A selective `-toolexec` hook is
+activated only for reachable Testify suites or covered rewritten `testing`
+sources. Other builds use the overlay directly. Preparation validates the selected
+Testify version and API even when Go can reuse a cached archive. Version fixtures
+cover v1.11.1 and v1.12.1. Run from the desired module directory. Runtime
+configuration and retry/skip/quarantine behavior remain in the selected runtime.
 
 ## Reproduce verification
 
@@ -57,6 +72,14 @@ allowing native parallel completion order and elapsed times to differ.
 GitHub Actions is configured to run the differential suite on Go 1.26/1.27 Linux and Go 1.27
 macOS/Windows. A green Go version is compatibility evidence for that tested
 version; it does not imply support for every future toolchain or SDK.
+
+The [results index](docs/results.md) links each experiment with its source inputs.
+The [refreshed Gin/Chi comparison](docs/results/compile-20261002-linux-go1.27/README.md)
+includes Native, Orchestrion, POC SDK and POC Mini at 4/32 CPUs. The later
+[Testify strategy experiment](docs/results/tool-strategies-20261003-linux-go1.27/README.md)
+retains all 660 compile-only observations, cache checks and the selected `-find`
+optimization. Those small Mini fixtures are separate from the Gin/Chi comparison.
+The tables below retain the earlier SDK-backend measurement.
 
 ## Compilation performance
 
@@ -121,3 +144,15 @@ not incomplete CPU accounting. Two cold rounds and five warm/edit rounds are
 exploratory data; this small fixture does not establish savings for your application.
 
 See [validation scope](docs/validation.md) and [results](docs/results.md).
+
+## Source maintenance
+
+Incorporated sources live in [`internal/thirdparty`](internal/thirdparty/README.md).
+Every origin records its repository, exact upstream SHA, licenses and file hashes.
+The current SDK extraction base is `dd-trace-go/main` at
+`96aedb31048c07e29e7a20a4333dc3b8d289c52d`; differential fixtures use the same
+version. The native client/transport remain separate from the upstream subsets.
+Run `python3 scripts/upstream.py verify` to audit the source record offline.
+The [maintenance guide](docs/maintenance.md) covers three-way SDK updates, codec
+regeneration, platform changes and the required checks. The benchmark tables
+above describe their explicitly recorded historical revisions.

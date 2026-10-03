@@ -1,0 +1,3 @@
+package main
+import("context";"encoding/json";"os";"github.com/tonyredondo/dd-ci-testing-poc/internal/runner")
+func main(){p,e:=runner.PrepareRuntime(context.Background(),os.Args[1],[]string{"-mod=mod","-coverpkg=.","."},runner.Mini);if e!=nil{panic(e)};if e=json.NewEncoder(os.Stdout).Encode(p);e!=nil{panic(e)}}

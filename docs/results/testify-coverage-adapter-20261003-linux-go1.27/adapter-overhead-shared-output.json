@@ -1,0 +1,830 @@
+{
+  "scope": "Compile-only prepared Mini overlay, native coverage without rewritten normal callers; force the adapter to isolate process/version overhead. Preparation and SDK runtime execution excluded. Six balanced pairs after warmup for unchanged/edit builds, two -a pairs. Edit pairs add an unused exported constant with equal-length values to force comparable compiler/linker work.",
+  "go": "go version go1.27.1 linux/amd64",
+  "cores": 4,
+  "driver_sha256": "8d9712940c2c1b6b4c72d25f01b38a09784c4061475872f5f921c0c04905b9ed",
+  "plan": {
+    "File": "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+    "Dir": "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246",
+    "InstrumentedFiles": 2,
+    "TestPackages": 1
+  },
+  "observations": [
+    {
+      "phase": "warmup",
+      "iteration": 0,
+      "mode": "direct",
+      "tool_invocations": {
+        "compile": 0,
+        "cover": 0,
+        "link": 1
+      },
+      "wall_ns": 373240124,
+      "user_s": 0.45085699999999995,
+      "sys_s": 0.11832,
+      "command": [
+        "go",
+        "test",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "warmup",
+      "iteration": 0,
+      "mode": "adapter",
+      "tool_invocations": {
+        "compile": 0,
+        "cover": 0,
+        "link": 1
+      },
+      "wall_ns": 363850390,
+      "user_s": 0.47625300000000004,
+      "sys_s": 0.10784699999999998,
+      "command": [
+        "go",
+        "test",
+        "-toolexec='/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/ddtest' cover-overlay '/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json'",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "unchanged",
+      "iteration": 0,
+      "mode": "direct",
+      "tool_invocations": {
+        "compile": 0,
+        "cover": 0,
+        "link": 1
+      },
+      "wall_ns": 376559659,
+      "user_s": 0.4603050000000001,
+      "sys_s": 0.12527800000000003,
+      "command": [
+        "go",
+        "test",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "unchanged",
+      "iteration": 0,
+      "mode": "adapter",
+      "tool_invocations": {
+        "compile": 0,
+        "cover": 0,
+        "link": 1
+      },
+      "wall_ns": 387289375,
+      "user_s": 0.4497229999999999,
+      "sys_s": 0.13106399999999996,
+      "command": [
+        "go",
+        "test",
+        "-toolexec='/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/ddtest' cover-overlay '/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json'",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "unchanged",
+      "iteration": 1,
+      "mode": "adapter",
+      "tool_invocations": {
+        "compile": 0,
+        "cover": 0,
+        "link": 0
+      },
+      "wall_ns": 74223190,
+      "user_s": 0.11063400000000012,
+      "sys_s": 0.080295,
+      "command": [
+        "go",
+        "test",
+        "-toolexec='/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/ddtest' cover-overlay '/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json'",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "unchanged",
+      "iteration": 1,
+      "mode": "direct",
+      "tool_invocations": {
+        "compile": 0,
+        "cover": 0,
+        "link": 1
+      },
+      "wall_ns": 386940704,
+      "user_s": 0.4560059999999999,
+      "sys_s": 0.13354900000000003,
+      "command": [
+        "go",
+        "test",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "unchanged",
+      "iteration": 2,
+      "mode": "direct",
+      "tool_invocations": {
+        "compile": 0,
+        "cover": 0,
+        "link": 0
+      },
+      "wall_ns": 64414915,
+      "user_s": 0.09866099999999989,
+      "sys_s": 0.07230399999999992,
+      "command": [
+        "go",
+        "test",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "unchanged",
+      "iteration": 2,
+      "mode": "adapter",
+      "tool_invocations": {
+        "compile": 0,
+        "cover": 0,
+        "link": 1
+      },
+      "wall_ns": 389682298,
+      "user_s": 0.4505629999999998,
+      "sys_s": 0.143239,
+      "command": [
+        "go",
+        "test",
+        "-toolexec='/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/ddtest' cover-overlay '/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json'",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "unchanged",
+      "iteration": 3,
+      "mode": "adapter",
+      "tool_invocations": {
+        "compile": 0,
+        "cover": 0,
+        "link": 0
+      },
+      "wall_ns": 74355640,
+      "user_s": 0.10034600000000049,
+      "sys_s": 0.09223800000000015,
+      "command": [
+        "go",
+        "test",
+        "-toolexec='/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/ddtest' cover-overlay '/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json'",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "unchanged",
+      "iteration": 3,
+      "mode": "direct",
+      "tool_invocations": {
+        "compile": 0,
+        "cover": 0,
+        "link": 1
+      },
+      "wall_ns": 374428006,
+      "user_s": 0.4558549999999997,
+      "sys_s": 0.120927,
+      "command": [
+        "go",
+        "test",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "unchanged",
+      "iteration": 4,
+      "mode": "direct",
+      "tool_invocations": {
+        "compile": 0,
+        "cover": 0,
+        "link": 0
+      },
+      "wall_ns": 66302678,
+      "user_s": 0.10304199999999986,
+      "sys_s": 0.0736159999999999,
+      "command": [
+        "go",
+        "test",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "unchanged",
+      "iteration": 4,
+      "mode": "adapter",
+      "tool_invocations": {
+        "compile": 0,
+        "cover": 0,
+        "link": 1
+      },
+      "wall_ns": 369792628,
+      "user_s": 0.43626900000000024,
+      "sys_s": 0.131046,
+      "command": [
+        "go",
+        "test",
+        "-toolexec='/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/ddtest' cover-overlay '/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json'",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "unchanged",
+      "iteration": 5,
+      "mode": "adapter",
+      "tool_invocations": {
+        "compile": 0,
+        "cover": 0,
+        "link": 0
+      },
+      "wall_ns": 70117164,
+      "user_s": 0.11272799999999972,
+      "sys_s": 0.07505499999999987,
+      "command": [
+        "go",
+        "test",
+        "-toolexec='/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/ddtest' cover-overlay '/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json'",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "unchanged",
+      "iteration": 5,
+      "mode": "direct",
+      "tool_invocations": {
+        "compile": 0,
+        "cover": 0,
+        "link": 1
+      },
+      "wall_ns": 1514502898,
+      "user_s": 0.4453580000000006,
+      "sys_s": 0.11409100000000016,
+      "command": [
+        "go",
+        "test",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "source-edit",
+      "iteration": 0,
+      "mode": "adapter",
+      "tool_invocations": {
+        "compile": 3,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 552181609,
+      "user_s": 0.5328099999999996,
+      "sys_s": 0.1697639999999998,
+      "command": [
+        "go",
+        "test",
+        "-toolexec='/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/ddtest' cover-overlay '/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json'",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "source-edit",
+      "iteration": 0,
+      "mode": "direct",
+      "tool_invocations": {
+        "compile": 3,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 426187363,
+      "user_s": 0.5188500000000005,
+      "sys_s": 0.15851000000000015,
+      "command": [
+        "go",
+        "test",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "source-edit",
+      "iteration": 1,
+      "mode": "direct",
+      "tool_invocations": {
+        "compile": 3,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 426395443,
+      "user_s": 0.5417819999999995,
+      "sys_s": 0.143227,
+      "command": [
+        "go",
+        "test",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "source-edit",
+      "iteration": 1,
+      "mode": "adapter",
+      "tool_invocations": {
+        "compile": 3,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 432935363,
+      "user_s": 0.5364060000000004,
+      "sys_s": 0.1763490000000001,
+      "command": [
+        "go",
+        "test",
+        "-toolexec='/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/ddtest' cover-overlay '/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json'",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "source-edit",
+      "iteration": 2,
+      "mode": "adapter",
+      "tool_invocations": {
+        "compile": 3,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 471945540,
+      "user_s": 0.5573920000000001,
+      "sys_s": 0.1698710000000001,
+      "command": [
+        "go",
+        "test",
+        "-toolexec='/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/ddtest' cover-overlay '/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json'",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "source-edit",
+      "iteration": 2,
+      "mode": "direct",
+      "tool_invocations": {
+        "compile": 3,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 437470029,
+      "user_s": 0.5194369999999999,
+      "sys_s": 0.1512859999999998,
+      "command": [
+        "go",
+        "test",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "source-edit",
+      "iteration": 3,
+      "mode": "direct",
+      "tool_invocations": {
+        "compile": 3,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 432789422,
+      "user_s": 0.544422,
+      "sys_s": 0.1687050000000001,
+      "command": [
+        "go",
+        "test",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "source-edit",
+      "iteration": 3,
+      "mode": "adapter",
+      "tool_invocations": {
+        "compile": 3,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 471400200,
+      "user_s": 0.5390630000000005,
+      "sys_s": 0.19857099999999983,
+      "command": [
+        "go",
+        "test",
+        "-toolexec='/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/ddtest' cover-overlay '/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json'",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "source-edit",
+      "iteration": 4,
+      "mode": "adapter",
+      "tool_invocations": {
+        "compile": 3,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 443320428,
+      "user_s": 0.5411559999999991,
+      "sys_s": 0.18434000000000017,
+      "command": [
+        "go",
+        "test",
+        "-toolexec='/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/ddtest' cover-overlay '/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json'",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "source-edit",
+      "iteration": 4,
+      "mode": "direct",
+      "tool_invocations": {
+        "compile": 3,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 1747534153,
+      "user_s": 0.538863000000001,
+      "sys_s": 0.1657169999999999,
+      "command": [
+        "go",
+        "test",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "source-edit",
+      "iteration": 5,
+      "mode": "direct",
+      "tool_invocations": {
+        "compile": 3,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 428021416,
+      "user_s": 0.5250339999999998,
+      "sys_s": 0.16180700000000003,
+      "command": [
+        "go",
+        "test",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "source-edit",
+      "iteration": 5,
+      "mode": "adapter",
+      "tool_invocations": {
+        "compile": 3,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 423527288,
+      "user_s": 0.5312229999999989,
+      "sys_s": 0.17566399999999982,
+      "command": [
+        "go",
+        "test",
+        "-toolexec='/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/ddtest' cover-overlay '/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json'",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "rebuild-all",
+      "iteration": 0,
+      "mode": "direct",
+      "tool_invocations": {
+        "compile": 279,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 8482312590,
+      "user_s": 27.996505,
+      "sys_s": 5.047304,
+      "command": [
+        "go",
+        "test",
+        "-a",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "rebuild-all",
+      "iteration": 0,
+      "mode": "adapter",
+      "tool_invocations": {
+        "compile": 279,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 7709926813,
+      "user_s": 28.83543000000001,
+      "sys_s": 6.701289000000001,
+      "command": [
+        "go",
+        "test",
+        "-toolexec='/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/ddtest' cover-overlay '/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json'",
+        "-a",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "rebuild-all",
+      "iteration": 1,
+      "mode": "adapter",
+      "tool_invocations": {
+        "compile": 279,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 7726440538,
+      "user_s": 28.690006999999994,
+      "sys_s": 6.890094000000001,
+      "command": [
+        "go",
+        "test",
+        "-toolexec='/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/ddtest' cover-overlay '/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json'",
+        "-a",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    },
+    {
+      "phase": "rebuild-all",
+      "iteration": 1,
+      "mode": "direct",
+      "tool_invocations": {
+        "compile": 279,
+        "cover": 2,
+        "link": 1
+      },
+      "wall_ns": 7334300465,
+      "user_s": 28.094482,
+      "sys_s": 4.972777999999998,
+      "command": [
+        "go",
+        "test",
+        "-a",
+        "-x",
+        "-mod=mod",
+        "-coverpkg=.",
+        "-overlay=/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/tmp/dd-ci-testing-poc-2515987246/overlay.json",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-testing-poc-testify-analysis-20261002/adapter-perf-fixture/fixture.test",
+        "."
+      ]
+    }
+  ],
+  "summary": {
+    "unchanged": {
+      "direct": {
+        "wall_median_ms": 375.4938325,
+        "cpu_median_ms": 568.1155000000002,
+        "wall_min_ms": 64.414915,
+        "wall_max_ms": 1514.502898
+      },
+      "adapter": {
+        "wall_median_ms": 222.074134,
+        "cpu_median_ms": 379.94950000000046,
+        "wall_min_ms": 70.117164,
+        "wall_max_ms": 389.682298
+      },
+      "delta_wall_ms": -153.4196985
+    },
+    "source-edit": {
+      "direct": {
+        "wall_median_ms": 430.405419,
+        "cpu_median_ms": 685.9249999999997,
+        "wall_min_ms": 426.187363,
+        "wall_max_ms": 1747.534153
+      },
+      "adapter": {
+        "wall_median_ms": 457.360314,
+        "cpu_median_ms": 719.1254999999999,
+        "wall_min_ms": 423.527288,
+        "wall_max_ms": 552.181609
+      },
+      "delta_wall_ms": 26.954895000000022
+    },
+    "rebuild-all": {
+      "direct": {
+        "wall_median_ms": 7908.3065275,
+        "cpu_median_ms": 33055.534499999994,
+        "wall_min_ms": 7334.300465,
+        "wall_max_ms": 8482.31259
+      },
+      "adapter": {
+        "wall_median_ms": 7718.1836755,
+        "cpu_median_ms": 35558.41000000001,
+        "wall_min_ms": 7709.926813,
+        "wall_max_ms": 7726.440538
+      },
+      "delta_wall_ms": -190.1228519999995
+    }
+  }
+}
