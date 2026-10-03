@@ -165,7 +165,7 @@ func TestTestifyContractInvalidatesOnlyTestingDependents(t *testing.T) {
 	}
 	run()
 	cached := run()
-	if strings.Contains(cached, "/compile ") || strings.Contains(cached, "\\compile.exe ") {
+	if len(compilerTraceLines(cached)) != 0 {
 		t.Fatal("unchanged plan recompiled packages", cached)
 	}
 	var marker string
@@ -190,10 +190,7 @@ func TestTestifyContractInvalidatesOnlyTestingDependents(t *testing.T) {
 	}
 	changed := run()
 	var suiteRebuilt bool
-	for _, line := range strings.Split(changed, "\n") {
-		if !strings.Contains(line, "/compile ") && !strings.Contains(line, "\\compile.exe ") {
-			continue
-		}
+	for _, line := range compilerTraceLines(changed) {
 		if strings.Contains(line, "-p github.com/stretchr/testify/suite ") {
 			suiteRebuilt = true
 		}
@@ -204,7 +201,7 @@ func TestTestifyContractInvalidatesOnlyTestingDependents(t *testing.T) {
 	if !suiteRebuilt {
 		t.Fatal("changed testing contract did not invalidate Testify", changed)
 	}
-	if again := run(); strings.Contains(again, "/compile ") || strings.Contains(again, "\\compile.exe ") {
+	if again := run(); len(compilerTraceLines(again)) != 0 {
 		t.Fatal("changed contract cannot reuse cache", again)
 	}
 }

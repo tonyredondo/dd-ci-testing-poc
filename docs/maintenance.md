@@ -279,7 +279,10 @@ when changing detection or version validation. Its source bytes stay constant
 while module/vendor metadata changes, so compile-time-only guards cannot pass
 it. Also run [`TestTestifyContractInvalidatesOnlyTestingDependents`](../integration/selective_tools_test.go)
 when changing the marker or tool identity: Testify must rebuild while unrelated
-standard-library packages remain cached. The [strategy experiment](results/tool-strategies-20261003-linux-go1.27/README.md)
+standard-library packages remain cached. These assertions use
+`compilerTraceLines` to recognize native `go test -x` commands, including quoted
+Windows executables and Unix paths with spaces. Keep that parser control when
+changing cache tests; a missed command can invalidate their proof. The [strategy experiment](results/tool-strategies-20261003-linux-go1.27/README.md)
 explains the rejected deferred-validation approaches and preserves all runs.
 
 After a platform change, check Unix `exec` replacement and Windows child exit

@@ -45,7 +45,7 @@ func TestSuite(t *testing.T) {suite.Run(t, new(ExampleSuite))}
 		if code != 0 {
 			t.Fatal(out, stderr)
 		}
-		if i == 1 && (strings.Contains(stderr, "/compile ") || strings.Contains(stderr, "\\compile.exe ")) {
+		if i == 1 && len(compilerTraceLines(stderr)) != 0 {
 			t.Fatal("unchanged vendor sources did not reuse cache", stderr)
 		}
 	}
