@@ -1,9 +1,12 @@
 package integration
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -37,11 +40,34 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	code := m.Run()
-	if err := os.RemoveAll(sharedParityRoot); err != nil {
+	if err := removeSharedParityWorkspace(sharedParityRoot); err != nil {
 		fmt.Fprintln(os.Stderr, "clean shared parity workspace:", err)
 		code = 1
 	}
 	os.Exit(code)
+}
+
+// Like testing.TempDir, allow Windows handles a short time to close. Removing
+// Orchestrion's URL file requests shutdown, but its log can remain open until
+// the daemon exits. A persistent lock or any other error still fails cleanup.
+func removeSharedParityWorkspace(path string) error {
+	const retryWindow = 2 * time.Second
+	const retryInterval = 10 * time.Millisecond
+	err := os.RemoveAll(path)
+	if err == nil || runtime.GOOS != "windows" {
+		return err
+	}
+	deadline := time.Now().Add(retryWindow)
+	for {
+		// Windows ERROR_ACCESS_DENIED (5) and ERROR_SHARING_VIOLATION (32)
+		// are the same transient errors retried by testing.TempDir.
+		retryable := errors.Is(err, syscall.Errno(5)) || errors.Is(err, syscall.Errno(32))
+		if !retryable || time.Now().Add(retryInterval).After(deadline) {
+			return err
+		}
+		time.Sleep(retryInterval)
+		err = os.RemoveAll(path)
+	}
 }
 
 func (s *sharedParityFixture) get(t *testing.T, name string, build func(*testing.T, func() string) *parityFixture) *parityFixture {

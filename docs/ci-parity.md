@@ -189,6 +189,10 @@ keep their source directories through the test process, including `-count`
 repetitions, and `TestMain` removes them afterward. Selecting only a deferred
 test still builds the required set. A failed build also fails later consumers.
 This reuse ends with the process; it adds no persistent build cache.
+On Windows, cleanup retries sharing violations and access-denied errors for up
+to two seconds, as `testing.TempDir` does. Removing the URL file requests
+Orchestrion shutdown; its log handles may close slightly later. A persistent
+cleanup error still fails the harness.
 
 Each scenario still starts a new child process with its own receiver and retry
 state. Cases, comparisons, execution order and report filenames are unchanged.

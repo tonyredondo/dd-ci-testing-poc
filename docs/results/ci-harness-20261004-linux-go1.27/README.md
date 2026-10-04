@@ -69,8 +69,9 @@ matrix/event checks and execution of both shell branches with a local command
 stub, including preservation of a failing exit through `tee`. The stub checks
 shell behavior; it does not provide parity evidence.
 
-The new workflow has not run on GitHub. Its elapsed time, runner queueing and
-native macOS/Windows behavior remain unverified until publication.
+At the time of these local measurements, the new workflow had not run on
+GitHub. These measurements do not establish its elapsed time, runner queueing
+or native macOS/Windows behavior.
 
 ## Local validation
 
@@ -92,4 +93,13 @@ All 21 Python maintenance/report tests, source and license manifests, and
 `go vet ./...` pass. The integration harness also cross-compiles for Windows
 and macOS amd64. Native execution remains a separate CI check.
 [`validation.json`](validation.json) records commands, expected exit codes,
-log hashes and source hashes. These changes remain local and uncommitted.
+log hashes and source hashes from before publication.
+
+The first published run at `c918fe17f037ac5821260baaf72c1ef4eb16e055` passed all
+four Linux jobs and macOS. Windows passed the tests but failed the final
+workspace removal because Orchestrion still held its stderr log open. The
+follow-up restores the two-second Windows retry window that `testing.TempDir`
+provides and keeps persistent errors fatal. Native tests reproduce a real open
+handle, verify removal after closure, and require an error for a persistent
+lock. The timing and source hashes above remain the original observations;
+they have not been rewritten to describe the cleanup follow-up.
