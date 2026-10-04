@@ -164,20 +164,42 @@ the outer harness's `-race` alone would not make every child binary a race build
 The Windows Testify reference build uses `-work` with a fixture-owned
 `GOTMPDIR`. The pinned Orchestrion job server can keep its stderr log open while
 Go tries to remove its build directory. The harness retains that directory until
-the policy cases finish, then cleans it through `t.TempDir`. Compilation errors
+both delivery modes finish, then cleans it through `TestMain`. Compilation errors
 still fail the test; event comparisons and the SDK reference are unchanged.
 Without the Orchestrion variable, the matrix can run against the POC SDK backend,
 including Testify, but the report renderer rejects a full parity report without
 the independent Orchestrion reference.
 
 [`compatibility.yml`](../.github/workflows/compatibility.yml) runs the suite on
-Linux Go 1.26/1.27 and macOS/Windows Go 1.27. Linux also runs the race harness.
+Linux Go 1.26/1.27 and macOS/Windows Go 1.27. Linux normal and race suites run
+as separate jobs, with SDK-first and Mini-first execution respectively. Each
+job runs the complete suite once. The six-job matrix runs on pull requests,
+pushes to `main` and manual dispatch; feature branch pushes use the pull request
+run instead of launching a second matrix. Artifact names include the mode.
 Each job uploads JSON counts, supplemental evidence, logs and a Markdown table;
 the table also appears in the GitHub job summary. Artifacts are retained for seven
 days; download them before expiry to keep a run beyond that period. Missing
 evidence, a failed comparison or an omitted reference fails the report step. The Testify fixture
 requires every Testify policy case, timing and count comparison to pass. Historical
 reports retain their original gap records; new evidence does not rewrite old runs.
+
+The normal and deferred `testing` matrices share one covered set of SDK, Mini
+and Orchestrion binaries. Testify shares its own race/coverage set. Both sets
+keep their source directories through the test process, including `-count`
+repetitions, and `TestMain` removes them afterward. Selecting only a deferred
+test still builds the required set. A failed build also fails later consumers.
+This reuse ends with the process; it adds no persistent build cache.
+
+Each scenario still starts a new child process with its own receiver and retry
+state. Cases, comparisons, execution order and report filenames are unchanged.
+Builds that deliberately alter flags, sources, overlays, workspaces or library
+versions keep their independent fixtures. Do not add those variants to the
+shared sets without checking their inputs and cleanup ownership.
+
+The [fixture-sharing measurements](results/ci-harness-20261004-linux-go1.27/README.md)
+retain three alternating pairs of all 115 scenarios. Local warm-cache harness
+walltime falls from a median of 110.257 s to 95.324 s (13.5%). These timings
+include compilation and comparison; they do not measure GitHub CI duration.
 
 ### Per-case duration records
 

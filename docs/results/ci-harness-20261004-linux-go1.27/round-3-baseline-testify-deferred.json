@@ -1,0 +1,244 @@
+{
+  "external_callers": true,
+  "mini": {
+    "sessions": 1,
+    "modules": 1,
+    "suites": 2,
+    "tests": 3,
+    "spans": 0
+  },
+  "poc_sdk_wall_ns": 1078123171,
+  "scenarios": [
+    {
+      "scenario": "pass-skip",
+      "features": [
+        "testify",
+        "pass-skip"
+      ],
+      "status": "passed",
+      "sdk": {
+        "sessions": 1,
+        "modules": 1,
+        "suites": 2,
+        "tests": 3,
+        "spans": 0
+      },
+      "mini": {
+        "sessions": 1,
+        "modules": 1,
+        "suites": 2,
+        "tests": 3,
+        "spans": 0
+      },
+      "sdk_exit": 0,
+      "mini_exit": 0,
+      "timing": {
+        "scope": "prebuilt binary: startup, settings, execution and shutdown/flush",
+        "sdk_wall_ns": 1077501205,
+        "mini_wall_ns": 1061194570
+      }
+    },
+    {
+      "scenario": "panic",
+      "features": [
+        "testify",
+        "panic"
+      ],
+      "status": "passed",
+      "sdk": {
+        "sessions": 1,
+        "modules": 1,
+        "suites": 2,
+        "tests": 2,
+        "spans": 0
+      },
+      "mini": {
+        "sessions": 1,
+        "modules": 1,
+        "suites": 2,
+        "tests": 2,
+        "spans": 0
+      },
+      "sdk_exit": 1,
+      "mini_exit": 1,
+      "timing": {
+        "scope": "prebuilt binary: startup, settings, execution and shutdown/flush",
+        "sdk_wall_ns": 76538962,
+        "mini_wall_ns": 58181826
+      }
+    },
+    {
+      "scenario": "external-module-helper",
+      "features": [
+        "testify",
+        "external-module-helper"
+      ],
+      "status": "passed",
+      "sdk": {
+        "sessions": 1,
+        "modules": 1,
+        "suites": 2,
+        "tests": 2,
+        "spans": 0
+      },
+      "mini": {
+        "sessions": 1,
+        "modules": 1,
+        "suites": 2,
+        "tests": 2,
+        "spans": 0
+      },
+      "sdk_exit": 0,
+      "mini_exit": 0,
+      "timing": {
+        "scope": "prebuilt binary: startup, settings, execution and shutdown/flush",
+        "sdk_wall_ns": 1076322174,
+        "mini_wall_ns": 1057779995
+      }
+    },
+    {
+      "scenario": "parallel-suites",
+      "features": [
+        "testify",
+        "parallel-suites"
+      ],
+      "status": "passed",
+      "sdk": {
+        "sessions": 1,
+        "modules": 1,
+        "suites": 2,
+        "tests": 4,
+        "spans": 0
+      },
+      "mini": {
+        "sessions": 1,
+        "modules": 1,
+        "suites": 2,
+        "tests": 4,
+        "spans": 0
+      },
+      "sdk_exit": 0,
+      "mini_exit": 0,
+      "timing": {
+        "scope": "prebuilt binary: startup, settings, execution and shutdown/flush",
+        "sdk_wall_ns": 1078991167,
+        "mini_wall_ns": 1063617687
+      }
+    },
+    {
+      "scenario": "coverage-helpers",
+      "features": [
+        "testify",
+        "coverage-helpers"
+      ],
+      "status": "passed",
+      "sdk": {
+        "sessions": 1,
+        "modules": 1,
+        "suites": 2,
+        "tests": 2,
+        "spans": 0
+      },
+      "mini": {
+        "sessions": 1,
+        "modules": 1,
+        "suites": 2,
+        "tests": 2,
+        "spans": 0
+      },
+      "sdk_exit": 0,
+      "mini_exit": 0,
+      "timing": {
+        "scope": "prebuilt binary: startup, settings, execution and shutdown/flush",
+        "sdk_wall_ns": 1077921858,
+        "mini_wall_ns": 1063211091
+      }
+    },
+    {
+      "scenario": "atr-coverage-in_process",
+      "features": [
+        "testify",
+        "atr-coverage-in_process"
+      ],
+      "status": "passed",
+      "sdk": {
+        "sessions": 1,
+        "modules": 1,
+        "suites": 2,
+        "tests": 4,
+        "spans": 0
+      },
+      "mini": {
+        "sessions": 1,
+        "modules": 1,
+        "suites": 2,
+        "tests": 4,
+        "spans": 0
+      },
+      "sdk_exit": 0,
+      "mini_exit": 0,
+      "timing": {
+        "scope": "prebuilt binary: startup, settings, execution and shutdown/flush",
+        "sdk_wall_ns": 1081728863,
+        "mini_wall_ns": 1069112931
+      }
+    },
+    {
+      "scenario": "atr-coverage-process",
+      "features": [
+        "testify",
+        "atr-coverage-process"
+      ],
+      "status": "passed",
+      "sdk": {
+        "sessions": 1,
+        "modules": 1,
+        "suites": 2,
+        "tests": 3,
+        "spans": 0
+      },
+      "mini": {
+        "sessions": 1,
+        "modules": 1,
+        "suites": 2,
+        "tests": 3,
+        "spans": 0
+      },
+      "sdk_exit": 0,
+      "mini_exit": 0,
+      "timing": {
+        "scope": "prebuilt binary: startup, settings, execution and shutdown/flush",
+        "sdk_wall_ns": 2105642814,
+        "mini_wall_ns": 2085015506
+      }
+    }
+  ],
+  "scope": "Testify registration, original runner, lifecycle, aliases, local and external helpers, race/coverage and CI policies",
+  "sdk": {
+    "sessions": 1,
+    "modules": 1,
+    "suites": 2,
+    "tests": 3,
+    "spans": 0
+  },
+  "sdk_with_orchestrion": {
+    "sessions": 1,
+    "modules": 1,
+    "suites": 2,
+    "tests": 3,
+    "spans": 0
+  },
+  "sdk_with_poc": {
+    "sessions": 1,
+    "modules": 1,
+    "suites": 2,
+    "tests": 3,
+    "spans": 0
+  },
+  "status": "passed",
+  "timing": {
+    "scope": "prebuilt binary: startup, settings, execution and shutdown/flush",
+    "sdk_wall_ns": 1077501205,
+    "mini_wall_ns": 1061194570
+  }
+}

@@ -12,7 +12,12 @@ import (
 
 func prepareMiniFixture(t *testing.T) (string, string) {
 	t.Helper()
-	dir, driver := prepareFixture(t, false)
+	return prepareMiniFixtureWithTempDir(t, t.TempDir)
+}
+
+func prepareMiniFixtureWithTempDir(t *testing.T, tempDir func() string) (string, string) {
+	t.Helper()
+	dir, driver := prepareFixtureWithTempDir(t, false, tempDir)
 	root, err := filepath.Abs("..")
 	if err != nil {
 		t.Fatal(err)
@@ -55,9 +60,14 @@ func TestMiniFixtureRuntimeImportLineEndings(t *testing.T) {
 }
 func compileMiniPair(t *testing.T, dir, driver string, flags ...string) []string {
 	t.Helper()
+	return compileMiniPairWithTempDir(t, dir, driver, t.TempDir, flags...)
+}
+
+func compileMiniPairWithTempDir(t *testing.T, dir, driver string, tempDir func() string, flags ...string) []string {
+	t.Helper()
 	var bins []string
 	for _, runtime := range []string{"sdk", "mini"} {
-		bin := filepath.Join(t.TempDir(), executableName("fixture.test"))
+		bin := filepath.Join(tempDir(), executableName("fixture.test"))
 		args := []string{"test", "--runtime=" + runtime, "-c", "-o", bin}
 		args = append(args, flags...)
 		args = append(args, ".")

@@ -454,8 +454,9 @@ func TestDeferredDeliveryParityMatrix(t *testing.T) {
 	runCIVisibilityParityMatrix(t, true)
 }
 
-func runCIVisibilityParityMatrix(t *testing.T, deferred bool) {
-	dir, driver := prepareMiniFixture(t)
+func buildTestingParityFixture(t *testing.T, tempDir func() string) *parityFixture {
+	t.Helper()
+	dir, driver := prepareMiniFixtureWithTempDir(t, tempDir)
 	reference := os.Getenv("ORCHESTRION_BIN")
 	if reference != "" {
 		var err error
@@ -493,9 +494,24 @@ func TestParityUnskippable(t *testing.T) { t.Log("must run") }
 	if err := os.WriteFile(filepath.Join(dir, "parity_cases_test.go"), []byte(source), 0600); err != nil {
 		t.Fatal(err)
 	}
-	// One coverage-enabled pair is reused for policy combinations. Existing tests
-	// independently cover uninstrumented coverage, race and per-attempt bitmaps.
 	base, head := prepareParityGit(t, dir)
+	bins := compileMiniPairWithTempDir(t, dir, driver, tempDir, "-cover", "-covermode=atomic", "-coverpkg=./...")
+	oracle := bins[0]
+	if reference != "" {
+		oracle = filepath.Join(tempDir(), executableName("fixture.test"))
+		out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false"), "go", "test", "-cover", "-covermode=atomic", "-coverpkg=./...", "-toolexec="+reference+" toolexec", "-c", "-o", oracle, ".")
+		if code != 0 {
+			t.Fatalf("SDK oracle compile: %s %s", out, stderr)
+		}
+	}
+	return &parityFixture{dir: dir, sdk: bins[0], mini: bins[1], oracle: oracle, base: base, head: head}
+}
+
+func runCIVisibilityParityMatrix(t *testing.T, deferred bool) {
+	// Delivery mode is a runtime setting. Both matrices use the same covered
+	// binaries while keeping receivers, retry counters and processes independent.
+	fixture := sharedTestingParity.get(t, "testing", buildTestingParityFixture)
+	dir, oracle := fixture.dir, fixture.oracle
 	cases := parityCases()
 	if deferred {
 		selected := map[string]bool{
@@ -518,16 +534,7 @@ func TestParityUnskippable(t *testing.T) { t.Log("must run") }
 	}
 	for i := range cases {
 		if cases[i].Git {
-			cases[i].Env = append(cases[i].Env, "DD_GIT_COMMIT_SHA="+head, "DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA="+base)
-		}
-	}
-	bins := compileMiniPair(t, dir, driver, "-cover", "-covermode=atomic", "-coverpkg=./...")
-	oracle := bins[0]
-	if reference != "" {
-		oracle = filepath.Join(t.TempDir(), executableName("fixture.test"))
-		out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false"), "go", "test", "-cover", "-covermode=atomic", "-coverpkg=./...", "-toolexec="+reference+" toolexec", "-c", "-o", oracle, ".")
-		if code != 0 {
-			t.Fatalf("SDK oracle compile: %s %s", out, stderr)
+			cases[i].Env = append(cases[i].Env, "DD_GIT_COMMIT_SHA="+fixture.head, "DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA="+fixture.base)
 		}
 	}
 	var results []parityResult
@@ -543,7 +550,7 @@ func TestParityUnskippable(t *testing.T) { t.Log("must run") }
 		default:
 			t.Fatal("PARITY_EXECUTION_ORDER must be sdk-first or mini-first")
 		}
-		results, block = runGroupedParityCases(t, dir, oracle, bins[1], cases, order)
+		results, block = runGroupedParityCases(t, dir, oracle, fixture.mini, cases, order)
 		return
 	}
 	for _, tc := range cases {
@@ -551,7 +558,7 @@ func TestParityUnskippable(t *testing.T) { t.Log("must run") }
 			row := parityResult{Scenario: tc.Name, Features: tc.Features, Status: "failed"}
 			defer func() { results = append(results, row) }()
 			want, sdk := runParityCase(t, dir, oracle, tc)
-			got, mini := runParityCase(t, dir, bins[1], tc)
+			got, mini := runParityCase(t, dir, fixture.mini, tc)
 			row = assertParityCase(t, tc, want, got, sdk, mini)
 		})
 	}

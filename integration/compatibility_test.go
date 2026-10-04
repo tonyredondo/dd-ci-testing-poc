@@ -169,11 +169,19 @@ func copyTree(t *testing.T, from, to string) {
 }
 func prepareFixture(t *testing.T, baseline bool) (string, string) {
 	t.Helper()
+	return prepareFixtureWithTempDir(t, baseline, t.TempDir)
+}
+
+// The directory owner must keep the source and driver alive until every child
+// process finishes. Most fixtures are test-owned; shared parity builds live
+// until TestMain finishes.
+func prepareFixtureWithTempDir(t *testing.T, baseline bool, tempDir func() string) (string, string) {
+	t.Helper()
 	root, err := filepath.Abs("..")
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := filepath.Join(t.TempDir(), "fixture")
+	dir := filepath.Join(tempDir(), "fixture")
 	copyTree(t, filepath.Join(root, "testdata/fixture"), dir)
 	// Go resolves its working directory without the parent's PWD. On macOS,
 	// /var/folders aliases /private/var/folders; overlay keys must use Go's path.
@@ -184,7 +192,7 @@ func prepareFixture(t *testing.T, baseline bool) (string, string) {
 	if baseline {
 		configureReferenceFixture(t, dir)
 	}
-	bin := filepath.Join(t.TempDir(), executableName("ddtest"))
+	bin := filepath.Join(tempDir(), executableName("ddtest"))
 	out, e, code := command(t, root, testEnv(), "go", "build", "-o", bin, "./cmd/ddtest")
 	if code != 0 {
 		t.Fatalf("build driver: %s\n%s", out, e)

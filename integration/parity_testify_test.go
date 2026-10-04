@@ -16,19 +16,29 @@ import (
 
 func prepareTestifyFixture(t *testing.T, reference bool) (string, string) {
 	t.Helper()
-	dir, driver := prepareMiniFixture(t)
+	return prepareTestifyFixtureWithTempDir(t, reference, t.TempDir)
+}
+
+func prepareTestifyFixtureWithTempDir(t *testing.T, reference bool, tempDir func() string) (string, string) {
+	t.Helper()
+	dir, driver := prepareMiniFixtureWithTempDir(t, tempDir)
 	if reference {
 		configureReferenceFixture(t, dir)
 	}
 	copyTree(t, filepath.Join("testdata", "testify"), dir)
-	installExternalTestifyHelper(t, dir)
+	installExternalTestifyHelperWithTempDir(t, dir, tempDir)
 	return dir, driver
 }
 
 // A separate module makes this fixture exercise the former overlay boundary.
 func installExternalTestifyHelper(t *testing.T, dir string) string {
 	t.Helper()
-	kit := t.TempDir()
+	return installExternalTestifyHelperWithTempDir(t, dir, t.TempDir)
+}
+
+func installExternalTestifyHelperWithTempDir(t *testing.T, dir string, tempDir func() string) string {
+	t.Helper()
+	kit := tempDir()
 	for name, source := range map[string]string{
 		"go.mod": "module example.com/external-testkit\n\ngo 1.26.0\nrequire github.com/stretchr/testify v1.11.1\n",
 		"run.go": "package testkit\nimport(\"testing\";\"github.com/stretchr/testify/suite\")\nfunc Run(t *testing.T,s suite.TestingSuite){suite.Run(t,s)}\n",
@@ -54,29 +64,36 @@ func TestDeferredDeliveryTestifyParity(t *testing.T) {
 	runCIVisibilityTestifyParity(t, true)
 }
 
-func runCIVisibilityTestifyParity(t *testing.T, deferred bool) {
+func buildTestifyParityFixture(t *testing.T, tempDir func() string) *parityFixture {
+	t.Helper()
 	reference := os.Getenv("ORCHESTRION_BIN")
-	dir, driver := prepareTestifyFixture(t, reference != "")
+	dir, driver := prepareTestifyFixtureWithTempDir(t, reference != "", tempDir)
 	flags := []string{"-mod=mod", "-race", "-cover", "-covermode=atomic", "-coverpkg=./..."}
-	bins := compileMiniPair(t, dir, driver, flags...)
+	bins := compileMiniPairWithTempDir(t, dir, driver, tempDir, flags...)
 	oracle := bins[0]
 	if reference != "" {
-		oracle = filepath.Join(t.TempDir(), executableName("fixture.test"))
+		oracle = filepath.Join(tempDir(), executableName("fixture.test"))
 		args := append([]string{"test"}, flags...)
 		args = append(args, "-toolexec="+reference+" toolexec", "-c", "-o", oracle, ".")
 		env := testEnv("DD_CIVISIBILITY_ENABLED=false")
 		if runtime.GOOS == "windows" {
 			// Orchestrion's job server can still hold its log open when Go
 			// removes $WORK. Keep this build under the fixture's ownership;
-			// t.TempDir cleans it after the server and policy cases finish.
+			// TestMain cleans it after the server and both delivery modes finish.
 			args = append(args, "-work")
-			env = append(env, "GOTMPDIR="+t.TempDir())
+			env = append(env, "GOTMPDIR="+tempDir())
 		}
 		out, stderr, code := command(t, dir, env, "go", args...)
 		if code != 0 {
 			t.Fatalf("Testify reference compile: %s %s", out, stderr)
 		}
 	}
+	return &parityFixture{dir: dir, sdk: bins[0], mini: bins[1], oracle: oracle}
+}
+
+func runCIVisibilityTestifyParity(t *testing.T, deferred bool) {
+	fixture := sharedTestifyParity.get(t, "Testify", buildTestifyParityFixture)
+	dir, oracle := fixture.dir, fixture.oracle
 	run := func(method string) []string { return []string{"-test.run=^TestParitySuite$/^" + method + "$"} }
 	cases := []parityCase{
 		{Name: "pass-skip", Args: run("Test(Pass|Skip)"), MinTests: 3},
@@ -132,7 +149,7 @@ func runCIVisibilityTestifyParity(t *testing.T, deferred bool) {
 		tc.Features = []string{"testify", tc.Name}
 		t.Run(tc.Name, func(t *testing.T) {
 			want, sdk := runParityCase(t, dir, oracle, tc)
-			got, mini := runParityCase(t, dir, bins[1], tc)
+			got, mini := runParityCase(t, dir, fixture.mini, tc)
 			normalizeTestifyEvents(t, want.events)
 			normalizeTestifyEvents(t, got.events)
 			row := assertParityCase(t, tc, want, got, sdk, mini)
@@ -149,7 +166,7 @@ func runCIVisibilityTestifyParity(t *testing.T, deferred bool) {
 				}
 				// The sdk backend must also contain the advice; otherwise this comparison
 				// would only prove the Mini variant, leaving the driver's default broken.
-				poc, pocResult := runParityCase(t, dir, bins[0], tc)
+				poc, pocResult := runParityCase(t, dir, fixture.sdk, tc)
 				normalizeTestifyEvents(t, poc.events)
 				assertParityCase(t, tc, want, poc, sdk, pocResult)
 				pocSDKWallNS = pocResult.wall.Nanoseconds()

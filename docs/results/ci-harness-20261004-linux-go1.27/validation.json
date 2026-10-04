@@ -1,0 +1,265 @@
+{
+  "scope": "Linux local validation of the fixture ownership and workflow change; cross-compilation does not establish native macOS/Windows execution",
+  "commands": [
+    {
+      "label": "full-126",
+      "command": [
+        "/var/tmp/dd-ci-runtime-20261004.e33op1au/go1.26.8/bin/go",
+        "test",
+        "-v",
+        "-count=1",
+        "-timeout=20m",
+        "./..."
+      ],
+      "wall_s": 330.9880482800072,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_sha256": "14808c6294391ca59ccc5832bb267ecad0e270c1e2bdeabc61a4deba94645cd9",
+      "log": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/full-126.log",
+      "env": {
+        "TMPDIR": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/tmp",
+        "GOMAXPROCS": "8",
+        "GOTOOLCHAIN": "local",
+        "ORCHESTRION_BIN": "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion",
+        "PARITY_EXECUTION_ORDER": "sdk-first",
+        "PARITY_REPORT_PATH": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/full-126.json",
+        "PATH_prefix": "/var/tmp/dd-ci-runtime-20261004.e33op1au/go1.26.8/bin"
+      }
+    },
+    {
+      "label": "full-126-report",
+      "command": [
+        "python3",
+        "scripts/parity_report.py",
+        "/var/tmp/dd-ci-harness-20261004.ifxz2afw/full-126.json",
+        "--output",
+        "/var/tmp/dd-ci-harness-20261004.ifxz2afw/full-126.md"
+      ],
+      "wall_s": 0.06382158305495977,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/full-126-report.log",
+      "env": {
+        "TMPDIR": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/tmp",
+        "GOMAXPROCS": "8",
+        "GOTOOLCHAIN": "local",
+        "ORCHESTRION_BIN": "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion"
+      }
+    },
+    {
+      "label": "full-race-127",
+      "command": [
+        "/usr/bin/go",
+        "test",
+        "-race",
+        "-v",
+        "-count=1",
+        "-timeout=20m",
+        "./..."
+      ],
+      "wall_s": 353.4507782079745,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_sha256": "75c31f0d53b353fdf85a43e46f414142be634dafb6fcd751019b488f13532aae",
+      "log": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/full-race-127.log",
+      "env": {
+        "TMPDIR": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/tmp",
+        "GOMAXPROCS": "8",
+        "GOTOOLCHAIN": "local",
+        "ORCHESTRION_BIN": "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion",
+        "PARITY_EXECUTION_ORDER": "mini-first",
+        "PARITY_REPORT_PATH": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/full-race-127.json"
+      }
+    },
+    {
+      "label": "full-race-127-report",
+      "command": [
+        "python3",
+        "scripts/parity_report.py",
+        "/var/tmp/dd-ci-harness-20261004.ifxz2afw/full-race-127.json",
+        "--output",
+        "/var/tmp/dd-ci-harness-20261004.ifxz2afw/full-race-127.md"
+      ],
+      "wall_s": 0.06387899094261229,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/full-race-127-report.log",
+      "env": {
+        "TMPDIR": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/tmp",
+        "GOMAXPROCS": "8",
+        "GOTOOLCHAIN": "local",
+        "ORCHESTRION_BIN": "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion"
+      }
+    },
+    {
+      "label": "deferred-filtered-repeat",
+      "command": [
+        "/var/tmp/dd-ci-harness-20261004.ifxz2afw/candidate.integration.test",
+        "-test.v",
+        "-test.timeout=12m",
+        "-test.count=2",
+        "-test.shuffle=42",
+        "-test.run=^(TestDeferredDeliveryParityMatrix|TestDeferredDeliveryTestifyParity)$"
+      ],
+      "wall_s": 50.7361342899967,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_sha256": "4f9887d3490e3e82c485dc1e3b593d62bd8077a54ba759847bd1a0d249d91e67",
+      "log": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/deferred-filtered-repeat.log",
+      "env": {
+        "TMPDIR": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/tmp",
+        "GOMAXPROCS": "8",
+        "GOTOOLCHAIN": "local",
+        "ORCHESTRION_BIN": "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion",
+        "PARITY_EXECUTION_ORDER": "sdk-first",
+        "PARITY_REPORT_PATH": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/deferred-filtered-repeat.json"
+      }
+    },
+    {
+      "label": "invalid-reference-control",
+      "command": [
+        "/var/tmp/dd-ci-harness-20261004.ifxz2afw/candidate.integration.test",
+        "-test.v",
+        "-test.timeout=3m",
+        "-test.run=^(TestCIVisibilityParityMatrix|TestDeferredDeliveryParityMatrix)$"
+      ],
+      "wall_s": 3.0189337759511545,
+      "exit_code": 1,
+      "expected_exit_code": 1,
+      "log_sha256": "61dc6b2455326d55fe8fa0cba1817ac2316ef13f61bf6fa86eb25155fedf1283",
+      "log": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/invalid-reference-control.log",
+      "env": {
+        "TMPDIR": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/tmp",
+        "GOMAXPROCS": "8",
+        "GOTOOLCHAIN": "local",
+        "ORCHESTRION_BIN": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/reference-does-not-exist",
+        "PARITY_EXECUTION_ORDER": "sdk-first"
+      }
+    },
+    {
+      "label": "upstream-and-report-tests",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts",
+        "-p",
+        "test_*.py"
+      ],
+      "wall_s": 0.2641820340650156,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_sha256": "ed64a125da8702b82e0272c1440cbfdb5245904418c567a4647baf1489d09758",
+      "log": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/upstream-and-report-tests.log",
+      "env": {
+        "TMPDIR": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/tmp",
+        "GOMAXPROCS": "8",
+        "GOTOOLCHAIN": "local",
+        "ORCHESTRION_BIN": "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion"
+      }
+    },
+    {
+      "label": "upstream-source-verification",
+      "command": [
+        "python3",
+        "scripts/upstream.py",
+        "verify"
+      ],
+      "wall_s": 0.11407103599049151,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_sha256": "81765e857e40d704f882a2daef44d5b413d7aebf7f119cdc39e448e7c26be3f8",
+      "log": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/upstream-source-verification.log",
+      "env": {
+        "TMPDIR": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/tmp",
+        "GOMAXPROCS": "8",
+        "GOTOOLCHAIN": "local",
+        "ORCHESTRION_BIN": "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion"
+      }
+    },
+    {
+      "label": "vet",
+      "command": [
+        "/usr/bin/go",
+        "vet",
+        "./..."
+      ],
+      "wall_s": 0.9157791330944747,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/vet.log",
+      "env": {
+        "TMPDIR": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/tmp",
+        "GOMAXPROCS": "8",
+        "GOTOOLCHAIN": "local",
+        "ORCHESTRION_BIN": "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion"
+      }
+    },
+    {
+      "label": "cross-compile-windows",
+      "command": [
+        "/usr/bin/go",
+        "test",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-harness-20261004.ifxz2afw/integration-windows.test",
+        "./integration"
+      ],
+      "wall_s": 0.5646286490373313,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/cross-compile-windows.log",
+      "env": {
+        "TMPDIR": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/tmp",
+        "GOMAXPROCS": "8",
+        "GOTOOLCHAIN": "local",
+        "ORCHESTRION_BIN": "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion",
+        "GOOS": "windows",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      }
+    },
+    {
+      "label": "cross-compile-darwin",
+      "command": [
+        "/usr/bin/go",
+        "test",
+        "-c",
+        "-o",
+        "/var/tmp/dd-ci-harness-20261004.ifxz2afw/integration-darwin.test",
+        "./integration"
+      ],
+      "wall_s": 5.123196630040184,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/cross-compile-darwin.log",
+      "env": {
+        "TMPDIR": "/var/tmp/dd-ci-harness-20261004.ifxz2afw/tmp",
+        "GOMAXPROCS": "8",
+        "GOTOOLCHAIN": "local",
+        "ORCHESTRION_BIN": "/var/tmp/dd-ci-testing-poc-20260930/bin/orchestrion",
+        "GOOS": "darwin",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0"
+      }
+    }
+  ],
+  "source_sha256": {
+    "integration/compatibility_test.go": "e80c13c249ed407c1a7f88b9256a426526305e7d0469baead6b1b4148eeedc35",
+    "integration/mini_test.go": "036d9332696c0432c3ecf6472ecbfaeb6de4f1a2c1567cd75d5c25974182d557",
+    "integration/parity_matrix_test.go": "408e039154f956f00f8170507c132f62e2f0c691ebd389aaf159678dd149c004",
+    "integration/parity_testify_test.go": "93686cc6ae195a458604931e1bc7ae69a6e897f7ae0e585af52b2f915264d978",
+    "integration/shared_fixture_test.go": "7121aaab413579b6f8aefc2baf1cf1b012a032e83453ec37e69556be55f1f38d",
+    "integration/shared_fixture_lifecycle_test.go": "ba84e571fe30bd1c75a62d2d01bbf8aaef893d42d1981fe675b23cf72de4cde3"
+  },
+  "runtime_diff": [],
+  "artifact_directory": "/var/tmp/dd-ci-harness-20261004.ifxz2afw",
+  "live_GitHub_workflow": "not run; local changes are unpublished"
+}
