@@ -72,23 +72,29 @@ func buildTestifyParityFixture(t *testing.T, tempDir func() string) *parityFixtu
 	bins := compileMiniPairWithTempDir(t, dir, driver, tempDir, flags...)
 	oracle := bins[0]
 	if reference != "" {
-		oracle = filepath.Join(tempDir(), executableName("fixture.test"))
-		args := append([]string{"test"}, flags...)
-		args = append(args, "-toolexec="+reference+" toolexec", "-c", "-o", oracle, ".")
-		env := testEnv("DD_CIVISIBILITY_ENABLED=false")
-		if runtime.GOOS == "windows" {
-			// Orchestrion's job server can still hold its log open when Go
-			// removes $WORK. Keep this build under the fixture's ownership;
-			// TestMain cleans it after the server and both delivery modes finish.
-			args = append(args, "-work")
-			env = append(env, "GOTMPDIR="+tempDir())
-		}
-		out, stderr, code := command(t, dir, env, "go", args...)
-		if code != 0 {
-			t.Fatalf("Testify reference compile: %s %s", out, stderr)
-		}
+		oracle = compileTestifyReference(t, dir, reference, tempDir, flags...)
 	}
 	return &parityFixture{dir: dir, sdk: bins[0], mini: bins[1], oracle: oracle}
+}
+
+func compileTestifyReference(t *testing.T, dir, reference string, tempDir func() string, flags ...string) string {
+	t.Helper()
+	oracle := filepath.Join(tempDir(), executableName("fixture.test"))
+	args := append([]string{"test"}, flags...)
+	args = append(args, "-toolexec="+reference+" toolexec", "-c", "-o", oracle, ".")
+	env := testEnv("DD_CIVISIBILITY_ENABLED=false")
+	if runtime.GOOS == "windows" {
+		// Orchestrion may retain its log and working directory after Go exits.
+		// The fixture owner removes WORK after the reference cases finish;
+		// its cleanup allows the daemon's handles a short time to close.
+		args = append(args, "-work")
+		env = append(env, "GOTMPDIR="+tempDir())
+	}
+	out, stderr, code := command(t, dir, env, "go", args...)
+	if code != 0 {
+		t.Fatalf("Testify reference compile: %s %s", out, stderr)
+	}
+	return oracle
 }
 
 func runCIVisibilityTestifyParity(t *testing.T, deferred bool) {
@@ -406,11 +412,7 @@ func TestRootCoverage(t *testing.T){client.RunLocalSuite(t,new(RootCoverageSuite
 	bins := compileMiniPair(t, dir, driver, "-mod=mod", "-cover")
 	oracle := bins[0]
 	if reference != "" {
-		oracle = filepath.Join(t.TempDir(), executableName("fixture.test"))
-		out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false"), "go", "test", "-mod=mod", "-cover", "-toolexec="+reference+" toolexec", "-c", "-o", oracle, ".")
-		if code != 0 {
-			t.Fatal(out, stderr)
-		}
+		oracle = compileTestifyReference(t, dir, reference, t.TempDir, "-mod=mod", "-cover")
 	}
 	tc := parityCase{Name: "regular-root-coverage", Args: []string{"-test.run=^TestRootCoverage$"}, Policy: policySettings{Coverage: true}, Coverage: true, MinTests: 2}
 	want, sdk := runParityCase(t, dir, oracle, tc)

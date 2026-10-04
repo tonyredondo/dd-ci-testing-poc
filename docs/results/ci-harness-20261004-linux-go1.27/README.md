@@ -103,3 +103,10 @@ provides and keeps persistent errors fatal. Native tests reproduce a real open
 handle, verify removal after closure, and require an error for a persistent
 lock. The timing and source hashes above remain the original observations;
 they have not been rewritten to describe the cleanup follow-up.
+
+The next run at `4ce5e04304b529c913cd75632db4b63dfed93d00` passed both Windows
+lock tests and shared workspace cleanup. It exposed a separate omission in the
+independent plain-coverage Testify reference build: that case did not retain
+`$WORK`, unlike the main matrix. Both builds now use one helper with the existing
+Windows ownership rule. The case, coverage assertions and frozen reference are
+retained.
