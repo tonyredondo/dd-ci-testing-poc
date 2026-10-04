@@ -20,7 +20,7 @@ does not need the CLI.
 flowchart TB
     subgraph build["Build time"]
         CLI["ddtest test: choose<br/>sdk or mini"] --> Plan["Resolve packages and<br/>prepare overlay"]
-        Plan --> Selection{"Suite or covered<br/>testing sources?"}
+        Plan --> Selection{"Suite, goleak or covered<br/>testing sources?"}
         Selection -->|Yes| Tools["Selective<br/>compiler/coverage<br/>wrapper"]
         Selection -->|No| Go["Native go test:<br/>compile and link"]
         Tools --> Go
@@ -95,12 +95,16 @@ import graph and prepares a registration call at its original `Run` entry.
 One private `-toolexec` hook substitutes compiler inputs for that package,
 including covered sources. It also bridges covered rewritten `testing` sources
 when needed. Unrelated calls bypass plan loading and replace the wrapper with
-the native tool on Unix. Builds needing neither feature omit `-toolexec`.
+the native tool on Unix. Mini also prepares a reachable goleak `Find` entry;
+the same graph lookup and wrapper serve both libraries. Builds needing none
+of these features omit `-toolexec`.
 The suite fingerprint travels through `testing` export data; compiler and
 linker identities remain native, so unrelated packages share Go's cache. The
 selected version and API are checked before Go can reuse a cached suite. A
 coverage bridge has its own version contract. Its dispatch, cache invalidation
 and source ownership are described in [Testify instrumentation](testify.md).
+Goleak's package-only cache marker, delivery pause and exact worker filters are
+described in [delivery and goleak](delivery.md).
 
 The plan lives for one invocation. Identical generated content shares a backing
 file within that plan. Go still owns its build cache and test-result cache; use
@@ -170,6 +174,13 @@ shares the private metadata and metric maps with the event. Setters then become
 no-ops; getters remain usable. Repeated `Finish` calls do not enqueue again.
 A span without a client can still carry context, but it is not queued.
 
+CI/Git/system strings have a separate immutable snapshot. Spans store local
+overrides and read the snapshot through their getters. Delivery projects shared
+values into event-kind metadata without changing either map. Mixed snapshots
+or numeric overrides use local strings for the affected kind/key. The
+[metadata diagram and rules](delivery.md#payload-level-common-metadata) explain
+that boundary; ordinary child spans receive no CI defaults.
+
 The client has two synchronization boundaries. `mu` protects queue, closure,
 error and drop state. `sendMu` is a context-aware token that serializes event
 acceptance and delivery, including ownership of the payload buffer. Slow delivery
@@ -185,7 +196,8 @@ that point before encoding. The [SDK adaptation record](../internal/thirdparty/d
 describes those lifetimes and the checks needed for an upstream update.
 
 The default event-count limit is 1,000. Byte accounting includes the envelope
-and uses generated `Msgsize()` upper bounds. The flush threshold is 2.5 MiB and
+and uses generated `Msgsize()` upper bounds plus shared-tag/envelope accounting.
+The flush threshold is 2.5 MiB and
 the maximum uncompressed test-cycle payload is 5 MiB. A single event that cannot
 fit is rejected. Small batches flush at explicit or CI lifecycle boundaries;
 the Mini client has no periodic flush worker.

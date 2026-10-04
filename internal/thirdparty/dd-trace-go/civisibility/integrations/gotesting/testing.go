@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations"
@@ -684,6 +685,11 @@ func (ddm *M) executeInternalTest(testInfo *testingTInfo, wrapperOpts additional
 
 	// Instrument the test function
 	instrumentedFunc := func(t *testing.T) {
+		if cidelivery.Enabled() {
+			// The first cleanup runs after user cleanups and parallel descendants.
+			// Keep the original instrumented function identity for hook recognition.
+			t.Cleanup(cidelivery.Begin())
+		}
 		// Set this func as a helper func of t
 		t.Helper()
 
@@ -966,6 +972,9 @@ func (ddm *M) executeInternalBenchmark(benchmarkInfo *testingBInfo) func(*testin
 	}
 
 	instrumentedInternalFunc := func(b *testing.B) {
+		if cidelivery.Enabled() {
+			b.Cleanup(cidelivery.Begin())
+		}
 
 		// decrement level
 		pBench := getBenchmarkPrivateFields(b)

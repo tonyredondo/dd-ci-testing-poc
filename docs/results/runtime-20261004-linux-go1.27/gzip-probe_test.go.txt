@@ -1,0 +1,79 @@
+package diagnostic
+
+import (
+	"bytes"
+	"compress/gzip"
+	"context"
+	"fmt"
+	transport "github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
+	mini "github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer"
+	"io"
+	"math/rand/v2"
+	"net/http"
+	"testing"
+)
+
+type captureHTTP struct{ payload []byte }
+
+func (c *captureHTTP) RoundTrip(r *http.Request) (*http.Response, error) {
+	c.payload, _ = io.ReadAll(r.Body)
+	r.Body.Close()
+	return &http.Response{StatusCode: 202, Body: http.NoBody}, nil
+}
+func BenchmarkGzipLevels(b *testing.B) {
+	capture := &captureHTTP{}
+	client, err := mini.New(mini.Config{MaxEvents: 1000, Service: "fixture", Transport: transport.Config{Endpoint: "http://fixture.invalid", HTTPClient: &http.Client{Transport: capture}}})
+	if err != nil {
+		b.Fatal(err)
+	}
+	for i := range 400 {
+		s, _ := client.StartSpan(context.Background(), "test", mini.Tag("test.name", fmt.Sprintf("TestCase%d", i)), mini.Tag("test.suite", "example.com/fixture"), mini.Tag("git.commit.sha", "0123456789abcdef0123456789abcdef01234567"), mini.Tag("ci.pipeline.name", "unit-tests"), mini.Tag("test.status", "pass"))
+		s.Finish()
+	}
+	if err := client.Close(context.Background()); err != nil {
+		b.Fatal(err)
+	}
+	random := make([]byte, 64<<10)
+	rand.NewChaCha8([32]byte{1}).Read(random)
+	shapes := []struct {
+		name string
+		data []byte
+	}{{"CI400", capture.payload}, {"Small", []byte("small payload")}, {"Repeated64KiB", bytes.Repeat([]byte("x"), 64<<10)}, {"Random64KiB", random}}
+	for _, shape := range shapes {
+		for _, level := range []int{gzip.DefaultCompression, gzip.BestSpeed} {
+			b.Run(fmt.Sprintf("%s/level=%d", shape.name, level), func(b *testing.B) {
+				var output bytes.Buffer
+				writer, err := gzip.NewWriterLevel(&output, level)
+				if err != nil {
+					b.Fatal(err)
+				}
+				output.Grow(len(shape.data) + 100)
+				b.ReportAllocs()
+				b.SetBytes(int64(len(shape.data)))
+				b.ResetTimer()
+				for range b.N {
+					output.Reset()
+					writer.Reset(&output)
+					if _, err := writer.Write(shape.data); err != nil {
+						b.Fatal(err)
+					}
+					if err := writer.Close(); err != nil {
+						b.Fatal(err)
+					}
+				}
+				b.StopTimer()
+				b.ReportMetric(float64(output.Len()), "wire-B")
+				b.ReportMetric(float64(len(shape.data)), "raw-B")
+				reader, err := gzip.NewReader(bytes.NewReader(output.Bytes()))
+				if err != nil {
+					b.Fatal(err)
+				}
+				got, err := io.ReadAll(reader)
+				reader.Close()
+				if err != nil || !bytes.Equal(shape.data, got) {
+					b.Fatal("gzip changed payload")
+				}
+			})
+		}
+	}
+}

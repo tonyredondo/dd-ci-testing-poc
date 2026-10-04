@@ -1,15 +1,93 @@
 package citransport
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func TestDeferredTransportOwnsItsConnections(t *testing.T) {
+	callerTransport := http.DefaultTransport.(*http.Transport).Clone()
+	caller := &http.Client{Transport: callerTransport}
+	transport, err := New(Config{Endpoint: "http://fixture.invalid", HTTPClient: caller, CloseIdleAfterSend: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if transport.client == caller || transport.client.Transport == callerTransport {
+		t.Fatal("deferred delivery borrowed the caller's transport")
+	}
+	if caller.Transport != callerTransport {
+		t.Fatal("changed the caller's client")
+	}
+	transport, err = New(Config{Endpoint: "http://fixture.invalid", CloseIdleAfterSend: true})
+	if err != nil || transport.client.Transport == http.DefaultTransport || transport.client.Transport == nil {
+		t.Fatal("deferred delivery borrowed the process default transport", err)
+	}
+}
+
+func TestLeakCheckpointLeavesCustomTransportOwnershipAlone(t *testing.T) {
+	custom := &customConnectionTransport{}
+	transport, err := New(Config{Endpoint: "http://fixture.invalid", HTTPClient: &http.Client{Transport: custom}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport.CloseOwnedIdleConnections()
+	if custom.closed.Load() != 0 {
+		t.Fatal("goleak checkpoint closed a borrowed custom transport")
+	}
+	transport.CloseIdleConnections()
+	if custom.closed.Load() != 1 {
+		t.Fatal("explicit shutdown lost the custom transport's lifecycle")
+	}
+}
+
+type customConnectionTransport struct{ closed atomic.Int32 }
+
+func (*customConnectionTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return &http.Response{StatusCode: 202, Body: http.NoBody}, nil
+}
+func (t *customConnectionTransport) CloseIdleConnections() { t.closed.Add(1) }
+
+func TestAgentlessGzipRoundTripsPayloadShapes(t *testing.T) {
+	random := make([]byte, 64<<10)
+	if _, err := rand.NewChaCha8([32]byte{1}).Read(random); err != nil {
+		t.Fatal(err)
+	}
+	for _, data := range [][]byte{nil, []byte("small payload"), bytes.Repeat([]byte("test.name:subtest,error.type:fixture;"), 8000), random, bytes.Repeat([]byte("x"), TestCycleMaxPayloadBytes)} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Content-Encoding") != "gzip" {
+				t.Error("lost standard gzip encoding")
+			}
+			reader, err := gzip.NewReader(r.Body)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer reader.Close()
+			got, err := io.ReadAll(reader)
+			if err != nil || !bytes.Equal(data, got) {
+				t.Error("gzip changed payload bytes", err)
+			}
+			w.WriteHeader(202)
+		}))
+		transport, err := New(Config{Endpoint: server.URL, Agentless: true, APIKey: "fixture", CloseIdleAfterSend: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = transport.Send(context.Background(), data)
+		server.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 func TestDeliveryModesAndRetries(t *testing.T) {
 	for _, agentless := range []bool{false, true} {

@@ -15,17 +15,17 @@ have dedicated version fixtures. A v2 module needs a separate review.
 
 ```mermaid
 flowchart TD
-    Resolve["Existing package<br/>query and test<br/>imports"] --> Known{"Suite already<br/>reachable?"}
-    Known -->|Yes| Find["go list -find:<br/>selected suite<br/>metadata"]
-    Known -->|No| Unknown{"Nonstandard test<br/>imports to resolve?"}
+    Resolve["Existing package<br/>query and test<br/>imports"] --> Unknown{"Unknown test<br/>imports to resolve?"}
     Unknown -->|Yes| Deps["go list -deps:<br/>include external<br/>helpers"]
-    Unknown -->|No| Coverage
+    Unknown -->|No| Known{"Library already<br/>reachable?"}
+    Known -->|Yes| Find["go list -find:<br/>selected library<br/>metadata"]
+    Known -->|No| Coverage
     Deps --> Found{"Suite found?"}
     Found -->|No| Coverage
     Found -->|Yes| Prepare["Validate API/version<br/>before cache lookup;<br/>prepare Run entry<br/>hook"]
     Find --> Prepare
     Prepare --> Fingerprint["Put transformation<br/>fingerprint in<br/>testing export data"]
-    Fingerprint --> Coverage{"Testify or covered<br/>rewritten testing<br/>sources?"}
+    Fingerprint --> Coverage{"Testify, Mini goleak or<br/>covered rewritten<br/>testing sources?"}
     Coverage -->|Neither| Native["go test with<br/>overlay; no toolexec"]
     Coverage -->|Either| Tool["go test with one<br/>selective tool<br/>wrapper"]
     Tool --> Dispatch{"Tool and package"}
@@ -40,9 +40,11 @@ imports decide whether `testify/suite` is part of this build. Dependencies of
 external helpers participate in that check. Known standard-library imports are
 excluded from the extra lookup.
 
-When the existing query already proves suite reachability, preparation uses
-`go list -find` to read only the selected library metadata and sources. Unknown
-test imports still require `-deps`. This keeps version and API validation before
+Testify and goleak share this discovery query. When reachability is known and
+no unknown test imports remain, preparation uses `go list -find` to read only
+selected library metadata. Unknown test imports require `-deps`, including when
+the suite is already known, so a helper's goleak import remains visible.
+This keeps version and API validation before
 the build, including when Go can recover the suite from cache. Moving that
 validation into the compile wrapper would miss warm-cache version changes.
 The [strategy experiment](results/tool-strategies-20261003-linux-go1.27/README.md)
@@ -53,6 +55,9 @@ adds a registration call and prepares a linkname declaration for the selected
 CI runtime. The compiler receives temporary source paths; module-cache files
 and client files stay untouched. There are no wrappers in client packages,
 and no Testify source is incorporated into Mini.
+
+Mini's goleak integration uses the same wrapper with a different package cache
+marker. See [delivery and goleak](delivery.md); the SDK backend does not add it.
 
 ## The bypass and cache contract
 

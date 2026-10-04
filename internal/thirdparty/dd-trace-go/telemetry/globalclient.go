@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	globalinternal "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/stacktrace"
@@ -72,10 +73,15 @@ func StartApp(client Client) {
 		return
 	}
 
-	go func() {
+	flush := func() {
 		defer startAppFlushWg.Done()
 		client.Flush()
-	}()
+	}
+	if cidelivery.Enabled() {
+		flush()
+	} else {
+		go flush()
+	}
 }
 
 // SwapClient swaps the global client with the given client and Flush the old (*client).

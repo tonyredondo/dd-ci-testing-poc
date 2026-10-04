@@ -66,20 +66,15 @@ func (c *capture) handler(w http.ResponseWriter, r *http.Request) {
 			c.fail(fmt.Errorf("non-map payload"))
 			return
 		}
-		events, ok := obj["events"].([]any)
-		if !ok {
-			c.fail(fmt.Errorf("missing events: %v", obj))
+		events, err := ciMetadataEvents(obj)
+		if err != nil {
+			c.fail(err)
 			return
 		}
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		for _, event := range events {
-			obj, ok := event.(map[string]any)
-			if !ok {
-				c.failures = append(c.failures, "invalid event")
-				continue
-			}
-			c.events = append(c.events, obj)
+			c.events = append(c.events, event)
 		}
 		w.WriteHeader(202)
 		return

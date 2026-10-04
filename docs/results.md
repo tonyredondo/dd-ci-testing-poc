@@ -7,6 +7,8 @@ projects or flag sets cannot isolate the effect of one optimization.
 
 | Report | What it measures | Evidence retained in the repository |
 | --- | --- | --- |
+| [Shared CI metadata, 2026-10-04](results/common-metadata-20261004-linux-go1.27/README.md) | Common tag options, span creation, MessagePack batching and gzip delivery | Five alternating before/after pairs, every observation, source/binary hashes, allocation and wire-byte measurements |
+| [Delivery follow-up, 2026-10-04](results/runtime-20261004-linux-go1.27/README.md) | Lazy enqueue deadlines, gzip level and preparation with automatic goleak detection | Five alternating pairs, source hashes, raw logs and Go 1.26/1.27 compatibility proof; predates shared CI metadata |
 | [Preparation and runtime hot paths, 2026-10-03](results/hotpaths-20261003-linux-go1.27/README.md) | Local query/JSON/AST preparation changes and ordinary CI counter updates | Three alternating before/after rounds, allocation counts, ranges, source/binary hashes, generated-source equality and Go 1.26/1.27 parity/race evidence |
 | [Full compile matrix, 2026-10-03](results/compile-matrix-20261003-linux-go1.27/README.md) | Native, Orchestrion, POC SDK and Mini; Gin/Chi and direct/external Testify, race/coverage; 4/32 CPUs, five scenarios | 7,113 completed command timings, five 48-row tables, ranges, uncertainty, input/binary hashes, traces and one interrupted attempt; [reusable runner](build-benchmarks.md) |
 | [Tool strategies, 2026-10-03](results/tool-strategies-20261003-linux-go1.27/README.md) | Current, selected `-find` and one-query Mini preparation; six fixtures, 4/32 CPUs, cold/cache/edit scenarios | 660 raw observations, commands, CPU/wall times, cache counters, hashes and compatibility reports |

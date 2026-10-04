@@ -109,6 +109,12 @@ func canonicalMiniStack(stack string) string {
 					for _, sourceRoot := range []string{"/internal/civisibility/", "/internal/thirdparty/dd-trace-go/civisibility/"} {
 						if offset := strings.Index(lines[i+1], sourceRoot); offset >= 0 {
 							lines[i+1] = "\tinternal/civisibility/" + lines[i+1][offset+len(sourceRoot):]
+							// The deferred lease adds six lines before this unchanged
+							// call site in the port. Map this exact Mini location back
+							// to the frozen SDK; retain all other source locations.
+							if strings.Contains(prefix, "dd-ci-testing-poc/") && lines[i] == "ci-runtime/integrations/gotesting.(*M).executeInternalTest.func1" && lines[i+1] == "\tinternal/civisibility/integrations/gotesting/testing.go:844" {
+								lines[i+1] = "\tinternal/civisibility/integrations/gotesting/testing.go:838"
+							}
 							break
 						}
 					}
@@ -117,6 +123,20 @@ func canonicalMiniStack(stack string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func TestCanonicalMiniStackMapsOnlyAdaptedCallSite(t *testing.T) {
+	sdk := "github.com/DataDog/dd-trace-go/v2/internal/civisibility/integrations/gotesting.(*M).executeInternalTest.func1\n\t/sdk/internal/civisibility/integrations/gotesting/testing.go:838\nexample.com/app.TestFailure\n\t/work/app_test.go:17"
+	mini := "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations/gotesting.(*M).executeInternalTest.func1\n\t/poc/internal/thirdparty/dd-trace-go/civisibility/integrations/gotesting/testing.go:844\nexample.com/app.TestFailure\n\t/work/app_test.go:17"
+	want := canonicalMiniStack(sdk)
+	if canonicalMiniStack(mini) != want {
+		t.Fatal("adapted call site was not mapped to the pinned SDK")
+	}
+	for _, changed := range []string{strings.ReplaceAll(mini, "testing.go:844", "testing.go:845"), strings.ReplaceAll(mini, "app_test.go:17", "app_test.go:18"), strings.ReplaceAll(mini, "executeInternalTest.func1", "executeInternalTest.func2")} {
+		if canonicalMiniStack(changed) == want {
+			t.Fatal("canonicalization hid a different location or function")
+		}
+	}
 }
 
 // Canonicalization must be limited to the relocated library namespace/root.

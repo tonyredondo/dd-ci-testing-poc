@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/globalconfig"
@@ -278,6 +279,11 @@ func (w *WriterStatusCodeError) Error() string {
 }
 
 func (w *writer) Flush(payload transport.Payload) ([]EndpointRequestResult, error) {
+	cidelivery.BeginSend()
+	defer cidelivery.EndSend()
+	if cidelivery.Enabled() {
+		defer w.httpClient.CloseIdleConnections()
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

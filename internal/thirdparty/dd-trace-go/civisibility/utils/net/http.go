@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
@@ -113,6 +114,8 @@ func (rh *RequestHandler) CloseIdleConnections() {
 // Except we use a higher timeout for this
 var defaultHTTPClient = createNewHTTPClient()
 
+func init() { cidelivery.RegisterConnectionCloser(CloseIdleConnections) }
+
 // CloseIdleConnections closes idle connections owned by the shared CI
 // Visibility HTTP client. It is safe to call during shutdown after CI
 // Visibility components have finished sending their final payloads.
@@ -151,6 +154,7 @@ func NewRequestHandler() *RequestHandler {
 
 // NewRequestHandlerWithClient creates a new RequestHandler with a custom http.Client
 func NewRequestHandlerWithClient(client *http.Client) *RequestHandler {
+	cidelivery.RegisterConnectionCloser(client.CloseIdleConnections)
 	return &RequestHandler{
 		Client: client,
 	}
@@ -158,6 +162,11 @@ func NewRequestHandlerWithClient(client *http.Client) *RequestHandler {
 
 // SendRequest sends an HTTP request based on the provided configuration.
 func (rh *RequestHandler) SendRequest(config RequestConfig) (*Response, error) {
+	cidelivery.BeginSend()
+	defer cidelivery.EndSend()
+	if cidelivery.Enabled() {
+		defer rh.CloseIdleConnections()
+	}
 	if config.MaxRetries <= 0 {
 		config.MaxRetries = DefaultMaxRetries // Default retries
 	}

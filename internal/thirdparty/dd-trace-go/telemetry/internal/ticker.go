@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 )
 
@@ -26,9 +27,13 @@ type Ticker struct {
 
 	stopChan chan struct{}
 	stopped  bool
+	stopIdle func()
 }
 
 func NewTicker(tickFunc TickFunc, interval Range[time.Duration]) *Ticker {
+	if cidelivery.Enabled() {
+		return &Ticker{tickSpeed: interval.Max, interval: interval, tickFunc: tickFunc, stopIdle: cidelivery.Register(tickFunc)}
+	}
 	ticker := &Ticker{
 		ticker:    time.NewTicker(interval.Max),
 		tickSpeed: interval.Max,
@@ -37,18 +42,21 @@ func NewTicker(tickFunc TickFunc, interval Range[time.Duration]) *Ticker {
 		stopChan:  make(chan struct{}),
 	}
 
-	go func() {
-		for {
-			select {
-			case <-ticker.ticker.C:
-				tickFunc()
-			case <-ticker.stopChan:
-				return
-			}
-		}
-	}()
+	go ticker.run()
 
 	return ticker
+}
+
+// run is named so the goleak shim can identify this owned periodic worker.
+func (t *Ticker) run() {
+	for {
+		select {
+		case <-t.ticker.C:
+			t.tickFunc()
+		case <-t.stopChan:
+			return
+		}
+	}
 }
 
 func (t *Ticker) CanIncreaseSpeed() {
@@ -63,7 +71,9 @@ func (t *Ticker) CanIncreaseSpeed() {
 	}
 
 	log.Debug("telemetry: increasing flush speed to an interval of %s", t.tickSpeed)
-	t.ticker.Reset(t.tickSpeed)
+	if t.ticker != nil {
+		t.ticker.Reset(t.tickSpeed)
+	}
 }
 
 func (t *Ticker) CanDecreaseSpeed() {
@@ -78,11 +88,18 @@ func (t *Ticker) CanDecreaseSpeed() {
 	}
 
 	log.Debug("telemetry: decreasing flush speed to an interval of %s", t.tickSpeed)
-	t.ticker.Reset(t.tickSpeed)
+	if t.ticker != nil {
+		t.ticker.Reset(t.tickSpeed)
+	}
 }
 
 func (t *Ticker) Stop() {
 	if t.stopped {
+		return
+	}
+	if t.stopIdle != nil {
+		t.stopIdle()
+		t.stopped = true
 		return
 	}
 	t.ticker.Stop()

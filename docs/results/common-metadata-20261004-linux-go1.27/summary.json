@@ -1,0 +1,106 @@
+[
+  {
+    "gzip": false,
+    "gomaxprocs": 1,
+    "before": {
+      "ns": 8746,
+      "wire_B": 2265.0,
+      "allocated_B": 7582,
+      "allocations": 151,
+      "range_ns": [
+        8612,
+        9254
+      ]
+    },
+    "after": {
+      "ns": 3924,
+      "wire_B": 481.1,
+      "allocated_B": 2155,
+      "allocations": 25,
+      "range_ns": [
+        3865,
+        3983
+      ]
+    },
+    "time_reduction_pct": 55.13377544020124,
+    "wire_reduction_pct": 78.75938189845475
+  },
+  {
+    "gzip": false,
+    "gomaxprocs": 8,
+    "before": {
+      "ns": 6829,
+      "wire_B": 2265.0,
+      "allocated_B": 7588,
+      "allocations": 151,
+      "range_ns": [
+        6596,
+        8016
+      ]
+    },
+    "after": {
+      "ns": 3247,
+      "wire_B": 481.1,
+      "allocated_B": 2160,
+      "allocations": 25,
+      "range_ns": [
+        3103,
+        3569
+      ]
+    },
+    "time_reduction_pct": 52.45277493044369,
+    "wire_reduction_pct": 78.75938189845475
+  },
+  {
+    "gzip": true,
+    "gomaxprocs": 1,
+    "before": {
+      "ns": 11786,
+      "wire_B": 201.4,
+      "allocated_B": 7804,
+      "allocations": 151,
+      "range_ns": [
+        11175,
+        11876
+      ]
+    },
+    "after": {
+      "ns": 4608,
+      "wire_B": 48.42,
+      "allocated_B": 2165,
+      "allocations": 25,
+      "range_ns": [
+        4544,
+        4741
+      ]
+    },
+    "time_reduction_pct": 60.90276599355167,
+    "wire_reduction_pct": 75.95829195630586
+  },
+  {
+    "gzip": true,
+    "gomaxprocs": 8,
+    "before": {
+      "ns": 9814,
+      "wire_B": 201.5,
+      "allocated_B": 8909,
+      "allocations": 151,
+      "range_ns": [
+        9698,
+        11311
+      ]
+    },
+    "after": {
+      "ns": 3945,
+      "wire_B": 48.36,
+      "allocated_B": 2650,
+      "allocations": 25,
+      "range_ns": [
+        3906,
+        4009
+      ]
+    },
+    "time_reduction_pct": 59.802323211738326,
+    "wire_reduction_pct": 76.0
+  }
+]

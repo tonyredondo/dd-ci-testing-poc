@@ -46,6 +46,14 @@ func installExternalTestifyHelper(t *testing.T, dir string) string {
 // Compare the full Testify advice, not merely the two POC backends. Each binary
 // is built once; policy cases exercise the selected library's original runner.
 func TestCIVisibilityTestifyParity(t *testing.T) {
+	runCIVisibilityTestifyParity(t, false)
+}
+
+func TestDeferredDeliveryTestifyParity(t *testing.T) {
+	runCIVisibilityTestifyParity(t, true)
+}
+
+func runCIVisibilityTestifyParity(t *testing.T, deferred bool) {
 	reference := os.Getenv("ORCHESTRION_BIN")
 	dir, driver := prepareTestifyFixture(t, reference != "")
 	flags := []string{"-mod=mod", "-race", "-cover", "-covermode=atomic", "-coverpkg=./..."}
@@ -100,6 +108,17 @@ func TestCIVisibilityTestifyParity(t *testing.T) {
 	}
 	var results []parityResult
 	var pocSDKWallNS int64
+	if deferred {
+		selected := map[string]bool{"pass-skip": true, "external-module-helper": true, "parallel-suites": true, "panic": true, "coverage-helpers": true, "atr-coverage-in_process": true, "atr-coverage-process": true}
+		kept := cases[:0]
+		for _, tc := range cases {
+			if selected[tc.Name] {
+				tc.Env = append(tc.Env, "DD_CIVISIBILITY_DEFERRED_DELIVERY=true")
+				kept = append(kept, tc)
+			}
+		}
+		cases = kept
+	}
 	for _, tc := range cases {
 		tc.Features = []string{"testify", tc.Name}
 		t.Run(tc.Name, func(t *testing.T) {
@@ -133,7 +152,11 @@ func TestCIVisibilityTestifyParity(t *testing.T) {
 	if len(results) != len(cases) || t.Failed() {
 		return
 	}
-	writeParityEvidence(t, "testify", map[string]any{"timing": results[0].Timing, "poc_sdk_wall_ns": pocSDKWallNS, "status": "passed", "sdk": results[0].SDK, "sdk_with_orchestrion": results[0].SDK, "sdk_with_poc": results[0].SDK, "mini": results[0].Mini, "external_callers": true, "scope": "Testify registration, original runner, lifecycle, aliases, local and external helpers, race/coverage and CI policies", "scenarios": results})
+	evidence := "testify"
+	if deferred {
+		evidence += "-deferred"
+	}
+	writeParityEvidence(t, evidence, map[string]any{"timing": results[0].Timing, "poc_sdk_wall_ns": pocSDKWallNS, "status": "passed", "sdk": results[0].SDK, "sdk_with_orchestrion": results[0].SDK, "sdk_with_poc": results[0].SDK, "mini": results[0].Mini, "external_callers": true, "scope": "Testify registration, original runner, lifecycle, aliases, local and external helpers, race/coverage and CI policies", "scenarios": results})
 }
 
 // Testify embeds library paths and debug.Stack in assertion/panic messages.

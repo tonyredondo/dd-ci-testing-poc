@@ -24,6 +24,7 @@ type Span struct {
 	finished     bool
 	hierarchy    [3]string
 	hierarchySet uint8
+	common       *CommonTags
 }
 type SpanContext struct{ identity propagation.Context }
 
@@ -155,6 +156,11 @@ func (s *Span) Meta(key string) (string, bool) {
 		return s.hierarchy[i], s.hierarchySet&(1<<i) != 0
 	}
 	v, ok := s.content.Meta[key]
+	if !ok && s.common != nil {
+		if _, numeric := s.content.Metrics[key]; !numeric {
+			v, ok = s.common.values[key]
+		}
+	}
 	return v, ok
 }
 func (s *Span) Metric(key string) (float64, bool) {
@@ -182,7 +188,7 @@ func (s *Span) Finish(options ...FinishOption) {
 	if content.Duration < 0 {
 		content.Duration = 0
 	}
-	event := &ciEvent{Type: content.Type, Version: 1, Content: content}
+	event := &ciEvent{Type: content.Type, Version: 1, Content: content, common: s.common}
 	event.Content.SessionID, _ = strconv.ParseUint(s.hierarchy[0], 10, 64)
 	event.Content.ModuleID, _ = strconv.ParseUint(s.hierarchy[1], 10, 64)
 	event.Content.SuiteID, _ = strconv.ParseUint(s.hierarchy[2], 10, 64)

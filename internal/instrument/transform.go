@@ -33,7 +33,9 @@ func Transform(files map[string][]byte) (map[string][]byte, error) {
 			return nil, fmt.Errorf("%s: already instrumented", name)
 		}
 		fs := token.NewFileSet()
-		file, err := parser.ParseFile(fs, name, src, parser.ParseComments|parser.SkipObjectResolution)
+		// Edits use declaration offsets and the original source bytes. Comment
+		// nodes are unused; scanner line directives still update the FileSet.
+		file, err := parser.ParseFile(fs, name, src, parser.SkipObjectResolution)
 		if err != nil {
 			return nil, err
 		}

@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer"
 )
 
 // Capabilities and ITR correlation are inherited session attributes. SDK
@@ -360,6 +362,9 @@ func ciWireMetadata(t *testing.T, c *miniWireCapture) string {
 		for kind, value := range metadata {
 			attrs := map[string]any{}
 			for key, v := range value.(map[string]any) {
+				if isSharedCIKind(kind) && isLiftedCIKey(key) {
+					continue // Compared after per-event inheritance, not discarded.
+				}
 				if kind == "*" && (key == "runtime-id" || key == "library_version") {
 					if v == "" {
 						t.Fatalf("missing %s", key)
@@ -368,7 +373,9 @@ func ciWireMetadata(t *testing.T, c *miniWireCapture) string {
 				}
 				attrs[key] = v
 			}
-			copy[kind] = attrs
+			if len(attrs) != 0 {
+				copy[kind] = attrs
+			}
 		}
 		raw, _ := json.Marshal(copy)
 		if expected != "" && expected != string(raw) {
@@ -380,6 +387,16 @@ func ciWireMetadata(t *testing.T, c *miniWireCapture) string {
 		t.Fatal("no metadata")
 	}
 	return expected
+}
+
+func isLiftedCIKey(key string) bool { return minitracer.IsSharedCITag(key) }
+
+func isSharedCIKind(kind string) bool {
+	switch kind {
+	case "test", "test_session_end", "test_module_end", "test_suite_end":
+		return true
+	}
+	return false
 }
 func runCIWireCase(t *testing.T, dir, bin string, args, overrides []string, unsetSession, retry bool) *miniWireCapture {
 	t.Helper()

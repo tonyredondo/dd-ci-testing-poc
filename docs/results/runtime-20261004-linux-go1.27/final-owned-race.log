@@ -1,0 +1,5 @@
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery	1.025s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/citransport	1.274s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer	2.220s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/runner	3.132s
+ok  	github.com/tonyredondo/dd-ci-testing-poc/internal/instrument	1.010s

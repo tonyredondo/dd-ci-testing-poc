@@ -407,6 +407,9 @@ func writeParityReport(t *testing.T, results []parityResult, block *parityTiming
 	if path == "" {
 		return
 	}
+	if strings.Contains(t.Name(), "DeferredDelivery") {
+		path = strings.TrimSuffix(path, filepath.Ext(path)) + "-deferred.json"
+	}
 	schema := 2
 	if block != nil {
 		schema = 3
@@ -442,6 +445,16 @@ func sdkOracleName() string {
 }
 
 func TestCIVisibilityParityMatrix(t *testing.T) {
+	runCIVisibilityParityMatrix(t, false)
+}
+
+// Reuse the SDK oracle and strict wire/coverage comparisons for the delivery
+// mode. These cases cover the scheduling and shutdown paths it changes.
+func TestDeferredDeliveryParityMatrix(t *testing.T) {
+	runCIVisibilityParityMatrix(t, true)
+}
+
+func runCIVisibilityParityMatrix(t *testing.T, deferred bool) {
 	dir, driver := prepareMiniFixture(t)
 	reference := os.Getenv("ORCHESTRION_BIN")
 	if reference != "" {
@@ -484,6 +497,25 @@ func TestParityUnskippable(t *testing.T) { t.Log("must run") }
 	// independently cover uninstrumented coverage, race and per-attempt bitmaps.
 	base, head := prepareParityGit(t, dir)
 	cases := parityCases()
+	if deferred {
+		selected := map[string]bool{
+			"pass": true, "nested-cleanup-context": true, "parallel-count-shuffle": true,
+			"empty-selection": true, "list": true, "examples-fuzz-seeds": true,
+			"error-Fatal": true, "coverage-parallel-shuffle": true, "coverage-report": true,
+			"logs-atr": true, "atr-coverage-in_process": true, "atr-coverage-process": true,
+			"atr-parallel-in_process": true, "atr-parallel-process": true,
+			"efd-parallel-execution": true, "benchmarks": true, "git-upload-require-git": true,
+		}
+		kept := cases[:0]
+		for _, tc := range cases {
+			if selected[tc.Name] {
+				tc.Env = append(tc.Env, "DD_CIVISIBILITY_DEFERRED_DELIVERY=true")
+				tc.Features = append(tc.Features, "deferred-delivery")
+				kept = append(kept, tc)
+			}
+		}
+		cases = kept
+	}
 	for i := range cases {
 		if cases[i].Git {
 			cases[i].Env = append(cases[i].Env, "DD_GIT_COMMIT_SHA="+head, "DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA="+base)

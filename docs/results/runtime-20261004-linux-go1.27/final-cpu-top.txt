@@ -1,0 +1,21 @@
+File: minitracer-final.test
+Build ID: 6ba488d9f4dfd11a6ee5fdb6f76dd9a4dddd94e5
+Type: cpu
+Time: 2026-10-04 10:54:45 CEST
+Duration: 6.45s, Total samples = 6410ms (99.42%)
+Showing nodes accounting for 3090ms, 48.21% of 6410ms total
+Dropped 116 nodes (cum <= 32.05ms)
+Showing top 12 nodes out of 133
+      flat  flat%   sum%        cum   cum%
+     790ms 12.32% 12.32%     1740ms 27.15%  internal/runtime/maps.(*Iter).Next
+     320ms  4.99% 17.32%      440ms  6.86%  runtime.findObject
+     310ms  4.84% 22.15%      390ms  6.08%  runtime.tryDeferToSpanScan
+     290ms  4.52% 26.68%      410ms  6.40%  github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp.(*Writer).writeString
+     230ms  3.59% 30.27%      990ms 15.44%  runtime.wbBufFlush1
+     220ms  3.43% 33.70%      220ms  3.43%  time.runtimeNow
+     190ms  2.96% 36.66%      190ms  2.96%  runtime.memmove
+     170ms  2.65% 39.31%      650ms 10.14%  runtime.mapassign_faststr
+     160ms  2.50% 41.81%      160ms  2.50%  internal/runtime/maps.memHashAES
+     140ms  2.18% 43.99%     2960ms 46.18%  github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer.newSpan
+     140ms  2.18% 46.18%      140ms  2.18%  github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp.(*Writer).push
+     130ms  2.03% 48.21%     1690ms 26.37%  github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer.(*eventContent).EncodeMsg

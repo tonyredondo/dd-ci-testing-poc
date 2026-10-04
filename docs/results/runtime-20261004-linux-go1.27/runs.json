@@ -1,0 +1,322 @@
+[
+  {
+    "pair": 1,
+    "variant": "before",
+    "group": "events",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/minitracer-before.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkEventLifecycle$",
+      "-test.benchmem",
+      "-test.cpu=1,8",
+      "-test.benchtime=500ms",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "events-1-before.log"
+  },
+  {
+    "pair": 1,
+    "variant": "before",
+    "group": "prepare",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/prepare-before.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Prepare|TestingTransform)$",
+      "-test.benchmem",
+      "-test.cpu=4",
+      "-test.benchtime=10x",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "prepare-1-before.log"
+  },
+  {
+    "pair": 1,
+    "variant": "final",
+    "group": "events",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/minitracer-final.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkEventLifecycle$",
+      "-test.benchmem",
+      "-test.cpu=1,8",
+      "-test.benchtime=500ms",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "events-1-final.log"
+  },
+  {
+    "pair": 1,
+    "variant": "final",
+    "group": "prepare",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/prepare-final.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Prepare|TestingTransform)$",
+      "-test.benchmem",
+      "-test.cpu=4",
+      "-test.benchtime=10x",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "prepare-1-final.log"
+  },
+  {
+    "pair": 2,
+    "variant": "final",
+    "group": "events",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/minitracer-final.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkEventLifecycle$",
+      "-test.benchmem",
+      "-test.cpu=1,8",
+      "-test.benchtime=500ms",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "events-2-final.log"
+  },
+  {
+    "pair": 2,
+    "variant": "final",
+    "group": "prepare",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/prepare-final.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Prepare|TestingTransform)$",
+      "-test.benchmem",
+      "-test.cpu=4",
+      "-test.benchtime=10x",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "prepare-2-final.log"
+  },
+  {
+    "pair": 2,
+    "variant": "before",
+    "group": "events",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/minitracer-before.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkEventLifecycle$",
+      "-test.benchmem",
+      "-test.cpu=1,8",
+      "-test.benchtime=500ms",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "events-2-before.log"
+  },
+  {
+    "pair": 2,
+    "variant": "before",
+    "group": "prepare",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/prepare-before.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Prepare|TestingTransform)$",
+      "-test.benchmem",
+      "-test.cpu=4",
+      "-test.benchtime=10x",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "prepare-2-before.log"
+  },
+  {
+    "pair": 3,
+    "variant": "before",
+    "group": "events",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/minitracer-before.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkEventLifecycle$",
+      "-test.benchmem",
+      "-test.cpu=1,8",
+      "-test.benchtime=500ms",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "events-3-before.log"
+  },
+  {
+    "pair": 3,
+    "variant": "before",
+    "group": "prepare",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/prepare-before.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Prepare|TestingTransform)$",
+      "-test.benchmem",
+      "-test.cpu=4",
+      "-test.benchtime=10x",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "prepare-3-before.log"
+  },
+  {
+    "pair": 3,
+    "variant": "final",
+    "group": "events",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/minitracer-final.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkEventLifecycle$",
+      "-test.benchmem",
+      "-test.cpu=1,8",
+      "-test.benchtime=500ms",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "events-3-final.log"
+  },
+  {
+    "pair": 3,
+    "variant": "final",
+    "group": "prepare",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/prepare-final.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Prepare|TestingTransform)$",
+      "-test.benchmem",
+      "-test.cpu=4",
+      "-test.benchtime=10x",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "prepare-3-final.log"
+  },
+  {
+    "pair": 4,
+    "variant": "final",
+    "group": "events",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/minitracer-final.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkEventLifecycle$",
+      "-test.benchmem",
+      "-test.cpu=1,8",
+      "-test.benchtime=500ms",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "events-4-final.log"
+  },
+  {
+    "pair": 4,
+    "variant": "final",
+    "group": "prepare",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/prepare-final.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Prepare|TestingTransform)$",
+      "-test.benchmem",
+      "-test.cpu=4",
+      "-test.benchtime=10x",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "prepare-4-final.log"
+  },
+  {
+    "pair": 4,
+    "variant": "before",
+    "group": "events",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/minitracer-before.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkEventLifecycle$",
+      "-test.benchmem",
+      "-test.cpu=1,8",
+      "-test.benchtime=500ms",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "events-4-before.log"
+  },
+  {
+    "pair": 4,
+    "variant": "before",
+    "group": "prepare",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/prepare-before.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Prepare|TestingTransform)$",
+      "-test.benchmem",
+      "-test.cpu=4",
+      "-test.benchtime=10x",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "prepare-4-before.log"
+  },
+  {
+    "pair": 5,
+    "variant": "before",
+    "group": "events",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/minitracer-before.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkEventLifecycle$",
+      "-test.benchmem",
+      "-test.cpu=1,8",
+      "-test.benchtime=500ms",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "events-5-before.log"
+  },
+  {
+    "pair": 5,
+    "variant": "before",
+    "group": "prepare",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/prepare-before.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Prepare|TestingTransform)$",
+      "-test.benchmem",
+      "-test.cpu=4",
+      "-test.benchtime=10x",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "prepare-5-before.log"
+  },
+  {
+    "pair": 5,
+    "variant": "final",
+    "group": "events",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/minitracer-final.test",
+      "-test.run=^$",
+      "-test.bench=BenchmarkEventLifecycle$",
+      "-test.benchmem",
+      "-test.cpu=1,8",
+      "-test.benchtime=500ms",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "events-5-final.log"
+  },
+  {
+    "pair": 5,
+    "variant": "final",
+    "group": "prepare",
+    "command": [
+      "/var/tmp/dd-ci-runtime-20261004.e33op1au/prepare-final.test",
+      "-test.run=^$",
+      "-test.bench=Benchmark(Prepare|TestingTransform)$",
+      "-test.benchmem",
+      "-test.cpu=4",
+      "-test.benchtime=10x",
+      "-test.count=1"
+    ],
+    "exit": 0,
+    "log": "prepare-5-final.log"
+  }
+]

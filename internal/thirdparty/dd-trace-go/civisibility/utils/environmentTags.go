@@ -28,6 +28,8 @@ var (
 	originalCiTags map[string]string // originalCiTags holds the original CI/CD tags after all the CMDs
 	addedTags      map[string]string // addedTags holds the tags added by the user
 	ciTagsMutex    sync.Mutex
+	ciTagsRevision uint64 // Advances when a new immutable tag snapshot is published.
+	ciTagsSnapshot map[string]string
 
 	// ciMetrics holds the CI/CD environment numeric variable information
 	currentCiMetrics  map[string]float64 // currentCiMetrics holds the CI/CD metrics after originalCiMetrics + addedMetrics
@@ -52,6 +54,26 @@ var (
 func GetCITags() map[string]string {
 	ciTagsMutex.Lock()
 	defer ciTagsMutex.Unlock()
+	return getCITagsLocked()
+}
+
+// GetCITagsSnapshot returns read-only tags and their revision together. Updates
+// publish a new map; callers retaining an older snapshot keep its original values.
+// The revision lets Mini prepare shared metadata once per published snapshot.
+func GetCITagsSnapshot() (map[string]string, uint64) {
+	ciTagsMutex.Lock()
+	defer ciTagsMutex.Unlock()
+	tags := getCITagsLocked()
+	// GetCITags historically exposes the cached map. Retain sequential direct
+	// edits as well as AddCITags updates; the published snapshot owns its copy.
+	if ciTagsSnapshot == nil || !maps.Equal(tags, ciTagsSnapshot) {
+		ciTagsSnapshot = maps.Clone(tags)
+		ciTagsRevision++
+	}
+	return ciTagsSnapshot, ciTagsRevision
+}
+
+func getCITagsLocked() map[string]string {
 
 	// Return the current tags if they are already initialized
 	if currentCiTags != nil {

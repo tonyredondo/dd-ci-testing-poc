@@ -71,8 +71,9 @@ persistent cache of instrumented binaries or prepared overlays.
 
 The [Testify contract](testify.md) selects `-toolexec` from actual reachability,
 not the presence of a module requirement. Plain tests and assert-only targets
-omit it unless coverage includes rewritten `testing` sources. Known suite
-reachability uses `go list -find`; unknown nonstandard test imports use `-deps`
+omit it unless Mini reaches goleak or coverage includes rewritten `testing`
+sources. Known library reachability without unknown test imports uses
+`go list -find`; unknown test imports use `-deps`
 so external helpers remain covered. The selected-version/API check stays in
 preparation, before a warm cache can skip the compiler. The dependency query
 excludes selected packages and dependency closures already inspected by the
@@ -103,10 +104,44 @@ handling. Always-on and hybrid prototypes that deferred validation failed a
 warm-vendor version counterexample. The repository applies only `-find` for
 known suites; the other strategies remain outside the implementation.
 
+Testify and goleak now share that metadata/dependency lookup. The historical
+strategy timings above predate the goleak integration. Library versions and APIs
+are still validated before the build.
+
 Compiler/linker version identities stay native. The exported suite fingerprint
 in `testing` carries instrumentation inputs into Go's package keys. No custom
 binary cache was added. Coverage of rewritten `testing` sources has its own
 versioned bridge; ordinary client-only coverage needs no bridge.
+
+Goleak has a package-scoped compiler flag marker because it does not import
+`testing`. Its worker filters and connection checkpoint are described in
+[delivery and goleak](delivery.md).
+
+## Delivery follow-up
+
+The ordinary enqueue path records its deadline but creates a context/timer only
+when it must wait for the send token or flush. Both operations share the original
+deadline. This removes timer allocations for events that fit the current batch;
+it does not extend a blocked enqueue's timeout.
+
+Mini's test-cycle gzip pool uses `gzip.BestSpeed`. Agentless payloads remain gzip
+and obey the same uncompressed intake limit. Coverage and diagnostic-log
+compressors retain their SDK settings. Compression ratio depends on payload
+shape; compare both CPU and wire size when changing the level.
+
+The optional deferred mode is intended for test isolation, not as a throughput
+claim. It delays delivery until idle and permits queue growth across parallel
+groups. The [delivery contract](delivery.md) describes that tradeoff.
+
+Preparation no longer constructs comment ASTs in the source rewriter; comments
+remain in the original bytes and line directives are handled separately. A
+five-pair parser-only experiment reduced allocated bytes by about 90 KiB per
+preparation, with no material improvement in total Prepare wall time. The final
+combined implementation retains that reduction in Gin and Chi. Shared library
+discovery adds about 10 ms to direct Testify preparation: unlike the former
+suite-only `-find` shortcut, it walks test-only dependencies to detect goleak.
+No concurrent preparation pipeline was added. See the
+[final measurements](results/runtime-20261004-linux-go1.27/README.md).
 
 ## Mini runtime optimizations
 
@@ -114,6 +149,7 @@ versioned bridge; ordinary client-only coverage needs no bridge.
 | --- | --- | --- |
 | CI-only runtime graph | Compilation/linking of excluded APM components | Retain CI policies, coverage, metadata and telemetry |
 | Sealed span maps | Metadata and metric snapshots on `Finish` | Setters must never mutate a finished span's maps |
+| Shared CI tag snapshots and cached options | Per-span closures, common map entries and repeated wire strings | Preserve late updates, getters, option precedence, numeric overrides, child spans and Bazel filtering |
 | Metadata capacity estimate | Repeated map growth while applying common tags | Include per-event and client tags in the estimate |
 | Lazy metric maps | A map allocation for events without numeric metrics | Tag type transitions must retain their existing semantics |
 | Direct event encoding | An intermediate encoded event array and its payload copy | Preserve field names, event versions and byte limits |
@@ -133,6 +169,13 @@ Copying a codec into the repository does not itself make its encoder faster.
 The dependency reduction comes from changing the runtime graph; the allocation
 changes come from event ownership and buffer reuse. Test-only `testify` and its
 dependencies remain in the repository without entering Mini's runtime imports.
+
+The [common metadata measurements](results/common-metadata-20261004-linux-go1.27/README.md)
+include SDK-derived option preparation, span creation, batching and compression.
+Five alternating pairs reduced median time by 52.5–60.9% in the synthetic
+CI-tag fixture. Allocations fell from 151 to 25 per event; uncompressed bytes
+fell 78.8%, and gzip wire bytes about 76%. Both GOMAXPROCS settings use one
+serial benchmark loop. These results concern event execution, not build time.
 
 The SDK-specific implementation rules are recorded in
 [ADAPTATIONS.md](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md). Common

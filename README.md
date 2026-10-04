@@ -41,11 +41,16 @@ configuration fail before compilation. Explicit `.go` file mode, `-C`, SDK
 replacements and standard-library test targets are outside this POC.
 [Testify suite support](docs/testify.md) covers v1.11.1 and newer v1 releases,
 including callers in external dependencies. A selective `-toolexec` hook is
-activated only for reachable Testify suites or covered rewritten `testing`
-sources. Other builds use the overlay directly. Preparation validates the selected
+activated only for reachable Testify suites, goleak in Mini, or covered rewritten
+`testing` sources. Other builds use the overlay directly. Preparation validates the selected
 Testify version and API even when Go can reuse a cached archive. Version fixtures
 cover v1.11.1 and v1.12.1. Run from the desired module directory. Runtime
 configuration and retry/skip/quarantine behavior remain in the selected runtime.
+
+Mini automatically integrates with reachable goleak v1.3.0 or newer v1 releases,
+independently of `DD_CIVISIBILITY_DEFERRED_DELIVERY`. The optional deferred mode
+sends at idle checkpoints between tests. See [delivery and goleak](docs/delivery.md)
+for connection ownership, parallel tests, memory costs and cache identity.
 
 ## Reproduce verification
 

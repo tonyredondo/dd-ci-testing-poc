@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"syscall"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	tracer "github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer"
 	infra "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel"
@@ -140,7 +141,11 @@ func internalCiVisibilityInitialization(tracerInitializer func([]tracer.StartOpt
 		}
 
 		// Initializing additional features asynchronously
-		go func() { ensureAdditionalFeaturesInitialization(serviceName) }()
+		if cidelivery.Enabled() {
+			ensureAdditionalFeaturesInitialization(serviceName)
+		} else {
+			go func() { ensureAdditionalFeaturesInitialization(serviceName) }()
+		}
 
 		// Initialize the tracer
 		log.Debug("civisibility: initializing tracer")
@@ -322,6 +327,9 @@ func exitCiVisibility(stopSignalHandler bool) {
 		closeActionsMutex.Unlock()
 	}()
 	log.Debug("civisibility: exiting")
+	if cidelivery.Enabled() {
+		cidelivery.Shutdown()
+	}
 	for _, barrier := range barriers {
 		barrier()
 	}

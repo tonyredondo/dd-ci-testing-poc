@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
 	infra "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
@@ -50,6 +51,7 @@ func Start(options ...StartOption) {
 	}
 	clientConfig.Endpoint = endpoint
 	config := Config{Service: env.Get("DD_SERVICE"), Env: env.Get("DD_ENV"), ServiceVersion: env.Get("DD_VERSION"), Transport: clientConfig, Tags: infra.ParseTagString(env.Get("DD_TAGS"))}
+	config.DeferUntilIdle = cidelivery.Enabled()
 	for _, option := range options {
 		option(&config)
 	}

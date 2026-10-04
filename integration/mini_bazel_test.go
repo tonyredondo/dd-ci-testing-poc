@@ -32,9 +32,11 @@ func readBazelEvents(t *testing.T, root string) *miniWireCapture {
 			t.Fatal(err)
 		}
 		c.payloads = append(c.payloads, payload)
-		for _, row := range payload["events"].([]any) {
-			c.events = append(c.events, row.(map[string]any))
+		events, err := ciMetadataEvents(payload)
+		if err != nil {
+			t.Fatal(err)
 		}
+		c.events = append(c.events, events...)
 	}
 	return c
 }

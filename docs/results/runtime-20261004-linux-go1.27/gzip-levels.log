@@ -1,0 +1,45 @@
+goos: linux
+goarch: amd64
+pkg: github.com/tonyredondo/dd-ci-testing-poc/diagnostic
+cpu: AMD Ryzen 9 5950X 16-Core Processor            
+BenchmarkGzipLevels/CI400/level=-1         	     474	    500235 ns/op	 283.09 MB/s	    141614 raw-B	     16312 wire-B	    2269 B/op	       0 allocs/op
+BenchmarkGzipLevels/CI400/level=-1         	     478	    499562 ns/op	 283.48 MB/s	    141614 raw-B	     16312 wire-B	    2250 B/op	       0 allocs/op
+BenchmarkGzipLevels/CI400/level=-1         	     478	    499684 ns/op	 283.41 MB/s	    141614 raw-B	     16312 wire-B	    2250 B/op	       0 allocs/op
+BenchmarkGzipLevels/CI400/level=-1         	     478	    495587 ns/op	 285.75 MB/s	    141614 raw-B	     16312 wire-B	    2250 B/op	       0 allocs/op
+BenchmarkGzipLevels/CI400/level=-1         	     481	    495946 ns/op	 285.54 MB/s	    141614 raw-B	     16312 wire-B	    2236 B/op	       0 allocs/op
+BenchmarkGzipLevels/CI400/level=1          	     997	    238179 ns/op	 594.57 MB/s	    141614 raw-B	     17984 wire-B	     816 B/op	       0 allocs/op
+BenchmarkGzipLevels/CI400/level=1          	    1002	    239226 ns/op	 591.97 MB/s	    141614 raw-B	     17984 wire-B	     812 B/op	       0 allocs/op
+BenchmarkGzipLevels/CI400/level=1          	    1004	    237610 ns/op	 595.99 MB/s	    141614 raw-B	     17984 wire-B	     810 B/op	       0 allocs/op
+BenchmarkGzipLevels/CI400/level=1          	    1004	    246503 ns/op	 574.49 MB/s	    141614 raw-B	     17984 wire-B	     810 B/op	       0 allocs/op
+BenchmarkGzipLevels/CI400/level=1          	     973	    247697 ns/op	 571.72 MB/s	    141614 raw-B	     17984 wire-B	     836 B/op	       0 allocs/op
+BenchmarkGzipLevels/Small/level=-1         	 2289214	       104.7 ns/op	 124.20 MB/s	        13.00 raw-B	        38.00 wire-B	       0 B/op	       0 allocs/op
+BenchmarkGzipLevels/Small/level=-1         	 2317449	       103.8 ns/op	 125.18 MB/s	        13.00 raw-B	        38.00 wire-B	       0 B/op	       0 allocs/op
+BenchmarkGzipLevels/Small/level=-1         	 2254047	       118.5 ns/op	 109.70 MB/s	        13.00 raw-B	        38.00 wire-B	       0 B/op	       0 allocs/op
+BenchmarkGzipLevels/Small/level=-1         	 2179714	       110.1 ns/op	 118.06 MB/s	        13.00 raw-B	        38.00 wire-B	       0 B/op	       0 allocs/op
+BenchmarkGzipLevels/Small/level=-1         	 2180125	       110.1 ns/op	 118.11 MB/s	        13.00 raw-B	        38.00 wire-B	       0 B/op	       0 allocs/op
+BenchmarkGzipLevels/Small/level=1          	 2162493	       105.3 ns/op	 123.44 MB/s	        13.00 raw-B	        38.00 wire-B	       0 B/op	       0 allocs/op
+BenchmarkGzipLevels/Small/level=1          	 2257700	       101.7 ns/op	 127.85 MB/s	        13.00 raw-B	        38.00 wire-B	       0 B/op	       0 allocs/op
+BenchmarkGzipLevels/Small/level=1          	 2347182	       104.3 ns/op	 124.67 MB/s	        13.00 raw-B	        38.00 wire-B	       0 B/op	       0 allocs/op
+BenchmarkGzipLevels/Small/level=1          	 2227778	       101.4 ns/op	 128.20 MB/s	        13.00 raw-B	        38.00 wire-B	       0 B/op	       0 allocs/op
+BenchmarkGzipLevels/Small/level=1          	 2253710	       102.9 ns/op	 126.30 MB/s	        13.00 raw-B	        38.00 wire-B	       0 B/op	       0 allocs/op
+BenchmarkGzipLevels/Repeated64KiB/level=-1 	    3074	     80350 ns/op	 815.63 MB/s	     65536 raw-B	       106.0 wire-B	     349 B/op	       0 allocs/op
+BenchmarkGzipLevels/Repeated64KiB/level=-1 	    3138	     77667 ns/op	 843.80 MB/s	     65536 raw-B	       106.0 wire-B	     342 B/op	       0 allocs/op
+BenchmarkGzipLevels/Repeated64KiB/level=-1 	    3114	     77659 ns/op	 843.89 MB/s	     65536 raw-B	       106.0 wire-B	     345 B/op	       0 allocs/op
+BenchmarkGzipLevels/Repeated64KiB/level=-1 	    3056	     77671 ns/op	 843.76 MB/s	     65536 raw-B	       106.0 wire-B	     352 B/op	       0 allocs/op
+BenchmarkGzipLevels/Repeated64KiB/level=-1 	    3066	     77034 ns/op	 850.74 MB/s	     65536 raw-B	       106.0 wire-B	     350 B/op	       0 allocs/op
+BenchmarkGzipLevels/Repeated64KiB/level=1  	   18586	     13294 ns/op	4929.70 MB/s	     65536 raw-B	       107.0 wire-B	      43 B/op	       0 allocs/op
+BenchmarkGzipLevels/Repeated64KiB/level=1  	   18116	     13210 ns/op	4961.01 MB/s	     65536 raw-B	       107.0 wire-B	      44 B/op	       0 allocs/op
+BenchmarkGzipLevels/Repeated64KiB/level=1  	   18248	     13253 ns/op	4945.12 MB/s	     65536 raw-B	       107.0 wire-B	      44 B/op	       0 allocs/op
+BenchmarkGzipLevels/Repeated64KiB/level=1  	   18649	     13215 ns/op	4959.22 MB/s	     65536 raw-B	       107.0 wire-B	      43 B/op	       0 allocs/op
+BenchmarkGzipLevels/Repeated64KiB/level=1  	   17710	     12691 ns/op	5163.92 MB/s	     65536 raw-B	       107.0 wire-B	      45 B/op	       0 allocs/op
+BenchmarkGzipLevels/Random64KiB/level=-1   	   24056	      9938 ns/op	6594.19 MB/s	     65536 raw-B	     65566 wire-B	      44 B/op	       0 allocs/op
+BenchmarkGzipLevels/Random64KiB/level=-1   	   24042	      9990 ns/op	6559.93 MB/s	     65536 raw-B	     65566 wire-B	      44 B/op	       0 allocs/op
+BenchmarkGzipLevels/Random64KiB/level=-1   	   23719	      9988 ns/op	6561.56 MB/s	     65536 raw-B	     65566 wire-B	      45 B/op	       0 allocs/op
+BenchmarkGzipLevels/Random64KiB/level=-1   	   24090	     10066 ns/op	6510.39 MB/s	     65536 raw-B	     65566 wire-B	      44 B/op	       0 allocs/op
+BenchmarkGzipLevels/Random64KiB/level=-1   	   24153	      9943 ns/op	6590.98 MB/s	     65536 raw-B	     65566 wire-B	      44 B/op	       0 allocs/op
+BenchmarkGzipLevels/Random64KiB/level=1    	   33595	      6897 ns/op	9502.16 MB/s	     65536 raw-B	     65566 wire-B	      24 B/op	       0 allocs/op
+BenchmarkGzipLevels/Random64KiB/level=1    	   35062	      6851 ns/op	9565.36 MB/s	     65536 raw-B	     65566 wire-B	      23 B/op	       0 allocs/op
+BenchmarkGzipLevels/Random64KiB/level=1    	   35098	      6847 ns/op	9570.86 MB/s	     65536 raw-B	     65566 wire-B	      23 B/op	       0 allocs/op
+BenchmarkGzipLevels/Random64KiB/level=1    	   35041	      6914 ns/op	9479.12 MB/s	     65536 raw-B	     65566 wire-B	      23 B/op	       0 allocs/op
+BenchmarkGzipLevels/Random64KiB/level=1    	   35018	      6859 ns/op	9554.59 MB/s	     65536 raw-B	     65566 wire-B	      23 B/op	       0 allocs/op
+PASS

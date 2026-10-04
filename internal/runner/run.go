@@ -34,8 +34,9 @@ type goPackage struct {
 type Overlay struct {
 	Replace map[string]string
 	// CoverExclude lists owned adapter files; they must not affect user coverage.
-	CoverExclude []string     `json:",omitempty"`
-	Testify      *TestifyTool `json:",omitempty"`
+	CoverExclude []string      `json:",omitempty"`
+	Testify      *LibraryEntry `json:",omitempty"`
+	Goleak       *LibraryEntry `json:",omitempty"`
 }
 
 type Plan struct {
@@ -43,6 +44,8 @@ type Plan struct {
 	InstrumentedFiles, TestPackages int
 	coverOverlay                    bool
 	testify                         bool
+	goleak                          bool
+	goleakCache                     string
 }
 
 // Prepare creates a complete plan before native Go compilation starts. Callers
@@ -198,7 +201,11 @@ func PrepareRuntime(ctx context.Context, dir string, args []string, runtime Runt
 		}
 		plan.TestPackages++
 	}
-	testify, e := prepareTestify(ctx, dir, opts, packages, replacements, runtime, temp)
+	libraries, e := resolveTestLibraries(ctx, dir, opts, packages)
+	if e != nil {
+		return plan, e
+	}
+	testify, e := prepareTestifyPackage(libraries[instrument.TestifySuiteImport], replacements, runtime, temp)
 	if e != nil {
 		return plan, e
 	}
@@ -220,10 +227,24 @@ func PrepareRuntime(ctx context.Context, dir string, args []string, runtime Runt
 			return plan, e
 		}
 	}
+	var goleak *LibraryEntry
+	if runtime == Mini {
+		goleak, e = prepareGoleak(libraries[instrument.GoleakImport], replacements, temp)
+		if e != nil {
+			return plan, e
+		}
+		if goleak != nil {
+			plan.goleak = true
+			plan.goleakCache, e = goleakCacheFlag(dir, opts, libraries[instrument.GoleakImport], goleak.Fingerprint)
+			if e != nil {
+				return plan, e
+			}
+		}
+	}
 	plan.coverOverlay = needsCoverOverlay(dir, opts, packages, []goPackage{*native})
 	plan.File = filepath.Join(temp, "overlay.json")
 	plan.InstrumentedFiles = len(rewritten)
-	encoded, e := json.Marshal(Overlay{Replace: replacements, Testify: testify})
+	encoded, e := json.Marshal(Overlay{Replace: replacements, Testify: testify, Goleak: goleak})
 	if e != nil {
 		return plan, e
 	}
@@ -253,7 +274,7 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 	}
 	defer os.RemoveAll(plan.Dir)
 	forwarded := []string{"test", "-overlay=" + plan.File}
-	if plan.coverOverlay || plan.testify {
+	if plan.coverOverlay || plan.testify || plan.goleak {
 		executable, e := os.Executable()
 		if e != nil {
 			fmt.Fprintln(stderr, e)
@@ -266,9 +287,14 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 		}
 		forwarded = append(forwarded, "-toolexec="+tool)
 	}
+	cacheFlag := plan.goleakCache
 	// The merged overlay replaces only the user's overlay flag, never test flags.
 	for i := 0; i < len(args); i++ {
 		if args[i] == "-args" {
+			if cacheFlag != "" {
+				forwarded = append(forwarded, cacheFlag)
+				cacheFlag = ""
+			}
 			forwarded = append(forwarded, args[i:]...)
 			break
 		}
@@ -280,6 +306,9 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 			continue
 		}
 		forwarded = append(forwarded, args[i])
+	}
+	if cacheFlag != "" {
+		forwarded = append(forwarded, cacheFlag)
 	}
 	cmd := exec.CommandContext(ctx, "go", forwarded...)
 	cmd.Dir = dir

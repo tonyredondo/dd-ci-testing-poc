@@ -8,6 +8,7 @@ package coverage
 import (
 	"sync"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/net"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/telemetry"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
@@ -29,20 +30,27 @@ const (
 )
 
 type coverageWriter struct {
-	client  net.Client       // http client
-	payload *coveragePayload // Encodes and buffers events in msgpack format.
-	climit  chan struct{}    // Limits the number of concurrent outgoing connections.
-	wg      sync.WaitGroup   // Waits for all uploads to finish.
-	mu      sync.Mutex       // Guards payload rotation between add and flush.
+	client     net.Client       // http client
+	payload    *coveragePayload // Encodes and buffers events in msgpack format.
+	climit     chan struct{}    // Limits the number of concurrent outgoing connections.
+	wg         sync.WaitGroup   // Waits for all uploads to finish.
+	mu         sync.Mutex       // Guards payload rotation between add and flush.
+	deferred   bool
+	removeIdle func()
 }
 
 func newCoverageWriter() *coverageWriter {
 	log.Debug("coverageWriter: creating trace writer instance")
-	return &coverageWriter{
-		client:  net.NewClientForCodeCoverage(),
-		payload: newCoveragePayload(),
-		climit:  make(chan struct{}, concurrentConnectionLimit),
+	writer := &coverageWriter{
+		client:   net.NewClientForCodeCoverage(),
+		payload:  newCoveragePayload(),
+		climit:   make(chan struct{}, concurrentConnectionLimit),
+		deferred: cidelivery.Enabled(),
 	}
+	if writer.deferred {
+		writer.removeIdle = cidelivery.Register(writer.flush)
+	}
+	return writer
 }
 
 func (w *coverageWriter) add(coverage *testCoverage) {
@@ -65,8 +73,14 @@ func (w *coverageWriter) add(coverage *testCoverage) {
 }
 
 func (w *coverageWriter) stop() {
+	if w.removeIdle != nil {
+		w.removeIdle()
+	}
 	log.Debug("coverageWriter: stopping writer")
 	w.flush()
+	if w.deferred {
+		cidelivery.Checkpoint()
+	}
 	w.wg.Wait()
 	if closer, ok := w.client.(interface{ CloseIdleConnections() }); ok {
 		closer.CloseIdleConnections()
@@ -94,35 +108,37 @@ func (w *coverageWriter) rotatePayloadLocked() *coveragePayload {
 	return oldp
 }
 
-// flushPayload sends a closed payload asynchronously without holding w.mu.
+// flushPayload reserves ownership before queueing. Deferred work acquires its
+// connection permit only at the checkpoint, so a large parallel group cannot
+// deadlock after filling the asynchronous connection limit.
 func (w *coverageWriter) flushPayload(oldp *coveragePayload) {
 	w.wg.Add(1)
+	if w.deferred {
+		cidelivery.Queue(func() {
+			w.climit <- struct{}{}
+			w.sendPayload(oldp)
+		})
+		return
+	}
 	w.climit <- struct{}{}
-	go func(p *coveragePayload) {
-		defer func() {
-			// Once the payload has been used, clear the buffer for garbage
-			// collection to avoid a memory leak when references to this object
-			// may still be kept by faulty transport implementations or the
-			// standard library. See dd-trace-go#976
-			p.clear()
+	go w.sendPayload(oldp)
+}
 
-			<-w.climit
-			w.wg.Done()
-		}()
-
-		size, count := p.size(), p.itemCount()
-		log.Debug("coverageWriter: sending payload: size: %d events: %d\n", size, count)
-
-		buf, err := p.getBuffer()
-		if err != nil {
-			log.Error("coverageWriter: failure getting coverage data: %s", err.Error())
-			return
-		}
-
-		telemetry.CodeCoverageFiles(float64(p.itemCount()))
-		err = w.client.SendCoveragePayload(buf)
-		if err != nil {
-			log.Error("coverageWriter: failure sending coverage data: %s", err.Error())
-		}
-	}(oldp)
+func (w *coverageWriter) sendPayload(p *coveragePayload) {
+	defer func() {
+		p.clear()
+		<-w.climit
+		w.wg.Done()
+	}()
+	size, count := p.size(), p.itemCount()
+	log.Debug("coverageWriter: sending payload: size: %d events: %d\n", size, count)
+	buf, err := p.getBuffer()
+	if err != nil {
+		log.Error("coverageWriter: failure getting coverage data: %s", err.Error())
+		return
+	}
+	telemetry.CodeCoverageFiles(float64(p.itemCount()))
+	if err := w.client.SendCoveragePayload(buf); err != nil {
+		log.Error("coverageWriter: failure sending coverage data: %s", err.Error())
+	}
 }

@@ -13,7 +13,7 @@ import (
 func main() {
 	if len(os.Args) >= 5 && os.Args[1] == "tool-overlay" {
 		mode, plan, args := os.Args[2], os.Args[3], os.Args[4:]
-		if mode != "testify" && mode != "cover" && mode != "testify-cover" {
+		if mode != "testify" && mode != "cover" && mode != "testify-cover" && mode != "goleak" && mode != "goleak-cover" && mode != "testify-goleak" && mode != "testify-goleak-cover" {
 			fmt.Fprintln(os.Stderr, "ddtest: invalid tool mode")
 			os.Exit(2)
 		}

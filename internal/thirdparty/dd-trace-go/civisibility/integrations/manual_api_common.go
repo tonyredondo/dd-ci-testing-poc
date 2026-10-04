@@ -7,7 +7,6 @@ package integrations
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -107,8 +106,8 @@ func (c *ciVisibilityCommon) GetTag(key string) (any, bool) {
 
 // fillCommonTags adds common tags to the span options for CI visibility.
 func fillCommonTags(opts []tracer.StartSpanOption) []tracer.StartSpanOption {
-	ciTags, ciMetrics := utils.GetCITags(), utils.GetCIMetrics()
-	combined := make([]tracer.StartSpanOption, len(opts), len(opts)+len(ciTags)+len(ciMetrics)+2)
+	common, ciMetrics := commonTagOptions(), utils.GetCIMetrics()
+	combined := make([]tracer.StartSpanOption, len(opts), len(opts)+len(common)+len(ciMetrics)+2)
 	copy(combined, opts)
 	opts = combined
 	opts = append(opts, []tracer.StartSpanOption{
@@ -116,31 +115,52 @@ func fillCommonTags(opts []tracer.StartSpanOption) []tracer.StartSpanOption {
 		ciVisibilityTag(ext.ManualKeep, true),
 	}...)
 
-	skipCIGitOSRuntimeTags := bazel.IsPayloadFilesModeEnabled()
-
-	// Apply CI tags
-	for k, v := range ciTags {
-		// Ignore the test session name (sent at the payload metadata level, see `civisibility_payload.go`)
-		if k == constants.TestSessionName {
-			continue
-		}
-		if skipCIGitOSRuntimeTags {
-			if strings.HasPrefix(k, "ci.") ||
-				strings.HasPrefix(k, "git.") ||
-				strings.HasPrefix(k, "os.") ||
-				strings.HasPrefix(k, "runtime.") ||
-				k == constants.CIEnvVars {
-				continue
-			}
-		}
-		opts = append(opts, ciVisibilityTag(k, v))
-	}
+	opts = append(opts, common...)
 
 	// Apply CI metrics
 	for k, v := range ciMetrics {
 		opts = append(opts, ciVisibilityTag(k, v))
 	}
 
+	return opts
+}
+
+var commonTagsCache struct {
+	sync.Mutex
+	revision     uint64
+	payloadFiles bool
+	options      []tracer.StartSpanOption
+}
+
+// Common options own an immutable, truncated copy. Revision changes include
+// AddCITags, AddCITagsMap and ResetCITags, so late feature discovery stays fresh.
+func commonTagOptions() []tracer.StartSpanOption {
+	tags, revision := utils.GetCITagsSnapshot()
+	payloadFiles := bazel.IsPayloadFilesModeEnabled()
+	commonTagsCache.Lock()
+	defer commonTagsCache.Unlock()
+	if commonTagsCache.options != nil && commonTagsCache.revision == revision && commonTagsCache.payloadFiles == payloadFiles {
+		return commonTagsCache.options
+	}
+	shared := make(map[string]string)
+	opts := make([]tracer.StartSpanOption, 0, len(tags)+1)
+	for key, value := range tags {
+		if key == constants.TestSessionName {
+			continue // Session name already belongs to envelope metadata.
+		}
+		if tracer.IsSharedCITag(key) {
+			if !payloadFiles {
+				shared[key] = truncateCIVisibilityMetaValue(value)
+			}
+		} else {
+			opts = append(opts, ciVisibilityTag(key, value))
+		}
+	}
+	if len(shared) != 0 {
+		opts = append(opts, tracer.NewCommonTags(shared).Option())
+	}
+	commonTagsCache.revision, commonTagsCache.payloadFiles = revision, payloadFiles
+	commonTagsCache.options = opts
 	return opts
 }
 

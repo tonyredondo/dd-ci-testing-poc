@@ -1,0 +1,110 @@
+
+VARIANT=before RUN=1
+goos: linux
+goarch: amd64
+pkg: github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations
+cpu: AMD Ryzen 9 5950X 16-Core Processor            
+BenchmarkCommonMetadataLifecycle/gzip=false           	   66909	      8612 ns/op	      2265 wire-B/event	    7582 B/op	     151 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=false-8         	   74206	      7972 ns/op	      2265 wire-B/event	    7588 B/op	     151 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true            	   49518	     11559 ns/op	       201.3 wire-B/event	    7866 B/op	     151 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true-8          	   55046	     11311 ns/op	       201.6 wire-B/event	    8934 B/op	     151 allocs/op
+PASS
+
+VARIANT=after RUN=1
+goos: linux
+goarch: amd64
+pkg: github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations
+cpu: AMD Ryzen 9 5950X 16-Core Processor            
+BenchmarkCommonMetadataLifecycle/gzip=false           	  140271	      3924 ns/op	       481.1 wire-B/event	    2156 B/op	      25 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=false-8         	  155988	      3356 ns/op	       481.1 wire-B/event	    2161 B/op	      25 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true            	  122151	      4587 ns/op	        48.40 wire-B/event	    2166 B/op	      25 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true-8          	  146065	      3933 ns/op	        48.32 wire-B/event	    2661 B/op	      25 allocs/op
+PASS
+
+VARIANT=after RUN=2
+goos: linux
+goarch: amd64
+pkg: github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations
+cpu: AMD Ryzen 9 5950X 16-Core Processor            
+BenchmarkCommonMetadataLifecycle/gzip=false           	  147410	      3928 ns/op	       481.1 wire-B/event	    2155 B/op	      25 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=false-8         	  156980	      3221 ns/op	       481.1 wire-B/event	    2160 B/op	      25 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true            	  134893	      4690 ns/op	        48.49 wire-B/event	    2164 B/op	      25 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true-8          	  145624	      3945 ns/op	        48.38 wire-B/event	    2623 B/op	      25 allocs/op
+PASS
+
+VARIANT=before RUN=2
+goos: linux
+goarch: amd64
+pkg: github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations
+cpu: AMD Ryzen 9 5950X 16-Core Processor            
+BenchmarkCommonMetadataLifecycle/gzip=false           	   69766	      8627 ns/op	      2265 wire-B/event	    7581 B/op	     151 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=false-8         	   74672	      6829 ns/op	      2265 wire-B/event	    7588 B/op	     151 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true            	   50006	     11175 ns/op	       201.7 wire-B/event	    7674 B/op	     151 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true-8          	   60000	      9722 ns/op	       201.5 wire-B/event	    8846 B/op	     151 allocs/op
+PASS
+
+VARIANT=before RUN=3
+goos: linux
+goarch: amd64
+pkg: github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations
+cpu: AMD Ryzen 9 5950X 16-Core Processor            
+BenchmarkCommonMetadataLifecycle/gzip=false           	   63813	      8889 ns/op	      2265 wire-B/event	    7584 B/op	     151 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=false-8         	   79252	      6596 ns/op	      2265 wire-B/event	    7586 B/op	     151 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true            	   49688	     11786 ns/op	       201.4 wire-B/event	    7946 B/op	     151 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true-8          	   61006	      9698 ns/op	       201.1 wire-B/event	    8935 B/op	     151 allocs/op
+PASS
+
+VARIANT=after RUN=3
+goos: linux
+goarch: amd64
+pkg: github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations
+cpu: AMD Ryzen 9 5950X 16-Core Processor            
+BenchmarkCommonMetadataLifecycle/gzip=false           	  151510	      3905 ns/op	       481.1 wire-B/event	    2155 B/op	      25 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=false-8         	  156609	      3247 ns/op	       481.1 wire-B/event	    2161 B/op	      25 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true            	  127606	      4608 ns/op	        48.38 wire-B/event	    2165 B/op	      25 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true-8          	  142846	      4009 ns/op	        48.38 wire-B/event	    2632 B/op	      25 allocs/op
+PASS
+
+VARIANT=after RUN=4
+goos: linux
+goarch: amd64
+pkg: github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations
+cpu: AMD Ryzen 9 5950X 16-Core Processor            
+BenchmarkCommonMetadataLifecycle/gzip=false           	  162804	      3865 ns/op	       481.1 wire-B/event	    2153 B/op	      25 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=false-8         	  161262	      3103 ns/op	       481.1 wire-B/event	    2160 B/op	      25 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true            	  130665	      4544 ns/op	        48.42 wire-B/event	    2165 B/op	      25 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true-8          	  148582	      3906 ns/op	        48.32 wire-B/event	    2671 B/op	      25 allocs/op
+PASS
+
+VARIANT=before RUN=4
+goos: linux
+goarch: amd64
+pkg: github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations
+cpu: AMD Ryzen 9 5950X 16-Core Processor            
+BenchmarkCommonMetadataLifecycle/gzip=false           	   64429	      9254 ns/op	      2265 wire-B/event	    7584 B/op	     151 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=false-8         	   72612	      8016 ns/op	      2265 wire-B/event	    7589 B/op	     151 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true            	   50887	     11813 ns/op	       202.1 wire-B/event	    7804 B/op	     151 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true-8          	   53293	     11242 ns/op	       202.3 wire-B/event	    8909 B/op	     151 allocs/op
+PASS
+
+VARIANT=before RUN=5
+goos: linux
+goarch: amd64
+pkg: github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations
+cpu: AMD Ryzen 9 5950X 16-Core Processor            
+BenchmarkCommonMetadataLifecycle/gzip=false           	   68392	      8746 ns/op	      2265 wire-B/event	    7582 B/op	     151 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=false-8         	   84718	      6715 ns/op	      2265 wire-B/event	    7583 B/op	     151 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true            	   45816	     11876 ns/op	       200.1 wire-B/event	    7774 B/op	     151 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true-8          	   59020	      9814 ns/op	       199.8 wire-B/event	    8845 B/op	     151 allocs/op
+PASS
+
+VARIANT=after RUN=5
+goos: linux
+goarch: amd64
+pkg: github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations
+cpu: AMD Ryzen 9 5950X 16-Core Processor            
+BenchmarkCommonMetadataLifecycle/gzip=false           	  150162	      3983 ns/op	       481.1 wire-B/event	    2155 B/op	      25 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=false-8         	  158761	      3569 ns/op	       481.1 wire-B/event	    2160 B/op	      25 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true            	  130921	      4741 ns/op	        48.59 wire-B/event	    2165 B/op	      25 allocs/op
+BenchmarkCommonMetadataLifecycle/gzip=true-8          	  149050	      4005 ns/op	        48.36 wire-B/event	    2650 B/op	      25 allocs/op
+PASS

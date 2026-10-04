@@ -1,11 +1,9 @@
 package runner
 
 import (
-	"context"
 	"crypto/sha256"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -18,57 +16,18 @@ const minimumTestifyVersion = "v1.11.1"
 // Bump when compiler-side edits change without changing prepared inputs.
 const testifyContractVersion = "ddtest-testify-entry-v1"
 
-// TestifyTool contains only the prepared suite inputs. Other packages never
+// LibraryEntry contains the inputs for one selected library entry. Other packages never
 // need to read the tool plan. Covered sources are transformed after go cover.
-type TestifyTool struct {
+type LibraryEntry struct {
+	Package     string `json:",omitempty"`
 	Sources     map[string]string
 	HookFile    string
 	Fingerprint string
 }
 
-func prepareTestify(ctx context.Context, dir string, opts options, packages []goPackage, replacements map[string]string, runtime Runtime, temp string) (*TestifyTool, error) {
-	var suite *goPackage
-	for _, p := range packages {
-		if p.ImportPath == instrument.TestifySuiteImport {
-			copy := p
-			suite = &copy
-			break
-		}
-	}
+func prepareTestifyPackage(suite *goPackage, replacements map[string]string, runtime Runtime, temp string) (*LibraryEntry, error) {
 	if suite == nil {
-		paths, hasSuite := testifyDependencyImports(packages)
-		if hasSuite {
-			paths = []string{instrument.TestifySuiteImport}
-		}
-		if len(paths) == 0 {
-			return nil, nil
-		}
-		// Walk actual test-import dependencies, including helpers in other modules.
-		// A go.mod requirement or an assert-only import does not enable the wrapper.
-		mode := "-deps"
-		if hasSuite {
-			// Reachability is already known. Find only the selected library's
-			// source and module metadata; its dependencies need no second walk.
-			mode = "-find"
-		}
-		args := []string{"list", mode, "-json=Dir,Name,ImportPath,GoFiles,Module,Error"}
-		args = append(args, opts.buildFlags...)
-		args = append(args, paths...)
-		cmd := exec.CommandContext(ctx, "go", args...)
-		cmd.Dir = dir
-		dependencies, err := readPackages(cmd, "resolve Testify test dependencies")
-		if err != nil {
-			return nil, err
-		}
-		for _, p := range dependencies {
-			if p.ImportPath == instrument.TestifySuiteImport {
-				copied := p
-				suite = &copied
-			}
-		}
-		if suite == nil {
-			return nil, nil
-		}
+		return nil, nil
 	}
 	selected := ""
 	if suite.Module != nil {
@@ -106,7 +65,7 @@ func prepareTestify(ctx context.Context, dir string, opts options, packages []go
 	if runtime == Mini {
 		hook = strings.Replace(hook, "github.com/DataDog/dd-trace-go/v2/internal/civisibility/", "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/", 1)
 	}
-	tool := &TestifyTool{Sources: map[string]string{}, HookFile: filepath.Join(temp, "testify-hook.go")}
+	tool := &LibraryEntry{Sources: map[string]string{}, HookFile: filepath.Join(temp, "testify-hook.go")}
 	hookSource := instrument.TestifyEntryHook(hook)
 	hash := sha256.New()
 	hash.Write([]byte(testifyContractVersion))
@@ -181,9 +140,9 @@ func testifyDependencyImports(packages []goPackage) ([]string, bool) {
 	return paths, hasSuite
 }
 
-func prepareTestifyCompile(plan *TestifyTool, args []string) ([]string, func(), error) {
+func prepareLibraryCompile(plan *LibraryEntry, args []string) ([]string, func(), error) {
 	if plan == nil {
-		return nil, nil, fmt.Errorf("missing Testify tool plan")
+		return nil, nil, fmt.Errorf("missing optional library tool plan")
 	}
 	result := append([]string(nil), args...)
 	var temporary []string
@@ -211,7 +170,11 @@ func prepareTestifyCompile(plan *TestifyTool, args []string) ([]string, func(), 
 			cleanup()
 			return nil, nil, err
 		}
-		transformed, found, err := instrument.TransformTestifyEntry(args[i], src)
+		rewrite := instrument.TransformTestifyEntry
+		if plan.Package == instrument.GoleakImport {
+			rewrite = instrument.TransformGoleakEntry
+		}
+		transformed, found, err := rewrite(args[i], src)
 		if err != nil {
 			cleanup()
 			return nil, nil, err
@@ -239,7 +202,7 @@ func prepareTestifyCompile(plan *TestifyTool, args []string) ([]string, func(), 
 	}
 	if !changed {
 		cleanup()
-		return nil, nil, fmt.Errorf("Testify compiler inputs contain no suite.Run entry")
+		return nil, nil, fmt.Errorf("optional library compiler inputs contain no instrumented entry")
 	}
 	return append(result, plan.HookFile), cleanup, nil
 }

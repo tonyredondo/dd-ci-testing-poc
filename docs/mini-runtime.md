@@ -126,10 +126,16 @@ and timeout. `Finish` seals an event once and shares its private tag/metric maps
 with delivery. Setters become no-ops and getters remain available. Native CI
 hierarchy IDs are stored separately, so serialization never deletes tag entries.
 Metadata maps are sized up front; metrics maps are allocated only when needed.
+CI/Git/system tags use an owned immutable base with local per-span overrides.
+Compatible event kinds share that base in payload metadata. Numeric overrides
+and mixed snapshots use a local fallback; generic child spans retain their own
+tags. Getters resolve the same values before and after `Finish`. See the
+[common metadata contract](delivery.md#payload-level-common-metadata).
 Events encode directly into one reusable, bounded payload buffer; the queue
 capacity is reused after successful delivery. Failed flushes retain their events
 while the client remains open.
-Agentless gzip compressors and bounded output buffers are reused. Request bodies
+Agentless gzip compressors use `gzip.BestSpeed` and reuse bounded output buffers.
+This remains standard gzip, trading compression ratio for CPU time. Request bodies
 are sealed before those buffers can be reused, including asynchronous HTTP errors
 and replay readers. APM `process_id` enrichment is omitted.
 `Flush` and `Close` report delivery errors. A failed `Flush` keeps its batch for a
@@ -142,6 +148,10 @@ logs delivery failures and lost event counts without changing test results.
 An ambiguous HTTP failure can lead to a repeated delivery; this is not a durable
 or exactly-once delivery mechanism.
 
+Mini can defer delivery until no instrumented test is active. Reachable goleak
+receives its automatic integration in both delivery modes. See
+[delivery checkpoints and goleak](delivery.md) for configuration and limits.
+
 ## Verification and boundaries
 
 See the [feature parity inventory](ci-parity.md) for policy combinations, event
@@ -150,9 +160,10 @@ capabilities before asynchronous settings loading, so emitted events retain them
 
 
 The local suite checks real loopback payloads against the SDK, preserving test
-attributes, statuses, error messages, stack frames and source lines. Only the
-relocated library namespace and its source root are canonicalized in mini stack
-comparisons; application frames are retained. The expanded comparator keeps CI
+attributes, statuses, error messages, stack frames and source lines. Mini stack
+comparisons canonicalize the relocated library namespace/root and map the known
+deferred-wrapper location from line 844 to the pinned SDK's line 838. Application
+frames and other library locations remain strict. The expanded comparator keeps CI
 metadata, metrics, service/resource/type, custom tags, capability tags and ITR
 correlation. It explicitly excludes APM sampling/profiling/process enrichment
 and process-local identity/order. Duplicate SDK Git aliases and hierarchy IDs

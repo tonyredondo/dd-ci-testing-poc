@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
@@ -131,7 +132,7 @@ func ensureSettingsInitialization(serviceName string) {
 			repositoryUpload := snapshotRepositoryUploadHooks()
 
 			// upload the repository changes
-			go func() {
+			upload := func() {
 				defer func() {
 					close(uploadChannel)
 				}()
@@ -141,7 +142,12 @@ func ensureSettingsInitialization(serviceName string) {
 				} else {
 					log.Debug("civisibility: uploaded %d bytes in pack files", bytes)
 				}
-			}()
+			}
+			if cidelivery.Enabled() {
+				upload()
+			} else {
+				go upload()
+			}
 		} else {
 			close(uploadChannel)
 			if gitUploadEnabled {

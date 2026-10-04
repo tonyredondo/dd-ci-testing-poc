@@ -7,6 +7,12 @@ comparison against the unmodified SDK instrumented by Orchestrion. Additional fi
 multiple package binaries, Unix sockets, a bounded fuzz campaign and CI telemetry.
 This evidence does not establish complete product parity.
 
+Mini also checks 17 of these combinations with deferred delivery and seven
+Testify combinations in that mode. Its automatic goleak fixture checks both
+delivery modes, external helpers, race, covered library inputs and deliberate
+test/HTTP leaks. These local runtime checks are described in
+[delivery and goleak](delivery.md); historical CI revisions below predate them.
+
 The SDK reference is `dd-trace-go/main` at
 [`96aedb31048c07e29e7a20a4333dc3b8d289c52d`](https://github.com/DataDog/dd-trace-go/tree/96aedb31048c07e29e7a20a4333dc3b8d289c52d),
 also the base of our incorporated CI source. The exact module version is owned by
@@ -118,7 +124,9 @@ Only declared differences are normalized:
   numeric values remain required. CI request counters are checked against each
   sender's requests because batching can differ. All other captured CI semantic
   counters compare exactly.
-- Relocated SDK library stack paths are canonicalized. For the six `testing`
+- Relocated SDK library stack paths are canonicalized. Mini's known deferred
+  wrapper line 844 is mapped to the pinned SDK's line 838; other library
+  locations remain strict. For the six `testing`
   failure methods, Orchestrion's `<generated>:1` frame (bare on Go 1.26, prefixed on Go 1.27)
   and the toolchain's
   `testing.go` frame are equivalent by method name. Application frames, their

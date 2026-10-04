@@ -14,12 +14,12 @@ Preparation parses `testing` with `go/parser` and writes an overlay containing
 changed sources, private hook declarations and an external runtime import for
 each selected test package. Native Go performs the build.
 
-If suites are already known to be reachable, a `go list -find` query supplies
-Testify source/module metadata. Unknown nonstandard test imports require `-deps`
-to discover suites through helpers. Version and API validation happen before
-the native build-cache lookup. A selective compiler wrapper transforms only
-`testify/suite`; a coverage bridge handles rewritten `testing` sources when
-coverage includes them. Builds needing neither omit `-toolexec`. The POC has
+Testify and goleak share library discovery. Known reachability without unknown
+test imports uses `go list -find`; unknown imports require `-deps` to discover
+libraries through helpers. Version and API validation happen before the native
+build-cache lookup. A selective compiler wrapper transforms `testify/suite`
+and, in Mini, reachable `go.uber.org/goleak`; a coverage bridge handles rewritten
+`testing` sources when coverage includes them. Other builds omit `-toolexec`. The POC has
 no configuration engine, build daemon or nested dependency build.
 
 The nine SDK aspects are retained: M.Run, T.Run, B.Run, Fail, FailNow, formatted

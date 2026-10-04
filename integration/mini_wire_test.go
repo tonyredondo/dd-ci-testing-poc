@@ -213,6 +213,8 @@ func TestMiniWireHierarchyAgentAndCoverage(t *testing.T) {
 			want := runMiniWire(t, dir, bins[0], agentless, true)
 			got := runMiniWire(t, dir, bins[1], agentless, true)
 			validateMiniHierarchy(t, got)
+			assertMiniCIAttributes(t, want.events, got.events)
+			assertSessionCommonMetadataPlacement(t, got)
 			expected, actual := normalizedMiniCoverage(t, want), normalizedMiniCoverage(t, got)
 			if len(actual) == 0 || !reflect.DeepEqual(expected, actual) {
 				t.Fatalf("coverage differs: SDK %v MINI %v", expected, actual)

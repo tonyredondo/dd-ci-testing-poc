@@ -589,7 +589,7 @@
     "internal/civisibility/integrations/manual_api_mocktracer_test.go",
     "internal/civisibility/integrations/manual_api_test.go"
   ],
-  "not_fully_ported_scope": "APM mock/span-count tests, Orchestrion-specific fixtures, subprocess control and platform cases are not represented as a complete upstream suite. Existing native/SDK end-to-end tests cover pass/skip/fail/panic/timeout, retries, EFD, ITR, quarantine and attempt-to-fix. testify/suite is outside the testing-only instrumentator scope.",
+  "not_fully_ported_scope": "APM mock/span-count tests, Orchestrion-specific fixtures, subprocess control and platform cases are not represented as a complete upstream suite. POC-owned SDK/Orchestrion differential tests separately cover native testing and Testify lifecycle, retries, EFD, ITR, quarantine, attempt-to-fix, coverage and deferred delivery; they do not turn this inventory into a full upstream-suite port.",
   "ci_only_cleanup": "The retired APM endpoint test is explicitly marked replacement; reduced telemetry helpers are marked adapted. Full CI test-file count is unchanged.",
   "base_commit": "96aedb31048c07e29e7a20a4333dc3b8d289c52d",
   "local_performance_tests": [
@@ -604,6 +604,46 @@
     {
       "path": "stacktrace/classification_test.go",
       "purpose": "Concurrent first use preserves internal filtering and third-party/customer classification."
+    }
+  ],
+  "local_delivery_checks": [
+    {
+      "path": "integration/parity_matrix_test.go",
+      "purpose": "TestDeferredDeliveryParityMatrix compares 17 deferred CI combinations against unchanged SDK/Orchestrion."
+    },
+    {
+      "path": "integration/parity_testify_test.go",
+      "purpose": "TestDeferredDeliveryTestifyParity compares seven deferred suite combinations."
+    },
+    {
+      "path": "integration/goleak_test.go",
+      "purpose": "Normal and deferred goleak checks retain real test/HTTP leak detection; library coverage and race are exercised."
+    },
+    {
+      "path": "integration/mini_test.go",
+      "purpose": "Map only Mini executeInternalTest.func1 testing.go:844 to SDK testing.go:838; other library locations and application frames stay strict."
+    }
+  ],
+  "local_common_metadata_checks": [
+    {
+      "path": "internal/minitracer/common_tags_test.go",
+      "purpose": "Decoded HTTP defaults/overrides, numeric masking, mixed snapshots, sealed concurrency and conservative byte accounting."
+    },
+    {
+      "path": "integration/common_metadata_test.go",
+      "purpose": "Semantic SDK comparison resolves declared CI defaults while retaining raw wire placement and wrong/missing/override/collision negative controls."
+    },
+    {
+      "path": "internal/thirdparty/dd-trace-go/civisibility/integrations/common_metadata_test.go",
+      "purpose": "Retain late tags, direct cached-map updates, Unicode truncation and Bazel filtering."
+    },
+    {
+      "path": "internal/thirdparty/dd-trace-go/civisibility/utils/environment_snapshot_test.go",
+      "purpose": "Immutable old snapshots and revisions follow AddCITags, direct edits and reset."
+    },
+    {
+      "path": "internal/minitracer/common_budget_test.go",
+      "purpose": "Large default replaced by text/metric consumes no byte budget; valid payload is delivered and kept below intake limit."
     }
   ]
 }

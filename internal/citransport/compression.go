@@ -15,7 +15,13 @@ type gzipCompressor struct {
 
 var gzipCompressors = sync.Pool{New: func() any {
 	compressor := &gzipCompressor{}
-	compressor.writer = gzip.NewWriter(&compressor.buffer)
+	// CI batches favor compression speed. BestSpeed still emits ordinary gzip;
+	// intake limits are checked against the uncompressed MessagePack payload.
+	writer, err := gzip.NewWriterLevel(&compressor.buffer, gzip.BestSpeed)
+	if err != nil {
+		panic(err) // The constant compression level is always valid.
+	}
+	compressor.writer = writer
 	return compressor
 }}
 

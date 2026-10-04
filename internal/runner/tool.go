@@ -14,16 +14,17 @@ import (
 )
 
 func (p Plan) toolMode() string {
-	if p.testify && p.coverOverlay {
-		return "testify-cover"
-	}
+	var modes []string
 	if p.testify {
-		return "testify"
+		modes = append(modes, "testify")
+	}
+	if p.goleak {
+		modes = append(modes, "goleak")
 	}
 	if p.coverOverlay {
-		return "cover"
+		modes = append(modes, "cover")
 	}
-	return ""
+	return strings.Join(modes, "-")
 }
 
 // ToolNeedsPlan is the allocation-free dispatch before any plan I/O. Go probes
@@ -35,7 +36,7 @@ func ToolNeedsPlan(mode string, args []string, importPath string) bool {
 	tool := filepath.Base(args[0])
 	tool = strings.TrimSuffix(tool, ".exe")
 	if tool == "cover" {
-		if mode != "cover" && mode != "testify-cover" {
+		if !strings.Contains(mode, "cover") {
 			return false
 		}
 		if len(args) == 2 && args[1] == "-V=full" {
@@ -44,14 +45,14 @@ func ToolNeedsPlan(mode string, args []string, importPath string) bool {
 		pkg, _, _ := strings.Cut(importPath, " [")
 		return pkg == "testing"
 	}
-	if tool != "compile" || mode != "testify" && mode != "testify-cover" {
+	if tool != "compile" || !strings.Contains(mode, "testify") && !strings.Contains(mode, "goleak") {
 		return false
 	}
 	if len(args) == 2 && args[1] == "-V=full" {
 		return false
 	}
 	pkg, _, _ := strings.Cut(importPath, " [")
-	return pkg == instrument.TestifySuiteImport
+	return pkg == instrument.TestifySuiteImport && strings.Contains(mode, "testify") || pkg == instrument.GoleakImport && strings.Contains(mode, "goleak")
 }
 
 // RunTool handles only a selected transform. CLI bypasses unrelated tools
@@ -74,7 +75,12 @@ func RunTool(ctx context.Context, overlay string, args []string, stdin io.Reader
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	forwarded, cleanup, err := prepareTestifyCompile(plan.Testify, args)
+	entry := plan.Testify
+	pkg, _, _ := strings.Cut(os.Getenv("TOOLEXEC_IMPORTPATH"), " [")
+	if pkg == instrument.GoleakImport {
+		entry = plan.Goleak
+	}
+	forwarded, cleanup, err := prepareLibraryCompile(entry, args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2

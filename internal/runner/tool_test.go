@@ -41,9 +41,9 @@ func TestPreparedSuiteCompilerInputs(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "suite.go")
 	prepared := filepath.Join(dir, "entry.go")
-	plan := &TestifyTool{Sources: map[string]string{source: prepared}, HookFile: filepath.Join(dir, "hook.go")}
+	plan := &LibraryEntry{Sources: map[string]string{source: prepared}, HookFile: filepath.Join(dir, "hook.go")}
 	args := []string{"compile", "-o", "output.a", source}
-	got, cleanup, err := prepareTestifyCompile(plan, args)
+	got, cleanup, err := prepareLibraryCompile(plan, args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestPreparedSuiteCompilerInputs(t *testing.T) {
 	if err := os.WriteFile(covered, []byte(src), 0600); err != nil {
 		t.Fatal(err)
 	}
-	got, cleanup, err = prepareTestifyCompile(plan, []string{"compile", covered})
+	got, cleanup, err = prepareLibraryCompile(plan, []string{"compile", covered})
 	if err != nil {
 		t.Fatal(err)
 	}

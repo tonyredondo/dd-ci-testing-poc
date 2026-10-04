@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/globalconfig"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
@@ -26,27 +27,33 @@ type Config struct {
 	Transport      citransport.Config
 	MaxEvents      int
 	FlushTimeout   time.Duration
+	// DeferUntilIdle buffers events while instrumented tests run. Payload limits
+	// still apply; the queue can grow until the current parallel group finishes.
+	DeferUntilIdle bool
 }
 
 // Client buffers native events. Event ownership transfers on Finish. Flushes
 // serialize; a failed batch stays queued and can be retried by a later Flush.
 type Client struct {
-	mu             sync.Mutex
-	sendMu         chan struct{}
-	events         []*ciEvent
-	transport      *citransport.Transport
-	service, env   string
-	serviceVersion string
-	queuedBytes    int
-	envelopeBytes  int
-	tags           map[string]string
-	metadata       map[string]map[string]string
-	maxEvents      int
-	timeout        time.Duration
-	closed         bool
-	lastErr        error
-	dropped        uint64
-	payload        bytes.Buffer // Protected by sendMu; released after oversized batches.
+	mu                     sync.Mutex
+	sendMu                 chan struct{}
+	events                 []*ciEvent
+	transport              *citransport.Transport
+	service, env           string
+	serviceVersion         string
+	queuedBytes            int
+	envelopeBytes          int
+	tags                   map[string]string
+	metadata               map[string]map[string]string
+	maxEvents              int
+	timeout                time.Duration
+	closed                 bool
+	lastErr                error
+	dropped                uint64
+	payload                bytes.Buffer // Protected by sendMu; released after oversized batches.
+	deferUntilIdle         bool
+	removeIdleFlush        func()
+	removeConnectionCloser func()
 }
 
 func New(c Config) (*Client, error) {
@@ -64,6 +71,9 @@ func New(c Config) (*Client, error) {
 	}
 	if c.Transport.Version == "" {
 		c.Transport.Version = Version
+	}
+	if c.DeferUntilIdle {
+		c.Transport.CloseIdleAfterSend = true
 	}
 	transport, err := citransport.New(c.Transport)
 	if err != nil {
@@ -87,7 +97,7 @@ func New(c Config) (*Client, error) {
 			dst[k] = v
 		}
 	}
-	return &Client{
+	client := &Client{
 		sendMu:         make(chan struct{}, 1),
 		transport:      transport,
 		service:        c.Service,
@@ -98,7 +108,23 @@ func New(c Config) (*Client, error) {
 		metadata:       metadata,
 		maxEvents:      c.MaxEvents,
 		timeout:        c.FlushTimeout,
-	}, nil
+		deferUntilIdle: c.DeferUntilIdle,
+	}
+	client.removeConnectionCloser = cidelivery.RegisterConnectionCloser(transport.CloseOwnedIdleConnections)
+	if c.DeferUntilIdle {
+		client.removeIdleFlush = cidelivery.Register(func() {
+			client.mu.Lock()
+			empty := len(client.events) == 0
+			client.mu.Unlock()
+			if empty {
+				return
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), client.timeout)
+			defer cancel()
+			_ = client.flush(ctx)
+		})
+	}
+	return client, nil
 }
 func (c *Client) StartSpan(ctx context.Context, name string, options ...StartSpanOption) (*Span, context.Context) {
 	return newSpan(c, ctx, name, options...)

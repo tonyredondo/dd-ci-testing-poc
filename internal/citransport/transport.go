@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/telemetry"
 )
@@ -33,6 +34,10 @@ type Config struct {
 	HTTPClient *http.Client
 	Attempts   int
 	RetryDelay time.Duration
+	// CloseIdleAfterSend releases delivery workers before the next test. Standard
+	// HTTP transports are cloned so this cannot close the caller's connections.
+	// A custom RoundTripper retains its own connection ownership policy.
+	CloseIdleAfterSend bool
 }
 type Transport struct {
 	config Config
@@ -67,6 +72,17 @@ func New(c Config) (*Transport, error) {
 	// A copy preserves the caller's client. Never forward API credentials through
 	// redirects, including custom headers not protected by net/http's defaults.
 	copyClient := *client
+	// This client owns standard transports even in ordinary delivery mode.
+	// A goleak checkpoint must not close a caller's unrelated HTTP connections.
+	transport := copyClient.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	if standard, ok := transport.(*http.Transport); ok {
+		copyClient.Transport = standard.Clone()
+	} else {
+		copyClient.Transport = transport
+	}
 	if copyClient.Timeout <= 0 {
 		copyClient.Timeout = 10 * time.Second
 	}
@@ -77,6 +93,11 @@ func New(c Config) (*Transport, error) {
 // Send retries transient failures using the same immutable payload. Context
 // cancellation bounds both requests and backoff; permanent 4xx responses fail.
 func (t *Transport) Send(ctx context.Context, payload []byte) error {
+	cidelivery.BeginSend()
+	defer cidelivery.EndSend()
+	if t.config.CloseIdleAfterSend {
+		defer t.client.CloseIdleConnections()
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -170,3 +191,12 @@ func wait(ctx context.Context, d time.Duration) error {
 
 // CloseIdleConnections releases this transport's idle connections after flush.
 func (t *Transport) CloseIdleConnections() { t.client.CloseIdleConnections() }
+
+// CloseOwnedIdleConnections is narrower than explicit client shutdown. A goleak
+// checkpoint owns cloned standard transports, but must leave a caller's custom
+// RoundTripper and its unrelated workers under that caller's control.
+func (t *Transport) CloseOwnedIdleConnections() {
+	if standard, ok := t.client.Transport.(*http.Transport); ok {
+		standard.CloseIdleConnections()
+	}
+}

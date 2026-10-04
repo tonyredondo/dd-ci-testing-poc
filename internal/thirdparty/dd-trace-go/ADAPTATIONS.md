@@ -92,6 +92,78 @@ publication boundary: initialize completely, publish once, then only read.
 Update the generated library list with upstream and retain
 `TestConcurrentStackClassification` under `-race`, plus error-stack parity.
 
+## Deferred delivery and goleak checkpoints
+
+The POC's `internal/cidelivery` owns the optional
+`DD_CIVISIBILITY_DEFERRED_DELIVERY` coordinator. The port integrates with it in
+`integrations/civisibility.go`, `civisibility_features.go`, `gotesting/testing.go`,
+the coverage/log writers and telemetry startup/ticker. Test activity begins
+inside the existing instrumented closure, not an outer wrapper: the SDK uses
+that closure's identity to recognize already instrumented tests. The first
+registered cleanup runs last, covering user cleanups and parallel descendants.
+Preserve this placement when syncing retry or testing lifecycle changes.
+
+In deferred mode, settings and repository upload are synchronous, coverage/log
+batches transfer ownership to an idle queue, and telemetry flushes at checkpoints
+instead of starting a periodic worker. Coverage acquires its delivery concurrency
+permit when the queued work runs, not while a parallel test is buffering it.
+Normal mode retains the asynchronous SDK paths. Terminal shutdown force-drains
+pending work before writer barriers. Memory may grow across a parallel group;
+outgoing payload bounds remain unchanged. See
+[delivery checkpoints](../../../docs/delivery.md).
+
+The automatic goleak shim applies in both Mini delivery modes. CI HTTP paths in
+`utils/net/http.go` and `telemetry/internal/writer.go` bracket requests with the
+send gate. A goleak check waits for active sends, pauses new sends and closes
+owned idle CI connections before taking snapshots. Named telemetry, coverage and
+log worker functions permit exact filters without ignoring `net/http` or a user
+goroutine snapshot. Preserve worker names together with
+`internal/instrument/goleak.go` when moving these functions.
+
+Checks: `TestDeferredDeliveryParityMatrix` (17 policy combinations),
+`TestDeferredDeliveryTestifyParity` (seven suite combinations),
+`TestMiniGoleakIntegration` (normal/deferred, covered library, race, external
+helper and real leak controls), coordinator/transport tests and `-race`.
+The error-stack comparator maps only the relocated wrapper's known line 844
+to the pinned SDK's line 838; application frames and other library lines remain
+strict. A source move must update that explicit mapping with proof, not erase
+stack locations globally.
+
+## Shared CI string tags
+
+`civisibility/utils/environmentTags.go` adds `GetCITagsSnapshot`, an owned,
+read-only snapshot with a revision. Current contents are checked with `maps.Equal`
+under the existing mutex. This retains the SDK's sequential direct cached-map
+edits as well as `AddCITags`, `AddCITagsMap` and resets. Prior snapshots never
+change. Do not replace this content check with pointer identity or update-only
+invalidation while the original `GetCITags` map remains mutable.
+
+`civisibility/integrations/manual_api_common.go` caches truncated string options
+per snapshot revision and Bazel mode. CI/Git/OS/runtime strings and
+`_dd.ci.env_vars` bind one Mini `CommonTags` option; other strings keep ordinary
+tag options, and numeric CI metrics remain fresh per call. Keep the original
+option order: common tags replace earlier options, and event-specific tags and
+metrics applied afterward can replace them. Session name stays in its original
+envelope entry. The UTF-8 character limit still applies before sharing.
+
+Bazel filtering precedes snapshot binding. CI tags must not reappear through
+envelope metadata in payload-file mode. New CI metrics or special tag handling
+in upstream require review of this boundary.
+
+Mini's `internal/minitracer/common_tags.go` owns getters and wire projection.
+Homogeneous event kinds share strings in metadata; text/numeric overrides or a
+mixed snapshot fall back to local strings without mutating sealed maps. Child
+spans do not receive CI defaults. Accounting excludes replaced default values
+and includes envelope overhead conservatively, even when the wire payload
+shrinks. A large masked default must never reject a smaller valid event.
+
+Checks: `TestCITagsSnapshotUpdatesAndRetainsOldValues`,
+`TestCommonTagOptionsKeepUpdatesTruncationAndBazelFiltering`, the native shared-tag
+wire/concurrency/bounds tests and the SDK/Mini parity matrices. The differential
+capture expands only the declared shared CI keys before semantic comparison;
+its negative controls retain missing/wrong values, overrides and numeric
+collisions. Keep the raw-payload placement assertions too.
+
 ## POC-owned code outside this source subset
 
 `internal/minitracer/span.go` encodes the high eight trace-ID bytes directly with
@@ -104,6 +176,13 @@ stdout, reserves rewritten-source buffer capacity and reuses the validated
 Testify AST within a preparation. See the
 [performance guide](../../../docs/performance.md) for those POC-owned paths and
 their separate build-time measurements.
+
+`internal/minitracer/batch.go` creates a timeout context only on a waiting or
+flushing enqueue, retaining the deadline captured at entry. Deferred batches
+split by the original intake thresholds and retain only unsent chunks after
+failure. `internal/citransport/compression.go` pools `gzip.BestSpeed` writers;
+this changes compression ratio, not content or protocol. The source rewriter
+omits comment AST construction while preserving original comment bytes.
 
 ## Update checklist
 
@@ -118,6 +197,5 @@ their separate build-time measurements.
    [maintenance procedure](../../../docs/maintenance.md). Rerun comparable
    benchmarks if upstream changes a hot path.
 
-Queue timeouts, common-span metadata storage, compression level and retry-code
-refactoring are outside this change. They need their own behavior and delivery
-checks before adoption.
+Retry-code refactoring remains deferred. Shared CI string metadata is implemented;
+the pre-existing global defaults and event overrides retain their behavior.
