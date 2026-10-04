@@ -161,6 +161,11 @@ On Windows set `ORCHESTRION_BIN` to `orchestrion.exe`. Linux race validation use
 `go test -race` and a distinct `parity-race.json` prefix. The parallel/retry
 coverage test explicitly compiles the fixture with `-race -covermode=atomic`;
 the outer harness's `-race` alone would not make every child binary a race build.
+The Windows Testify reference build uses `-work` with a fixture-owned
+`GOTMPDIR`. The pinned Orchestrion job server can keep its stderr log open while
+Go tries to remove its build directory. The harness retains that directory until
+the policy cases finish, then cleans it through `t.TempDir`. Compilation errors
+still fail the test; event comparisons and the SDK reference are unchanged.
 Without the Orchestrion variable, the matrix can run against the POC SDK backend,
 including Testify, but the report renderer rejects a full parity report without
 the independent Orchestrion reference.

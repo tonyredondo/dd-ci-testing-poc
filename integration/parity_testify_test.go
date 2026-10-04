@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -63,7 +64,15 @@ func runCIVisibilityTestifyParity(t *testing.T, deferred bool) {
 		oracle = filepath.Join(t.TempDir(), executableName("fixture.test"))
 		args := append([]string{"test"}, flags...)
 		args = append(args, "-toolexec="+reference+" toolexec", "-c", "-o", oracle, ".")
-		out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false"), "go", args...)
+		env := testEnv("DD_CIVISIBILITY_ENABLED=false")
+		if runtime.GOOS == "windows" {
+			// Orchestrion's job server can still hold its log open when Go
+			// removes $WORK. Keep this build under the fixture's ownership;
+			// t.TempDir cleans it after the server and policy cases finish.
+			args = append(args, "-work")
+			env = append(env, "GOTMPDIR="+t.TempDir())
+		}
+		out, stderr, code := command(t, dir, env, "go", args...)
 		if code != 0 {
 			t.Fatalf("Testify reference compile: %s %s", out, stderr)
 		}
