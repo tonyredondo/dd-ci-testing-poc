@@ -52,7 +52,8 @@ identity: their events are reconstructed by the controlling parent, following th
 original SDK contract.
 
 Both W3C `traceparent`/`tracestate` and Datadog headers carry the complete 128-bit
-trace ID and active span ID. W3C vendor state is preserved. Sampling priority is
+trace ID and active span ID. W3C vendor state is preserved. Generated span IDs use 63 bits,
+like dd-trace-go, and so do the CI session, module and suite IDs derived from them. Sampling priority is
 propagation metadata; the mini client records every CI event. Invalid identifiers
 return an error. This is trace identity propagation, without an OpenTelemetry SDK,
 baggage API, or an APM adapter.

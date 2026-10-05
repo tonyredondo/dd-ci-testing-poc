@@ -2,6 +2,7 @@ package propagation
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"net/http"
 	"testing"
@@ -122,5 +123,29 @@ func TestVendorStatePreservedAndInvalidPriorityWritesNothing(t *testing.T) {
 		if err = Inject(c, out, format); err == nil || len(out) != 0 {
 			t.Fatal("invalid priority wrote headers")
 		}
+	}
+}
+
+func TestGeneratedSpanIDsUse63Bits(t *testing.T) {
+	high := false
+	for i := 0; i < 2000; i++ {
+		root, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		child, err := root.Child()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if root.SpanID>>63 != 0 || child.SpanID>>63 != 0 || root.SpanID == 0 || child.SpanID == 0 {
+			t.Fatalf("span IDs exceed 63 bits: root=%x child=%x", root.SpanID, child.SpanID)
+		}
+		if root.SpanID != binary.BigEndian.Uint64(root.TraceID[8:]) {
+			t.Fatal("root span ID is not the trace ID's low half")
+		}
+		high = high || root.SpanID>>62 != 0
+	}
+	if !high {
+		t.Fatal("63-bit range not exercised")
 	}
 }

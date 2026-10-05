@@ -28,11 +28,15 @@ type Context struct {
 func (c Context) Valid() bool { return c.TraceID != [16]byte{} && c.SpanID != 0 }
 
 // New creates a recorded root context with a unique trace and span identifier.
+// Generated span IDs use 63 bits, like dd-trace-go, so consumers that read IDs
+// as signed 64-bit integers stay positive. As in the SDK, the root span ID is
+// the low half of the trace ID.
 func New() (Context, error) {
 	var c Context
 	if _, err := rand.Read(c.TraceID[:]); err != nil {
 		return c, err
 	}
+	c.TraceID[8] &= 0x7f
 	c.SpanID = binary.BigEndian.Uint64(c.TraceID[8:])
 	if !c.Valid() {
 		return New()
@@ -53,6 +57,7 @@ func (c Context) Child() (Context, error) {
 		if _, err := rand.Read(id[:]); err != nil {
 			return Context{}, err
 		}
+		id[0] &= 0x7f // 63 bits, like dd-trace-go span IDs.
 	}
 	c.SpanID = binary.BigEndian.Uint64(id[:])
 	return c, nil
