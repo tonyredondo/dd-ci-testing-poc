@@ -118,7 +118,11 @@ when additions overlap collection. No `xsync` source is incorporated. The SDK
 comparison fixture still uses its original dependency graph.
 
 `testopt.New` also creates an explicit client without reading API credentials
-from the environment. Its configuration controls endpoint, tags, batch capacity
+from the environment. Span tags follow dd-trace-go's `SetTag` value
+rules: pointers to basic values are dereferenced, exact numbers become metrics,
+`fmt.Stringer`, byte slices and slices use the SDK's text forms, and `error`
+tags record the message, type and handling stack (`error.stack` only for
+`fmt.Formatter` errors). A nil error clears the flag. Its configuration controls endpoint, tags, batch capacity
 and timeout. `Finish` seals an event once and shares its private tag/metric maps read-only
 with delivery. Setters become no-ops and getters remain available. Native CI
 hierarchy IDs are stored separately, so serialization never deletes tag entries.

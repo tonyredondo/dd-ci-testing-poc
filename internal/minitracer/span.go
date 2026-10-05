@@ -6,12 +6,13 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"runtime/debug"
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/ddtrace/ext"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/stacktrace"
 	"github.com/tonyredondo/dd-ci-testing-poc/propagation"
 )
 
@@ -43,73 +44,188 @@ func StartTime(v time.Time) StartSpanOption { return func(s *Span) { s.content.S
 func Tag(k string, v any) StartSpanOption   { return func(s *Span) { s.SetTag(k, v) } }
 func FinishTime(v time.Time) FinishOption   { return func(c *finishConfig) { c.time = v } }
 
+// SetTag follows dd-trace-go's Span.SetTag for the values CI events carry:
+// pointers to basic values are dereferenced, numbers that fit a float64
+// exactly become metrics, and error tags set the error flag and details.
 func (s *Span) SetTag(key string, value any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.finished {
 		return
 	}
+	value = dereference(value)
 	switch key {
 	case ext.ManualKeep:
 		return // CI events are always recorded, without a sampler.
 	case ext.Error:
-		switch v := value.(type) {
-		case bool:
-			if v {
-				s.content.Error = 1
+		s.setError(value, true)
+		return
+	case ext.ErrorNoStackTrace:
+		s.setError(value, false)
+		return
+	}
+	switch v := value.(type) {
+	case bool:
+		s.setTextTag(key, strconv.FormatBool(v))
+		return
+	case string:
+		s.setTextTag(key, v)
+		return
+	}
+	if v, ok := toFloat64(value); ok {
+		s.setMetric(key, v)
+		return
+	}
+	if v, ok := value.(fmt.Stringer); ok {
+		s.setTextTag(key, safeString(v, value))
+		return
+	}
+	if v, ok := value.([]byte); ok {
+		s.setTextTag(key, string(v))
+		return
+	}
+	if value != nil && reflect.TypeOf(value).Kind() == reflect.Slice {
+		// Slices use the SDK's dot notation: key.0, key.1, ...
+		slice := reflect.ValueOf(value)
+		for i := 0; i < slice.Len(); i++ {
+			element := slice.Index(i).Interface()
+			name := key + "." + strconv.Itoa(i)
+			if number, ok := toFloat64(element); ok {
+				s.setMetric(name, number)
 			} else {
-				s.content.Error = 0
-			}
-		case error:
-			if v != nil {
-				s.content.Error = 1
-				s.content.Meta[ext.ErrorMsg] = v.Error()
-				s.content.Meta[ext.ErrorType] = fmt.Sprintf("%T", v)
-				s.content.Meta[ext.ErrorStack] = string(debug.Stack())
+				s.setTextTag(name, fmt.Sprintf("%v", element))
 			}
 		}
 		return
 	}
+	s.setTextTag(key, fmt.Sprint(value))
+}
+
+// setError mirrors the SDK: an error value records its message and type, a
+// formatted stack for fmt.Formatter errors, and the stack where it was handled.
+// Nil clears the flag; any other value sets it.
+func (s *Span) setError(value any, stack bool) {
 	switch v := value.(type) {
-	case string:
-		s.setTextTag(key, v)
 	case bool:
-		s.setTextTag(key, strconv.FormatBool(v))
-	case int:
-		s.setMetric(key, float64(v))
-	case int8:
-		s.setMetric(key, float64(v))
-	case int16:
-		s.setMetric(key, float64(v))
-	case int32:
-		s.setMetric(key, float64(v))
-	case int64:
-		if v > (1<<53)-1 || v < -(1<<53)+1 {
-			s.setTextTag(key, strconv.FormatInt(v, 10))
-		} else {
-			s.setMetric(key, float64(v))
+		s.content.Error = 0
+		if v {
+			s.content.Error = 1
 		}
-	case uint:
-		s.setMetric(key, float64(v))
-	case uint8:
-		s.setMetric(key, float64(v))
-	case uint16:
-		s.setMetric(key, float64(v))
-	case uint32:
-		s.setMetric(key, float64(v))
-	case uint64:
-		if v > (1<<53)-1 {
-			s.setTextTag(key, strconv.FormatUint(v, 10))
-		} else {
-			s.setMetric(key, float64(v))
+	case error:
+		s.content.Error = 1
+		s.setTextTag(ext.ErrorMsg, v.Error())
+		s.setTextTag(ext.ErrorType, reflect.TypeOf(v).String())
+		if !stack {
+			return
 		}
-	case float32:
-		s.setMetric(key, float64(v))
-	case float64:
-		s.setMetric(key, v)
+		if _, ok := v.(fmt.Formatter); ok {
+			s.setTextTag(ext.ErrorStack, fmt.Sprintf("%+v", v))
+		}
+		// Skip setError and SetTag, like the SDK's own capture wrapper.
+		s.setTextTag(ext.ErrorHandlingStack, stacktrace.Format(stacktrace.SkipAndCaptureWithInternalFrames(0, 2)))
+	case nil:
+		s.content.Error = 0
 	default:
-		s.setTextTag(key, fmt.Sprint(v))
+		s.content.Error = 1
 	}
+}
+
+// toFloat64 accepts the same numeric types as the SDK. 64-bit integers beyond
+// ±(2^53-1) are not exact as float64 and become strings instead.
+func toFloat64(value any) (float64, bool) {
+	const maxExact = 1<<53 - 1
+	switch v := value.(type) {
+	case byte:
+		return float64(v), true
+	case float32:
+		return float64(v), true
+	case float64:
+		return v, true
+	case int:
+		return float64(v), true
+	case int8:
+		return float64(v), true
+	case int16:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case int64:
+		if v > maxExact || v < -maxExact {
+			return 0, false
+		}
+		return float64(v), true
+	case uint:
+		return float64(v), true
+	case uint16:
+		return float64(v), true
+	case uint32:
+		return float64(v), true
+	case uint64:
+		if v > maxExact {
+			return 0, false
+		}
+		return float64(v), true
+	}
+	return 0, false
+}
+
+// dereference reads the pointers to basic values that the SDK dereferences, so
+// a tag never records a memory address. A nil pointer yields the zero value.
+func dereference(value any) any {
+	switch v := value.(type) {
+	case *bool:
+		return derefOrZero(v)
+	case *string:
+		return derefOrZero(v)
+	case *byte:
+		return derefOrZero(v)
+	case *float32:
+		return derefOrZero(v)
+	case *float64:
+		return derefOrZero(v)
+	case *int:
+		return derefOrZero(v)
+	case *int8:
+		return derefOrZero(v)
+	case *int16:
+		return derefOrZero(v)
+	case *int32:
+		return derefOrZero(v)
+	case *int64:
+		return derefOrZero(v)
+	case *uint:
+		return derefOrZero(v)
+	case *uint16:
+		return derefOrZero(v)
+	case *uint32:
+		return derefOrZero(v)
+	case *uint64:
+		return derefOrZero(v)
+	}
+	return value
+}
+
+func derefOrZero[T any](value *T) T {
+	if value == nil {
+		var zero T
+		return zero
+	}
+	return *value
+}
+
+// safeString reports a nil pointer receiver as "<nil>", like the SDK, instead
+// of panicking inside the caller's instrumentation.
+func safeString(v fmt.Stringer, original any) (result string) {
+	defer func() {
+		if e := recover(); e != nil {
+			if rv := reflect.ValueOf(original); rv.Kind() == reflect.Pointer && rv.IsNil() {
+				result = "<nil>"
+				return
+			}
+			panic(e)
+		}
+	}()
+	return v.String()
 }
 
 // Text tags replace numeric metrics of the same name. Hierarchy IDs remain
