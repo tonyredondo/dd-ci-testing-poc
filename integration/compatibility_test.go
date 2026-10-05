@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -161,8 +162,12 @@ type fixtureBuild struct {
 }
 
 // buildConcurrently runs independent fixture compilations together. Each one
-// writes its own output, and Go's build cache and module files are safe for
-// concurrent go commands. Failures are reported from the test goroutine.
+// writes its own output; Go's build and module caches and go.sum are safe for
+// concurrent go commands. go.mod is not: go rewrites it in place, and a
+// concurrent Orchestrion build that reads it partially written pins itself
+// again. With -mod=mod, the first build therefore runs alone and records the
+// requirements; the others must then leave go.mod unchanged. Failures are
+// reported from the test goroutine.
 func buildConcurrently(t *testing.T, builds ...fixtureBuild) {
 	t.Helper()
 	type result struct {
@@ -171,15 +176,12 @@ func buildConcurrently(t *testing.T, builds ...fixtureBuild) {
 		err         error
 	}
 	results := make([]result, len(builds))
-	var wg sync.WaitGroup
-	for i, build := range builds {
-		wg.Go(func() {
-			r := &results[i]
-			r.out, r.stderr, r.code, _, r.err = runCommand(build.dir, build.env, build.tool, build.args...)
-		})
+	run := func(i int) {
+		r, build := &results[i], builds[i]
+		r.out, r.stderr, r.code, _, r.err = runCommand(build.dir, build.env, build.tool, build.args...)
 	}
-	wg.Wait()
-	for i, r := range results {
+	check := func(i int) {
+		r := results[i]
 		if r.err != nil {
 			t.Fatalf("%s: %v", builds[i].name, r.err)
 		}
@@ -187,6 +189,40 @@ func buildConcurrently(t *testing.T, builds ...fixtureBuild) {
 			t.Fatalf("%s: %s\n%s", builds[i].name, r.out, r.stderr)
 		}
 	}
+	first := 0
+	settled := map[string][]byte{}
+	if slices.ContainsFunc(builds, func(b fixtureBuild) bool { return slices.Contains(b.args, "-mod=mod") }) {
+		run(0)
+		check(0)
+		first = 1
+		for _, build := range builds[1:] {
+			if _, ok := settled[build.dir]; !ok {
+				settled[build.dir] = readModFile(t, build.dir)
+			}
+		}
+	}
+	var wg sync.WaitGroup
+	for i := first; i < len(builds); i++ {
+		wg.Go(func() { run(i) })
+	}
+	wg.Wait()
+	for i := first; i < len(builds); i++ {
+		check(i)
+	}
+	for dir, before := range settled {
+		if after := readModFile(t, dir); !bytes.Equal(before, after) {
+			t.Fatalf("go.mod in %s changed during concurrent builds; build them one at a time:\n%s", dir, after)
+		}
+	}
+}
+
+func readModFile(t *testing.T, dir string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }
 func copyTree(t *testing.T, from, to string) {
 	t.Helper()
