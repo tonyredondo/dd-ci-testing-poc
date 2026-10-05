@@ -20,7 +20,6 @@ type Ticker struct {
 
 	tickSpeedMu sync.Mutex
 	tickSpeed   time.Duration
-	paused      bool
 
 	interval Range[time.Duration]
 
@@ -33,20 +32,8 @@ type Ticker struct {
 }
 
 func NewTicker(tickFunc TickFunc, interval Range[time.Duration]) *Ticker {
-	return newTicker(tickFunc, interval, false)
-}
-
-// NewPausedTicker creates a stopped native timer for queued startup telemetry.
-// The timer is stopped before its worker starts, so even a short interval cannot
-// send initialization data before StartApp has prepared its payload.
-// Deferred tickers keep their checkpoint callback; the client gates that flush.
-func NewPausedTicker(tickFunc TickFunc, interval Range[time.Duration]) *Ticker {
-	return newTicker(tickFunc, interval, true)
-}
-
-func newTicker(tickFunc TickFunc, interval Range[time.Duration], paused bool) *Ticker {
 	if cidelivery.Enabled() {
-		ticker := &Ticker{tickSpeed: interval.Max, interval: interval, tickFunc: tickFunc, paused: paused, lastTick: time.Now()}
+		ticker := &Ticker{tickSpeed: interval.Max, interval: interval, tickFunc: tickFunc, lastTick: time.Now()}
 		ticker.stopIdle = cidelivery.Register(ticker.tickIfDue)
 		return ticker
 	}
@@ -56,10 +43,6 @@ func newTicker(tickFunc TickFunc, interval Range[time.Duration], paused bool) *T
 		interval:  interval,
 		tickFunc:  tickFunc,
 		stopChan:  make(chan struct{}),
-		paused:    paused,
-	}
-	if paused {
-		ticker.ticker.Stop()
 	}
 
 	go ticker.run()
@@ -80,11 +63,10 @@ func (t *Ticker) run() {
 }
 
 // tickIfDue runs at idle checkpoints in deferred mode. Like the periodic ticker,
-// it ticks only after the current interval elapsed, rather than once per test,
-// and not while paused for startup telemetry.
+// it ticks only after the current interval elapsed, rather than once per test.
 func (t *Ticker) tickIfDue() {
 	t.tickSpeedMu.Lock()
-	due := !t.paused && time.Since(t.lastTick) >= t.tickSpeed
+	due := time.Since(t.lastTick) >= t.tickSpeed
 	if due {
 		t.lastTick = time.Now()
 	}
@@ -106,7 +88,7 @@ func (t *Ticker) CanIncreaseSpeed() {
 	}
 
 	log.Debug("telemetry: increasing flush speed to an interval of %s", t.tickSpeed)
-	if t.ticker != nil && !t.paused && !t.stopped {
+	if t.ticker != nil && !t.stopped {
 		t.ticker.Reset(t.tickSpeed)
 	}
 }
@@ -123,22 +105,13 @@ func (t *Ticker) CanDecreaseSpeed() {
 	}
 
 	log.Debug("telemetry: decreasing flush speed to an interval of %s", t.tickSpeed)
-	if t.ticker != nil && !t.paused && !t.stopped {
-		t.ticker.Reset(t.tickSpeed)
-	}
-}
-
-// Resume keeps the current interval, including adjustments while paused.
-// Deferred tickers remain driven by checkpoints and have no native timer.
-func (t *Ticker) Resume() {
-	t.tickSpeedMu.Lock()
-	defer t.tickSpeedMu.Unlock()
-	t.paused = false
 	if t.ticker != nil && !t.stopped {
 		t.ticker.Reset(t.tickSpeed)
 	}
 }
 
+// Stop is terminal: the mutex orders it with speed changes, which must not
+// restart a stopped native timer.
 func (t *Ticker) Stop() {
 	t.tickSpeedMu.Lock()
 	if t.stopped {

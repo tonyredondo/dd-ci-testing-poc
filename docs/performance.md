@@ -152,11 +152,10 @@ invocation.
 Clock isolation also has costs. Ordinary coverage processing is synchronous when
 telemetry or debug logging is enabled. Deferred mode retains captured profiles
 until its idle checkpoint, so parallel groups can use more temporary disk space.
-Startup telemetry is prepared without HTTP and sent after the first test group,
-or at session close if no tests run. Waiting for HTTP therefore happens between
-groups rather than before the first test. Total session time still includes that
-request; this scheduling does not remove network work. The recorded benchmark
-tables do not measure these scheduling changes. See
+Startup telemetry is sent synchronously before the first test in both modes, so
+a slow endpoint delays the start of the session instead of running alongside
+tests; no test's duration includes it. The recorded benchmark tables do not
+measure these scheduling changes. See
 [delivery](delivery.md) and the SDK port's
 [adaptation record](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md) before
 changing this scheduling during an upstream update.

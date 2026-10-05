@@ -685,7 +685,7 @@ func (ddm *M) executeInternalTest(testInfo *testingTInfo, wrapperOpts additional
 
 	// Instrument the test function
 	instrumentedFunc := func(t *testing.T) {
-		if cidelivery.TestAdmissionRequired() {
+		if cidelivery.Enabled() {
 			// The first cleanup runs after user cleanups and parallel descendants.
 			// Keep the original instrumented function identity for hook recognition.
 			t.Cleanup(cidelivery.Begin())
@@ -972,7 +972,7 @@ func (ddm *M) executeInternalBenchmark(benchmarkInfo *testingBInfo) func(*testin
 	}
 
 	instrumentedInternalFunc := func(b *testing.B) {
-		if cidelivery.TestAdmissionRequired() {
+		if cidelivery.Enabled() {
 			b.Cleanup(cidelivery.Begin())
 		}
 

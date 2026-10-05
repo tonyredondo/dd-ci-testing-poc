@@ -10,9 +10,6 @@ package transport
 // https://github.com/DataDog/instrumentation-telemetry-api-docs/tree/dad49961203d74ec8236b68ce4b54bbb7ed8716f/GeneratedDocumentation/ApiDocs/v2/SchemaDocumentation/Schemas
 
 type AppStarted struct {
-	// TracerTime belongs to the envelope, not this payload. Capture it when
-	// startup is prepared so deferred delivery and retries retain its time.
-	TracerTime        int64               `json:"-"`
 	Products          Products            `json:"products,omitempty"`
 	Configuration     []ConfKeyValue      `json:"configuration,omitempty"`
 	Error             Error               `json:"error"`

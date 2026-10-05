@@ -190,11 +190,7 @@ func (w *writer) setPayloadToBody(payload transport.Payload) {
 	w.bodyMu.Lock()
 	defer w.bodyMu.Unlock()
 	w.body.SeqID++
-	if started, ok := payload.(transport.AppStarted); ok && started.TracerTime != 0 {
-		w.body.TracerTime = started.TracerTime
-	} else {
-		w.body.TracerTime = time.Now().Unix()
-	}
+	w.body.TracerTime = time.Now().Unix()
 	w.body.RequestType = payload.RequestType()
 	w.body.Payload = payload
 }

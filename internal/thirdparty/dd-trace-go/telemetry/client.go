@@ -10,7 +10,6 @@ import (
 	"os"
 	"strconv"
 	"sync"
-	"sync/atomic"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry/internal"
@@ -77,7 +76,7 @@ func newClient(tracerConfig internal.TracerConfig, config ClientConfig) (*client
 		client.dataSources = append(client.dataSources, &client.metrics, &client.distributions)
 	}
 
-	client.flushTicker = internal.NewPausedTicker(client.Flush, config.FlushInterval)
+	client.flushTicker = internal.NewTicker(client.Flush, config.FlushInterval)
 
 	return client, nil
 }
@@ -108,8 +107,6 @@ type client struct {
 	flushTicker *internal.Ticker
 	// flushMu is used to ensure that only one flush is happening at a time
 	flushMu sync.Mutex
-	// Periodic flushes cannot send before the queued startup checkpoint.
-	startupPending atomic.Bool
 
 	// writer is the writer to use to send the payloads to the backend or the agent
 	writer internal.Writer
@@ -207,43 +204,22 @@ func (c *client) Config() ClientConfig {
 // This function is called by the flushTicker so it should not panic, or it will crash the whole customer application.
 // If a panic occurs, we stop the telemetry and log the error.
 func (c *client) Flush() {
-	if !c.startupPending.Load() {
-		c.flushDataSources()
-	}
-}
-
-func (c *client) flushStartup() {
 	defer func() {
-		c.startupPending.Store(false)
-		c.flushTicker.Resume()
+		r := recover()
+		if r == nil {
+			return
+		}
+		if err, ok := r.(error); ok {
+			log.Warn("panic while flushing telemetry data, stopping telemetry: %s", err.Error())
+		} else {
+			log.Warn("panic while flushing telemetry data, stopping telemetry!")
+		}
+		telemetryClientEnabled = false
+		if gc, ok := GlobalClient().(*client); ok && gc == c {
+			SwapClient(nil)
+		}
 	}()
-	c.flushDataSources()
-}
 
-// prepareStartup seals initialization data without HTTP. Later changes remain
-// separate payloads, following app-started when the first group completes.
-func (c *client) prepareStartup() {
-	defer c.recoverFlushPanic()
-	c.payloadQueue.Enqueue(c.transform(c.collectPayloads())...)
-}
-
-func (c *client) recoverFlushPanic() {
-	r := recover()
-	if r == nil {
-		return
-	}
-	if err, ok := r.(error); ok {
-		log.Warn("panic while flushing telemetry data, stopping telemetry: %s", err.Error())
-	} else {
-		log.Warn("panic while flushing telemetry data, stopping telemetry!")
-	}
-	telemetryClientEnabled = false
-	if gc, ok := GlobalClient().(*client); ok && gc == c {
-		SwapClient(nil)
-	}
-}
-
-func (c *client) collectPayloads() []transport.Payload {
 	// We call the flushTickerFuncs before flushing the data for data sources
 	c.callFlushTickerFuncs()
 
@@ -253,12 +229,8 @@ func (c *client) collectPayloads() []transport.Payload {
 			payloads = append(payloads, payload)
 		}
 	}
-	return payloads
-}
 
-func (c *client) flushDataSources() {
-	defer c.recoverFlushPanic()
-	nbBytes, err := c.flush(c.collectPayloads())
+	nbBytes, err := c.flush(payloads)
 	if err != nil {
 		log.Debug("telemetry: error while flushing CI telemetry data: %s", err.Error())
 

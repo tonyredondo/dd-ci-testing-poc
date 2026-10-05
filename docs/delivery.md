@@ -42,13 +42,12 @@ sequenceDiagram
 Nested tests and concurrent retry attempts use the same process-wide coordinator.
 Waiting for delivery inside an active group would deadlock the test scheduler.
 The coordinator starts no goroutines. Initial CI settings and repository
-upload run synchronously in this mode. In both modes, telemetry prepares and
-queues `app-started` without HTTP. It sends after the first admitted group has
-finished, including user cleanups and parallel descendants. The first test does
-not wait for that request; the next group waits while it completes. If no tests
-run, session close sends it before `app-closing`. Deferred delivery also replaces
-the periodic telemetry worker with idle checkpoints, which flush only once its
-interval has elapsed.
+upload run synchronously in this mode. In both modes, telemetry startup is
+synchronous during CI initialization, before the first test: as in the SDK,
+`app-started` goes alone, followed by a `message-batch` with the initial data.
+No test waits for these requests, and `go test` does not count them in any
+test's duration. Deferred delivery also replaces the periodic telemetry worker
+with idle checkpoints, which flush only once its interval has elapsed.
 
 A checkpoint delivers only full payloads: sealed test-cycle batches (the event
 count or 2.5 MiB threshold) and full coverage/log payloads. Partial payloads
@@ -63,20 +62,15 @@ needs wall-clock timestamps; with both disabled it runs asynchronously.
 Completed coverage workers exit before session shutdown. Serialization durations
 use a monotonic origin, while event timestamps keep their wall-clock meaning.
 
-The queued startup payload retains its initialization timestamp and configuration.
-The native telemetry timer stays stopped until that first flush completes;
-interval adjustments cannot start it early. Periodic telemetry cannot bypass the
-queued startup. Failed requests retain the payload for retry
-under the existing endpoint and queue rules. Startup sends create no new worker.
-Ordinary mode coordinates admission only while startup is pending, then permits
-periodic telemetry and CI sends during tests. Use deferred delivery to keep all
+A failed startup request keeps its payload for the next flush under the existing
+endpoint and queue rules. Startup creates no worker. Ordinary mode then permits
+periodic telemetry and CI sends during tests; use deferred delivery to keep all
 queued processing and sends outside admitted test groups.
 
 Each telemetry response is consumed and closed before its flush returns, including
 error responses before endpoint fallback. The configured client timeouts bound
-HTTP completion. Delayed startup telemetry may be lost if the process terminates
-without reaching a checkpoint or normal shutdown. This changes delivery timing,
-not the event contents or the settings needed to choose test features.
+HTTP completion. This changes delivery timing, not the event contents or the
+settings needed to choose test features.
 
 This trades memory and delivery latency for isolation from test bodies. The
 pending queue can grow throughout a parallel group; its total memory is not
@@ -245,10 +239,11 @@ checks; deployed Agent/intake acceptance requires separate evidence.
 changes `time.Local`, with 4/32 CPUs and both telemetry/delivery settings. It
 compares CI attributes and coverage bitmaps with an SDK run of the same test
 paths that leaves the local zone unchanged. Coverage and telemetry lifecycle
-tests check worker completion, response draining and startup admission separately.
-`TestStartupTelemetryWaitsForIdleGroup` checks first-test admission, initialization
-timestamps and configuration, failed-request retry, empty selections and a
-concurrent session close against a real loopback HTTP server in both modes.
+tests check worker completion and response draining separately.
+`TestStartupTelemetrySendsBeforeTests` checks that `StartApp` returns only after
+its startup request, with configuration, failed-request retry, a concurrent
+session close and a failed initialization, against a real loopback HTTP server
+in both modes.
 
 `TestCommonTagsWireOverridesAndGetters` checks real decoded requests in both
 delivery modes. Mixed-snapshot, concurrent sealed-map and byte-accounting checks

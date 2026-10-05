@@ -91,40 +91,19 @@ that mutation because its background clocks are not safe under it.
 
 ## Telemetry startup and HTTP completion
 
-[`telemetry/globalclient.go`](telemetry/globalclient.go) installs the client and
-queues its initial flush without HTTP in both delivery modes. An initialization
-lock publishes the client and queued work together; concurrent shutdown cannot
-miss startup. If preparation disables telemetry through the existing panic
-handler, the failed client is not added to the startup queue. `StopApp` joins the
-checkpoint before adding `app-closing`, including empty selections and
-`-test.list`.
+[`telemetry/globalclient.go`](telemetry/globalclient.go) runs the flush in
+`StartApp` synchronously in both delivery modes; the SDK starts it in a
+goroutine in normal mode. CI initialization calls `StartApp` before the first
+test, so no test waits for the startup requests or runs while they read
+`time.Local`, and `go test` does not count them in a test's duration. As in the
+SDK, `app-started` is a standalone request followed by a `message-batch`: the
+mapper keeps `app-started` out of batches. A slow endpoint delays the session
+start within the client timeouts. `StopApp` still waits on the existing
+WaitGroup, so a concurrent close sends `app-closing` after startup.
 
-[`telemetry/client.go`](telemetry/client.go) prepares startup payloads immediately,
-retaining the initial configuration and products. Its periodic flushes return
-while startup is pending. The native ticker is created stopped, before its worker
-starts, and resumes only after the startup flush. Skipping the flush alone would
-leave `time.Ticker` constructing timestamps from `time.Local` during a long group.
-Interval adjustments retain their value without restarting the paused timer;
-close/resume state is protected by the ticker mutex. Deferred tickers continue
-using checkpoint callbacks, gated by the pending client; a paused one skips
-checkpoints without consuming its interval.
-
-The startup checkpoint sends prepared payloads first, then collects later
-metrics/configuration with the existing queue, mapper,
-endpoint fallback and retry rules. The app-started mapper captures its Unix
-initialization timestamp; the writer places it in the envelope, including retries.
-The extra transport field is excluded from payload JSON.
-
-The coordinator's `QueueAfterTests` waits for a completed group, rather than a
-checkpoint before the first test. `testing` and benchmark wrappers admit tests
-while that work is pending, even in ordinary mode. Its admission count stays
-positive through HTTP completion so the next test cannot bypass the lock. Normal
-mode stops acquiring leases after startup; deferred mode continues coordinating
-all admitted groups. No startup goroutine is created. Normal periodic telemetry
-stays asynchronous after this first send. Unavailable endpoints can delay the
-next group within the existing HTTP timeouts; delaying the request does not
-remove its cost from total session time. Abrupt process termination can lose
-startup telemetry that has not reached a checkpoint.
+[`telemetry/internal/ticker.go`](telemetry/internal/ticker.go) orders `Stop`
+with interval changes under the ticker mutex, so an interval change after `Stop`
+cannot restart the native timer.
 
 [`telemetry/internal/writer.go`](telemetry/internal/writer.go) consumes each HTTP
 response to EOF and closes it before trying another endpoint or returning.
@@ -134,13 +113,10 @@ messages keep only their 256-byte prefix, and request duration retains its
 measurement at the response headers, before draining. Status classification,
 fallback and payload accounting retain their SDK rules.
 
-Checks: `TestStartupTelemetryWaitsForIdleGroup` blocks a real loopback startup
-response and checks admission, initial configuration/time, retry, no-test shutdown,
-concurrent close and failed initialization in both modes. A millisecond-interval
-variant changes `time.Local` during the first group; its real HTTP receiver has explicit listener
-synchronization because network IO does not establish that shared-memory ordering.
-`TestPausedTickerStartsOnlyAfterResume` and `TestStoppedTickerCannotResume` check
-timer activation, interval changes and terminal close.
+Checks: `TestStartupTelemetrySendsBeforeTests` blocks a real loopback startup
+response and checks that `StartApp` waits for it, initial configuration, retry,
+concurrent close and failed initialization in both modes.
+`TestStoppedTickerCannotRestart` checks terminal close.
 `TestWriterFlushWaitsForResponseCompletion` holds the transport's return-to-idle
 handshake for successful and failed responses.
 Run these with `-race`, plus the clock integration and HTTP telemetry parity.
@@ -186,7 +162,7 @@ Update the generated library list with upstream and retain
 The POC's `internal/cidelivery` owns the optional
 `DD_CIVISIBILITY_DEFERRED_DELIVERY` coordinator. The port integrates with it in
 `integrations/civisibility.go`, `civisibility_features.go`, `gotesting/testing.go`,
-the coverage/log writers and telemetry startup/ticker. Test activity begins
+the coverage/log writers and the telemetry ticker. Test activity begins
 inside the existing instrumented closure, not an outer wrapper: the SDK uses
 that closure's identity to recognize already instrumented tests. The first
 registered cleanup runs last, covering user cleanups and parallel descendants.
@@ -199,8 +175,8 @@ Telemetry ticks at checkpoints once its current interval has elapsed
 (`telemetry/internal/ticker.go`), instead of starting a periodic worker.
 Coverage acquires its delivery concurrency permit when the queued work runs,
 not while a parallel test is buffering it.
-Normal mode keeps background sending and periodic telemetry; startup and coverage
-follow the clock ownership rules above. Terminal shutdown force-drains
+Normal mode keeps background sending and periodic telemetry; telemetry startup
+and coverage follow the rules above. Terminal shutdown force-drains
 pending work before writer barriers. Memory may grow across a parallel group;
 outgoing payload bounds remain unchanged. See
 [delivery checkpoints](../../../docs/delivery.md).

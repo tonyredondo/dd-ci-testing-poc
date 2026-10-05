@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "4038c51c9f26450f24a5e624fa6e76cddbbe5ce9a8d59d1a1231aea0d6bec957",
+      "sha256": "29b2cf2e6c73a88d7b7d93febbbcc0c2cf5bdfc0fa4580ceb97122487d7d4730",
       "role": "local"
     },
     {
@@ -574,7 +574,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/testing.go",
-      "sha256": "30db60d872c83326569d596d323d7ef571a751da47103e66be387d5ea2ceb620",
+      "sha256": "3cd8078751d4f273af29681dcccbfd3d73d6e1dc72e22e0a4af5c84c5e53a131",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testing.go",
       "source_sha256": "a053656b43cb3fc9673e74f39a41e065420d5d36d0be4631cb95a344973fdfc9"
@@ -1567,7 +1567,7 @@
     },
     {
       "path": "telemetry/client.go",
-      "sha256": "3f94361e3989c41b24e5d69af9631cd8e3382b9cf8a7df75d7ed3e3451c63c95",
+      "sha256": "45100dc2e2380bbde846620cd5e90cb61db93dcc6d8757d3208a4fde54cf14ab",
       "role": "adapted",
       "source_path": "internal/telemetry/client.go",
       "source_sha256": "98c09ac5c1927c95161fdb0959c173364366dc6edcecfcedef907ecf4a125fc6"
@@ -1600,7 +1600,7 @@
     },
     {
       "path": "telemetry/globalclient.go",
-      "sha256": "f0d5b541d399a2aa141ab48613602b82659ca7e903c7537001b0f9c7c84ce951",
+      "sha256": "bf657808ca4d8cbb100a04b8bf7638745767cf92f4af6370b3ce214b49602673",
       "role": "adapted",
       "source_path": "internal/telemetry/globalclient.go",
       "source_sha256": "87bbf0ba701f4310d520cfdc44d212e9069bf15974de95f10e53403100899d86"
@@ -1642,7 +1642,7 @@
     },
     {
       "path": "telemetry/internal/mapper/app_started.go",
-      "sha256": "5d88af6a12b5f607974e6b68563656211bde29babe70764cd8407c004cbb1c7c",
+      "sha256": "661682998608052485b30f478fb887ba0d152093574bd0aabf3541c4e274326f",
       "role": "adapted",
       "source_path": "internal/telemetry/internal/mapper/app_started.go",
       "source_sha256": "a3a8d20756db371861b04a670c64a9324aaf10bad28c2087aa7588cbdfd62070"
@@ -1691,19 +1691,19 @@
     },
     {
       "path": "telemetry/internal/ticker.go",
-      "sha256": "72b287437cd5089fdbef73d04e65009e6560bdbda9f0fe6f4fbf1f0cd198e8ca",
+      "sha256": "9cc8877675a8feb2e153bd169b7163d4e173a5eafd0f21ab58171b6af3a058bb",
       "role": "adapted",
       "source_path": "internal/telemetry/internal/ticker.go",
       "source_sha256": "d12ae562403502996505a3bf5dfbd4eb9c5d91faab87cf01656a92741cc37a05"
     },
     {
       "path": "telemetry/internal/ticker_lifecycle_test.go",
-      "sha256": "3663ef4fee4f891423a18402ab973f7db05fb0d7932ffbc01beeec3c15516082",
+      "sha256": "58412a1f148a63e005f77c7c0ffdeb00d282f5c6c7e5e1ff24dd5d1c36e9cce0",
       "role": "local"
     },
     {
       "path": "telemetry/internal/ticker_test.go",
-      "sha256": "c4a5a454d8fdc0b943510ed5c178ce1e7aadfaf79a542767f933a7cd897ee0e5",
+      "sha256": "846b8ad446b1764c8b0968ce214b0e734feb524078fc0b6e92cc80bfdcdeabf5",
       "role": "local"
     },
     {
@@ -1743,8 +1743,8 @@
     },
     {
       "path": "telemetry/internal/transport/app_started.go",
-      "sha256": "7343515136dc9c2d6b9ffe6cf04c982d7f8f5d48575422b65e31d821cff0d2d4",
-      "role": "adapted",
+      "sha256": "e48b0a78b5074029e54f5157f8d3b9cbfb774ccbdd1e70217fb64fa62a6d9b5d",
+      "role": "upstream",
       "source_path": "internal/telemetry/internal/transport/app_started.go",
       "source_sha256": "e48b0a78b5074029e54f5157f8d3b9cbfb774ccbdd1e70217fb64fa62a6d9b5d"
     },
@@ -1827,7 +1827,7 @@
     },
     {
       "path": "telemetry/internal/writer.go",
-      "sha256": "3a4a079dee18bf67d289426199ead84d8a3df73882572130e957d9ef81c09b82",
+      "sha256": "5ba6a871e238f1b0f565dfecb6b275318cf8555c8a7b54794b451a074642ffaa",
       "role": "adapted",
       "source_path": "internal/telemetry/internal/writer.go",
       "source_sha256": "d13665bb661561f291036ffc215a65845716f0a9e904d31c69067f787474afe5"
@@ -1879,7 +1879,7 @@
     },
     {
       "path": "telemetry/startup_lifecycle_test.go",
-      "sha256": "be259e13ab548f2d6cfbe4b039c550f10ad68c06a494464b487ca4c469087779",
+      "sha256": "f229f9af79db755fd0092c75e48ba5f5eb9242aecb175210c8b011f6e9aea4bc",
       "role": "local"
     },
     {

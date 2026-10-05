@@ -33,22 +33,3 @@ func TestDeferredTickerWaitsForItsInterval(t *testing.T) {
 		t.Fatalf("ticks after a faster interval: %d", ticks)
 	}
 }
-
-// A deferred ticker paused for startup telemetry skips due checkpoints until
-// it resumes.
-func TestPausedDeferredTickerWaitsForResume(t *testing.T) {
-	t.Setenv(cidelivery.DeferredEnv, "true")
-	ticks := 0
-	ticker := NewPausedTicker(func() { ticks++ }, Range[time.Duration]{Min: time.Millisecond, Max: time.Millisecond})
-	defer ticker.Stop()
-	time.Sleep(5 * time.Millisecond)
-	ticker.tickIfDue()
-	if ticks != 0 {
-		t.Fatal("paused ticker ticked at a checkpoint")
-	}
-	ticker.Resume()
-	ticker.tickIfDue()
-	if ticks != 1 {
-		t.Fatalf("ticks after resume: %d", ticks)
-	}
-}
