@@ -30,6 +30,10 @@ const sdkVersion = runner.SDKVersion
 
 const orchestrionVersion = "v1.13.2-0.20260917114356-5c24783fcd76"
 
+// orchestrionPinChecked is what orchestrion go sets for its toolexec children
+// after checking that go.mod requires this Orchestrion version.
+const orchestrionPinChecked = "DD_ORCHESTRION_IS_GOMOD_VERSION"
+
 type capture struct {
 	mu       sync.Mutex
 	events   []map[string]any
@@ -108,6 +112,10 @@ func testEnv(extra ...string) []string {
 			env = append(env, name+"="+v)
 		}
 	}
+	// configureReferenceFixture checks the Orchestrion pin once. Otherwise every
+	// toolexec call runs go list to check it again, and on any failure rewrites
+	// orchestrion.tool.go and runs go mod tidy.
+	env = append(env, orchestrionPinChecked+"=true")
 	env = append(env, "GOFLAGS=", "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=false", "DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED=false", "DD_INSTRUMENTATION_TELEMETRY_ENABLED=false", "DD_APPSEC_ENABLED=false", "DD_SERVICE=dd-ci-testing-poc", "DD_ENV=poc", "DD_TEST_SESSION_NAME=poc", "DD_GIT_REPOSITORY_URL=https://github.com/tonyredondo/dd-ci-testing-poc.git", "DD_GIT_COMMIT_SHA=1111111111111111111111111111111111111111", "DD_CIVISIBILITY_FLAKY_RETRY_ENABLED=false", "DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED=false")
 	return append(env, extra...)
 }
@@ -493,5 +501,10 @@ func configureReferenceFixture(t *testing.T, dir string) {
 	tool := "//go:build tools\n\npackage fixture\nimport _ \"github.com/DataDog/orchestrion\"\n"
 	if err = os.WriteFile(filepath.Join(dir, "orchestrion.tool.go"), []byte(tool), 0644); err != nil {
 		t.Fatal(err)
+	}
+	// Check the pin once, as orchestrion go does before a build; testEnv then
+	// skips that check in every toolexec call. A different binary fails here.
+	if out, e, code := command(t, dir, testEnv(orchestrionPinChecked+"=false"), os.Getenv("ORCHESTRION_BIN"), "go", "version"); code != 0 || strings.Contains(out+e, "is not present in your go.mod") {
+		t.Fatalf("orchestrion pin: %s\n%s", out, e)
 	}
 }
