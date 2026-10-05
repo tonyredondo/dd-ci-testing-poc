@@ -43,6 +43,9 @@ type Overlay struct {
 type Plan struct {
 	File, Dir                       string
 	InstrumentedFiles, TestPackages int
+	// Modfile is a temporary go.mod that provides a runtime the module does
+	// not require; the module's own go.mod and go.sum stay untouched.
+	Modfile string
 	// Warnings name optional integrations skipped for unsupported libraries.
 	Warnings     []string
 	coverOverlay bool
@@ -132,18 +135,41 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime) (pl
 			replacements[filepath.Clean(from)] = to
 		}
 	}
-	listArgs := append([]string{"list", "-json=Dir,Name,ImportPath,Standard,GoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,Deps,Module,Error"}, opts.buildFlags...)
-	listArgs = append(listArgs, opts.packages...)
-	listArgs = append(listArgs, "testing", runtimePackage)
-	cmd := exec.CommandContext(ctx, "go", listArgs...)
-	cmd.Dir = dir
-	failureContext := fmt.Sprintf("resolve packages (runtime %s must already be required)", runtimePackage)
-	if runtime == SDK {
-		failureContext = fmt.Sprintf("resolve packages (SDK %s must already be required)", SDKVersion)
-	}
-	packages, e := readPackages(cmd, failureContext)
+	temp, e := os.MkdirTemp("", "dd-ci-testing-poc-")
 	if e != nil {
 		return plan, e
+	}
+	plan.Dir = temp
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(temp)
+		}
+	}()
+	list := func() ([]goPackage, error) {
+		listArgs := append([]string{"list", "-e", "-json=Dir,Name,ImportPath,Standard,GoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,Deps,Module,Error"}, opts.buildFlags...)
+		listArgs = append(listArgs, opts.packages...)
+		listArgs = append(listArgs, "testing", runtimePackage)
+		cmd := exec.CommandContext(ctx, "go", listArgs...)
+		cmd.Dir = dir
+		return readPackages(cmd, "resolve packages")
+	}
+	packages, e := list()
+	if e != nil {
+		return plan, e
+	}
+	for _, p := range packages {
+		if p.ImportPath == runtimePackage && p.Error != nil {
+			// The module does not require the runtime: provide it through a
+			// temporary go.mod instead of failing or editing the module.
+			if plan.Modfile, e = provideRuntime(ctx, dir, opts, runtime, temp); e != nil {
+				return plan, fmt.Errorf("%s: %s\nddtest could not provide it: %w", p.ImportPath, p.Error.Err, e)
+			}
+			opts.buildFlags = append(opts.buildFlags, "-modfile="+plan.Modfile)
+			if packages, e = list(); e != nil {
+				return plan, e
+			}
+			break
+		}
 	}
 	for _, p := range packages {
 		if p.Error != nil {
@@ -184,16 +210,6 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime) (pl
 	if e != nil {
 		return plan, e
 	}
-	temp, e := os.MkdirTemp("", "dd-ci-testing-poc-")
-	if e != nil {
-		return plan, e
-	}
-	plan.Dir = temp
-	defer func() {
-		if err != nil {
-			_ = os.RemoveAll(temp)
-		}
-	}()
 	// Backing files are shared only within this plan and finalized before Go starts.
 	backingByContent := map[string]string{}
 	add := func(logical, content string) error {
@@ -394,6 +410,9 @@ func prepareInterruptibly(ctx context.Context, dir string, opts options, runtime
 // last user -gcflags, which keeps goleak's other effective compiler flags.
 func goTestArguments(plan Plan, opts options, tool string) []string {
 	forwarded := []string{"test", "-overlay=" + plan.File}
+	if plan.Modfile != "" {
+		forwarded = append(forwarded, "-modfile="+plan.Modfile)
+	}
 	if tool != "" {
 		forwarded = append(forwarded, "-toolexec="+tool)
 	}
@@ -409,7 +428,7 @@ func goTestArguments(plan Plan, opts options, tool string) []string {
 		}
 	}
 	for i, argument := range opts.arguments {
-		if argument.flag == "overlay" || argument.flag == "toolexec" && tool != "" {
+		if argument.flag == "overlay" || argument.flag == "toolexec" && tool != "" || argument.flag == "modfile" && plan.Modfile != "" {
 			continue
 		}
 		forwarded = append(forwarded, argument.raw...)

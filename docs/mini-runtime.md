@@ -17,13 +17,33 @@ Build the driver from this checkout:
 go build -o bin/ddtest ./cmd/ddtest
 ```
 
-In the target module, explicitly add the local runtime before invoking the CLI:
+Then run it from the target module. No changes to the module are needed:
 
 ```sh
-go mod edit -replace=github.com/tonyredondo/dd-ci-testing-poc=/path/to/this/checkout
-go get github.com/tonyredondo/dd-ci-testing-poc/testopt@v0.0.0
 /path/to/ddtest test --runtime=mini -count=1 ./...
 ```
+
+When the module does not require the runtime, `ddtest` adds it to a temporary
+copy of `go.mod` and `go.sum` that Go reads through `-modfile`; the module's own
+files stay unchanged, and `go mod tidy` cannot break a later run. Mini comes
+from the module's `replace` directive for this module if there is one, else from
+the published version that built `ddtest`, else from the checkout `ddtest` was
+built from (a `-trimpath` build cannot locate it). The SDK backend adds its
+pinned version the same way; a different required SDK version is still an error.
+
+To pin the runtime in `go.mod` instead, require it and keep the requirement with
+a file that `go mod tidy` and `go mod vendor` see but builds ignore:
+
+```go
+//go:build tools
+
+package tools
+
+import _ "github.com/tonyredondo/dd-ci-testing-poc/testopt"
+```
+
+A vendored module or a Go workspace must require the runtime this way: `ddtest`
+does not provide it through `-modfile` in those modes.
 
 `--runtime` must immediately follow `test`. Omitting it selects `sdk`. The mini
 backend does not require `dd-trace-go`. Existing application imports of that SDK

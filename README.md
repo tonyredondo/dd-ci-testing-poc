@@ -15,9 +15,14 @@ For maintainers, start with the [documentation guide](docs/README.md):
 
 ```sh
 go build -o bin/ddtest ./cmd/ddtest
-# Run from a target module which already requires the supported SDK:
+# Run from the target module; no go.mod changes are needed:
 /path/to/ddtest test -count=1 -race ./...
 ```
+
+If the module does not require the selected runtime (the pinned SDK, or this
+module for Mini), `ddtest` provides it through a temporary copy of `go.mod` and
+`go.sum` passed with `-modfile`. The module's files are never modified, so
+`go mod tidy` cannot break a later run. See [native runtime usage](docs/mini-runtime.md#use-the-local-poc).
 
 When `DD_CIVISIBILITY_ENABLED` is absent, the CLI sets it to `parent`. The SDK
 activates CI Visibility for each test process and disables it for ordinary child

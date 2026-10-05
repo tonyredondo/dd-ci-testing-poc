@@ -86,6 +86,8 @@ type options struct {
 	packages, buildFlags []string
 	arguments            []argument
 	chdir                string
+	mod                  string
+	modfile              string
 	overlay              string
 	toolexec             string
 	coverage             bool
@@ -250,6 +252,10 @@ func chdirFlag(args []string) (string, []string) {
 
 func (o *options) apply(name, value string) error {
 	switch name {
+	case "mod":
+		o.mod = value
+	case "modfile":
+		o.modfile = value
 	case "overlay":
 		o.overlay = value
 	case "toolexec":

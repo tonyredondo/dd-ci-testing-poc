@@ -30,9 +30,23 @@ func TestMiniCLIWithoutSDK(t *testing.T) {
 			t.Fatalf("native result cache: %d %s %s", code, out, stderr)
 		}
 	}
-	_, stderr, code = command(t, dir, env, driver, "test", "-run=^TestPass$", ".")
-	if code != 2 || !strings.Contains(stderr, "must already be required") {
+	// The default runtime is still the SDK. The module no longer requires it,
+	// so ddtest provides the pinned SDK without editing go.mod.
+	before, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), executableName("default.test"))
+	_, stderr, code = command(t, dir, env, driver, "test", "-c", "-o", bin, ".")
+	if code != 0 {
+		t.Fatalf("SDK default could not be provided: %d %s", code, stderr)
+	}
+	symbols, stderr, code := command(t, dir, testEnv(), "go", "tool", "nm", bin)
+	if code != 0 || !strings.Contains(symbols, "github.com/DataDog/dd-trace-go/v2/internal/civisibility") || strings.Contains(symbols, "github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer") {
 		t.Fatalf("SDK default silently changed: %d %s", code, stderr)
+	}
+	if after, err := os.ReadFile(filepath.Join(dir, "go.mod")); err != nil || string(after) != string(before) {
+		t.Fatalf("providing the SDK edited go.mod: %v", err)
 	}
 	_, stderr, code = command(t, dir, env, driver, "test", "--runtime=unknown", ".")
 	if code != 2 || !strings.Contains(stderr, "runtime must be") {
