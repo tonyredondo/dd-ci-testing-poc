@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"io"
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -179,5 +182,31 @@ func TestInvalidConfiguration(t *testing.T) {
 		if _, err := New(c); err == nil {
 			t.Fatal("accepted invalid configuration")
 		}
+	}
+}
+
+func TestDeliveryErrorsKeepTheirCause(t *testing.T) {
+	const key = "private-fixture-key"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("payload rejected: missing field"))
+	}))
+	transport, err := New(Config{Endpoint: server.URL, Agentless: true, APIKey: key, RetryDelay: time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = transport.Send(context.Background(), []byte("payload"))
+	if err == nil || !strings.Contains(err.Error(), "HTTP 400: payload rejected: missing field (Status: Bad Request)") || strings.Contains(err.Error(), key) {
+		t.Fatalf("status error: %v", err)
+	}
+	server.Close() // Later requests fail at the network layer.
+	transport, err = New(Config{Endpoint: server.URL, Agentless: true, APIKey: key, Attempts: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = transport.Send(context.Background(), []byte("payload"))
+	var urlErr *url.Error
+	if err == nil || !errors.As(err, &urlErr) || !strings.Contains(err.Error(), "connect") || strings.Contains(err.Error(), key) {
+		t.Fatalf("network error lost its cause: %v", err)
 	}
 }

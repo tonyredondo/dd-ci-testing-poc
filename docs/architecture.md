@@ -268,7 +268,9 @@ HTTP retries reuse the same immutable bytes. The defaults are three attempts,
 100 ms initial exponential backoff and a 10-second HTTP timeout. Network errors,
 429 and 5xx responses are retryable. Other non-success responses stop delivery;
 429 can provide an integer `Retry-After` between zero and 60 seconds. Context
-cancellation bounds requests and backoff. Redirects are refused.
+cancellation bounds requests and backoff. Redirects are refused. As in the SDK,
+errors keep their cause: a network failure wraps the `net/http` error, and an
+HTTP failure reports up to 1000 bytes of the response with its status.
 
 An HTTP implementation may keep reading after `Do` returns. Each reader shares
 an owner lock; sealing that owner waits for an active read and makes subsequent

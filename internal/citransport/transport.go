@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
@@ -149,16 +150,23 @@ func (t *Transport) Send(ctx context.Context, payload []byte) error {
 		retry := false
 		if err != nil {
 			telemetry.EndpointPayloadRequestsErrors(telemetry.TestCycleEndpointType, telemetry.NetworkErrorType)
-			last = errors.New("CI Visibility request failed")
+			// Like the SDK, keep the cause. net/http names the request URL
+			// without user info; credentials travel only in headers.
+			last = fmt.Errorf("CI Visibility request failed: %w", err)
 			retry = true
 		} else {
+			// Like the SDK, a failure reports up to 1000 bytes of the response.
+			var detail []byte
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				detail, _ = io.ReadAll(io.LimitReader(resp.Body, 1000))
+			}
 			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 			_ = resp.Body.Close()
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 				return nil
 			}
 			telemetry.EndpointPayloadRequestsErrors(telemetry.TestCycleEndpointType, telemetry.GetErrorTypeFromStatusCode(resp.StatusCode))
-			last = fmt.Errorf("CI Visibility endpoint returned HTTP %d", resp.StatusCode)
+			last = statusError(resp.StatusCode, detail)
 			retry = resp.StatusCode == 429 || resp.StatusCode >= 500
 			if resp.StatusCode == 429 && attempt+1 < t.config.Attempts {
 				if seconds, e := strconv.Atoi(resp.Header.Get("Retry-After")); e == nil && seconds >= 0 && seconds <= 60 {
@@ -178,6 +186,13 @@ func (t *Transport) Send(ctx context.Context, payload []byte) error {
 	}
 	return last
 }
+func statusError(code int, body []byte) error {
+	if text := strings.TrimSpace(string(body)); text != "" {
+		return fmt.Errorf("CI Visibility endpoint returned HTTP %d: %s (Status: %s)", code, text, http.StatusText(code))
+	}
+	return fmt.Errorf("CI Visibility endpoint returned HTTP %d (Status: %s)", code, http.StatusText(code))
+}
+
 func wait(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
