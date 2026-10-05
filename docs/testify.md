@@ -157,7 +157,7 @@ cross-compilation proof cannot replace execution in the other platform jobs.
 
 ## Maintenance and remaining boundary
 
-Explicit `.go` file mode remains unsupported. The pinned SDK applies ITR to
+Explicit `.go` file mode runs native `go test` without instrumentation. The pinned SDK applies ITR to
 the top-level `testing.M` entry, not individual Testify methods. The regression
 suite records that behavior; it does not claim method-level skipping works.
 

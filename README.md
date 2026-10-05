@@ -34,11 +34,14 @@ retry control and abnormal finalization.
 
 This is an experimental POC, not a replacement for supported Orchestrion releases.
 It supports package-mode tests with the pinned SDK, build tags, test selection,
-count/shuffle, JSON, benchmarks, race and coverage. It forwards native flags and
-preserves the user's result-cache choice; use `-count=1` for fresh CI events.
-Existing overlays are merged. Missing or ambiguous hooks and conflicting `-toolexec`
-configuration fail before compilation. Explicit `.go` file mode, `-C`, SDK
-replacements and standard-library test targets are outside this POC.
+count/shuffle, JSON, benchmarks, race and coverage. Arguments follow `go test`'s
+own rules, including `-C`, `--flag` spellings and custom test flags without
+`-args`. It preserves the user's result-cache choice; use `-count=1` for fresh CI
+events. A user overlay is merged into ours, and ours takes precedence. A user
+`-toolexec` runs every tool after ours. Missing or ambiguous hooks fail before
+compilation. Help and explicit `.go` file mode run native `go test` without
+instrumentation, with a warning for file mode. SDK replacements and
+standard-library test targets are outside this POC.
 [Testify suite support](docs/testify.md) covers v1.11.1 and newer v1 releases,
 including callers in external dependencies. A selective `-toolexec` hook is
 activated only for reachable Testify suites, goleak in Mini, or covered rewritten

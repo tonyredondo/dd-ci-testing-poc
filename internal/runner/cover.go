@@ -26,6 +26,9 @@ func RunCoverTool(ctx context.Context, overlay string, args []string, stdin io.R
 		return runCoverVersion(ctx, args, stdin, stdout, stderr)
 	}
 	args, err := translateCoverInputs(overlay, args)
+	if err == nil {
+		args, err = chainUserToolexec(args)
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -61,6 +64,11 @@ func appendCoverIdentity(native, fingerprint string) string {
 }
 
 func runCoverVersion(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	args, err := chainUserToolexec(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
 	var native bytes.Buffer
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, &native, stderr

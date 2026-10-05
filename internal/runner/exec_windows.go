@@ -12,6 +12,11 @@ func ExecNativeTool(args []string) int {
 		fmt.Fprintln(os.Stderr, "ddtest: missing tool executable")
 		return 2
 	}
+	args, err := chainUserToolexec(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {

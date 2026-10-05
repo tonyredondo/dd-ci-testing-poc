@@ -67,7 +67,8 @@ read directly from the installed SDK. The SDK backend reads the original module;
 | Process retries | First attempt fails, second passes; reference events and process exit |
 | EFD, ITR, disabled, quarantine, attempt-to-fix | Real SDK requests against loopback policy responses and reference event equivalence |
 | Panic, Goexit and timeout | Abnormal exit and diagnostic marker; enabled/disabled reference event equivalence |
-| Unsupported input | Missing/ambiguous hooks, malformed source, double instrumentation, conflicting toolexec and ambiguous arguments rejected |
+| Unsupported input | Missing/ambiguous hooks, malformed source and double instrumentation rejected |
+| Command line | Go's own package/flag classification, `-C`, `--flag` spellings, custom test flags, overlay precedence and chained `-toolexec` |
 
 The backend responses are synthetic, but hooks, retry processes, serialization
 and network requests come from the real SDK. Fixtures inherit a small whitelist
@@ -86,8 +87,8 @@ line content and multiplicity are retained.
 
 The default backend supports module packages with the exact unreplaced SDK.
 The optional mini backend requires this module instead. Standard
-library test targets, explicit Go file mode, `-C` and custom flags before `-args`
-are unsupported. Testify callers in client and external modules use the original
+library test targets are unsupported; explicit Go file mode runs native `go test`
+without instrumentation. Testify callers in client and external modules use the original
 selected runner; dedicated version fixtures cover v1.11.1 and v1.12.1.
 Other APM integrations remain outside the POC.
 The AST transformer validates hook presence and ambiguity and selected shape

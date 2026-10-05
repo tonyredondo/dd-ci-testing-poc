@@ -56,7 +56,47 @@ func Prepare(ctx context.Context, dir string, args []string) (Plan, error) {
 
 // PrepareRuntime selects the event runtime without changing Go's test options.
 // The selected runtime must already be required by the target module.
-func PrepareRuntime(ctx context.Context, dir string, args []string, runtime Runtime) (plan Plan, err error) {
+func PrepareRuntime(ctx context.Context, dir string, args []string, runtime Runtime) (Plan, error) {
+	opts, err := parseOptions(args, os.Getenv("GOFLAGS"))
+	if err != nil {
+		return Plan{}, err
+	}
+	dir = workingDirectory(dir, opts)
+	if opts.help || explicitFiles(dir, opts.packages) {
+		return Plan{}, errors.New("help and explicit Go file arguments run without instrumentation")
+	}
+	return prepare(ctx, dir, opts, runtime)
+}
+
+// workingDirectory applies go test's -C, relative to the caller's directory.
+func workingDirectory(dir string, opts options) string {
+	if opts.chdir == "" || filepath.IsAbs(opts.chdir) {
+		if opts.chdir != "" {
+			return filepath.Clean(opts.chdir)
+		}
+		return dir
+	}
+	return filepath.Join(dir, opts.chdir)
+}
+
+// explicitFiles mirrors go test's file mode: an argument ending in .go selects
+// it only when that argument names an existing file rather than a package.
+func explicitFiles(dir string, packages []string) bool {
+	for _, p := range packages {
+		if !strings.HasSuffix(p, ".go") {
+			continue
+		}
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(dir, p)
+		}
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+func prepare(ctx context.Context, dir string, opts options, runtime Runtime) (plan Plan, err error) {
 	runtimePackage := sdkPackage
 	switch runtime {
 	case SDK:
@@ -64,11 +104,6 @@ func PrepareRuntime(ctx context.Context, dir string, args []string, runtime Runt
 		runtimePackage = miniPackage
 	default:
 		return plan, fmt.Errorf("unknown CI runtime: %s", runtime)
-	}
-
-	opts, err := parseOptions(args, os.Getenv("GOFLAGS"))
-	if err != nil {
-		return plan, err
 	}
 	replacements := map[string]string{}
 	if opts.overlay != "" {
@@ -262,59 +297,92 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 
 // RunRuntime compiles and executes tests using one explicitly selected runtime.
 func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Reader, stdout, stderr io.Writer) int {
-	dir, err := os.Getwd()
+	cwd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	plan, err := PrepareRuntime(ctx, dir, args, runtime)
+	opts, err := parseOptions(args, os.Getenv("GOFLAGS"))
+	if err != nil {
+		fmt.Fprintln(stderr, "ddtest:", err)
+		return 2
+	}
+	dir := workingDirectory(cwd, opts)
+	if opts.help || explicitFiles(dir, opts.packages) {
+		if !opts.help {
+			fmt.Fprintln(stderr, "ddtest: warning: explicit Go files run without CI Visibility instrumentation")
+		}
+		// Native go test handles -C, help and file mode itself.
+		return runGo(ctx, cwd, append([]string{"test"}, args...), nil, stdin, stdout, stderr)
+	}
+	plan, err := prepare(ctx, dir, opts, runtime)
 	if err != nil {
 		fmt.Fprintln(stderr, "ddtest:", err)
 		return 2
 	}
 	defer os.RemoveAll(plan.Dir)
-	forwarded := []string{"test", "-overlay=" + plan.File}
+	var tool string
+	var env []string
 	if plan.coverOverlay || plan.testify || plan.goleak {
 		executable, e := os.Executable()
 		if e != nil {
 			fmt.Fprintln(stderr, e)
 			return 2
 		}
-		tool, e := toolCommand(executable, plan.File, plan.toolMode())
-		if e != nil {
+		if tool, e = toolCommand(executable, plan.File, plan.toolMode()); e != nil {
 			fmt.Fprintln(stderr, e)
 			return 2
 		}
+		if opts.toolexec != "" {
+			// The user's -toolexec, including one from GOFLAGS, runs every tool
+			// after ours, exactly as it would without ddtest.
+			env = append(os.Environ(), userToolexecEnv+"="+opts.toolexec)
+		}
+	}
+	forwarded := goTestArguments(plan, opts, tool)
+	return runGo(ctx, dir, forwarded, env, stdin, stdout, stderr)
+}
+
+// goTestArguments keeps the user's arguments in order. Our overlay already
+// contains the user's entries and our -toolexec chains the user's, so those
+// flags are replaced wherever they appear before the test binary arguments.
+// Go applies per-package flags in order: the goleak cache marker follows the
+// last user -gcflags, which keeps goleak's other effective compiler flags.
+func goTestArguments(plan Plan, opts options, tool string) []string {
+	forwarded := []string{"test", "-overlay=" + plan.File}
+	if tool != "" {
 		forwarded = append(forwarded, "-toolexec="+tool)
 	}
-	cacheFlag := plan.goleakCache
-	// The merged overlay replaces only the user's overlay flag, never test flags.
-	for i := 0; i < len(args); i++ {
-		if args[i] == "-args" {
-			if cacheFlag != "" {
-				forwarded = append(forwarded, cacheFlag)
-				cacheFlag = ""
+	lastGcflags := -1
+	if plan.goleakCache != "" {
+		for i, argument := range opts.arguments {
+			if argument.flag == "gcflags" {
+				lastGcflags = i
 			}
-			forwarded = append(forwarded, args[i:]...)
-			break
 		}
-		if args[i] == "-overlay" {
-			i++
+		if lastGcflags < 0 {
+			forwarded = append(forwarded, plan.goleakCache)
+		}
+	}
+	for i, argument := range opts.arguments {
+		if argument.flag == "overlay" || argument.flag == "toolexec" && tool != "" {
 			continue
 		}
-		if strings.HasPrefix(args[i], "-overlay=") {
-			continue
+		forwarded = append(forwarded, argument.raw...)
+		if i == lastGcflags {
+			forwarded = append(forwarded, plan.goleakCache)
 		}
-		forwarded = append(forwarded, args[i])
 	}
-	if cacheFlag != "" {
-		forwarded = append(forwarded, cacheFlag)
-	}
-	cmd := exec.CommandContext(ctx, "go", forwarded...)
-	cmd.Dir = dir
+	return forwarded
+}
+
+// runGo retains native output and exit status.
+func runGo(ctx context.Context, dir string, args, env []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	cmd := exec.CommandContext(ctx, "go", args...)
+	cmd.Dir, cmd.Env = dir, env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, stderr
 	cmd.WaitDelay = 5 * time.Second
-	if err = cmd.Run(); err != nil {
+	if err := cmd.Run(); err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
 			return exit.ExitCode()

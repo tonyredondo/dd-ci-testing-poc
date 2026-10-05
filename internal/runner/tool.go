@@ -13,6 +13,22 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/instrument"
 )
 
+// userToolexecEnv carries the user's -toolexec to ddtest's tool wrapper. Every
+// tool then runs through it, after any ddtest input transformation.
+const userToolexecEnv = "DDTEST_USER_TOOLEXEC"
+
+func chainUserToolexec(args []string) ([]string, error) {
+	chain := os.Getenv(userToolexecEnv)
+	if chain == "" {
+		return args, nil
+	}
+	words, err := splitFlags(chain)
+	if err != nil {
+		return nil, fmt.Errorf("ddtest: invalid -toolexec %q: %w", chain, err)
+	}
+	return append(words, args...), nil
+}
+
 func (p Plan) toolMode() string {
 	var modes []string
 	if p.testify {
@@ -86,6 +102,10 @@ func RunTool(ctx context.Context, overlay string, args []string, stdin io.Reader
 		return 2
 	}
 	defer cleanup()
+	if forwarded, err = chainUserToolexec(forwarded); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
 	cmd := exec.CommandContext(ctx, forwarded[0], forwarded[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, stderr
 	if err := cmd.Run(); err != nil {

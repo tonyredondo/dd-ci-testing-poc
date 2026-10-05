@@ -86,10 +86,15 @@ line directives. A generated file declares the private SDK hooks with
 `go:linkname`. Each selected package with tests receives a virtual external
 test file that blank-imports the chosen runtime.
 
-Existing overlays are merged before transformation. Generated-path collisions,
-missing or ambiguous hooks, already instrumented sources and conflicting
-`-toolexec` settings fail during preparation. The [flag parser](../internal/runner/options.go)
-also rejects explicit Go-file mode, `-C` and unknown flags before `-args`.
+Existing overlays are merged before transformation, and every user `-overlay`
+spelling is replaced by the merged plan. Generated-path collisions, missing or
+ambiguous hooks and already instrumented sources fail during preparation. The
+[flag parser](../internal/runner/options.go) follows `go test`'s algorithm: GOFLAGS
+first, `-C` only as the first flag, `--flag` spellings, and unknown flags or
+everything after `-args`/`--` for the test binary. `TestFlagTableMatchesToolchain`
+compares its flag table with the toolchain's help. When the plan needs the
+selective tool, a user `-toolexec` (from arguments or GOFLAGS) runs every tool
+after ours. Help and explicit Go-file mode run native `go test`.
 
 [Testify preparation](testify.md) detects the suite package in the actual test
 import graph and prepares a registration call at its original `Run` entry.
