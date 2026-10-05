@@ -6,6 +6,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // readPackages decodes go list output as it arrives instead of retaining a
@@ -15,6 +16,9 @@ import (
 func readPackages(cmd *exec.Cmd, failureContext string) ([]goPackage, error) {
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
+	// A canceled go list is killed; do not wait indefinitely for descendants
+	// that might still hold its output pipes.
+	cmd.WaitDelay = 5 * time.Second
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w\n%s", failureContext, err, stderr.String())

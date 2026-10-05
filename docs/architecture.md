@@ -117,6 +117,9 @@ file within that plan. Go still owns its build cache and test-result cache; use
 `-count=1` when a test must run again and emit fresh events. With `-c`, Go builds
 the instrumented binary and leaves execution to the caller. `-work` preserves
 Go's work directory, but the CLI still removes its own overlay plan.
+Interrupt, termination and hangup signals are forwarded to Go instead of
+ending the CLI first. The plan is removed after Go exits, and `ddtest` exits
+with Go's status; if a signal terminated Go, `ddtest` re-raises it.
 
 ## The testing boundary
 

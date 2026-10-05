@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"time"
@@ -296,7 +297,13 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 }
 
 // RunRuntime compiles and executes tests using one explicitly selected runtime.
+// Interrupt and termination signals are forwarded to go test instead of ending
+// ddtest first: the plan is removed only after Go exits, and the result keeps
+// go test's exit status. A signal during preparation stops it and cleans up.
 func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Reader, stdout, stderr io.Writer) int {
+	signals := make(chan os.Signal, 4)
+	signal.Notify(signals, forwardedSignals...)
+	defer signal.Stop(signals)
 	cwd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -313,14 +320,19 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 			fmt.Fprintln(stderr, "ddtest: warning: explicit Go files run without CI Visibility instrumentation")
 		}
 		// Native go test handles -C, help and file mode itself.
-		return runGo(ctx, cwd, append([]string{"test"}, args...), nil, stdin, stdout, stderr)
+		return runGo(ctx, cwd, append([]string{"test"}, args...), nil, signals, stdin, stdout, stderr)
 	}
-	plan, err := prepare(ctx, dir, opts, runtime)
+	plan, interrupted, err := prepareInterruptibly(ctx, dir, opts, runtime, signals)
+	if err == nil {
+		defer os.RemoveAll(plan.Dir)
+	}
+	if interrupted != nil {
+		return interruptedStatus(interrupted)
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, "ddtest:", err)
 		return 2
 	}
-	defer os.RemoveAll(plan.Dir)
 	var tool string
 	var env []string
 	if plan.coverOverlay || plan.testify || plan.goleak {
@@ -340,7 +352,28 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 		}
 	}
 	forwarded := goTestArguments(plan, opts, tool)
-	return runGo(ctx, dir, forwarded, env, stdin, stdout, stderr)
+	return runGo(ctx, dir, forwarded, env, signals, stdin, stdout, stderr)
+}
+
+// prepareInterruptibly cancels package resolution when a signal arrives. The
+// watcher has stopped before returning, so later signals reach go test.
+func prepareInterruptibly(ctx context.Context, dir string, opts options, runtime Runtime, signals <-chan os.Signal) (Plan, os.Signal, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var interrupted os.Signal
+	stop, stopped := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(stopped)
+		select {
+		case interrupted = <-signals:
+			cancel()
+		case <-stop:
+		}
+	}()
+	plan, err := prepare(ctx, dir, opts, runtime)
+	close(stop)
+	<-stopped
+	return plan, interrupted, err
 }
 
 // goTestArguments keeps the user's arguments in order. Our overlay already
@@ -376,19 +409,48 @@ func goTestArguments(plan Plan, opts options, tool string) []string {
 	return forwarded
 }
 
-// runGo retains native output and exit status.
-func runGo(ctx context.Context, dir string, args, env []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	cmd := exec.CommandContext(ctx, "go", args...)
+// runGo retains native output and exit status. Signals are forwarded to Go
+// rather than killing it; context cancellation interrupts it, then kills it
+// after a grace period.
+func runGo(ctx context.Context, dir string, args, env []string, signals <-chan os.Signal, stdin io.Reader, stdout, stderr io.Writer) int {
+	cmd := exec.Command("go", args...)
 	cmd.Dir, cmd.Env = dir, env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, stderr
 	cmd.WaitDelay = 5 * time.Second
-	if err := cmd.Run(); err != nil {
-		var exit *exec.ExitError
-		if errors.As(err, &exit) {
-			return exit.ExitCode()
-		}
+	if err := cmd.Start(); err != nil {
 		fmt.Fprintln(stderr, "ddtest:", err)
 		return 2
 	}
-	return 0
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	canceled := ctx.Done()
+	var kill <-chan time.Time
+	for {
+		select {
+		case err := <-done:
+			if err == nil {
+				return 0
+			}
+			var exit *exec.ExitError
+			if errors.As(err, &exit) {
+				if code, signaled := signalExitCode(exit.ProcessState); signaled {
+					return code
+				}
+				return exit.ExitCode()
+			}
+			fmt.Fprintln(stderr, "ddtest:", err)
+			return 2
+		case s := <-signals:
+			_ = cmd.Process.Signal(s)
+		case <-canceled:
+			canceled = nil
+			_ = interruptProcess(cmd.Process)
+			timer := time.NewTimer(10 * time.Second)
+			defer timer.Stop()
+			kill = timer.C
+		case <-kill:
+			kill = nil
+			_ = cmd.Process.Kill()
+		}
+	}
 }

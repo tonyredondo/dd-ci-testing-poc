@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/signal"
 	"strings"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/runner"
@@ -42,7 +41,5 @@ func main() {
 			os.Exit(2)
 		}
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-	os.Exit(runner.RunRuntime(ctx, args, runtime, os.Stdin, os.Stdout, os.Stderr))
+	runner.Exit(runner.RunRuntime(context.Background(), args, runtime, os.Stdin, os.Stdout, os.Stderr))
 }
