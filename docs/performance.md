@@ -141,11 +141,25 @@ invocation.
 | Standard-library telemetry maps | An external concurrent-map module | Preserve registration, startup replay and log counts under concurrency |
 | Bound ordinary CI counters | Repeated tag slices, key joining and registry lookup | Preserve startup replay, client swaps, disabled telemetry and feature-tag fallback |
 | Inline metric points | A heap allocation on every count/gauge submission | Collect each value/timestamp together; retain zero, NaN, reset and rate semantics |
+| Completed coverage workers | A worker blocked on an unbuffered shutdown notification per covered test | Close the completion channel after processing, including profile errors; shutdown still waits for outstanding work |
+| Coverage duration clock | A wall-clock read from background serialization | Use monotonic elapsed durations; retain event and metric wall timestamps |
 | Literal Testify prefix check | Compiling `^Test` for each suite method | Match exactly the same method names |
 | Source parser without object resolution | Unused identifier objects in metadata lookup | Retain ITR comments, function ranges and parse errors |
 | Direct high trace-ID hex encoding | General-purpose integer formatting | Retain 16 lowercase hex digits, including leading zeros |
 | Lazy classification tries | Eager construction of stack-prefix tables | Preserve internal filtering, third-party matching and redaction; publish immutable tries once |
 | Internal codec/platform subsets | External runtime module requirements | Preserve original semantics, licenses and source provenance |
+
+Clock isolation also has costs. Ordinary coverage processing is synchronous when
+telemetry or debug logging is enabled. Deferred mode retains captured profiles
+until its idle checkpoint, so parallel groups can use more temporary disk space.
+Startup telemetry is prepared without HTTP and sent after the first test group,
+or at session close if no tests run. Waiting for HTTP therefore happens between
+groups rather than before the first test. Total session time still includes that
+request; this scheduling does not remove network work. The recorded benchmark
+tables do not measure these scheduling changes. See
+[delivery](delivery.md) and the SDK port's
+[adaptation record](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md) before
+changing this scheduling during an upstream update.
 
 Copying a codec into the repository does not itself make its encoder faster.
 The dependency reduction comes from changing the runtime graph; the allocation

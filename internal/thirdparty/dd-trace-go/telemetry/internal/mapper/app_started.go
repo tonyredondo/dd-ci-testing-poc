@@ -6,23 +6,27 @@
 package mapper
 
 import (
+	"time"
+
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/globalconfig"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry/internal/transport"
 )
 
 type appStartedReducer struct {
-	next Mapper
+	next       Mapper
+	tracerTime int64
 }
 
 // NewAppStartedMapper returns a new Mapper that adds an AppStarted payload to the beginning of all payloads
 // and pass it down to irs underlying mapper.
 // The AppStarted payload ingest the [transport.AppClientConfigurationChange] and [transport.AppProductChange] payloads
 func NewAppStartedMapper(next Mapper) Mapper {
-	return &appStartedReducer{next: next}
+	return &appStartedReducer{next: next, tracerTime: time.Now().Unix()}
 }
 
 func (t *appStartedReducer) Transform(payloads []transport.Payload) ([]transport.Payload, Mapper) {
 	appStarted := transport.AppStarted{
+		TracerTime: t.tracerTime,
 		InstallSignature: transport.InstallSignature{
 			InstallID:   globalconfig.InstrumentationInstallID(),
 			InstallType: globalconfig.InstrumentationInstallType(),

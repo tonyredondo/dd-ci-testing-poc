@@ -57,6 +57,95 @@ Checks: `TestMetricPointLifecycle`,
 `-race`. Compare both serial updates and contended updates when changing this
 lock; an allocation reduction alone does not establish faster throughput.
 
+## Coverage processing and clock ownership
+
+[`civisibility/integrations/gotesting/coverage/coverage_payload.go`](civisibility/integrations/gotesting/coverage/coverage_payload.go)
+measures serialization with differences from one monotonic origin captured at
+package initialization. This measures elapsed work without reading `time.Local`
+from a coverage worker. Event and metric timestamps retain their wall clocks.
+
+[`civisibility/integrations/gotesting/coverage/test_coverage.go`](civisibility/integrations/gotesting/coverage/test_coverage.go)
+captures both counter profiles in the test hooks. Deferred delivery queues only
+their parsing, subtraction and serialization for an idle checkpoint; capturing
+the second profile later would include another test's counters. In ordinary
+delivery, processing runs synchronously when telemetry or debug logging needs
+wall-clock timestamps. With both disabled, it can run in a worker using the
+monotonic duration clock. This synchronization adds post-test work to ordinary
+delivery when diagnostics are enabled.
+
+Each processing job closes its completion channel, including on a profile error.
+The close action waits for that channel. A completed worker can exit immediately;
+it does not remain blocked until the session closes. Keep the profile snapshots,
+idle admission, terminal shutdown and completion signal together when updating
+this code. Coverage still uses the SDK's initial-attempt-only retry policy.
+
+Checks: `TestCoveragePayloadConcurrentLocalChange`,
+`TestCoverageProcessingFinishesBeforeShutdown`,
+`TestDeferredCoverageProcessingWaitsForWholeTestGroup`,
+`TestDeferredCoverageProcessingFailureStillCompletes` and
+`TestMiniCoverageWithGlobalTimeChanges`. The integration check compares exact
+per-test bitmaps and CI events with a safe SDK reference, with 4/32 CPUs,
+ordinary/deferred delivery and telemetry off/on. Its Mini process changes the
+global local zone; the SDK reference runs the same application paths without
+that mutation because its background clocks are not safe under it.
+
+## Telemetry startup and HTTP completion
+
+[`telemetry/globalclient.go`](telemetry/globalclient.go) installs the client and
+queues its initial flush without HTTP in both delivery modes. An initialization
+lock publishes the client and queued work together; concurrent shutdown cannot
+miss startup. If preparation disables telemetry through the existing panic
+handler, the failed client is not added to the startup queue. `StopApp` joins the
+checkpoint before adding `app-closing`, including empty selections and
+`-test.list`.
+
+[`telemetry/client.go`](telemetry/client.go) prepares startup payloads immediately,
+retaining the initial configuration and products. Its periodic flushes return
+while startup is pending. The native ticker is created stopped, before its worker
+starts, and resumes only after the startup flush. Skipping the flush alone would
+leave `time.Ticker` constructing timestamps from `time.Local` during a long group.
+Interval adjustments retain their value without restarting the paused timer;
+close/resume state is protected by the ticker mutex. Deferred tickers continue
+using checkpoint callbacks, gated by the pending client.
+
+The startup checkpoint sends prepared payloads first, then collects later
+metrics/configuration with the existing queue, mapper,
+endpoint fallback and retry rules. The app-started mapper captures its Unix
+initialization timestamp; the writer places it in the envelope, including retries.
+The extra transport field is excluded from payload JSON.
+
+The coordinator's `QueueAfterTests` waits for a completed group, rather than a
+checkpoint before the first test. `testing` and benchmark wrappers admit tests
+while that work is pending, even in ordinary mode. Its admission count stays
+positive through HTTP completion so the next test cannot bypass the lock. Normal
+mode stops acquiring leases after startup; deferred mode continues coordinating
+all admitted groups. No startup goroutine is created. Normal periodic telemetry
+stays asynchronous after this first send. Unavailable endpoints can delay the
+next group within the existing HTTP timeouts; delaying the request does not
+remove its cost from total session time. Abrupt process termination can lose
+startup telemetry that has not reached a checkpoint.
+
+[`telemetry/internal/writer.go`](telemetry/internal/writer.go) consumes each HTTP
+response to EOF and closes it before trying another endpoint or returning.
+Go's transport can otherwise finish draining an unread body in the background,
+after the next test has started. The client timeout bounds consumption. Error
+messages keep only their 256-byte prefix, and request duration retains its
+measurement at the response headers, before draining. Status classification,
+fallback and payload accounting retain their SDK rules.
+
+Checks: `TestStartupTelemetryWaitsForIdleGroup` blocks a real loopback startup
+response and checks admission, initial configuration/time, retry, no-test shutdown,
+concurrent close and failed initialization in both modes. A millisecond-interval
+variant changes `time.Local` during the first group; its real HTTP receiver has explicit listener
+synchronization because network IO does not establish that shared-memory ordering.
+`TestPausedTickerStartsOnlyAfterResume` and `TestStoppedTickerCannotResume` check
+timer activation, interval changes and terminal close.
+`TestWriterFlushWaitsForResponseCompletion` holds the transport's return-to-idle
+handshake for successful and failed responses.
+Run these with `-race`, plus the clock integration and HTTP telemetry parity.
+When synchronizing upstream, check response ownership and startup scheduling
+alongside the telemetry metrics; checking wire fields alone misses these races.
+
 ## Source metadata parsing
 
 [`civisibility/integrations/manual_api_sourcecache.go`](civisibility/integrations/manual_api_sourcecache.go)
@@ -108,7 +197,8 @@ waits for the writer's stop, so a serial suite does not send one per test.
 Telemetry ticks at checkpoints once its current interval has elapsed
 (`telemetry/internal/ticker.go`), instead of starting a periodic worker. Coverage acquires its delivery concurrency
 permit when the queued work runs, not while a parallel test is buffering it.
-Normal mode retains the asynchronous SDK paths. Terminal shutdown force-drains
+Normal mode keeps background sending and periodic telemetry; startup and coverage
+follow the clock ownership rules above. Terminal shutdown force-drains
 pending work before writer barriers. Memory may grow across a parallel group;
 outgoing payload bounds remain unchanged. See
 [delivery checkpoints](../../../docs/delivery.md).

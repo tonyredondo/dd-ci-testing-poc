@@ -19,12 +19,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/filebitmap"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/telemetry"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/locking"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
+	runtimeTelemetry "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry"
 )
 
 const (
@@ -502,14 +504,32 @@ func (t *testCoverage) CollectCoverageAfterTestExecution() {
 		return
 	}
 
-	var pChannel = make(chan struct{})
+	t.scheduleProcessing()
+}
+
+// Profiles have already been captured by the test's before/after hooks. Only
+// their processing is deferred, so a checkpoint cannot include a later test's
+// counters. Completion closes a channel instead of retaining a worker until
+// session shutdown receives from it.
+func (t *testCoverage) scheduleProcessing() <-chan struct{} {
+	done := make(chan struct{})
 	integrations.PushCiVisibilityCloseAction(func() {
-		<-pChannel
+		<-done
 	})
-	go func() {
+	process := func() {
+		defer close(done)
 		t.processCoverageData()
-		pChannel <- struct{}{}
-	}()
+	}
+	if cidelivery.Enabled() {
+		cidelivery.Queue(process)
+	} else if !runtimeTelemetry.Disabled() || log.DebugEnabled() {
+		// Metric points and debug records need wall-clock timestamps. Finish
+		// this work before a following test can change the global local zone.
+		process()
+	} else {
+		go process()
+	}
+	return done
 }
 
 // getCoverageData gets the coverage data.

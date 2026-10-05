@@ -105,9 +105,9 @@ func TestParallelB(t *testing.T) {t.Parallel()}
 				{"TestUserLeak", "TestUserLeak.func", 1},
 				{"TestUserHTTPLeak", "persistConn", 1},
 			} {
-				receiver := &parityReceiver{side: map[string][][]byte{}, requests: map[string]int{}}
+				receiver := &parityReceiver{policy: policySettings{Coverage: true}, side: map[string][][]byte{}, requests: map[string]int{}}
 				server := httptest.NewServer(http.HandlerFunc(receiver.handler))
-				env := testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=false", "DD_TRACE_AGENT_URL="+server.URL, "DD_INSTRUMENTATION_TELEMETRY_ENABLED=true", "DD_CIVISIBILITY_DEFERRED_DELIVERY="+deferred)
+				env := testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=false", "DD_TRACE_AGENT_URL="+server.URL, "DD_INSTRUMENTATION_TELEMETRY_ENABLED=true", "DD_CIVISIBILITY_CODE_COVERAGE_ENABLED=true", "DD_CIVISIBILITY_DEFERRED_DELIVERY="+deferred)
 				out, stderr, code := command(t, dir, env, bin, "-test.v", "-test.run=^"+tc.run+"$", "-test.timeout=20s")
 				server.Close()
 				if code != tc.want || tc.marker != "" && !strings.Contains(out+stderr, tc.marker) {

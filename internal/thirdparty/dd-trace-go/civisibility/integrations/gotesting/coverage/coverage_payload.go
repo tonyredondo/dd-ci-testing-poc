@@ -46,6 +46,10 @@ type coveragePayload struct {
 
 var _ io.Reader = (*coveragePayload)(nil)
 
+// Keep the monotonic component captured before tests run. Measuring elapsed
+// time through this origin avoids reading time.Local from coverage workers.
+var serializationOrigin = time.Now()
+
 // newCoveragePayload returns a ready to use coverage payload.
 func newCoveragePayload() *coveragePayload {
 	p := &coveragePayload{
@@ -59,9 +63,9 @@ func newCoveragePayload() *coveragePayload {
 func (p *coveragePayload) push(testCoverageData *ciTestCoverageData) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	startTime := time.Now()
+	startTime := time.Since(serializationOrigin)
 	defer func() {
-		p.serializationTime += time.Since(startTime)
+		p.serializationTime += time.Since(serializationOrigin) - startTime
 	}()
 	p.buf.Grow(testCoverageData.Msgsize())
 	if err := msgp.Encode(&p.buf, testCoverageData); err != nil {
@@ -162,7 +166,7 @@ func (p *coveragePayload) Read(b []byte) (n int, err error) {
 //	A pointer to a bytes.Buffer containing the encoded CI Visibility coverage payload.
 //	An error if reading from the buffer or encoding the payload fails.
 func (p *coveragePayload) getBuffer() (*bytes.Buffer, error) {
-	startTime := time.Now()
+	startTime := time.Since(serializationOrigin)
 	log.Debug("coveragePayload: .getBuffer (count: %d)", p.itemCount())
 
 	// Create a buffer to read the current payload
@@ -185,6 +189,6 @@ func (p *coveragePayload) getBuffer() (*bytes.Buffer, error) {
 
 	telemetry.EndpointPayloadBytes(telemetry.CodeCoverageEndpointType, float64(encodedBuf.Len()))
 	telemetry.EndpointPayloadEventsCount(telemetry.CodeCoverageEndpointType, float64(p.itemCount()))
-	telemetry.EndpointEventsSerializationMs(telemetry.CodeCoverageEndpointType, float64((p.serializationTime + time.Since(startTime)).Milliseconds()))
+	telemetry.EndpointEventsSerializationMs(telemetry.CodeCoverageEndpointType, float64((p.serializationTime + time.Since(serializationOrigin) - startTime).Milliseconds()))
 	return encodedBuf, nil
 }

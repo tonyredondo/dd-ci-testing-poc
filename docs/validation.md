@@ -113,6 +113,9 @@ the oracle; fewer APM fields is intentional.
 | Oversized events and delivery failures | `TestLargeBatchFailureRetainedAndOversizedEventRejected`: single-event rejection, failed batch retention and recovery |
 | Bazel output and offline mode | `TestMiniBazelOfflineAndPayloadFiles`: real manifest/cache, test/coverage/telemetry JSON files versus SDK, zero HTTP requests; native file writer error propagation tested separately |
 | Parallel and retry coverage attribution | `TestMiniParallelAndRetryCoverageAttribution`: both runtimes compiled with `-race -covermode=atomic`, exact distinct-function bitmaps and initial-attempt-only retry policy |
+| Coverage and global local-zone changes | `TestMiniCoverageWithGlobalTimeChanges`: Mini mutates `time.Local` under race/atomic coverage at 4/32 CPUs, ordinary/deferred delivery and telemetry off/on; exact bitmaps and CI attributes compared with a safe SDK run |
+| Coverage processing lifetime | `TestCoverageProcessingFinishesBeforeShutdown` and deferred group/error checks: profiles captured at test boundaries, processing outside active deferred groups, completion also on profile errors |
+| Telemetry startup and response lifetime | `TestStartupTelemetryWaitsForIdleGroup` and `TestWriterFlushWaitsForResponseCompletion`: initial HTTP waits for the complete first group; initialization timestamp/configuration, retry, empty selections, concurrent close and a millisecond timer checked in both modes; response EOF handshake joined for 200/503 responses |
 | CI product metadata | Expanded pass/error/policy comparison retains capability tags and ITR correlation; delayed session enrichment is checked |
 | Original CI assertions | Ported SDK tests, including retry runtime/parallel ownership, coverage writer/profile, ITR backfill, source metadata and lifecycle; [exact provenance](../internal/thirdparty/dd-trace-go/TESTS.json) |
 

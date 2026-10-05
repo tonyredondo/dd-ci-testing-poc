@@ -36,9 +36,9 @@ var (
 	// Ordinary client swaps keep the same swappable handles and need no refresh.
 	metricRegistryGeneration atomic.Uint64
 
-	// startAppFlushWg tracks the goroutine launched by StartApp so StopApp can
-	// wait for it to finish before proceeding with the shutdown flush.
-	startAppFlushWg sync.WaitGroup
+	// Publish the client and its queued startup together, so a concurrent close
+	// cannot miss startup work or send app-closing first.
+	appLifecycleMu sync.Mutex
 )
 
 // GlobalClient returns the global telemetry client.
@@ -50,38 +50,36 @@ func GlobalClient() Client {
 	return *client
 }
 
-// StartApp starts the telemetry client with the given client send the app-started telemetry and sets it as the global (*client)
-// then calls client.Flush on the client asynchronously.
-func StartApp(client Client) {
+// StartApp installs the client without sending HTTP. Startup flushes after the
+// first complete test group, or during StopApp when no tests run.
+func StartApp(next Client) {
 	if Disabled() {
 		return
 	}
+	appLifecycleMu.Lock()
+	defer appLifecycleMu.Unlock()
 
 	if GlobalClient() != nil {
 		log.Debug("telemetry: StartApp called multiple times, ignoring")
 		return
 	}
 
-	client.AppStart()
-	// Increment the WaitGroup before SwapClient makes the client visible so
-	// StopApp cannot observe a zero counter and return before the flush goroutine runs.
-	startAppFlushWg.Add(1)
-	if SwapClient(client) != nil {
-		// A concurrent StartApp call already set the client; undo the Add.
-		startAppFlushWg.Done()
-		log.Debug("telemetry: StartApp called multiple times, ignoring")
-		return
+	flush := next.Flush
+	if c, ok := next.(*client); ok {
+		c.startupPending.Store(true)
+		flush = c.flushStartup
 	}
-
-	flush := func() {
-		defer startAppFlushWg.Done()
-		client.Flush()
+	next.AppStart()
+	SwapClient(next)
+	if c, ok := next.(*client); ok {
+		c.prepareStartup()
+		// The existing panic handler disables telemetry. Do not retain failed
+		// initialization in startup work that shutdown would invoke again.
+		if Disabled() || GlobalClient() != c {
+			return
+		}
 	}
-	if cidelivery.Enabled() {
-		flush()
-	} else {
-		go flush()
-	}
+	cidelivery.QueueAfterTests(flush)
 }
 
 // SwapClient swaps the global client with the given client and Flush the old (*client).
@@ -130,9 +128,14 @@ func MockClient(client Client) func() {
 
 // StopApp creates the app-stopped telemetry, adding to the queue and Flush all the queue before stopping the (*client).
 func StopApp() {
-	if client := globalClient.Swap(nil); client != nil && *client != nil {
+	appLifecycleMu.Lock()
+	client := globalClient.Swap(nil)
+	appLifecycleMu.Unlock()
+	if client != nil && *client != nil {
+		// Join any idle startup flush and deliver it even for -test.list or an
+		// empty selection. Terminal shutdown may drain an unfinished test group.
+		cidelivery.Shutdown()
 		(*client).AppStop()
-		startAppFlushWg.Wait()
 		(*client).Flush()
 		(*client).Close()
 	}

@@ -190,7 +190,11 @@ func (w *writer) setPayloadToBody(payload transport.Payload) {
 	w.bodyMu.Lock()
 	defer w.bodyMu.Unlock()
 	w.body.SeqID++
-	w.body.TracerTime = time.Now().Unix()
+	if started, ok := payload.(transport.AppStarted); ok && started.TracerTime != 0 {
+		w.body.TracerTime = started.TracerTime
+	} else {
+		w.body.TracerTime = time.Now().Unix()
+	}
 	w.body.RequestType = payload.RequestType()
 	w.body.Payload = payload
 }
@@ -320,11 +324,19 @@ func (w *writer) Flush(payload transport.Payload) ([]EndpointRequestResult, erro
 			continue
 		}
 
-		// We only have a few endpoints, so we can afford to keep the response body stream open until we are done with it
-		defer response.Body.Close()
-
-		if response.StatusCode >= 300 || response.StatusCode < 200 {
-			respBodyBytes, _ := io.ReadAll(io.LimitReader(response.Body, 256)) // maybe we can find an error reason in the response body
+		callDuration := time.Since(now)
+		failed := response.StatusCode >= 300 || response.StatusCode < 200
+		var respBodyBytes []byte
+		if failed {
+			respBodyBytes, _ = io.ReadAll(io.LimitReader(response.Body, 256))
+		}
+		// Reading to EOF joins net/http's return-to-idle handshake. Closing an
+		// unread body can leave response draining after Flush, including reads
+		// of time.Local during the next test. The client timeout bounds this read;
+		// retain only the existing diagnostic prefix and request timing.
+		_, _ = io.Copy(io.Discard, response.Body)
+		_ = response.Body.Close()
+		if failed {
 			results = append(results, EndpointRequestResult{Error: &WriterStatusCodeError{
 				Status: response.Status,
 				Body:   string(respBodyBytes),
@@ -335,7 +347,7 @@ func (w *writer) Flush(payload transport.Payload) ([]EndpointRequestResult, erro
 		results = append(results, EndpointRequestResult{
 			PayloadByteSize:  int(sumReaderCloser.n.Load()),
 			RequestAttempted: true,
-			CallDuration:     time.Since(now),
+			CallDuration:     callDuration,
 			StatusCode:       response.StatusCode,
 		})
 

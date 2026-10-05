@@ -58,8 +58,10 @@ configuration and retry/skip/quarantine behavior remain in the selected runtime.
 
 Mini automatically integrates with reachable goleak v1.3.0 or newer v1 releases,
 independently of `DD_CIVISIBILITY_DEFERRED_DELIVERY`. Older versions produce a
-warning and run without the CI goroutine filters. The optional deferred mode
-sends at idle checkpoints between tests. See [delivery and goleak](docs/delivery.md)
+warning and run without the CI goroutine filters. Set
+`DD_CIVISIBILITY_DEFERRED_DELIVERY=true` to send buffered CI data between completed
+test groups. The next group waits while delivery finishes. See
+[delivery and goleak](docs/delivery.md)
 for connection ownership, parallel tests, memory costs and cache identity.
 
 ## Reproduce verification

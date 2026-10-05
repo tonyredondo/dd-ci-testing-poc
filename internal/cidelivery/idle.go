@@ -1,12 +1,13 @@
-// Package cidelivery coordinates opt-in delivery between instrumented tests.
-// It starts no goroutines. A checkpoint owns admission until all queued work
-// completes; tests already admitted may continue to run in parallel.
+// Package cidelivery coordinates CI delivery with instrumented test groups.
+// Startup uses it in both modes; full deferred delivery is opt-in. It starts no
+// goroutines. Delivery blocks new admission; admitted tests can run in parallel.
 package cidelivery
 
 import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 )
 
 const DeferredEnv = "DD_CIVISIBILITY_DEFERRED_DELIVERY"
@@ -25,6 +26,10 @@ type Coordinator struct {
 	mu        sync.Mutex
 	callbacks []*idleCallback
 	pending   []func()
+	// Startup work waits for a completed group, rather than delaying the first
+	// admission. The count stays positive while delivery blocks new admission.
+	afterTests      []func()
+	afterTestsCount atomic.Int32
 }
 
 type idleCallback struct{ run func() }
@@ -34,6 +39,10 @@ var process Coordinator
 // Begin waits for an idle delivery checkpoint, then admits a test. Release is
 // idempotent because retry cleanup and native cleanup may share a registration.
 func Begin() func() { return process.begin() }
+
+// TestAdmissionRequired enables coordination for deferred delivery or a queued
+// startup flush. Ordinary tests stop paying for admission once startup finishes.
+func TestAdmissionRequired() bool { return Enabled() || process.afterTestsCount.Load() != 0 }
 
 func (c *Coordinator) begin() func() {
 	c.admission.Lock()
@@ -49,6 +58,7 @@ func (c *Coordinator) begin() func() {
 			defer c.admission.Unlock()
 			c.active--
 			if c.active == 0 {
+				c.drainAfterTests()
 				c.drain()
 			}
 		})
@@ -83,6 +93,30 @@ func (c *Coordinator) queue(run func()) {
 	c.mu.Unlock()
 }
 
+// QueueAfterTests schedules startup delivery after the first admitted group,
+// including its cleanup callbacks. Shutdown also runs it if no tests execute.
+func QueueAfterTests(run func()) { process.queueAfterTests(run) }
+
+func (c *Coordinator) queueAfterTests(run func()) {
+	c.mu.Lock()
+	c.afterTestsCount.Add(1)
+	c.afterTests = append(c.afterTests, func() {
+		defer c.afterTestsCount.Add(-1)
+		run()
+	})
+	c.mu.Unlock()
+}
+
+func (c *Coordinator) drainAfterTests() {
+	c.mu.Lock()
+	work := c.afterTests
+	c.afterTests = nil
+	c.mu.Unlock()
+	for _, run := range work {
+		run()
+	}
+}
+
 // Checkpoint drains only when no test is admitted. Explicit flush calls during
 // a test leave delivery to the next checkpoint rather than waiting on the test.
 func Checkpoint() {
@@ -98,6 +132,7 @@ func Checkpoint() {
 func Shutdown() {
 	process.admission.Lock()
 	defer process.admission.Unlock()
+	process.drainAfterTests()
 	process.drain()
 }
 

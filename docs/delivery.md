@@ -12,9 +12,14 @@ DD_CIVISIBILITY_DEFERRED_DELIVERY=true ddtest test --runtime=mini -count=1 ./...
 ```
 
 The default is ordinary delivery: finishing an event never waits for the
-network, and a background sender delivers full batches. Deferred mode buffers
-test-cycle events, coverage and diagnostic logs while instrumented tests are
-active, and sends nothing concurrently with them. A test holds
+network, and a background sender delivers full batches. With the variable
+enabled, delivery runs between completed test groups, and remaining data is sent
+at session close. Sequential tests can have a delivery checkpoint after each
+test. Parallel tests continue together until the whole group finishes; the next
+group waits while delivery completes.
+
+Deferred mode buffers test-cycle events, coverage and diagnostic logs while
+instrumented tests are active, and sends nothing concurrently with them. A test holds
 an activity lease through its body, cleanup callbacks and parallel descendants.
 The lease is acquired inside the existing instrumented function, preserving the
 SDK's function-identity checks and retry accounting.
@@ -35,17 +40,43 @@ sequenceDiagram
 ```
 
 Nested tests and concurrent retry attempts use the same process-wide coordinator.
-Parallel tests can continue together; sending waits until the whole admitted
-group finishes. Waiting for delivery inside that group would deadlock the test
-scheduler. The coordinator starts no goroutines. Initial CI settings, repository
-upload and telemetry startup also run synchronously in this mode. Telemetry's
-periodic worker is replaced by idle checkpoints, which flush only once its
+Waiting for delivery inside an active group would deadlock the test scheduler.
+The coordinator starts no goroutines. Initial CI settings and repository
+upload run synchronously in this mode. In both modes, telemetry prepares and
+queues `app-started` without HTTP. It sends after the first admitted group has
+finished, including user cleanups and parallel descendants. The first test does
+not wait for that request; the next group waits while it completes. If no tests
+run, session close sends it before `app-closing`. Deferred delivery also replaces
+the periodic telemetry worker with idle checkpoints, which flush only once its
 interval has elapsed.
 
 A checkpoint delivers only full payloads: sealed test-cycle batches (the event
 count or 2.5 MiB threshold) and full coverage/log payloads. Partial payloads
 wait for the end of the session, so a serial suite sends one payload per full
 batch rather than one per test.
+
+Coverage counter snapshots are captured in the before/after hooks. Deferred
+delivery postpones their processing as well as their upload until the whole
+test group is idle. It never captures counters from a later test. In ordinary
+delivery, processing finishes in the after hook when telemetry or debug logging
+needs wall-clock timestamps; with both disabled it runs asynchronously.
+Completed coverage workers exit before session shutdown. Serialization durations
+use a monotonic origin, while event timestamps keep their wall-clock meaning.
+
+The queued startup payload retains its initialization timestamp and configuration.
+The native telemetry timer stays stopped until that first flush completes;
+interval adjustments cannot start it early. Periodic telemetry cannot bypass the
+queued startup. Failed requests retain the payload for retry
+under the existing endpoint and queue rules. Startup sends create no new worker.
+Ordinary mode coordinates admission only while startup is pending, then permits
+periodic telemetry and CI sends during tests. Use deferred delivery to keep all
+queued processing and sends outside admitted test groups.
+
+Each telemetry response is consumed and closed before its flush returns, including
+error responses before endpoint fallback. The configured client timeouts bound
+HTTP completion. Delayed startup telemetry may be lost if the process terminates
+without reaching a checkpoint or normal shutdown. This changes delivery timing,
+not the event contents or the settings needed to choose test features.
 
 This trades memory and delivery latency for isolation from test bodies. The
 pending queue can grow throughout a parallel group; its total memory is not
@@ -199,7 +230,8 @@ The SDK-port changes are recorded in
 [`ADAPTATIONS.md`](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md).
 
 `TestMiniGoleakIntegration` runs ordinary/deferred delivery, external helpers,
-invalid options, parallel TestMain, explicit delivery, race and library coverage.
+invalid options, parallel TestMain, explicit delivery, race and library coverage,
+with per-test coverage enabled by the local settings endpoint.
 `TestGoleakCacheAndWarmVersionGuard` checks unchanged cache reuse, a changed
 goleak source with unrelated standard packages still cached, and rejection of an
 unsupported version with unchanged cached source.
@@ -208,6 +240,15 @@ the SDK/Orchestrion reference; `TestDeferredDeliveryTestifyParity` adds seven
 Testify combinations. Queue tests check order, payload limits, retained failures,
 concurrent admission and idempotent release. These are local protocol and behavior
 checks; deployed Agent/intake acceptance requires separate evidence.
+
+`TestMiniCoverageWithGlobalTimeChanges` exercises atomic coverage while the test
+changes `time.Local`, with 4/32 CPUs and both telemetry/delivery settings. It
+compares CI attributes and coverage bitmaps with an SDK run of the same test
+paths that leaves the local zone unchanged. Coverage and telemetry lifecycle
+tests check worker completion, response draining and startup admission separately.
+`TestStartupTelemetryWaitsForIdleGroup` checks first-test admission, initialization
+timestamps and configuration, failed-request retry, empty selections and a
+concurrent session close against a real loopback HTTP server in both modes.
 
 `TestCommonTagsWireOverridesAndGetters` checks real decoded requests in both
 delivery modes. Mixed-snapshot, concurrent sealed-map and byte-accounting checks
