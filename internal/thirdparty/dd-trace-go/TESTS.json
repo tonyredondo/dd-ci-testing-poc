@@ -305,9 +305,9 @@
       "source": "internal/civisibility/integrations/gotesting/retry_attempt_test.go",
       "destination": "internal/thirdparty/dd-trace-go/civisibility/integrations/gotesting/retry_attempt_test.go",
       "source_sha256": "622692e42d33cea8b17dc71f6067583ffb9ba76936953ef599c8ba3c255a044a",
-      "adapted_sha256": "622692e42d33cea8b17dc71f6067583ffb9ba76936953ef599c8ba3c255a044a",
+      "adapted_sha256": "7c8cd81879181d680f0ae0db0165f84935e094c1fb85ef5e9aa8c22dc3ebf17f",
       "kind": "full",
-      "adaptation": "Internal import relocation only"
+      "adaptation": "Two nil unsafe.Pointer checks use require.Zero: Testify before v1.8.2, including the required v1.7.5, does not treat a nil unsafe.Pointer as nil"
     },
     {
       "source": "internal/civisibility/integrations/gotesting/retry_test_helpers_test.go",
@@ -428,14 +428,6 @@
       "adapted_sha256": "9e43a8d38ae9fb8c4144e78ab04fc5fd8127a0603a19e17fed1638f3537a4149",
       "kind": "full",
       "adaptation": "If the enclosing suite disables telemetry, run all original recorder assertions in a fresh local test process with telemetry enabled before initialization"
-    },
-    {
-      "source": "internal/telemetry/telemetrytest/mock.go",
-      "destination": "internal/thirdparty/dd-trace-go/telemetry/telemetrytest/mock.go",
-      "source_sha256": "eed7d0e64995054a97437633e95b25fc5cc133c32da4444a70d4e5ccac5b4f4b",
-      "adapted_sha256": "6f164b815b7bbb571dc868162bdd50910f558c6597140dd722fedcb23d32e650",
-      "kind": "adapted",
-      "adaptation": "Internal import relocation and removal of the retired APM dependency loader or endpoint-inventory API. CI recording assertions retained."
     },
     {
       "source": "internal/telemetry/telemetrytest/record.go",
@@ -590,7 +582,7 @@
     "internal/civisibility/integrations/manual_api_test.go"
   ],
   "not_fully_ported_scope": "APM mock/span-count tests, Orchestrion-specific fixtures, subprocess control and platform cases are not represented as a complete upstream suite. POC-owned SDK/Orchestrion differential tests separately cover native testing and Testify lifecycle, retries, EFD, ITR, quarantine, attempt-to-fix, coverage and deferred delivery; they do not turn this inventory into a full upstream-suite port.",
-  "ci_only_cleanup": "The retired APM endpoint test is explicitly marked replacement; reduced telemetry helpers are marked adapted. Full CI test-file count is unchanged.",
+  "ci_only_cleanup": "The retired APM endpoint test is explicitly marked replacement; reduced telemetry helpers are marked adapted. Full CI test-file count is unchanged. The unused telemetrytest MockClient helper is not incorporated, so tests need no testify/mock.",
   "base_commit": "96aedb31048c07e29e7a20a4333dc3b8d289c52d",
   "local_performance_tests": [
     {

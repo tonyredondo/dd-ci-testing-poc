@@ -104,7 +104,9 @@ a settings cache; the offline differential fixture supplies a synthetic key.
 The test verifies zero HTTP requests with all three payload types present.
 Mini has **no external runtime module dependencies**. A fresh consumer's
 `go get` and `go mod tidy` add only `github.com/tonyredondo/dd-ci-testing-poc`;
-the consumer also builds offline. Repository test dependencies do not enter
+the consumer also builds offline. The module requires only Testify v1.7.5, for
+its own tests: a consumer with that version or newer keeps its own, and one
+without Testify gains no requirement. Repository test dependencies do not enter
 `go list -deps ./testopt` or the CLI's imports. Runtime UUIDv4 generation uses
 `crypto/rand`. The [maintenance checks](maintenance.md#verification-before-publication)
 show how to audit these dependency boundaries.

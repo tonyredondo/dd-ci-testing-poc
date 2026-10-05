@@ -121,8 +121,9 @@ unverified. Loopback and payload-file fixtures prove their local contracts.
 
 Mini and the CLI import only this module and the Go standard library. Consumer
 fixtures check that adding `testopt` requires no external runtime modules and
-that the resulting program builds offline. Test dependencies in the repository's
-`go.mod` do not enter that consumer graph. The
+that the resulting program builds offline. The repository's test dependencies
+never enter the consumer's packages; its module graph lists only them, at the
+old versions this module requires, and the check rejects a newer Testify. The
 [maintenance checks](maintenance.md#verification-before-publication) verify this
 boundary after source updates.
 

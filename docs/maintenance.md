@@ -226,7 +226,16 @@ go list -deps -f '{{if and (not .Standard) .Module}}{{.Module.Path}}{{end}}' ./t
 
 The final command should list only `github.com/tonyredondo/dd-ci-testing-poc`.
 Test-only dependencies in the root module are expected. Their presence in
-`go.mod` alone does not establish a runtime dependency.
+`go.mod` alone does not establish a runtime dependency, but Go's minimal version
+selection applies them to consumers' module graphs. Keep
+`github.com/stretchr/testify` at v1.7.5: the oldest release that builds the
+ported tests and requires a `yaml.v3` without CVE-2022-28948. A consumer with
+Testify v1.7.5 or newer keeps its version; one without Testify gains no
+requirement, only `go.sum` checksums for Testify's `go.mod`.
+`TestMiniConsumerAddsOnlyOwnModule` fails if the requirement is raised. Adapt a
+ported assertion that needs a newer Testify instead of raising the requirement:
+before v1.8.2, for example, `Nil` rejects a nil `unsafe.Pointer`, so those
+checks use `Zero`.
 
 Install the frozen Orchestrion reference used by the
 [workflow](../.github/workflows/compatibility.yml), then export

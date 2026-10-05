@@ -181,7 +181,7 @@ func TestProcessRetryParityFreshAttemptHasNoMutableAliases(t *testing.T) {
 		require.NotEqual(t, pointerWord(firstBase, layout.common.chatty), pointerWord(secondBase, layout.common.chatty))
 	}
 	require.Empty(t, *fieldPtr[map[uintptr]struct{}](firstParentBase, layout.common.helperPCs))
-	require.Nil(t, pointerWord(firstParentBase, layout.common.chatty))
+	require.Zero(t, pointerWord(firstParentBase, layout.common.chatty))
 
 	originalOutput := append([]byte(nil), (*fieldPtr[[]byte](originalBase, layout.common.output))...)
 	originalCleanups := len(*fieldPtr[[]func()](originalBase, layout.common.cleanups))
@@ -329,7 +329,7 @@ func TestProcessRetryParitySyntheticParentSkipsAttemptOnlyMetadata(t *testing.T)
 
 	require.True(t, copyRetryAttemptStableParentCommon(sourceBase, targetBase, layout))
 	require.Empty(t, *fieldPtr[map[uintptr]struct{}](targetBase, layout.common.helperPCs))
-	require.Nil(t, pointerWord(targetBase, layout.common.chatty))
+	require.Zero(t, pointerWord(targetBase, layout.common.chatty))
 
 	if layout.common.cancelCtx.available {
 		if cancel := *fieldPtr[context.CancelFunc](sourceBase, layout.common.cancelCtx); cancel != nil {

@@ -35,7 +35,7 @@
     },
     {
       "path": "TESTS.json",
-      "sha256": "6daf5a1f0ea2390dbc2bbb70abb8ae616ae0cb8a68c7843b07dbaf9b8d30f964",
+      "sha256": "01e24c5eb9d758dbf20ec5f52144c04e3b3dca04310ca0eb50718a889de9f8f9",
       "role": "local"
     },
     {
@@ -485,8 +485,8 @@
     },
     {
       "path": "civisibility/integrations/gotesting/retry_attempt_test.go",
-      "sha256": "622692e42d33cea8b17dc71f6067583ffb9ba76936953ef599c8ba3c255a044a",
-      "role": "upstream",
+      "sha256": "7c8cd81879181d680f0ae0db0165f84935e094c1fb85ef5e9aa8c22dc3ebf17f",
+      "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/retry_attempt_test.go",
       "source_sha256": "622692e42d33cea8b17dc71f6067583ffb9ba76936953ef599c8ba3c255a044a"
     },
@@ -1877,13 +1877,6 @@
       "role": "adapted",
       "source_path": "internal/telemetry/telemetrytest/globalclient_test.go",
       "source_sha256": "e4c1e59233c3ef6ad52c7da53be3e84038591c453181ad9d9616564a2ecdc416"
-    },
-    {
-      "path": "telemetry/telemetrytest/mock.go",
-      "sha256": "6f164b815b7bbb571dc868162bdd50910f558c6597140dd722fedcb23d32e650",
-      "role": "adapted",
-      "source_path": "internal/telemetry/telemetrytest/mock.go",
-      "source_sha256": "eed7d0e64995054a97437633e95b25fc5cc133c32da4444a70d4e5ccac5b4f4b"
     },
     {
       "path": "telemetry/telemetrytest/record.go",

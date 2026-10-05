@@ -148,8 +148,9 @@ invocation.
 
 Copying a codec into the repository does not itself make its encoder faster.
 The dependency reduction comes from changing the runtime graph; the allocation
-changes come from event ownership and buffer reuse. Test-only `testify` and its
-dependencies remain in the repository without entering Mini's runtime imports.
+changes come from event ownership and buffer reuse. Test-only `testify` (v1.7.5)
+and its dependencies remain in the repository without entering Mini's runtime
+imports.
 
 The [runtime comparison](benchmarks.md#runtime-of-the-prebuilt-test-binaries)
 includes startup, test execution and delivery. Its detailed report records

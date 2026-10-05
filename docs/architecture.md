@@ -7,8 +7,9 @@ keeping the same testing entry points.
 
 The CLI defaults to `sdk`. That backend requires the exact, unreplaced SDK
 version in [`internal/version`](../internal/version/version.go). The `mini`
-backend links this module's CI runtime. It has no external runtime module
-dependencies, although the repository uses external libraries in its tests.
+backend links this module's CI runtime, which imports no external module. The
+module requires only Testify v1.7.5 for its own tests, deliberately old so a
+consumer's newer Testify never changes.
 
 ## Build time and runtime
 
