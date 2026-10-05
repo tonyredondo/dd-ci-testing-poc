@@ -80,10 +80,11 @@ func (t *Ticker) run() {
 }
 
 // tickIfDue runs at idle checkpoints in deferred mode. Like the periodic ticker,
-// it ticks only after the current interval elapsed, rather than once per test.
+// it ticks only after the current interval elapsed, rather than once per test,
+// and not while paused for startup telemetry.
 func (t *Ticker) tickIfDue() {
 	t.tickSpeedMu.Lock()
-	due := time.Since(t.lastTick) >= t.tickSpeed
+	due := !t.paused && time.Since(t.lastTick) >= t.tickSpeed
 	if due {
 		t.lastTick = time.Now()
 	}

@@ -106,7 +106,8 @@ starts, and resumes only after the startup flush. Skipping the flush alone would
 leave `time.Ticker` constructing timestamps from `time.Local` during a long group.
 Interval adjustments retain their value without restarting the paused timer;
 close/resume state is protected by the ticker mutex. Deferred tickers continue
-using checkpoint callbacks, gated by the pending client.
+using checkpoint callbacks, gated by the pending client; a paused one skips
+checkpoints without consuming its interval.
 
 The startup checkpoint sends prepared payloads first, then collects later
 metrics/configuration with the existing queue, mapper,
@@ -195,8 +196,9 @@ In deferred mode, settings and repository upload are synchronous. Full
 coverage/log payloads transfer ownership to an idle queue; a partial payload
 waits for the writer's stop, so a serial suite does not send one per test.
 Telemetry ticks at checkpoints once its current interval has elapsed
-(`telemetry/internal/ticker.go`), instead of starting a periodic worker. Coverage acquires its delivery concurrency
-permit when the queued work runs, not while a parallel test is buffering it.
+(`telemetry/internal/ticker.go`), instead of starting a periodic worker.
+Coverage acquires its delivery concurrency permit when the queued work runs,
+not while a parallel test is buffering it.
 Normal mode keeps background sending and periodic telemetry; startup and coverage
 follow the clock ownership rules above. Terminal shutdown force-drains
 pending work before writer barriers. Memory may grow across a parallel group;
