@@ -181,26 +181,18 @@ def render(directory):
 
 
 def overview_lines(manifest, summary, link):
-    """README excerpts use the same statistics and formatter as the full report."""
-    cases = [case for case in manifest["cases"] if not case["flags"]]
-    if not cases:
-        raise ValueError("README excerpts need at least one case without extra flags")
-    lines = ["## Latest four-variant compilation comparison", "",
-             f"The [complete matrix]({link}/README.md) retains {summary['completed_commands']:,} completed",
-             "command timings across the selected CPU configurations and five build scenarios.",
-             f"Measured POC: `{manifest['source_head']}`; `{manifest['toolchain']}`.",
-             f"SDK: `{manifest['sdk_version']}`. Test binaries were compiled with `-ldflags=-w`",
-             "and never executed. These excerpts show the cases without extra flags.", "",
-             "Values are medians in seconds. Each POC cell lists its signed change against total",
-             "Orchestrion wall time first, then against Native. For example, `(-50%; +20%)` means",
-             "half Orchestrion time and 20% more than Native. Every sample, including slow runs,",
-             "remains included; small differences need the ranges and uncertainty in the report.", ""]
-    tables = table_lines(manifest, summary["statistics"], scenarios=["cold", "cached"], cases=cases)
-    lines += [line.replace("## ", "### ", 1) if line.startswith("## ") else line for line in tables]
-    lines += ["[Run the matrix or regenerate its tables](docs/build-benchmarks.md) with",
-              "`scripts/build_benchmark.py`. The older measurements below preserve their original",
-              "inputs and are separate experiments.", ""]
-    return "\n".join(lines)
+    """Keep the README short; comparison tables belong in the linked reports."""
+    return "\n".join([
+        "## Benchmarks", "",
+        "[Build time, runtime and memory comparisons](docs/benchmarks.md) cover",
+        "Native, Orchestrion, POC SDK and POC Mini at 4/32 CPUs, including Testify,",
+        "coverage, race and deferred delivery. The report also links the repeated",
+        "115-case CI parity comparison and records failed runtime combinations.", "",
+        f"The [compile-only dataset]({link}/README.md) contains",
+        f"{summary['measured_observations']:,} comparative observations, measured at",
+        f"POC commit `{manifest['source_head']}`.", "",
+        "[Run benchmarks or regenerate the tables](docs/build-benchmarks.md).", "",
+    ])
 
 
 def report_command(args):
@@ -218,7 +210,7 @@ def report_command(args):
         _, after = tail.split(end)
         updated_readme = before + begin + "\n" + overview_lines(read_json(directory / "manifest.json"), summary, link) + end + after
         if args.check and readme != updated_readme:
-            raise ValueError("README benchmark excerpts are stale")
+            raise ValueError("README benchmark links are stale")
     if args.check:
         if output.read_text() != markdown or read_json(directory / "statistics.json") != summary:
             raise ValueError("generated tables or statistics are stale")

@@ -158,8 +158,9 @@ flowchart TB
 6. Regenerate affected code, then use `rehash` against `NEW_SDK` after the
    original-hash records have been updated. Refresh per-origin READMEs,
    [NOTICE](../NOTICE), the root source overview and any configuration or
-   compatibility descriptions changed by the update. Leave historical timing
-   artifacts attached to the revisions they measured.
+   compatibility descriptions changed by the update. Benchmark reports keep
+   their measured revision until a new run replaces them; use the
+   [benchmark guide](build-benchmarks.md) to update the latest dataset.
 
 7. Run the applicable checks below and inspect the complete diff. An update
    description should identify the old and new SHAs, CI behavior changes,
@@ -287,8 +288,9 @@ when changing the marker or tool identity: Testify must rebuild while unrelated
 standard-library packages remain cached. These assertions use
 `compilerTraceLines` to recognize native `go test -x` commands, including quoted
 Windows executables and Unix paths with spaces. Keep that parser control when
-changing cache tests; a missed command can invalidate their proof. The [strategy experiment](results/tool-strategies-20261003-linux-go1.27/README.md)
-explains the rejected deferred-validation approaches and preserves all runs.
+changing cache tests; a missed command can invalidate their proof. The
+[Testify contract](testify.md) explains why selected-version validation must
+run before compilation even when Go can reuse a cached archive.
 
 After a platform change, check Unix `exec` replacement and Windows child exit
 status separately. A cross-compiled CLI is build proof; the workflow must run

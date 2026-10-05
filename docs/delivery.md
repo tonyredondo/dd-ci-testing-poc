@@ -198,5 +198,6 @@ checks; deployed Agent/intake acceptance requires separate evidence.
 `TestCommonTagsWireOverridesAndGetters` checks real decoded requests in both
 delivery modes. Mixed-snapshot, concurrent sealed-map and byte-accounting checks
 live in `internal/minitracer/common_tags_test.go`. The SDK-port tests cover late
-updates, direct cached-map edits, Unicode truncation and Bazel filtering. See
-[the common metadata measurements](results/common-metadata-20261004-linux-go1.27/README.md).
+updates, direct cached-map edits, Unicode truncation and Bazel filtering.
+The [latest runtime comparison](benchmarks.md#runtime-of-the-prebuilt-test-binaries)
+records complete test execution, delivery, memory peaks and wire sizes.

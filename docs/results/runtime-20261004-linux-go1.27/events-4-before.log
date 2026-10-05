@@ -1,9 +1,0 @@
-goos: linux
-goarch: amd64
-pkg: github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer
-cpu: AMD Ryzen 9 5950X 16-Core Processor            
-BenchmarkEventLifecycle/gzip=false           	  188713	      3052 ns/op	    2313 B/op	      16 allocs/op
-BenchmarkEventLifecycle/gzip=false-8         	  202296	      2634 ns/op	    2323 B/op	      16 allocs/op
-BenchmarkEventLifecycle/gzip=true            	  102276	      5744 ns/op	    2330 B/op	      16 allocs/op
-BenchmarkEventLifecycle/gzip=true-8          	  107530	      5425 ns/op	    3124 B/op	      16 allocs/op
-PASS

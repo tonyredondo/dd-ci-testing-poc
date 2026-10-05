@@ -49,14 +49,16 @@ class ReportTests(unittest.TestCase):
         self.assertEqual((mini["n"], mini["median"], mini["min"], mini["max"]), (3, 40, 20, 100))
         self.assertEqual(benchmark.render(self.directory), (report, summary))
 
-    def test_readme_excerpts_use_both_reference_comparisons_and_seconds(self):
+    def test_readme_links_the_reports_without_duplicating_tables(self):
         _, summary = benchmark.render(self.directory)
         self.manifest.update(toolchain="go example", sdk_version="sdk-example")
         excerpt = benchmark.overview_lines(self.manifest, summary, "docs/results/example")
         self.assertIn("docs/results/example/README.md", excerpt)
+        self.assertIn("docs/benchmarks.md", excerpt)
         self.assertIn("`example`", excerpt)
-        self.assertEqual(excerpt.count("40.000 s (+33.3%; +100.0%)"), 2)
-        self.assertNotIn("Unused-constant", excerpt)
+        self.assertIn("60 comparative observations", excerpt)
+        self.assertNotIn("|", excerpt)
+        self.assertNotIn("40.000 s", excerpt)
 
     def test_controls_do_not_enter_comparative_medians(self):
         row = dict(self.rows[0], scenario="control-link", validation_only=True, wall_s=1000)

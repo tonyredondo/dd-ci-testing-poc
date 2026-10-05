@@ -183,8 +183,8 @@ Each job uploads JSON counts, supplemental evidence, logs and a Markdown table;
 the table also appears in the GitHub job summary. Artifacts are retained for seven
 days; download them before expiry to keep a run beyond that period. Missing
 evidence, a failed comparison or an omitted reference fails the report step. The Testify fixture
-requires every Testify policy case, timing and count comparison to pass. Historical
-reports retain their original gap records; new evidence does not rewrite old runs.
+requires every Testify policy case, timing and count comparison to pass. Reports
+record their own source revision; new evidence does not rewrite old runs.
 
 The normal and deferred `testing` matrices share one covered set of SDK, Mini
 and Orchestrion binaries. Testify shares its own race/coverage set. Both sets
@@ -203,18 +203,18 @@ Builds that deliberately alter flags, sources, overlays, workspaces or library
 versions keep their independent fixtures. Do not add those variants to the
 shared sets without checking their inputs and cleanup ownership.
 
-The [fixture-sharing measurements](results/ci-harness-20261004-linux-go1.27/README.md)
-retain three alternating pairs of all 115 scenarios. Local warm-cache harness
-walltime falls from a median of 110.257 s to 95.324 s (13.5%). These timings
-include compilation and comparison; they do not measure GitHub CI duration.
+The [latest repeated comparison](results/20261005-linux-go1.27.1/parity/README.md)
+runs all 115 scenarios using these shared fixtures. The per-round `harness.json`
+records total harness time, including fixture compilation and comparison;
+that clock does not measure either backend's runtime or GitHub CI duration.
 
 ### Per-case duration records
 
-The [recorded Linux Go 1.27 run](results/ci-parity-20261002-linux-go1.27/README.md)
-includes all scenario durations and supplemental fixtures. Its adjacent JSON files
-preserve the raw observations; `run.json` records the command, execution order,
-reference versions and hashes of the tested harness. This is one observed run,
-not a performance baseline with a stability threshold.
+The [recorded Linux Go 1.27.1 run](results/20261005-linux-go1.27.1/parity/README.md)
+includes six rounds at each of 4/32 CPUs. Its per-round JSON files retain
+scenario durations, event counts and supplemental fixtures; `manifest.json`
+records the execution order, reference versions and harness input hashes.
+The summary keeps medians and ranges without imposing a speed threshold.
 
 Schemas 2 and 3 record `timing.sdk_wall_ns` and `timing.mini_wall_ns` for every matrix
 scenario and additional fixture. The renderer adds separate SDK/Mini walltimes
@@ -237,16 +237,18 @@ and Mini second; Testify cases run the reference SDK, then Mini, with a separate
 POC SDK check for pass/skip.
 These are diagnostic durations from compatibility tests, with no speed threshold.
 A performance claim needs repeated, balanced runs with the same inputs and
-enough context to separate host load, compilation and SDK work. The compile-only cold/incremental benchmarks in the README measure another contract.
+enough context to separate host load, compilation and SDK work. The
+[compile-only cold/incremental benchmarks](benchmarks.md) measure another contract.
 
 ### Repeated whole-matrix timing
 
-The [six-round Linux comparison](results/ci-parity-repeated-20261002-linux-go1.27/README.md)
-keeps every input report, the run manifest and a separate continuous wall clock
-for the entire 65-scenario SDK block and Mini block. A full warmup runs first and
-is excluded from the six measured rounds. All seven supplemental fixtures also
-run in every round and retain their own times; they have different compilation
-and initialization contracts and are outside the main block.
+The [latest Linux comparison](results/20261005-linux-go1.27.1/parity/README.md)
+keeps every input report, the run manifest and separate continuous clocks for
+the 65-case testing and 17-case deferred SDK/Mini blocks. It has six measured
+rounds at each CPU count, three in each execution order. The 26 Testify and seven
+deferred Testify cases retain paired SDK-first order and race-runtime shutdown
+delays. All supplemental fixtures run each round and have separate clocks.
+The sum of the 115 individual case durations is not a continuous wall clock.
 
 Set `PARITY_EXECUTION_ORDER=sdk-first` or `mini-first` to use grouped execution.
 Each variant runs all matrix cases before their differential comparisons. The

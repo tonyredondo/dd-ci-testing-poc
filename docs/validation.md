@@ -148,18 +148,16 @@ verification and `go vet` passed. This closes the previously pending native
 platform checks for that implementation, not for future code or SDK changes.
 
 See the [maintenance guide](maintenance.md#verification-before-publication)
-for checks to repeat after an update. Historical performance artifacts remain
-unchanged; these CI runs did not repeat the build benchmark matrix.
+for checks to repeat after an update. CI compatibility checks and the
+[local benchmark matrix](benchmarks.md) provide separate evidence.
 
 ## Selective-tool validation
 
-The final selected implementation passed the complete Linux suite on Go 1.26.8
-and the complete `-race` suite on Go 1.27.1. Each run included all 26 Testify
-cases against the full SDK/Orchestrion reference. The [tool-strategy report](results/tool-strategies-20261003-linux-go1.27/README.md)
-retains these event reports, source hashes and full local logs. The CLI also
-cross-compiled for Windows/amd64 and macOS/arm64. Those local checks do not
-establish native execution on either platform; publication must be followed
-through the compatibility workflow.
+The [latest Linux Go 1.27.1 dataset](results/20261005-linux-go1.27.1/parity/README.md)
+repeats all 26 Testify cases and seven deferred Testify cases against the full
+SDK/Orchestrion reference, within the 115-case matrix. Six rounds pass at each
+of 4/32 CPUs. This is local protocol and runtime evidence; native macOS/Windows
+execution is checked separately by the compatibility workflow.
 
 [`TestTestifyVersionGuardWithWarmVendoredSources`](../integration/vendor_cache_test.go)
 warms the build cache with supported vendored sources, then changes consistent

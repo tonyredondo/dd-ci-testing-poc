@@ -5,11 +5,11 @@ Orchestrion, POC SDK and POC Mini. It compiles test binaries and never executes
 them. Use the separate [CI parity tests](ci-parity.md) to compare runtime
 behavior and events.
 
-The [2026-10-03 report](results/compile-matrix-20261003-linux-go1.27/README.md)
-contains all five scenario tables, with Gin, Chi, direct Testify and external
-Testify callers at 4/32 logical CPUs. Its CSV preserves every completed command,
-including controls and trace checks. These are results for the recorded POC
-revision, Go toolchain and SDK pin. Adding this script does not refresh them.
+The [latest comparison](benchmarks.md) includes build time, runtime and memory
+for Gin, Chi, direct Testify and external Testify callers at 4/32 logical CPUs.
+Its [build dataset](results/20261005-linux-go1.27.1/build/README.md) preserves
+every completed command, including controls and trace checks. Reports keep
+their measured POC revision, Go toolchain and SDK pin when regenerated.
 
 ## Regenerate the recorded tables
 
@@ -17,21 +17,32 @@ From the repository root:
 
 ```sh
 python3 scripts/build_benchmark.py report \
-  --input docs/results/compile-matrix-20261003-linux-go1.27 --update-readme
+  --input docs/results/20261005-linux-go1.27.1/build --update-readme
+python3 scripts/benchmark_report.py \
+  --input docs/results/20261005-linux-go1.27.1
 
 # Check that the generated files are current, without writing:
 python3 scripts/build_benchmark.py report \
-  --input docs/results/compile-matrix-20261003-linux-go1.27 --update-readme --check
+  --input docs/results/20261005-linux-go1.27.1/build --update-readme --check
+python3 scripts/benchmark_report.py \
+  --input docs/results/20261005-linux-go1.27.1 --check
 ```
 
 This command needs Python 3.9 or newer. It reads `manifest.json`, `observations.csv`,
 `methodology.md` and `notes.md`, then writes `README.md` and `statistics.json`.
-With `--update-readme`, it also regenerates the marked cold/cache summary in the
-repository README, using the same medians and formatter. That option requires
+With `--update-readme`, it updates the short report links and measured revision
+in the repository README. Comparison tables stay in dedicated documents. That option requires
 a result directory inside the repository and preserves the rest of the README.
 It runs no Go commands and uses no network. It rejects changed CSV contents,
 failed commands, missing rounds and duplicate observations. Controls and traces
 stay in the CSV but do not contribute to comparative medians.
+
+`benchmark_report.py` writes `docs/benchmarks.md` and the dataset's complete
+`memory.md`. It verifies the archived file hashes, the original contents of
+compressed records and runtime memory medians against the per-run CSV. It uses
+the recorded validation outcomes: a failed repetition cannot become a successful
+comparison by filtering it out. No Go toolchain, local binary or original
+`/var/tmp` path is needed to regenerate the documents.
 
 All durations in the tables are wall-clock seconds, with `s` in each cell.
 For example, `1.200 s (-40.0%; +20.0%)` means 40% less total command time than
@@ -40,8 +51,11 @@ and retain their signs, including a positive first value when the POC is slower.
 `statistics.json` adds ranges, sample counts, variation and a deterministic
 bootstrap interval for the median. The interval estimates uncertainty by resampling
 the observed runs; it is not a range for future builds. Ranges are the actual
-fastest and slowest observations. The original experiment's statistics and
-qualification manifests remain in `baseline/` and `expanded/`.
+fastest and slowest observations. Runtime statistics and individual records
+are in the dataset's `runtime/` directory. Memory tables use the median of
+per-run cgroup `memory.peak`, in MiB; that includes charged page-cache and
+kernel memory as well as all measured processes. It is not isolated Go heap
+usage or a sum of independent process RSS peaks.
 
 ## Prepare the tools
 
@@ -89,8 +103,9 @@ python3 scripts/build_benchmark.py run \
 
 Choose a new directory and limits suitable for the host. The command above
 allows six hours including setup; it is an example budget, not a prediction.
-The prior complete experiment took roughly one hour for the baseline and four
-and a half hours for the expanded series. Artifact limits are checked between
+The latest build, runtime and repeated-parity collection used about ten hours
+of active experiment time. The build command alone does not run those runtime
+phases. Artifact limits are checked between
 commands, so one build can exceed the disk threshold before the runner stops.
 Per-command timeouts default to 600 seconds. Only this run's build scopes and
 owned caches are stopped or removed.
@@ -166,8 +181,9 @@ and remaining artifacts are retained; an attempt without a usable timing gets
 an interruption record. Partial matrices cannot produce a successful report.
 The runner does not resume an interrupted matrix. Start a new output directory
 for a new experiment; preserve the partial run if it matters for diagnosis.
-The archived experiment's one interrupted attempt and its explicit continuation
-are recorded separately.
+The latest dataset keeps the failed first Native control and the successful
+160-run control separately. Its runtime collection resumed from a preserved
+prefix after an agreed budget pause; all 1,440 original groups remain recorded.
 
 The checked-in report keeps timings, input provenance, summaries, control data,
 traces and qualification hashes. Large test binaries, build caches and full
@@ -186,6 +202,9 @@ names and reachable test-body signature as well.
 
 Run a reduced matrix and inspect the traces and symbol checks before repeating
 the expensive series. A new run records the new inputs and belongs in a new
-results directory. Keep previous reports attached to their original revisions.
+results directory. After validating the new dataset, update the comparison
+document and README links together. Keep only the latest benchmark dataset in
+the repository; older reports can be recovered from Git history. Do not remove
+SDK provenance, adaptation notes or compatibility fixtures during this cleanup.
 The original exploratory [`scripts/benchmark.py`](../scripts/benchmark.py)
 remains available for its older three-variant fixture protocol.

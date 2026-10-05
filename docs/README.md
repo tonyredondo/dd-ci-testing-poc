@@ -16,9 +16,9 @@ the optimizations in the code and how to measure a proposed change.
 | Compare CI features and policy combinations with the SDK | [Feature parity and event counts](ci-parity.md) |
 | Check what compatibility tests establish | [Validation contract](validation.md) |
 | Compare repeated execution of the complete CI matrix | [Whole-matrix timing](ci-parity.md#repeated-whole-matrix-timing) |
-| Choose a Testify discovery strategy or inspect wrapper overhead | [Tool strategies](results/tool-strategies-20261003-linux-go1.27/README.md) and [selective tools](results/selective-tools-20261003-linux-go1.27/README.md) |
+| Understand Testify discovery and selective tool dispatch | [Testify design](testify.md) and [preparation constraints](performance.md) |
 | Repeat compile benchmarks or regenerate their tables | [Build benchmark runner and protocol](build-benchmarks.md) |
-| Find original timings and their limitations | [Results index](results.md) and [compile-only tables](../README.md#compilation-performance) |
+| Compare build time, runtime and memory | [Latest benchmark comparison](benchmarks.md) |
 
 The source record lives beside each incorporated library in
 [`internal/thirdparty`](../internal/thirdparty/README.md). Its manifests identify
@@ -30,7 +30,7 @@ Documentation describes the checked-in implementation. Timing artifacts describe
 the revisions recorded inside them; updating the SDK or moving code does not
 refresh those measurements.
 
-The latest [full compile matrix](results/compile-matrix-20261003-linux-go1.27/README.md)
-retains 7,113 completed commands and all five tables. The earlier tool-strategy
-report has 660 separate observations. Compatibility reports measure a different
-contract from these build timings.
+The [latest dataset](results/20261005-linux-go1.27.1/README.md) contains 6,224
+comparative builds, 1,200 measured runtime groups, memory peaks and twelve
+rounds of the 115-case parity comparison. Four Gin race cells have real runtime
+failures; their records remain explicit. Only this benchmark series is checked in.

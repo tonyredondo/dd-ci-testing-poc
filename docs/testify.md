@@ -47,8 +47,9 @@ the suite is already known, so a helper's goleak import remains visible.
 This keeps version and API validation before
 the build, including when Go can recover the suite from cache. Moving that
 validation into the compile wrapper would miss warm-cache version changes.
-The [strategy experiment](results/tool-strategies-20261003-linux-go1.27/README.md)
-records the alternatives, cache counterexample and all compile timings.
+[`TestTestifyVersionGuardWithWarmVendoredSources`](../integration/vendor_cache_test.go)
+checks that warm-cache counterexample. The [performance guide](performance.md)
+records the discovery and cache constraints.
 
 Preparation reads only the selected Testify sources. It validates the entry,
 adds a registration call and prepares a linkname declaration for the selected
@@ -119,10 +120,9 @@ sequenceDiagram
     Note over Go: Client coverage and test execution stay native
 ```
 
-The [selective tool measurements](results/selective-tools-20261003-linux-go1.27/README.md)
-keep every run, distinguish dispatch from process startup, and show the cost of
-closing the external-caller gap. They also record the existing cache and
-compatibility checks.
+The [latest benchmark comparison](benchmarks.md) includes direct and external
+Testify callers at 4/32 CPUs, with race, coverage and their combinations.
+It measures complete invocations, including preparation and selective tool startup.
 
 ## Compatibility checks
 

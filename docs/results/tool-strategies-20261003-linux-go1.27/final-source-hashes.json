@@ -1,6 +1,0 @@
-{
-  "internal/runner/testify.go": "dcfc90fa1f370522c5957751533e6523173ad05a8b860b02d799b99007cf913b",
-  "integration/vendor_cache_test.go": "02f783a3e7010fc7b796e6718e086f5bcf27191456aba02a696e5c93577d2d6e",
-  "internal/runner/run.go": "6e7b03b876d497f0c99a8ed0d7b4ce29f52571c7eef630bcc6b4bd3ff9734302",
-  "cmd/ddtest/main.go": "1b240d9ee02cc8a3f9b1a7767c6f935b43f516820276104e2b7865eca743fabc"
-}

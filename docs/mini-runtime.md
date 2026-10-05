@@ -214,35 +214,16 @@ mock, security, profiling and process-tag dependencies. The hook execution and
 CI policy logic are retained. See `NOTICE` and the generated MessagePack schema
 in `internal/minitracer/events.go`.
 
-## Initial compile-only comparison
+## Build and runtime measurements
 
-Chi v5.3.2, eight physical cores, `go test -c -o <directory>/ -ldflags=-w ./...`.
-No test binaries executed. Both SDK instruments use the same unmodified SDK; all
-four variants use the same project inputs and module resolution graph. Values are
-wall-time medians; percentages compare mini with the POC SDK backend.
-
-| Scenario | Native | Orchestrion | POC SDK | POC Mini |
-| --- | ---: | ---: | ---: | ---: |
-| Cold (n=2) | 6.68 s | 30.95 s | 14.66 s | 8.37 s (-42.9%) |
-| Cached dependencies, forced link (n=5) | 0.28 s | 1.75 s | 1.13 s | 0.53 s (-53.3%) |
-
-CPU accounting includes all descendants in an exclusive cgroup. Cold median CPU
-falls from 73.74 s (POC SDK) to 38.58 s (mini); native uses 29.85 s and Orchestrion
-112.51 s. Warm-link median CPU is 1.80 s (SDK), 0.86 s (mini), 0.62 s (native), and
-4.44 s (Orchestrion). Every build produced two checked binaries without DWARF;
-only mini binaries contain the mini hooks, and they do not link dd-trace-go.
-
-These measurements predate the compatibility follow-up (service version,
-session metadata, byte accounting, Bazel transport and CI telemetry) and have
-not been rerun for the current source. These results are exploratory.
-The native A/A control ranges from 0.255 to 1.052 s
-with almost unchanged CPU consumption, showing wall-time noise. Warm-link ranges
-overlap: SDK 0.793-1.169 s; mini 0.393-1.536 s. A stable warm wall-time benefit is
-not established by this experiment. No samples were discarded. Two cold runs do
-not establish stability or results for other projects.
-
-[All 32 commands, input hashes, ranges and binary checks](benchmark-mini-chi.json)
-are retained. The earlier README matrix measures the SDK backend, not mini.
+The [latest comparison](benchmarks.md) covers Native, Orchestrion, POC SDK and
+Mini at 4/32 CPUs on Gin, Chi and direct/external Testify callers. It separates
+compile-only cold/cache/link/edit timings from execution of prebuilt binaries,
+including default/deferred delivery and aggregate memory peaks. Its detailed
+reports retain coverage/race combinations and failed application cases.
+The repeated 115-case SDK/Mini comparison records event counts and durations
+separately. Only this benchmark series is checked in; earlier data remain in
+Git history.
 
 ## Reused upstream CI tests
 

@@ -84,29 +84,16 @@ is checked before pruning, so a known suite still receives its metadata query
 and version validation.
 
 Unrelated tools dispatch without opening the plan. On Unix the CLI replaces
-itself with the native tool; Windows delegates through a child. The dispatch
-branch measured about 12.5 ns with zero allocations, while the real wrapper
-added about 1.1 ms to a compiler version probe on this Linux host. The
-[isolated probe results](results/selective-tools-20261003-linux-go1.27/README.md#isolated-bypass)
-measure process startup as well as dispatch. A microbenchmark of the branch
-alone cannot predict a build-wide saving.
+itself with the native tool; Windows delegates through a child. Process startup
+still has a cost even when dispatch does little work. The [latest build matrix](benchmarks.md)
+measures the complete invocation, including preparation and tool processes.
 
-The [4/32 CPU strategy experiment](results/tool-strategies-20261003-linux-go1.27/README.md)
-retains 660 compile-only observations. For a directly imported suite, the
-selected `-find` branch reduced unchanged median wall time from 120.31 to
-110.34 ms at 4 CPUs and from 133.74 to 120.24 ms at 32 CPUs. Cold differences
-were small and their ranges overlap. These fixtures measure preparation and
-compilation; they do not execute tests or the event runtime.
-
-A one-query `-deps -test` prototype also passed compatibility and cache checks,
-but added about 8 ms to unchanged plain tests and needed more test-variant
-handling. Always-on and hybrid prototypes that deferred validation failed a
-warm-vendor version counterexample. The repository applies only `-find` for
-known suites; the other strategies remain outside the implementation.
-
-Testify and goleak now share that metadata/dependency lookup. The historical
-strategy timings above predate the goleak integration. Library versions and APIs
-are still validated before the build.
+Always-on and hybrid prototypes that deferred version validation failed the
+warm-vendor counterexample covered by
+[`TestTestifyVersionGuardWithWarmVendoredSources`](../integration/vendor_cache_test.go).
+The repository uses `-find` for known libraries and `-deps` for unknown test
+imports. Testify and goleak share that lookup, and their selected versions and
+APIs are validated before the build, including when compilation is cached.
 
 Compiler/linker version identities stay native. The exported suite fingerprint
 in `testing` carries instrumentation inputs into Go's package keys. No custom
@@ -134,14 +121,10 @@ claim. It delays delivery until idle and permits queue growth across parallel
 groups. The [delivery contract](delivery.md) describes that tradeoff.
 
 Preparation no longer constructs comment ASTs in the source rewriter; comments
-remain in the original bytes and line directives are handled separately. A
-five-pair parser-only experiment reduced allocated bytes by about 90 KiB per
-preparation, with no material improvement in total Prepare wall time. The final
-combined implementation retains that reduction in Gin and Chi. Shared library
-discovery adds about 10 ms to direct Testify preparation: unlike the former
-suite-only `-find` shortcut, it walks test-only dependencies to detect goleak.
-No concurrent preparation pipeline was added. See the
-[final measurements](results/runtime-20261004-linux-go1.27/README.md).
+remain in the original bytes and line directives are handled separately.
+Library discovery walks unknown test-only dependencies to detect goleak as
+well as Testify. No concurrent preparation pipeline was added. Current complete
+invocation costs are in the [build comparison](benchmarks.md).
 
 ## Mini runtime optimizations
 
@@ -170,12 +153,10 @@ The dependency reduction comes from changing the runtime graph; the allocation
 changes come from event ownership and buffer reuse. Test-only `testify` and its
 dependencies remain in the repository without entering Mini's runtime imports.
 
-The [common metadata measurements](results/common-metadata-20261004-linux-go1.27/README.md)
-include SDK-derived option preparation, span creation, batching and compression.
-Five alternating pairs reduced median time by 52.5–60.9% in the synthetic
-CI-tag fixture. Allocations fell from 151 to 25 per event; uncompressed bytes
-fell 78.8%, and gzip wire bytes about 76%. Both GOMAXPROCS settings use one
-serial benchmark loop. These results concern event execution, not build time.
+The [runtime comparison](benchmarks.md#runtime-of-the-prebuilt-test-binaries)
+includes startup, test execution and delivery. Its detailed report records
+event counts and wire bytes. It measures the current implementation rather
+than isolating an individual optimization's before/after cost.
 
 The SDK-specific implementation rules are recorded in
 [ADAPTATIONS.md](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md). Common
@@ -187,10 +168,6 @@ swaps retain the existing swappable handle.
 Counts and gauges keep their value/timestamp inline under a short mutex. A flush
 detaches the whole point under that mutex, then encodes it after releasing the
 lock. This removes per-submission snapshots while preserving collection boundaries.
-
-The [2026-10-03 optimization measurements](results/hotpaths-20261003-linux-go1.27/README.md)
-retain alternating before/after observations for preparation, transformation and
-counter updates. They are separate from the frozen four-variant compile matrix.
 
 ## The ownership rules behind reuse
 
@@ -339,7 +316,7 @@ The [build benchmark guide](build-benchmarks.md) documents
 [`scripts/build_benchmark.py`](../scripts/build_benchmark.py), which runs all four
 variants across the five scenarios, assigns affinity, measures exclusive cgroups
 and qualifies the outputs. Its `report` command regenerates the
-[full 2026-10-03 tables](results/compile-matrix-20261003-linux-go1.27/README.md)
+[latest build tables](results/20261005-linux-go1.27.1/build/README.md)
 from every retained CSV observation, without Go or network access.
 
 [`scripts/benchmark.py`](../scripts/benchmark.py) is a smaller fixture runner
@@ -350,17 +327,13 @@ cannot reproduce a four-variant physical-core matrix by itself.
 
 ## Evidence and remaining work
 
-The [README tables](../README.md#compilation-performance),
-[original fixture results](results.md),
-[early Mini comparison](mini-runtime.md#initial-compile-only-comparison) and
-their raw JSON files retain the revisions and conditions they measured.
-Those older timings predate the latest SDK extraction and source reorganization.
-The [results index](results.md#later-experiments) links the refreshed four-variant
-Gin/Chi matrix and the subsequent selective-tool/strategy experiments, each with
-its measured inputs. The later [full compilation matrix](results/compile-matrix-20261003-linux-go1.27/README.md)
-covers all four variants, Gin/Chi, direct and external Testify, race and coverage.
-It preserves the observed variation and separates the unused-constant diagnostic
-from the reachable test-body edit.
+The [latest comparison](benchmarks.md) covers all four variants, Gin/Chi,
+direct and external Testify, race and coverage at 4/32 CPUs. It keeps raw
+durations, aggregate cgroup memory, variation and event counts, and separates
+the unused-constant diagnostic from the reachable test-body edit. All build
+cells qualified; four Gin race runtime cells contain real failures. The repeated
+115-case parity suite passes, which does not close those application races.
+Only this series is checked in; older benchmark data remain in Git history.
 
 Further profiling can examine MessagePack encoding, tag construction, telemetry
 lookups and time spent waiting for `sendMu`. A proposed change needs before/after
