@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 )
 
@@ -135,7 +134,8 @@ func needsCoverOverlay(dir string, opts options, targets, rewritten []goPackage)
 	if !opts.coverage {
 		return false
 	}
-	for _, p := range rewritten {
+	for i := range rewritten {
+		p := &rewritten[i]
 		if len(opts.coverPatterns) == 0 {
 			for _, target := range targets {
 				if target.ImportPath == p.ImportPath && target.ImportPath != "testing" && target.ImportPath != sdkPackage && target.ImportPath != miniPackage {
@@ -145,35 +145,7 @@ func needsCoverOverlay(dir string, opts options, targets, rewritten []goPackage)
 			continue
 		}
 		for _, pattern := range opts.coverPatterns {
-			if pattern == "all" || pattern == "std" && p.Module == nil {
-				return true
-			}
-			name := p.ImportPath
-			if pattern == "." || pattern == ".." || strings.HasPrefix(pattern, "./") || strings.HasPrefix(pattern, "../") || filepath.IsAbs(pattern) {
-				// Resolve the directory before the wildcard. A relative pattern
-				// must not cover testing in an unrelated GOROOT outside that tree.
-				prefix, tail := pattern, ""
-				if wildcard := strings.Index(pattern, "..."); wildcard >= 0 {
-					slash := strings.LastIndex(pattern[:wildcard], "/")
-					prefix, tail = pattern[:slash], pattern[slash+1:]
-				}
-				base := prefix
-				if !filepath.IsAbs(base) {
-					base = filepath.Join(dir, base)
-				}
-				relative, err := filepath.Rel(base, p.Dir)
-				if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-					continue
-				}
-				name, pattern = filepath.ToSlash(relative), tail
-				if name == "." {
-					name = ""
-				}
-			}
-			expression := regexp.QuoteMeta(pattern)
-			expression = strings.ReplaceAll(expression, `/\.\.\.`, `(?:/.*)?`)
-			expression = strings.ReplaceAll(expression, `\.\.\.`, ".*")
-			if regexp.MustCompile("^" + expression + "$").MatchString(name) {
+			if matchPackagePattern(pattern, dir, p) {
 				return true
 			}
 		}

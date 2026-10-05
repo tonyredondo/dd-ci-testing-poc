@@ -22,11 +22,13 @@ const miniPackage = "github.com/tonyredondo/dd-ci-testing-poc/testopt"
 
 type goPackage struct {
 	Dir, Name, ImportPath              string
+	Standard                           bool
 	GoFiles, TestGoFiles, XTestGoFiles []string
 	Imports, TestImports, XTestImports []string
 	Deps                               []string
 	Module                             *struct {
 		Path, Version string
+		Main          bool
 		Replace       *struct{ Dir, Version string }
 	}
 	Error *struct{ Err string }
@@ -92,7 +94,7 @@ func PrepareRuntime(ctx context.Context, dir string, args []string, runtime Runt
 			replacements[filepath.Clean(from)] = to
 		}
 	}
-	listArgs := append([]string{"list", "-json=Dir,Name,ImportPath,GoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,Deps,Module,Error"}, opts.buildFlags...)
+	listArgs := append([]string{"list", "-json=Dir,Name,ImportPath,Standard,GoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,Deps,Module,Error"}, opts.buildFlags...)
 	listArgs = append(listArgs, opts.packages...)
 	listArgs = append(listArgs, "testing", runtimePackage)
 	cmd := exec.CommandContext(ctx, "go", listArgs...)

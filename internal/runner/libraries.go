@@ -58,7 +58,7 @@ func resolveTestLibraries(ctx context.Context, dir string, opts options, package
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
-	args := []string{"list", mode, "-json=Dir,Name,ImportPath,GoFiles,Module,Error"}
+	args := []string{"list", mode, "-json=Dir,Name,ImportPath,Standard,GoFiles,Module,Error"}
 	args = append(args, opts.buildFlags...)
 	args = append(args, paths...)
 	cmd := exec.CommandContext(ctx, "go", args...)

@@ -44,6 +44,33 @@ func TestGoleakCacheFlagPreservesEffectiveCompilerFlags(t *testing.T) {
 	}
 }
 
+func TestGoleakCacheFlagIgnoresRelativePatternsOutsideTheTree(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "project")
+	pkg := &goPackage{Dir: filepath.Join(root, "gomodcache", "go.uber.org", "goleak@v1.3.0"), ImportPath: "go.uber.org/goleak"}
+	for _, args := range [][]string{
+		{"-gcflags=-N -l", "./..."},
+		{"-gcflags=./...=-N -l", "./..."},
+		{"-gcflags=.=-N -l", "./..."},
+	} {
+		opts, err := parseOptions(args, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		flag, err := goleakCacheFlag(dir, opts, pkg, "hash")
+		if err != nil || flag != "-gcflags=go.uber.org/goleak=-I=ddtest-goleak-hash" {
+			t.Fatalf("%v: %q, %v", args, flag, err)
+		}
+	}
+	opts, err := parseOptions([]string{"-gcflags=go.uber.org/...=-N -l", "./..."}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if flag, err := goleakCacheFlag(dir, opts, pkg, "hash"); err != nil || flag != "-gcflags=go.uber.org/goleak='-N' '-l' -I=ddtest-goleak-hash" && flag != "-gcflags=go.uber.org/goleak=-N -l -I=ddtest-goleak-hash" {
+		t.Fatalf("import pattern lost: %q, %v", flag, err)
+	}
+}
+
 func TestGoleakToolDispatch(t *testing.T) {
 	args := []string{"compile", "file.go"}
 	for _, mode := range []string{"goleak", "testify-goleak", "goleak-cover", "testify-goleak-cover"} {

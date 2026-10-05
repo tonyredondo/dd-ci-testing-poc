@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -104,14 +103,14 @@ func goleakCacheFlag(dir string, opts options, pkg *goPackage, fingerprint strin
 		value = strings.TrimSpace(value)
 		match := false // unqualified flags apply only to command-line packages
 		for _, selected := range opts.packages {
-			match = match || matchesGoleakPattern(selected, dir, pkg)
+			match = match || matchPackagePattern(selected, dir, pkg)
 		}
 		if value != "" && !strings.HasPrefix(value, "-") {
 			pattern, rest, ok := strings.Cut(value, "=")
 			if !ok {
 				return "", fmt.Errorf("invalid gcflags pattern")
 			}
-			match = matchesGoleakPattern(strings.TrimSpace(pattern), dir, pkg)
+			match = matchPackagePattern(strings.TrimSpace(pattern), dir, pkg)
 			value = rest
 		}
 		if match {
@@ -136,38 +135,4 @@ func goleakCacheFlag(dir string, opts options, pkg *goPackage, fingerprint strin
 		quoted[i] = flag
 	}
 	return "-gcflags=" + instrument.GoleakImport + "=" + strings.Join(quoted, " "), nil
-}
-
-func matchesGoleakPattern(pattern, dir string, pkg *goPackage) bool {
-	if pattern == "all" {
-		return true
-	}
-	if pattern == "std" || pattern == "cmd" {
-		return false
-	}
-	name := pkg.ImportPath
-	if filepath.IsAbs(pattern) || strings.HasPrefix(pattern, ".") {
-		if filepath.IsAbs(pattern) {
-			name = filepath.ToSlash(pkg.Dir)
-			pattern = filepath.ToSlash(pattern)
-		} else {
-			relative, err := filepath.Rel(dir, pkg.Dir)
-			if err != nil {
-				return false
-			}
-			name = "./" + filepath.ToSlash(relative)
-			if relative == "." {
-				name = "."
-			}
-			if strings.Contains(name, "/vendor/") && !strings.Contains(pattern, "/vendor/") {
-				return false
-			}
-		}
-	}
-	expression := regexp.QuoteMeta(pattern)
-	if strings.HasSuffix(expression, `/\.\.\.`) {
-		expression = strings.TrimSuffix(expression, `/\.\.\.`) + "(/.*)?"
-	}
-	expression = strings.ReplaceAll(expression, `\.\.\.`, ".*")
-	return regexp.MustCompile("^" + expression + "$").MatchString(name)
 }
