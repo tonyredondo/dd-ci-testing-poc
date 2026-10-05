@@ -146,7 +146,12 @@ func ensureSettingsInitialization(serviceName string) {
 			if cidelivery.Enabled() {
 				upload()
 			} else {
-				go upload()
+				// A goleak check waits for the upload, including git subprocesses.
+				done := cidelivery.TrackBackground()
+				go func() {
+					defer done()
+					upload()
+				}()
 			}
 		} else {
 			close(uploadChannel)

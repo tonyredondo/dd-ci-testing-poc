@@ -144,7 +144,11 @@ func internalCiVisibilityInitialization(tracerInitializer func([]tracer.StartOpt
 		if cidelivery.Enabled() {
 			ensureAdditionalFeaturesInitialization(serviceName)
 		} else {
-			go func() { ensureAdditionalFeaturesInitialization(serviceName) }()
+			done := cidelivery.TrackBackground() // A goleak check waits for it.
+			go func() {
+				defer done()
+				ensureAdditionalFeaturesInitialization(serviceName)
+			}()
 		}
 
 		// Initialize the tracer

@@ -89,6 +89,9 @@ and coverage sender. It preserves the
 caller's options and goleak's original validation, retry loop and error result.
 Waiting for an active CI request can add its remaining HTTP/retry time before
 goleak starts that loop; the checkpoint waits for delivery rather than canceling it.
+It also waits, for up to one minute like the SDK's own end-of-session wait, for
+the asynchronous settings start-up and repository upload, including their git
+subprocesses, which would otherwise look like leaks.
 It does not use `IgnoreCurrent`, ignore `net/http` functions, or suppress arbitrary
 goroutine snapshots. Standard HTTP transports are cloned for Mini's ownership;
 closing them does not close the caller's default transport. Custom RoundTrippers
