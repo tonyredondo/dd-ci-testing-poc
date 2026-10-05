@@ -90,7 +90,13 @@ func TestPackagePatternsMatchGoBuildFlags(t *testing.T) {
 	if testing.Short() {
 		t.Skip("invokes go build -n -a for each pattern")
 	}
-	dir := t.TempDir()
+	// With an explicit environment, os/exec does not set PWD, so the go
+	// commands below report directories under the resolved path (macOS's
+	// /var is a link to /private/var). Patterns use the same spelling.
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	for name, content := range map[string]string{
 		"go.mod":     "module example.com/m\n\ngo 1.21\n",
 		"root.go":    "package m\n\nimport _ \"example.com/m/sub\"\n",

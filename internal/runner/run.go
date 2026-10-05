@@ -150,6 +150,9 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime) (pl
 		listArgs = append(listArgs, opts.packages...)
 		listArgs = append(listArgs, "testing", runtimePackage)
 		cmd := exec.CommandContext(ctx, "go", listArgs...)
+		// Keep Env nil: os/exec then sets PWD to dir, so go list reports
+		// package directories with the spelling of dir, even through symbolic
+		// links. Relative patterns are matched against that same spelling.
 		cmd.Dir = dir
 		return readPackages(cmd, "resolve packages")
 	}
