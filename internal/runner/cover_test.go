@@ -50,71 +50,32 @@ func TestCoverageSelection(t *testing.T) {
 	}
 }
 
-func TestCoverInputOrderingAndGeneratedExclusion(t *testing.T) {
-	for _, assigned := range []bool{true, false} {
-		t.Run(map[bool]string{true: "assigned", false: "separate"}[assigned], func(t *testing.T) {
-			dir := t.TempDir()
-			original := filepath.Join(dir, "original.go")
-			actual := filepath.Join(dir, "rewritten.go")
-			logical := filepath.Join(dir, "zz_dd_ci_testify.go")
-			wrapper := filepath.Join(dir, "wrapper.go")
-			if err := os.WriteFile(wrapper, []byte("package helper\nfunc adapter() {}\n"), 0600); err != nil {
-				t.Fatal(err)
-			}
-			overlay := filepath.Join(dir, "overlay.json")
-			data, _ := json.Marshal(Overlay{Replace: map[string]string{original: actual, logical: wrapper}, CoverExclude: []string{logical}})
-			if err := os.WriteFile(overlay, data, 0600); err != nil {
-				t.Fatal(err)
-			}
-			outList := filepath.Join(dir, "outputs.txt")
-			outputs := []string{filepath.Join(dir, "vars.go"), filepath.Join(dir, "original.cover.go"), filepath.Join(dir, "wrapper.cover.go")}
-			if err := os.WriteFile(outList, []byte(strings.Join(outputs, "\n")), 0600); err != nil {
-				t.Fatal(err)
-			}
-			args := []string{"cover", "-pkgcfg=config"}
-			if assigned {
-				args = append(args, "-outfilelist="+outList)
-			} else {
-				args = append(args, "-outfilelist", outList)
-			}
-			args = append(args, original, logical)
-			saved := append([]string(nil), args...)
-			got, finish, cleanup, err := prepareCoverInputs(overlay, args)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer cleanup()
-			if !reflect.DeepEqual(args, saved) {
-				t.Fatal("mutated caller arguments")
-			}
-			if got[len(got)-1] != actual || len(got) != len(args)-1 {
-				t.Fatalf("inputs=%v", got)
-			}
-			list := got[2]
-			if assigned {
-				list = strings.TrimPrefix(list, "-outfilelist=")
-			} else {
-				list = got[3]
-			}
-			data, err = os.ReadFile(list)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if string(data) != strings.Join(outputs[:2], "\n")+"\n" {
-				t.Fatalf("outputs=%q", data)
-			}
-			if err := finish(); err != nil {
-				t.Fatal(err)
-			}
-			data, err = os.ReadFile(outputs[2])
-			if err != nil || string(data) != "package helper\nfunc adapter() {}\n" {
-				t.Fatalf("wrapper=%q, %v", data, err)
-			}
-			cleanup()
-			if _, err := os.Stat(list); !os.IsNotExist(err) {
-				t.Fatalf("temporary output list remains: %v", err)
-			}
-		})
+func TestCoverInputTranslation(t *testing.T) {
+	dir := t.TempDir()
+	original := filepath.Join(dir, "original.go")
+	actual := filepath.Join(dir, "rewritten.go")
+	untouched := filepath.Join(dir, "untouched.go")
+	overlay := filepath.Join(dir, "overlay.json")
+	data, _ := json.Marshal(Overlay{Replace: map[string]string{original: actual}})
+	if err := os.WriteFile(overlay, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	outList := filepath.Join(dir, "outputs.txt")
+	args := []string{"cover", "-pkgcfg=config", "-outfilelist", outList, original, untouched}
+	saved := append([]string(nil), args...)
+	got, err := translateCoverInputs(overlay, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(args, saved) {
+		t.Fatal("mutated caller arguments")
+	}
+	want := []string{"cover", "-pkgcfg=config", "-outfilelist", outList, actual, untouched}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("inputs=%v, want %v", got, want)
+	}
+	if _, err := translateCoverInputs(filepath.Join(dir, "missing.json"), args); err == nil {
+		t.Fatal("missing plan accepted")
 	}
 }
 
@@ -132,44 +93,37 @@ func TestCoverToolForwardingAndErrors(t *testing.T) {
 	if err := os.WriteFile(overlay, data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, tool := range []string{"compile", "cover"} {
-		executable := filepath.Join(strings.TrimSpace(string(output)), tool+suffix)
-		want, err := exec.Command(executable, "-V=full").CombinedOutput()
-		if err != nil {
-			t.Fatal(err)
-		}
-		var stdout, stderr bytes.Buffer
-		code := RunCoverTool(context.Background(), overlay, []string{executable, "-V=full"}, nil, &stdout, &stderr)
-		if tool == "cover" {
-			want = []byte(appendCoverIdentity(string(want), coverFingerprint(Overlay{})))
-		}
-		if code != 0 || !bytes.Equal(stdout.Bytes(), want) || stderr.Len() != 0 {
-			t.Fatalf("%s identity changed: %d %s %s", tool, code, stdout.String(), stderr.String())
-		}
+	cover := filepath.Join(strings.TrimSpace(string(output)), "cover"+suffix)
+	want, err := exec.Command(cover, "-V=full").CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer
+	// The identity probe needs no plan: unrelated packages never read it.
+	code := RunCoverTool(context.Background(), "missing-overlay", []string{cover, "-V=full"}, nil, &stdout, &stderr)
+	if code != 0 || stdout.String() != appendCoverIdentity(string(want), coverFingerprint()) || stderr.Len() != 0 {
+		t.Fatalf("cover identity: %d %s %s", code, stdout.String(), stderr.String())
+	}
 	if code := RunCoverTool(context.Background(), "missing-overlay", nil, nil, &stdout, &stderr); code != 2 {
 		t.Fatalf("missing tool exit=%d", code)
 	}
-	if code := RunCoverTool(context.Background(), "missing-overlay", []string{filepath.Join(strings.TrimSpace(string(output)), "cover"+suffix), "-mode=set", "file.go"}, nil, &stdout, &stderr); code != 2 {
+	if code := RunCoverTool(context.Background(), "missing-overlay", []string{cover, "-mode=set", "file.go"}, nil, &stdout, &stderr); code != 2 {
 		t.Fatalf("missing overlay exit=%d", code)
 	}
 	// A forwarded tool failure must retain its native exit status.
-	compile := filepath.Join(strings.TrimSpace(string(output)), "compile"+suffix)
-	cmd := exec.Command(compile, "-invalid-ddtest-flag")
-	err = cmd.Run()
+	err = exec.Command(cover, "-invalid-ddtest-flag").Run()
 	native, ok := err.(*exec.ExitError)
 	if !ok {
 		t.Fatalf("expected native failure: %v", err)
 	}
-	if got := RunCoverTool(context.Background(), "missing-overlay", []string{compile, "-invalid-ddtest-flag"}, nil, &stdout, &stderr); got != native.ExitCode() {
+	if got := RunCoverTool(context.Background(), overlay, []string{cover, "-invalid-ddtest-flag"}, nil, &stdout, &stderr); got != native.ExitCode() {
 		t.Fatalf("exit=%d, native=%d", got, native.ExitCode())
 	}
 }
 
 func TestCoverCommandQuoting(t *testing.T) {
 	for _, paths := range [][2]string{{"/path with spaces/ddtest", "/path/overlay.json"}, {`C:\Program Files\ddtest.exe`, `C:\build\overlay.json`}, {"/path/it's/ddtest", `/path/\"quoted\"/overlay.json`}} {
-		command, err := coverToolCommand(paths[0], paths[1])
+		command, err := toolCommand(paths[0], paths[1], "cover")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -179,20 +133,14 @@ func TestCoverCommandQuoting(t *testing.T) {
 			t.Fatalf("quoted command=%q: %v, %v", command, got, err)
 		}
 	}
-	if _, err := coverToolCommand(`path'with"both`, "overlay"); err == nil {
+	if _, err := toolCommand(`path'with"both`, "overlay", "cover"); err == nil {
 		t.Fatal("ambiguous quoting accepted")
 	}
 }
 
-func TestCoverIdentityTracksOnlyTransformationInputs(t *testing.T) {
-	a := Overlay{Replace: map[string]string{"source": "/temporary/one"}, CoverExclude: []string{"b.go", "a.go"}}
-	b := Overlay{Replace: map[string]string{"source": "/temporary/two"}, CoverExclude: []string{"a.go", "b.go"}}
-	if coverFingerprint(a) != coverFingerprint(b) {
-		t.Fatal("temporary backing paths or exclusion ordering invalidated cache")
-	}
-	b.CoverExclude = []string{"a.go"}
-	if coverFingerprint(a) == coverFingerprint(b) {
-		t.Fatal("coverage exclusion change retained stale tool identity")
+func TestCoverIdentityTracksTheContract(t *testing.T) {
+	if coverFingerprint() != coverFingerprint() || len(coverFingerprint()) != 64 {
+		t.Fatal("cover identity is not a stable contract hash")
 	}
 	for _, version := range []string{"cover version go1.27.1\n", "cover version devel go1.28 buildID=action/content\n"} {
 		tagged := appendCoverIdentity(version, "fixture")

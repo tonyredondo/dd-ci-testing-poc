@@ -22,9 +22,6 @@ func main() {
 		}
 		os.Exit(runner.RunTool(context.Background(), plan, args, os.Stdin, os.Stdout, os.Stderr))
 	}
-	if len(os.Args) >= 3 && os.Args[1] == "cover-overlay" {
-		os.Exit(runner.RunCoverTool(context.Background(), os.Args[2], os.Args[3:], os.Stdin, os.Stdout, os.Stderr))
-	}
 	if len(os.Args) < 2 || os.Args[1] != "test" {
 		fmt.Fprintln(os.Stderr, "usage: ddtest test [--runtime=sdk|mini] [go test flags] [packages]")
 		os.Exit(2)

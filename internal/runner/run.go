@@ -33,10 +33,8 @@ type goPackage struct {
 }
 type Overlay struct {
 	Replace map[string]string
-	// CoverExclude lists owned adapter files; they must not affect user coverage.
-	CoverExclude []string      `json:",omitempty"`
-	Testify      *LibraryEntry `json:",omitempty"`
-	Goleak       *LibraryEntry `json:",omitempty"`
+	Testify *LibraryEntry `json:",omitempty"`
+	Goleak  *LibraryEntry `json:",omitempty"`
 }
 
 type Plan struct {

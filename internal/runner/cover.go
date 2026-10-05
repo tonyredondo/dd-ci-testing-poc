@@ -11,35 +11,25 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 )
 
-// RunCoverTool is ddtest's private -toolexec entrypoint. Go's cover tool opens
-// logical source paths directly, unlike the compiler. Translate only its Go
-// inputs and coverage metadata. Compiler/linker identities stay native. The
-// cover identity also includes our transformation contract and excluded files.
+// RunCoverTool handles Go's cover tool for ddtest's private -toolexec
+// entrypoint. Unlike the compiler, cover opens logical source paths directly, so
+// overlay-backed inputs are translated to their backing files. Compiler and
+// linker identities stay native; cover's identity includes our contract.
 func RunCoverTool(ctx context.Context, overlay string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "ddtest: missing cover tool executable")
 		return 2
 	}
-	var finish func() error
-	var cleanup func()
-	if filepath.Base(args[0]) == "cover" || filepath.Base(args[0]) == "cover.exe" {
-		probe := len(args) == 2 && args[1] == "-V=full"
-		if probe {
-			return runCoverVersion(ctx, overlay, args, stdin, stdout, stderr)
-		}
-		var err error
-		args, finish, cleanup, err = prepareCoverInputs(overlay, args)
-		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return 2
-		}
-		if cleanup != nil {
-			defer cleanup()
-		}
+	if len(args) == 2 && args[1] == "-V=full" {
+		return runCoverVersion(ctx, args, stdin, stdout, stderr)
+	}
+	args, err := translateCoverInputs(overlay, args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
 	}
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, stderr
@@ -50,12 +40,6 @@ func RunCoverTool(ctx context.Context, overlay string, args []string, stdin io.R
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	if finish != nil {
-		if err := finish(); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 2
-		}
-	}
 	return 0
 }
 
@@ -63,14 +47,8 @@ func RunCoverTool(ctx context.Context, overlay string, args []string, stdin io.R
 // rewritten client sources. Otherwise Go could reuse stale coverage objects.
 const coverContractVersion = "ddtest-cover-v1"
 
-func coverFingerprint(plan Overlay) string {
-	excluded := append([]string(nil), plan.CoverExclude...)
-	sort.Strings(excluded)
-	data, _ := json.Marshal(struct {
-		Version  string
-		Excluded []string
-	}{coverContractVersion, excluded})
-	hash := sha256.Sum256(data)
+func coverFingerprint() string {
+	hash := sha256.Sum256([]byte(coverContractVersion))
 	return fmt.Sprintf("%x", hash)
 }
 
@@ -83,17 +61,7 @@ func appendCoverIdentity(native, fingerprint string) string {
 	return native + " ddtest-cover=" + fingerprint + "\n"
 }
 
-func runCoverVersion(ctx context.Context, overlay string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	data, err := os.ReadFile(overlay)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
-	}
-	var plan Overlay
-	if err := json.Unmarshal(data, &plan); err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
-	}
+func runCoverVersion(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var native bytes.Buffer
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, &native, stderr
@@ -104,128 +72,38 @@ func runCoverVersion(ctx context.Context, overlay string, args []string, stdin i
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	_, err = io.WriteString(stdout, appendCoverIdentity(native.String(), coverFingerprint(plan)))
-	if err != nil {
+	if _, err := io.WriteString(stdout, appendCoverIdentity(native.String(), coverFingerprint())); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
 	return 0
 }
 
-// prepareCoverInputs keeps cover's input/output ordering intact. Generated
-// wrappers are compiled normally but excluded from metadata and counters, so
-// adding instrumentation cannot change the client's coverage percentage.
-func prepareCoverInputs(overlay string, args []string) ([]string, func() error, func(), error) {
+// translateCoverInputs replaces overlaid Go inputs with their backing files and
+// keeps every other argument, including cover's input/output ordering, intact.
+func translateCoverInputs(overlay string, args []string) ([]string, error) {
 	data, err := os.ReadFile(overlay)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	var plan Overlay
 	if err := json.Unmarshal(data, &plan); err != nil {
-		return nil, nil, nil, err
-	}
-	excluded := make(map[string]bool, len(plan.CoverExclude))
-	for _, path := range plan.CoverExclude {
-		excluded[path] = true
+		return nil, err
 	}
 	result := append([]string(nil), args...)
-	var inputs []int
-	outListIndex := -1
-	outListAssigned := false
 	for i := 1; i < len(result); i++ {
-		if strings.HasPrefix(result[i], "-outfilelist=") {
-			outListIndex = i
-			outListAssigned = true
-		} else if result[i] == "-outfilelist" && i+1 < len(result) {
-			outListIndex = i + 1
-		}
 		if strings.HasPrefix(result[i], "-") || !strings.HasSuffix(result[i], ".go") {
 			continue
 		}
 		logical, err := filepath.Abs(result[i])
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
-		inputs = append(inputs, i)
 		if actual := plan.Replace[logical]; actual != "" {
 			result[i] = actual
 		}
 	}
-	var skipped map[int]string
-	for _, i := range inputs {
-		logical, _ := filepath.Abs(args[i])
-		if excluded[logical] {
-			if skipped == nil {
-				skipped = make(map[int]string)
-			}
-			skipped[i] = result[i]
-		}
-	}
-	if len(skipped) == 0 {
-		return result, nil, nil, nil
-	}
-	if outListIndex < 0 {
-		return nil, nil, nil, fmt.Errorf("cover: generated adapters require package coverage output mapping")
-	}
-	outList := strings.TrimPrefix(result[outListIndex], "-outfilelist=")
-	data, err = os.ReadFile(outList)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	outputs := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
-	if len(outputs) != len(inputs)+1 {
-		return nil, nil, nil, fmt.Errorf("cover: expected %d output paths, got %d", len(inputs)+1, len(outputs))
-	}
-	keptOutputs := []string{outputs[0]}
-	restore := make(map[string]string, len(skipped))
-	for n, i := range inputs {
-		if source, ok := skipped[i]; ok {
-			restore[outputs[n+1]] = source
-		} else {
-			keptOutputs = append(keptOutputs, outputs[n+1])
-		}
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(outList), "ddtest-cover-*.txt")
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	cleanup := func() { os.Remove(temporary.Name()) }
-	_, err = temporary.WriteString(strings.Join(keptOutputs, "\n") + "\n")
-	closeErr := temporary.Close()
-	if err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		cleanup()
-		return nil, nil, nil, err
-	}
-	result[outListIndex] = temporary.Name()
-	if outListAssigned {
-		result[outListIndex] = "-outfilelist=" + temporary.Name()
-	}
-	filtered := make([]string, 0, len(result)-len(skipped))
-	for i, arg := range result {
-		if _, skip := skipped[i]; !skip {
-			filtered = append(filtered, arg)
-		}
-	}
-	finish := func() error {
-		for output, source := range restore {
-			content, err := os.ReadFile(source)
-			if err != nil {
-				return err
-			}
-			if err := os.WriteFile(output, content, 0600); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	return filtered, finish, cleanup, nil
-}
-
-func coverToolCommand(executable, overlay string) (string, error) {
-	return toolCommand(executable, overlay, "cover")
+	return result, nil
 }
 
 func toolCommand(executable, overlay, mode string) (string, error) {
