@@ -119,6 +119,16 @@ func command(t *testing.T, dir string, env []string, name string, args ...string
 // Measure only the child process. Fixture setup and result comparisons stay outside.
 func commandWithTiming(t *testing.T, dir string, env []string, name string, args ...string) (string, string, int, time.Duration) {
 	t.Helper()
+	out, stderr, code, wall, err := runCommand(dir, env, name, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out, stderr, code, wall
+}
+
+// runCommand reports start failures and timeouts as errors instead of through
+// testing.T, so independent builds can run in other goroutines.
+func runCommand(dir string, env []string, name string, args ...string) (string, string, int, time.Duration, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -135,13 +145,48 @@ func commandWithTiming(t *testing.T, dir string, env []string, name string, args
 		if e, ok := err.(*exec.ExitError); ok {
 			code = e.ExitCode()
 		} else {
-			t.Fatalf("%s: %v", name, err)
+			return "", "", 0, wall, fmt.Errorf("%s: %v", name, err)
 		}
 	}
 	if ctx.Err() != nil {
-		t.Fatalf("command timed out: %s %v", name, args)
+		return "", "", 0, wall, fmt.Errorf("command timed out: %s %v", name, args)
 	}
-	return out.String(), errout.String(), code, wall
+	return out.String(), errout.String(), code, wall, nil
+}
+
+// fixtureBuild is one independent compilation of a fixture binary.
+type fixtureBuild struct {
+	name, dir, tool string
+	env, args       []string
+}
+
+// buildConcurrently runs independent fixture compilations together. Each one
+// writes its own output, and Go's build cache and module files are safe for
+// concurrent go commands. Failures are reported from the test goroutine.
+func buildConcurrently(t *testing.T, builds ...fixtureBuild) {
+	t.Helper()
+	type result struct {
+		out, stderr string
+		code        int
+		err         error
+	}
+	results := make([]result, len(builds))
+	var wg sync.WaitGroup
+	for i, build := range builds {
+		wg.Go(func() {
+			r := &results[i]
+			r.out, r.stderr, r.code, _, r.err = runCommand(build.dir, build.env, build.tool, build.args...)
+		})
+	}
+	wg.Wait()
+	for i, r := range results {
+		if r.err != nil {
+			t.Fatalf("%s: %v", builds[i].name, r.err)
+		}
+		if r.code != 0 {
+			t.Fatalf("%s: %s\n%s", builds[i].name, r.out, r.stderr)
+		}
+	}
 }
 func copyTree(t *testing.T, from, to string) {
 	t.Helper()
@@ -192,12 +237,7 @@ func prepareFixtureWithTempDir(t *testing.T, baseline bool, tempDir func() strin
 	if baseline {
 		configureReferenceFixture(t, dir)
 	}
-	bin := filepath.Join(tempDir(), executableName("ddtest"))
-	out, e, code := command(t, root, testEnv(), "go", "build", "-o", bin, "./cmd/ddtest")
-	if code != 0 {
-		t.Fatalf("build driver: %s\n%s", out, e)
-	}
-	return dir, bin
+	return dir, sharedDriver(t, root)
 }
 
 func normalizedOutput(s string) string {

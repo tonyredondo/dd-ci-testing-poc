@@ -69,16 +69,25 @@ func buildTestifyParityFixture(t *testing.T, tempDir func() string) *parityFixtu
 	reference := os.Getenv("ORCHESTRION_BIN")
 	dir, driver := prepareTestifyFixtureWithTempDir(t, reference != "", tempDir)
 	flags := []string{"-mod=mod", "-race", "-cover", "-covermode=atomic", "-coverpkg=./..."}
-	bins := compileMiniPairWithTempDir(t, dir, driver, tempDir, flags...)
+	bins, builds := miniPairBuilds(dir, driver, tempDir, flags...)
 	oracle := bins[0]
 	if reference != "" {
-		oracle = compileTestifyReference(t, dir, reference, tempDir, flags...)
+		var build fixtureBuild
+		oracle, build = testifyReferenceBuild(dir, reference, tempDir, flags...)
+		builds = append(builds, build)
 	}
+	buildConcurrently(t, builds...)
 	return &parityFixture{dir: dir, sdk: bins[0], mini: bins[1], oracle: oracle}
 }
 
 func compileTestifyReference(t *testing.T, dir, reference string, tempDir func() string, flags ...string) string {
 	t.Helper()
+	oracle, build := testifyReferenceBuild(dir, reference, tempDir, flags...)
+	buildConcurrently(t, build)
+	return oracle
+}
+
+func testifyReferenceBuild(dir, reference string, tempDir func() string, flags ...string) (string, fixtureBuild) {
 	oracle := filepath.Join(tempDir(), executableName("fixture.test"))
 	args := append([]string{"test"}, flags...)
 	args = append(args, "-toolexec="+reference+" toolexec", "-c", "-o", oracle, ".")
@@ -90,11 +99,7 @@ func compileTestifyReference(t *testing.T, dir, reference string, tempDir func()
 		args = append(args, "-work")
 		env = append(env, "GOTMPDIR="+tempDir())
 	}
-	out, stderr, code := command(t, dir, env, "go", args...)
-	if code != 0 {
-		t.Fatalf("Testify reference compile: %s %s", out, stderr)
-	}
-	return oracle
+	return oracle, fixtureBuild{name: "Testify reference compile", dir: dir, tool: "go", env: env, args: args}
 }
 
 func runCIVisibilityTestifyParity(t *testing.T, deferred bool) {
@@ -429,11 +434,14 @@ func TestRootCoverage(t *testing.T){client.RunLocalSuite(t,new(RootCoverageSuite
 			t.Fatal(err)
 		}
 	}
-	bins := compileMiniPair(t, dir, driver, "-mod=mod", "-cover")
+	bins, builds := miniPairBuilds(dir, driver, t.TempDir, "-mod=mod", "-cover")
 	oracle := bins[0]
 	if reference != "" {
-		oracle = compileTestifyReference(t, dir, reference, t.TempDir, "-mod=mod", "-cover")
+		var build fixtureBuild
+		oracle, build = testifyReferenceBuild(dir, reference, t.TempDir, "-mod=mod", "-cover")
+		builds = append(builds, build)
 	}
+	buildConcurrently(t, builds...)
 	tc := parityCase{Name: "regular-root-coverage", Args: []string{"-test.run=^TestRootCoverage$"}, Policy: policySettings{Coverage: true}, Coverage: true, MinTests: 2}
 	want, sdk := runParityCase(t, dir, oracle, tc)
 	got, mini := runParityCase(t, dir, bins[1], tc)

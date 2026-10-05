@@ -495,15 +495,13 @@ func TestParityUnskippable(t *testing.T) { t.Log("must run") }
 		t.Fatal(err)
 	}
 	base, head := prepareParityGit(t, dir)
-	bins := compileMiniPairWithTempDir(t, dir, driver, tempDir, "-cover", "-covermode=atomic", "-coverpkg=./...")
+	bins, builds := miniPairBuilds(dir, driver, tempDir, "-cover", "-covermode=atomic", "-coverpkg=./...")
 	oracle := bins[0]
 	if reference != "" {
 		oracle = filepath.Join(tempDir(), executableName("fixture.test"))
-		out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false"), "go", "test", "-cover", "-covermode=atomic", "-coverpkg=./...", "-toolexec="+reference+" toolexec", "-c", "-o", oracle, ".")
-		if code != 0 {
-			t.Fatalf("SDK oracle compile: %s %s", out, stderr)
-		}
+		builds = append(builds, fixtureBuild{name: "SDK oracle compile", dir: dir, tool: "go", env: testEnv("DD_CIVISIBILITY_ENABLED=false"), args: []string{"test", "-cover", "-covermode=atomic", "-coverpkg=./...", "-toolexec=" + reference + " toolexec", "-c", "-o", oracle, "."}})
 	}
+	buildConcurrently(t, builds...)
 	return &parityFixture{dir: dir, sdk: bins[0], mini: bins[1], oracle: oracle, base: base, head: head}
 }
 

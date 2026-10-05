@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"syscall"
@@ -27,7 +28,39 @@ var (
 	sharedTestingParity sharedParityFixture
 	sharedTestifyParity sharedParityFixture
 	sharedParityRoot    string
+	sharedDriverBuild   struct {
+		once      sync.Once
+		path, err string
+	}
 )
+
+// sharedDriver builds ddtest once per test process. The driver is an
+// immutable build of this checkout that tests only execute, so every fixture
+// can share it instead of linking it again. TestMain owns its directory.
+func sharedDriver(t *testing.T, root string) string {
+	t.Helper()
+	sharedDriverBuild.once.Do(func() {
+		dir, err := os.MkdirTemp(sharedParityRoot, "driver-")
+		if err != nil {
+			sharedDriverBuild.err = err.Error()
+			return
+		}
+		bin := filepath.Join(dir, executableName("ddtest"))
+		out, stderr, code, _, err := runCommand(root, testEnv(), "go", "build", "-o", bin, "./cmd/ddtest")
+		switch {
+		case err != nil:
+			sharedDriverBuild.err = err.Error()
+		case code != 0:
+			sharedDriverBuild.err = out + "\n" + stderr
+		default:
+			sharedDriverBuild.path = bin
+		}
+	})
+	if sharedDriverBuild.path == "" {
+		t.Fatalf("build driver: %s", sharedDriverBuild.err)
+	}
+	return sharedDriverBuild.path
+}
 
 // The first consumer's t.TempDir would disappear before the deferred matrix
 // starts. TestMain owns these directories through all selected tests and -count

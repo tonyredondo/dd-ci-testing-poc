@@ -65,19 +65,25 @@ func compileMiniPair(t *testing.T, dir, driver string, flags ...string) []string
 
 func compileMiniPairWithTempDir(t *testing.T, dir, driver string, tempDir func() string, flags ...string) []string {
 	t.Helper()
+	bins, builds := miniPairBuilds(dir, driver, tempDir, flags...)
+	buildConcurrently(t, builds...)
+	return bins
+}
+
+// miniPairBuilds describes the SDK and Mini compilations so callers can run
+// them together with other independent builds, such as the reference.
+func miniPairBuilds(dir, driver string, tempDir func() string, flags ...string) ([]string, []fixtureBuild) {
 	var bins []string
+	var builds []fixtureBuild
 	for _, runtime := range []string{"sdk", "mini"} {
 		bin := filepath.Join(tempDir(), executableName("fixture.test"))
 		args := []string{"test", "--runtime=" + runtime, "-c", "-o", bin}
 		args = append(args, flags...)
 		args = append(args, ".")
-		out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false"), driver, args...)
-		if code != 0 {
-			t.Fatalf("compile %s: %s\n%s", runtime, out, stderr)
-		}
 		bins = append(bins, bin)
+		builds = append(builds, fixtureBuild{name: "compile " + runtime, dir: dir, tool: driver, env: testEnv("DD_CIVISIBILITY_ENABLED=false"), args: args})
 	}
-	return bins
+	return bins, builds
 }
 func assertMiniEquivalent(t *testing.T, want, got execution) {
 	t.Helper()
