@@ -67,14 +67,19 @@ func TestFinishedSpanSharesSealedMaps(t *testing.T) {
 	if event.Content.Meta["test.name"] != "original" || event.Content.Metrics["coverage"] != 0.5 {
 		t.Fatal("event changed after Finish")
 	}
-	capacity := cap(client.events)
+	client.mu.Lock()
+	capacity := cap(client.events) + cap(client.spare)
+	client.mu.Unlock()
 	if capacity == 0 {
 		t.Fatal("successful flush did not retain queue capacity")
 	}
 	if err := client.Flush(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if cap(client.events) != capacity {
+	client.mu.Lock()
+	retained := cap(client.events) + cap(client.spare)
+	client.mu.Unlock()
+	if retained != capacity {
 		t.Fatal("empty flush discarded queue capacity")
 	}
 	if err := client.Close(context.Background()); err != nil {

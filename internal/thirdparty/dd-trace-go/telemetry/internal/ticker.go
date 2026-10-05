@@ -28,11 +28,14 @@ type Ticker struct {
 	stopChan chan struct{}
 	stopped  bool
 	stopIdle func()
+	lastTick time.Time // Deferred mode: when the checkpoint ticker last ran.
 }
 
 func NewTicker(tickFunc TickFunc, interval Range[time.Duration]) *Ticker {
 	if cidelivery.Enabled() {
-		return &Ticker{tickSpeed: interval.Max, interval: interval, tickFunc: tickFunc, stopIdle: cidelivery.Register(tickFunc)}
+		ticker := &Ticker{tickSpeed: interval.Max, interval: interval, tickFunc: tickFunc, lastTick: time.Now()}
+		ticker.stopIdle = cidelivery.Register(ticker.tickIfDue)
+		return ticker
 	}
 	ticker := &Ticker{
 		ticker:    time.NewTicker(interval.Max),
@@ -56,6 +59,20 @@ func (t *Ticker) run() {
 		case <-t.stopChan:
 			return
 		}
+	}
+}
+
+// tickIfDue runs at idle checkpoints in deferred mode. Like the periodic ticker,
+// it ticks only after the current interval elapsed, rather than once per test.
+func (t *Ticker) tickIfDue() {
+	t.tickSpeedMu.Lock()
+	due := time.Since(t.lastTick) >= t.tickSpeed
+	if due {
+		t.lastTick = time.Now()
+	}
+	t.tickSpeedMu.Unlock()
+	if due {
+		t.tickFunc()
 	}
 }
 

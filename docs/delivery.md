@@ -11,8 +11,10 @@ Set `DD_CIVISIBILITY_DEFERRED_DELIVERY=true` before running the test binary:
 DD_CIVISIBILITY_DEFERRED_DELIVERY=true ddtest test --runtime=mini -count=1 ./...
 ```
 
-The default is ordinary delivery. Deferred mode buffers test-cycle events,
-coverage and diagnostic logs while instrumented tests are active. A test holds
+The default is ordinary delivery: finishing an event never waits for the
+network, and a background sender delivers full batches. Deferred mode buffers
+test-cycle events, coverage and diagnostic logs while instrumented tests are
+active, and sends nothing concurrently with them. A test holds
 an activity lease through its body, cleanup callbacks and parallel descendants.
 The lease is acquired inside the existing instrumented function, preserving the
 SDK's function-identity checks and retry accounting.
@@ -26,7 +28,7 @@ sequenceDiagram
     Test->>Send: Finish events and queue side payloads
     Note over Idle,Send: No delivery while admitted tests remain
     Test->>Idle: Last test cleanup releases lease
-    Idle->>Send: Drain queued work synchronously
+    Idle->>Send: Deliver full batches synchronously
     Note over Idle: Next test waits at admission
     Send-->>Idle: Delivery completes or fails
     Idle-->>Test: Admit next test
@@ -37,7 +39,13 @@ Parallel tests can continue together; sending waits until the whole admitted
 group finishes. Waiting for delivery inside that group would deadlock the test
 scheduler. The coordinator starts no goroutines. Initial CI settings, repository
 upload and telemetry startup also run synchronously in this mode. Telemetry's
-periodic worker is replaced by idle checkpoint flushes.
+periodic worker is replaced by idle checkpoints, which flush only once its
+interval has elapsed.
+
+A checkpoint delivers only full payloads: sealed test-cycle batches (the event
+count or 2.5 MiB threshold) and full coverage/log payloads. Partial payloads
+wait for the end of the session, so a serial suite sends one payload per full
+batch rather than one per test.
 
 This trades memory and delivery latency for isolation from test bodies. The
 pending queue can grow throughout a parallel group; its total memory is not
@@ -46,8 +54,8 @@ count limit, 2.5 MiB flush threshold and 5 MiB uncompressed intake limit. A fail
 flush preserves unsent chunks in order. Successfully sent chunks are not retried.
 Final abandonment reports drops per payload, not per event.
 
-An explicit `Flush` during an active test leaves sending to a later checkpoint
-and returns without waiting for that test. `Close` is terminal and flushes
+An explicit `Flush` during an active test returns without waiting for that test;
+the next checkpoint then also delivers the partial test-cycle batch. `Close` is terminal and flushes
 directly. Panic and signal shutdown force a checkpoint so writer shutdown can
 join pending batches. A user-created explicit client therefore remains responsible
 for its `Close` timing. Deferred mode is not a guarantee that no goroutine exists
@@ -76,7 +84,8 @@ flowchart TD
 ```
 
 The shim adds exact function filters for the CI signal handler, telemetry ticker,
-blocked CI senders, diagnostic log sender and coverage sender. It preserves the
+blocked CI senders, Mini's background test-cycle sender, diagnostic log sender
+and coverage sender. It preserves the
 caller's options and goleak's original validation, retry loop and error result.
 Waiting for an active CI request can add its remaining HTTP/retry time before
 goleak starts that loop; the checkpoint waits for delivery rather than canceling it.
@@ -169,7 +178,7 @@ Agent/intake acceptance remains a separate check.
 | --- | --- | --- |
 | No | Off | Ordinary batching and asynchronous CI workers. No leak-check checkpoint runs. |
 | Yes | Off | Ordinary delivery until `Find` runs; that check waits for sends, pauses new sends, closes owned idle connections and adds exact CI worker filters. |
-| No | On | Queue during admitted tests and drain at idle checkpoints; the next test waits for the drain. No goleak filters are installed. |
+| No | On | Queue during admitted tests; idle checkpoints deliver full payloads, and the next test waits for that delivery. No goleak filters are installed. |
 | Yes | On | Idle delivery plus the same automatic `Find` checkpoint and filters. |
 
 The lightweight HTTP send gate exists in Mini regardless of goleak detection.

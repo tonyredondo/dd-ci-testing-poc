@@ -102,9 +102,11 @@ that closure's identity to recognize already instrumented tests. The first
 registered cleanup runs last, covering user cleanups and parallel descendants.
 Preserve this placement when syncing retry or testing lifecycle changes.
 
-In deferred mode, settings and repository upload are synchronous, coverage/log
-batches transfer ownership to an idle queue, and telemetry flushes at checkpoints
-instead of starting a periodic worker. Coverage acquires its delivery concurrency
+In deferred mode, settings and repository upload are synchronous. Full
+coverage/log payloads transfer ownership to an idle queue; a partial payload
+waits for the writer's stop, so a serial suite does not send one per test.
+Telemetry ticks at checkpoints once its current interval has elapsed
+(`telemetry/internal/ticker.go`), instead of starting a periodic worker. Coverage acquires its delivery concurrency
 permit when the queued work runs, not while a parallel test is buffering it.
 Normal mode retains the asynchronous SDK paths. Terminal shutdown force-drains
 pending work before writer barriers. Memory may grow across a parallel group;
@@ -115,8 +117,8 @@ The automatic goleak shim applies in both Mini delivery modes. CI HTTP paths in
 `utils/net/http.go` and `telemetry/internal/writer.go` bracket requests with the
 send gate. A goleak check waits for active sends, pauses new sends and closes
 owned idle CI connections before taking snapshots. Named telemetry, coverage and
-log worker functions permit exact filters without ignoring `net/http` or a user
-goroutine snapshot. Preserve worker names together with
+log worker functions, and Mini's background test-cycle sender, permit exact
+filters without ignoring `net/http` or a user goroutine snapshot. Preserve worker names together with
 `internal/instrument/goleak.go` when moving these functions.
 
 Checks: `TestDeferredDeliveryParityMatrix` (17 policy combinations),

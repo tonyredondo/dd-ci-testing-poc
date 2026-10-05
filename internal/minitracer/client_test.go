@@ -175,38 +175,87 @@ func TestQueueBoundAndConcurrentBackpressure(t *testing.T) {
 		w.WriteHeader(202)
 	}))
 	defer server.Close()
-	client, err := New(Config{MaxEvents: 2, Transport: citransport.Config{Endpoint: server.URL}})
+	client, err := New(Config{MaxEvents: 2, Transport: citransport.Config{Endpoint: server.URL, Attempts: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	finish := func() { span, _ := client.StartSpan(context.Background(), "test", SpanType("test")); span.Finish() }
-	finish()
-	finish()
-	finish()
-	if client.DroppedEvents() != 1 || client.LastError() == nil {
-		t.Fatal("unreported rejected event")
+	// While intake fails, sealed batches are retained up to the bound plus the
+	// open batch. Further events are rejected immediately, never waiting.
+	retained := 2 * (maxReadyBatches + 1)
+	for range retained + 3 {
+		finish()
+	}
+	if client.DroppedEvents() != 3 || client.LastError() == nil {
+		t.Fatal("unreported rejected events")
 	}
 	client.mu.Lock()
-	queued := len(client.events)
+	sealed, open := len(client.ready)+client.inflight, len(client.events)
 	client.mu.Unlock()
-	if queued != 2 {
-		t.Fatalf("queue exceeded bound: %d", queued)
+	if sealed != maxReadyBatches || open != 2 {
+		t.Fatalf("queue exceeded bound: sealed=%d open=%d", sealed, open)
 	}
+	// A successful explicit flush delivers the retained batches and clears the
+	// background backoff. Concurrent finishers within the bound all succeed.
 	failing.Store(false)
+	if err := client.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	var wg sync.WaitGroup
-	for i := 0; i < 40; i++ {
-		wg.Add(1)
-		go func() { defer wg.Done(); finish() }()
+	for range retained {
+		wg.Go(finish)
 	}
 	wg.Wait()
 	if err := client.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if count.Load() != 42 || client.DroppedEvents() != 1 {
+	if count.Load() != int32(2*retained) || client.DroppedEvents() != 3 {
 		t.Fatalf("delivery=%d dropped=%d", count.Load(), client.DroppedEvents())
 	}
 	finish()
-	if client.DroppedEvents() != 2 {
+	if client.DroppedEvents() != 4 {
 		t.Fatal("post-close event accepted")
+	}
+}
+
+// TestFinishNeverWaitsForIntake covers the failure mode that previously made
+// tests slow: a blackholed endpoint delays delivery, never Finish.
+func TestFinishNeverWaitsForIntake(t *testing.T) {
+	release := make(chan struct{})
+	var count atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+		var envelope testCyclePayload
+		if err := msgp.Decode(r.Body, &envelope); err != nil {
+			t.Error(err)
+			return
+		}
+		var events ciEvents
+		if err := msgp.Decode(bytes.NewReader(envelope.Events), &events); err != nil {
+			t.Error(err)
+			return
+		}
+		count.Add(int32(len(events)))
+		w.WriteHeader(202)
+	}))
+	defer server.Close()
+	client, err := New(Config{MaxEvents: 10, Transport: citransport.Config{Endpoint: server.URL}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	for range 35 {
+		span, _ := client.StartSpan(context.Background(), "test", SpanType("test"))
+		span.Finish()
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("Finish waited for a stalled intake: %s", elapsed)
+	}
+	close(release)
+	if err := client.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if count.Load() != 35 || client.DroppedEvents() != 0 {
+		t.Fatalf("delivered=%d dropped=%d", count.Load(), client.DroppedEvents())
 	}
 }

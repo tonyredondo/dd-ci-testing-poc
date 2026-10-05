@@ -150,16 +150,18 @@ func TestCommonMetadataConcurrentProjectionAndBounds(t *testing.T) {
 
 func TestCommonMetadataFailureRetainsOriginalSnapshot(t *testing.T) {
 	var attempts int
-	var delivered testCycleBatch
+	var delivered []testCycleBatch
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempts++
 		if attempts == 1 {
 			w.WriteHeader(401)
 			return
 		}
-		if err := msgp.Decode(r.Body, &delivered); err != nil {
+		var batch testCycleBatch
+		if err := msgp.Decode(r.Body, &batch); err != nil {
 			t.Error(err)
 		}
+		delivered = append(delivered, batch)
 		w.WriteHeader(202)
 	}))
 	defer server.Close()
@@ -179,13 +181,15 @@ func TestCommonMetadataFailureRetainsOriginalSnapshot(t *testing.T) {
 	if err := client.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if len(delivered.Events) != 2 || client.DroppedEvents() != 0 {
-		t.Fatal("retry lost or duplicated events")
-	}
-	for i, want := range []string{"old", "new"} {
-		if got := effectiveCommonMeta(&delivered, delivered.Events[i])["git.commit.sha"]; got != want {
-			t.Fatalf("retry snapshot %d: %q", i, got)
+	// The retried batch keeps its own payload; the later event follows it.
+	var got []string
+	for i := range delivered {
+		for _, event := range delivered[i].Events {
+			got = append(got, effectiveCommonMeta(&delivered[i], event)["git.commit.sha"])
 		}
+	}
+	if strings.Join(got, ",") != "old,new" || client.DroppedEvents() != 0 {
+		t.Fatalf("retry lost, duplicated or reordered events: %v", got)
 	}
 	if got, _ := first.Meta("git.commit.sha"); got != "old" {
 		t.Fatal("retry changed sealed getter")

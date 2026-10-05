@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "fc7a7d26a46dddfc6debb849b325bd2402c5a3a47597a5711658794b813e9242",
+      "sha256": "1d907f5a7d9277a537eb4eabc518703f2e423f0e256861549981ca684d4363d7",
       "role": "local"
     },
     {
@@ -240,7 +240,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/coverage/coverage_writer.go",
-      "sha256": "c7c894d276c0c4a31ec12cd6906d73eaf11bb43d9ebedc962391a2b4ce9c24f2",
+      "sha256": "6ab71f90755a9088f92fbde8efcf5751bec841a01a473f8a4d33cb532823dcd4",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/coverage/coverage_writer.go",
       "source_sha256": "ec47c70e876239624294dd40334a13cae92b0ea57d0e4f8d707d2ec7a15a2ed4"
@@ -632,7 +632,7 @@
     },
     {
       "path": "civisibility/integrations/logs/logs_writer.go",
-      "sha256": "5ac297c8c47809bd88a697a3e27141248ab7e56db8b0faa1bdca8d2824832979",
+      "sha256": "fc9c33973ed03ee6a471f156ac43b7e949d77af0cfff56055f6b816fdd9eab8e",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/logs/logs_writer.go",
       "source_sha256": "19d9142417ff5af2daed0d9142a998c2472a24178e8193cf010fe9bd75bd57d0"
@@ -1686,10 +1686,15 @@
     },
     {
       "path": "telemetry/internal/ticker.go",
-      "sha256": "056c2e923a88ab7d090da26dc5aa2cd95a6d1db3e00c28f274d166f530f0193d",
+      "sha256": "93fd509cf17c2464eab5fef17358c03683021f4530f23d29ad2b3db8c9f472e8",
       "role": "adapted",
       "source_path": "internal/telemetry/internal/ticker.go",
       "source_sha256": "d12ae562403502996505a3bf5dfbd4eb9c5d91faab87cf01656a92741cc37a05"
+    },
+    {
+      "path": "telemetry/internal/ticker_test.go",
+      "sha256": "846b8ad446b1764c8b0968ce214b0e734feb524078fc0b6e92cc80bfdcdeabf5",
+      "role": "local"
     },
     {
       "path": "telemetry/internal/tracerconfig.go",

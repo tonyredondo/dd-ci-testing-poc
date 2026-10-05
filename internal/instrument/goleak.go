@@ -49,6 +49,7 @@ func TransformGoleakEntry(name string, src []byte) ([]byte, bool, error) {
 			prefix + "cidelivery.BeginSend",
 			prefix + "thirdparty/dd-trace-go/civisibility/integrations/logs.(*logsWriter).sendPayload",
 			prefix + "thirdparty/dd-trace-go/civisibility/integrations/gotesting/coverage.(*coverageWriter).sendPayload",
+			prefix + "minitracer.(*Client).deliverInBackground",
 		}
 		options := arg.Names[0].Name
 		// Find also accepts a caller-owned variadic slice with spare capacity.

@@ -32,12 +32,20 @@ type Config struct {
 	DeferUntilIdle bool
 }
 
-// Client buffers native events. Event ownership transfers on Finish. Flushes
-// serialize; a failed batch stays queued and can be retried by a later Flush.
+// Client buffers native events. Event ownership transfers on Finish, which
+// never waits for the network. Full batches are sealed for delivery; delivery
+// is serialized, and a failed batch stays queued for a later attempt.
 type Client struct {
 	mu                     sync.Mutex
-	sendMu                 chan struct{}
-	events                 []*ciEvent
+	sendMu                 chan struct{} // Delivery token; owns payload while held.
+	events                 []*ciEvent    // Open batch.
+	ready                  []readyBatch  // Sealed batches, oldest first.
+	inflight               int           // Sealed batches being delivered.
+	spare                  []*ciEvent    // Delivered storage reused by the next open batch.
+	sending                bool          // A background sender is running.
+	flushRequested         bool          // A deferred Flush waits for the next checkpoint.
+	nextRetry              time.Time     // Background delivery waits until then after a failure.
+	retryBackoff           time.Duration
 	transport              *citransport.Transport
 	service, env           string
 	serviceVersion         string
@@ -112,16 +120,20 @@ func New(c Config) (*Client, error) {
 	}
 	client.removeConnectionCloser = cidelivery.RegisterConnectionCloser(transport.CloseOwnedIdleConnections)
 	if c.DeferUntilIdle {
+		// Idle checkpoints deliver only sealed, full batches. The open batch
+		// waits for Close or an explicit Flush, so a serial suite does not send
+		// one payload per test. A Flush skipped during a test seals it here.
 		client.removeIdleFlush = cidelivery.Register(func() {
 			client.mu.Lock()
-			empty := len(client.events) == 0
-			client.mu.Unlock()
-			if empty {
-				return
+			if client.flushRequested {
+				client.flushRequested = false
+				client.sealAllLocked()
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), client.timeout)
-			defer cancel()
-			_ = client.flush(ctx)
+			empty := len(client.ready) == 0
+			client.mu.Unlock()
+			if !empty {
+				_ = client.deliverReady(context.Background())
+			}
 		})
 	}
 	return client, nil

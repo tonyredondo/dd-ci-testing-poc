@@ -30,13 +30,12 @@ const (
 )
 
 type coverageWriter struct {
-	client     net.Client       // http client
-	payload    *coveragePayload // Encodes and buffers events in msgpack format.
-	climit     chan struct{}    // Limits the number of concurrent outgoing connections.
-	wg         sync.WaitGroup   // Waits for all uploads to finish.
-	mu         sync.Mutex       // Guards payload rotation between add and flush.
-	deferred   bool
-	removeIdle func()
+	client   net.Client       // http client
+	payload  *coveragePayload // Encodes and buffers events in msgpack format.
+	climit   chan struct{}    // Limits the number of concurrent outgoing connections.
+	wg       sync.WaitGroup   // Waits for all uploads to finish.
+	mu       sync.Mutex       // Guards payload rotation between add and flush.
+	deferred bool
 }
 
 func newCoverageWriter() *coverageWriter {
@@ -47,9 +46,8 @@ func newCoverageWriter() *coverageWriter {
 		climit:   make(chan struct{}, concurrentConnectionLimit),
 		deferred: cidelivery.Enabled(),
 	}
-	if writer.deferred {
-		writer.removeIdle = cidelivery.Register(writer.flush)
-	}
+	// Deferred mode queues only full payloads for idle checkpoints; the partial
+	// payload waits for stop, so a serial suite does not send one per test.
 	return writer
 }
 
@@ -73,9 +71,6 @@ func (w *coverageWriter) add(coverage *testCoverage) {
 }
 
 func (w *coverageWriter) stop() {
-	if w.removeIdle != nil {
-		w.removeIdle()
-	}
 	log.Debug("coverageWriter: stopping writer")
 	w.flush()
 	if w.deferred {

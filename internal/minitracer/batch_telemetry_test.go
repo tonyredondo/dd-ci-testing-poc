@@ -39,29 +39,34 @@ func TestPayloadDropCountsTerminalBatches(t *testing.T) {
 	finish := func() { s, _ := c.StartSpan(context.Background(), "test", SpanType("test")); s.Finish() }
 	finish()
 	finish()
-	if err = c.Flush(context.Background()); err == nil || drops() != 0 {
+	if err = c.Flush(context.Background()); err == nil || drops() != 0 || c.DroppedEvents() != 0 {
 		t.Fatal("a retained batch must not count as discarded")
 	}
-	finish()
-	finish()
-	if c.DroppedEvents() != 2 || drops() != 0 {
+	// The bounded queue retains later batches; beyond it, events are rejected
+	// one by one without being counted as payloads.
+	for range 2*maxReadyBatches + 1 {
+		finish()
+	}
+	if c.DroppedEvents() != 1 || drops() != 0 {
 		t.Fatalf("rejected events were counted as payloads: events=%d payloads=%v", c.DroppedEvents(), drops())
 	}
 	if err = c.Close(context.Background()); err == nil {
 		t.Fatal("terminal delivery failure suppressed")
 	}
-	if drops() != 1 || c.DroppedEvents() != 4 || calls.Load() != 12 {
-		t.Fatalf("one abandoned two-event batch: payloads=%v events=%d attempts=%d", drops(), c.DroppedEvents(), calls.Load())
+	// Every retained batch is abandoned once: the ready batches and the open one.
+	if drops() != maxReadyBatches+1 || c.DroppedEvents() != 2*(maxReadyBatches+1)+1 {
+		t.Fatalf("abandoned batches: payloads=%v events=%d", drops(), c.DroppedEvents())
 	}
-	// Neither repeated close/flush nor finishing additional spans may count that
-	// same payload twice or resend an abandoned batch.
+	// Neither repeated close/flush nor finishing additional spans may count those
+	// payloads twice or resend an abandoned batch.
+	sent := calls.Load()
 	var wg sync.WaitGroup
 	for range 8 {
 		wg.Go(func() { _ = c.Close(context.Background()) })
 	}
 	wg.Wait()
 	finish()
-	if err = c.Flush(context.Background()); err != nil || drops() != 1 || calls.Load() != 12 || c.DroppedEvents() != 5 {
+	if err = c.Flush(context.Background()); err != nil || drops() != maxReadyBatches+1 || calls.Load() != sent || c.DroppedEvents() != 2*(maxReadyBatches+1)+2 {
 		t.Fatalf("discarded batch counted or sent again: payloads=%v events=%d attempts=%d err=%v", drops(), c.DroppedEvents(), calls.Load(), err)
 	}
 }

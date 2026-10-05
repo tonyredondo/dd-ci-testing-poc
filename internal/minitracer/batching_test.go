@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel"
@@ -110,13 +111,12 @@ func TestLargeBatchFailureRetainedAndOversizedEventRejected(t *testing.T) {
 	}
 	span, _ := c.StartSpan(context.Background(), "test", SpanType("test"), Tag("large", strings.Repeat("a", 3<<20)))
 	span.Finish()
-	if c.LastError() == nil {
-		t.Fatal("byte threshold did not flush")
-	}
+	// The byte threshold seals the batch; delivery fails in the background.
+	waitFor(t, func() bool { return c.LastError() != nil })
 	c.mu.Lock()
-	queued, queuedBytes := len(c.events), c.queuedBytes
+	retained := len(c.ready) == 1 && len(c.ready[0].events) == 1 && c.ready[0].bytes >= 3<<20 && len(c.events) == 0
 	c.mu.Unlock()
-	if queued != 1 || queuedBytes < 3<<20 {
+	if !retained {
 		t.Fatal("failed batch not retained")
 	}
 	tooLarge, _ := c.StartSpan(context.Background(), "test", SpanType("test"), Tag("large", strings.Repeat("a", citransport.TestCycleMaxPayloadBytes)))
@@ -133,8 +133,20 @@ func TestLargeBatchFailureRetainedAndOversizedEventRejected(t *testing.T) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.queuedBytes != 0 {
+	if c.queuedBytes != 0 || len(c.ready) != 0 {
 		t.Fatal("byte count not reset")
+	}
+}
+
+// waitFor polls a condition set by background delivery.
+func waitFor(t *testing.T, condition func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for !condition() {
+		if time.Now().After(deadline) {
+			t.Fatal("condition not reached")
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 

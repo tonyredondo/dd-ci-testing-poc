@@ -105,10 +105,11 @@ Goleak has a package-scoped compiler flag marker because it does not import
 
 ## Enqueue and delivery
 
-The ordinary enqueue path records its deadline but creates a context/timer only
-when it must wait for the send token or flush. Both operations share the original
-deadline. This removes timer allocations for events that fit the current batch;
-it does not extend a blocked enqueue's timeout.
+Enqueueing takes only the client mutex: it never waits for the delivery token,
+creates no timer and performs no network I/O. Network work happens in the
+background sender when a batch fills, and at the end of the session. A test that
+finishes fewer events than one batch (1,000 by default) sees no delivery work
+concurrent with its tests.
 
 Mini's test-cycle gzip pool uses `gzip.BestSpeed`. Agentless payloads remain gzip
 and obey the same uncompressed intake limit. Coverage and diagnostic-log
@@ -182,20 +183,19 @@ compressor and buffer too. Request and replay readers must all become unable to
 read before either backing buffer is reusable. Calling `Close` on just the
 initial reader does not establish that boundary.
 
-In ordinary delivery, the queue is bounded by event count and byte estimates.
-A stalled flush can block finishing goroutines and reject new events when an older full batch
-cannot be delivered. That is observable backpressure, so a throughput change
+In ordinary delivery, the queue is bounded: four sealed batches, including one
+in flight, plus the open batch, each limited by event count and byte estimates.
+A stalled intake therefore delays only background delivery. Once the bound is
+reached, new events are rejected and counted immediately, so a throughput change
 must check errors and drops as well as ns/op.
 
 Deferred delivery can buffer more than one batch while tests are active. Its
 pending queue has no total size limit; each outgoing payload still obeys the
 intake bounds. Include peak memory when assessing that mode.
 
-`Client.add` records a deadline from `FlushTimeout` (10 seconds by default).
-It creates a timeout context only if it must wait for the delivery token or
-flush a batch. Waiting and flushing share that deadline. Expiry rejects the
-incoming event, increments `DroppedEvents` and records the error. An ordinary
-enqueue that fits the current batch allocates no timeout context or timer.
+Each background or checkpoint delivery of a sealed batch is bounded by
+`FlushTimeout` (10 seconds by default). Explicit `Flush` and `Close` use their
+caller's context.
 
 [Sealed-span tests](../internal/minitracer/sealed_span_test.go),
 [batching tests](../internal/minitracer/batching_test.go),

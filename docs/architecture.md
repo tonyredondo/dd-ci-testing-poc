@@ -193,14 +193,21 @@ or numeric overrides use local strings for the affected kind/key. The
 [metadata diagram and rules](delivery.md#payload-level-common-metadata) explain
 that boundary; ordinary child spans receive no CI defaults.
 
-The client has two synchronization boundaries. `mu` protects queue, closure,
-error and drop state. `sendMu` is a context-aware token that serializes event
-acceptance and delivery, including ownership of the payload buffer. Slow delivery
-can therefore block concurrent finishers. In ordinary mode, a failed flush keeps
-its batch; a new event is rejected and counted if that batch fills the queue
-and cannot be delivered. Deferred mode queues through active test groups and
-drains at idle checkpoints. Its pending queue can exceed one batch, while each
-outgoing payload keeps the intake limits.
+The client has two synchronization boundaries. `mu` protects the open batch,
+sealed batches, closure, error and drop state. `sendMu` is a context-aware token
+that serializes delivery, including ownership of the payload buffer. `Finish`
+never takes the token and never performs network I/O: it appends to the open
+batch and seals it once it reaches the event-count or byte threshold.
+
+In ordinary mode, one background sender delivers sealed batches in order, each
+bounded by `FlushTimeout`. A failed batch stays first in line, and background
+retries back off from one to ten seconds; any successful delivery clears the
+backoff. At most four sealed batches, including one in flight, plus the open
+batch are retained. Beyond that bound new events are rejected and counted
+immediately instead of waiting. Deferred mode starts no sender: idle
+checkpoints deliver sealed batches, and the open batch waits for `Close` or an
+explicit `Flush`. Its pending queue can exceed the bound, while each outgoing
+payload keeps the intake limits.
 
 Ordinary CI telemetry updates use bound handles for their existing tag
 combinations. The global swappable handle retains startup replay and follows

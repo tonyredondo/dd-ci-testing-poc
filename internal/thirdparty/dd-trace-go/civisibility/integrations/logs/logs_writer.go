@@ -30,14 +30,13 @@ const (
 
 // logsWriter is responsible for writing logs to the agentless endpoint.
 type logsWriter struct {
-	client     net.Client     // http client
-	payload    *logsPayload   // Encodes and buffers events in JSON format.
-	climit     chan struct{}  // Limits the number of concurrent outgoing connections.
-	wg         sync.WaitGroup // Waits for all uploads to finish.
-	mu         sync.Mutex     // Guards payload rotation, stopped state, and upload reservations.
-	stopped    bool           // Prevents new entries and reservations after shutdown starts.
-	deferred   bool
-	removeIdle func()
+	client   net.Client     // http client
+	payload  *logsPayload   // Encodes and buffers events in JSON format.
+	climit   chan struct{}  // Limits the number of concurrent outgoing connections.
+	wg       sync.WaitGroup // Waits for all uploads to finish.
+	mu       sync.Mutex     // Guards payload rotation, stopped state, and upload reservations.
+	stopped  bool           // Prevents new entries and reservations after shutdown starts.
+	deferred bool
 }
 
 // newLogsWriter creates a new instance of logsWriter.
@@ -49,9 +48,8 @@ func newLogsWriter() *logsWriter {
 		climit:   make(chan struct{}, concurrentConnectionLimit),
 		deferred: cidelivery.Enabled(),
 	}
-	if writer.deferred {
-		writer.removeIdle = cidelivery.Register(writer.flush)
-	}
+	// Deferred mode queues only full payloads for idle checkpoints; the partial
+	// payload waits for stop, so a serial suite does not send one per test.
 	return writer
 }
 
@@ -80,9 +78,6 @@ func (w *logsWriter) add(entry *logEntry) bool {
 }
 
 func (w *logsWriter) stop() {
-	if w.removeIdle != nil {
-		w.removeIdle()
-	}
 	log.Debug("logsWriter: stopping writer")
 	w.mu.Lock()
 	var payloadToFlush *logsPayload
