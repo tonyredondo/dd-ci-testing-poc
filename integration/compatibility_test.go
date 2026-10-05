@@ -162,11 +162,11 @@ type fixtureBuild struct {
 }
 
 // buildConcurrently runs independent fixture compilations together. Each one
-// writes its own output; Go's build and module caches and go.sum are safe for
-// concurrent go commands. go.mod is not: go rewrites it in place, and a
-// concurrent Orchestrion build that reads it partially written pins itself
-// again. With -mod=mod, the first build therefore runs alone and records the
-// requirements; the others must then leave go.mod unchanged. Failures are
+// writes its own output, and Go's build and module caches are safe for
+// concurrent go commands. Builds with -mod=mod run one at a time instead: go
+// may rewrite go.mod while another build reads it, and every Orchestrion
+// toolexec call re-checks its pin with go list, then rewrites
+// orchestrion.tool.go and runs go mod tidy when that check fails. Failures are
 // reported from the test goroutine.
 func buildConcurrently(t *testing.T, builds ...fixtureBuild) {
 	t.Helper()
@@ -189,41 +189,23 @@ func buildConcurrently(t *testing.T, builds ...fixtureBuild) {
 			t.Fatalf("%s: %s\n%s", builds[i].name, r.out, r.stderr)
 		}
 	}
-	first := 0
-	settled := map[string][]byte{}
 	if slices.ContainsFunc(builds, func(b fixtureBuild) bool { return slices.Contains(b.args, "-mod=mod") }) {
-		run(0)
-		check(0)
-		first = 1
-		for _, build := range builds[1:] {
-			if _, ok := settled[build.dir]; !ok {
-				settled[build.dir] = readModFile(t, build.dir)
-			}
+		for i := range builds {
+			run(i)
+			check(i)
 		}
+		return
 	}
 	var wg sync.WaitGroup
-	for i := first; i < len(builds); i++ {
+	for i := range builds {
 		wg.Go(func() { run(i) })
 	}
 	wg.Wait()
-	for i := first; i < len(builds); i++ {
+	for i := range builds {
 		check(i)
-	}
-	for dir, before := range settled {
-		if after := readModFile(t, dir); !bytes.Equal(before, after) {
-			t.Fatalf("go.mod in %s changed during concurrent builds; build them one at a time:\n%s", dir, after)
-		}
 	}
 }
 
-func readModFile(t *testing.T, dir string) []byte {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return data
-}
 func copyTree(t *testing.T, from, to string) {
 	t.Helper()
 	err := filepath.WalkDir(from, func(path string, d os.DirEntry, err error) error {
