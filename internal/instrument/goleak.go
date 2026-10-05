@@ -30,17 +30,17 @@ func TransformGoleakEntry(name string, src []byte) ([]byte, bool, error) {
 			return nil, false, fmt.Errorf("%s: reserved goleak hook name", name)
 		}
 		if fn.Body == nil || fn.Type.Params == nil || len(fn.Type.Params.List) != 1 || len(fn.Type.Params.List[0].Names) != 1 || fn.Type.Results == nil || len(fn.Type.Results.List) != 1 {
-			return nil, false, fmt.Errorf("%s: unsupported goleak.Find signature", name)
+			return nil, false, fmt.Errorf("%s: %w: unsupported goleak.Find signature", name, ErrUnsupportedAPI)
 		}
 		arg := fn.Type.Params.List[0]
 		variadic, ok := arg.Type.(*ast.Ellipsis)
 		if !ok || arg.Names[0].Name == "_" {
-			return nil, false, fmt.Errorf("%s: goleak.Find requires named variadic options", name)
+			return nil, false, fmt.Errorf("%s: %w: goleak.Find requires named variadic options", name, ErrUnsupportedAPI)
 		}
 		typ, ok := variadic.Elt.(*ast.Ident)
 		result, resultOK := fn.Type.Results.List[0].Type.(*ast.Ident)
 		if !ok || typ.Name != "Option" || !resultOK || result.Name != "error" {
-			return nil, false, fmt.Errorf("%s: unsupported goleak.Find types", name)
+			return nil, false, fmt.Errorf("%s: %w: unsupported goleak.Find types", name, ErrUnsupportedAPI)
 		}
 		prefix := "github.com/tonyredondo/dd-ci-testing-poc/internal/"
 		filters := []string{

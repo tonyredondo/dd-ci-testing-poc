@@ -2,6 +2,7 @@ package instrument
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -12,6 +13,11 @@ import (
 )
 
 const TestifySuiteImport = "github.com/stretchr/testify/suite"
+
+// ErrUnsupportedAPI marks a library entry whose shape this instrumentation does
+// not recognize. Preparation then continues without that library integration.
+var ErrUnsupportedAPI = errors.New("unsupported library API")
+
 const TestifyRegisterName = "__dd_ci_registerTestifySuite"
 
 // CheckTestifyNames rejects bindings that would capture the inserted hook,
@@ -113,13 +119,14 @@ func validateTestifyAPI(files []*ast.File) error {
 		}
 	}
 	if !validRun {
-		return fmt.Errorf("unsupported Testify API: expected suite.Run(*testing.T, TestingSuite)")
+		return fmt.Errorf("%w: expected Testify suite.Run(*testing.T, TestingSuite)", ErrUnsupportedAPI)
 	}
 	return nil
 }
 
-// SupportsTestifyVersion bounds the ABI to Testify v1.11.1 and later v1
-// releases. Local replacements use their declared version plus TestifyAPI.
+// SupportsTestifyVersion accepts Testify v1.4.0 and later v1 releases: every
+// one runs each suite method as t.Run(method) from Run(*testing.T, TestingSuite).
+// Local replacements use their declared version plus TestifyAPI.
 func SupportsTestifyVersion(version string) bool {
 	if !strings.HasPrefix(version, "v") {
 		return false
@@ -138,11 +145,9 @@ func SupportsTestifyVersion(version string) bool {
 		}
 		values[i] = n
 	}
-	if values[0] != 1 || values[1] < 11 {
+	if values[0] != 1 || values[1] < 4 {
 		return false
 	}
-	if values[1] == 11 && values[2] < 1 {
-		return false
-	}
-	return !(values[1] == 11 && values[2] == 1 && pre && suffix != "")
+	// A pre-release of the minimum version precedes it.
+	return !(values[1] == 4 && values[2] == 0 && pre && suffix != "")
 }

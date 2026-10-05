@@ -50,14 +50,16 @@ func TestSuite(t *testing.T) {suite.Run(t, new(ExampleSuite))}
 		}
 	}
 	// Consistent metadata with unchanged vendored sources is a supported Go
-	// build input. Even if the API happens to fit, our minimum-version guard applies.
+	// build input. Even if the API happens to fit, our minimum-version guard
+	// applies: the suite builds without instrumentation and the cached
+	// instrumented object is not reused.
 	for _, name := range []string{"go.mod", "vendor/modules.txt"} {
 		path := filepath.Join(dir, filepath.FromSlash(name))
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		edited := strings.ReplaceAll(string(data), "=> github.com/stretchr/testify v1.11.1", "=> github.com/stretchr/testify v1.10.0")
+		edited := strings.ReplaceAll(string(data), "=> github.com/stretchr/testify v1.11.1", "=> github.com/stretchr/testify v1.3.0")
 		if edited == string(data) {
 			t.Fatal("versioned replacement missing", name)
 		}
@@ -66,7 +68,7 @@ func TestSuite(t *testing.T) {suite.Run(t, new(ExampleSuite))}
 		}
 	}
 	out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false"), driver, args...)
-	if code != 2 || !strings.Contains(stderr, "requires >=v1.11.1") {
-		t.Fatalf("cached unsupported vendor was accepted: exit=%d\n%s\n%s", code, out, stderr)
+	if code != 0 || !strings.Contains(stderr, "ddtest: warning: Testify v1.3.0 is not instrumented") || strings.Contains(stderr, "tool-overlay") {
+		t.Fatalf("cached unsupported vendor: exit=%d\n%s\n%s", code, out, stderr)
 	}
 }

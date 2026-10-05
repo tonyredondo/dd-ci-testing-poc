@@ -2,6 +2,7 @@ package runner
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,9 +12,11 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/instrument"
 )
 
-func prepareGoleak(pkg *goPackage, replacements map[string]string, temp string) (*LibraryEntry, error) {
+// prepareGoleak returns a warning instead of an entry when the selected goleak
+// is unsupported; its checks then run without the CI worker filters.
+func prepareGoleak(pkg *goPackage, replacements map[string]string, temp string) (*LibraryEntry, string, error) {
 	if pkg == nil {
-		return nil, nil
+		return nil, "", nil
 	}
 	version := ""
 	if pkg.Module != nil {
@@ -22,9 +25,24 @@ func prepareGoleak(pkg *goPackage, replacements map[string]string, temp string) 
 			version = pkg.Module.Replace.Version
 		}
 	}
-	if !supportedGoleakVersion(version) {
-		return nil, fmt.Errorf("goleak %q is unsupported: requires >=v1.3.0 and <v2.0.0", version)
+	reason := "requires v1.3.0 or a later v1 release"
+	entry, err := (*LibraryEntry)(nil), error(nil)
+	if supportedGoleakVersion(version) {
+		entry, err = prepareGoleakEntry(pkg, replacements, temp)
+		if errors.Is(err, instrument.ErrUnsupportedAPI) {
+			reason, err = err.Error(), nil
+		}
 	}
+	if entry == nil && err == nil {
+		if version == "" {
+			version = "(unknown version)"
+		}
+		return nil, fmt.Sprintf("goleak %s is not instrumented (%s); its leak checks run without CI goroutine filters and can report CI workers", version, reason), nil
+	}
+	return entry, "", err
+}
+
+func prepareGoleakEntry(pkg *goPackage, replacements map[string]string, temp string) (*LibraryEntry, error) {
 	tool := &LibraryEntry{Package: instrument.GoleakImport, Sources: map[string]string{}, HookFile: filepath.Join(temp, "goleak-hook.go")}
 	hash := sha256.New()
 	hash.Write([]byte("ddtest-goleak-find-v1"))
@@ -60,7 +78,7 @@ func prepareGoleak(pkg *goPackage, replacements map[string]string, temp string) 
 		hash.Write(out)
 	}
 	if len(tool.Sources) == 0 {
-		return nil, fmt.Errorf("goleak.Find entry was not found")
+		return nil, fmt.Errorf("%w: goleak.Find entry was not found", instrument.ErrUnsupportedAPI)
 	}
 	if err := os.WriteFile(tool.HookFile, []byte(hook), 0600); err != nil {
 		return nil, err

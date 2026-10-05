@@ -43,10 +43,12 @@ type Overlay struct {
 type Plan struct {
 	File, Dir                       string
 	InstrumentedFiles, TestPackages int
-	coverOverlay                    bool
-	testify                         bool
-	goleak                          bool
-	goleakCache                     string
+	// Warnings name optional integrations skipped for unsupported libraries.
+	Warnings     []string
+	coverOverlay bool
+	testify      bool
+	goleak       bool
+	goleakCache  string
 }
 
 // Prepare creates a complete plan before native Go compilation starts. Callers
@@ -241,9 +243,12 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime) (pl
 	if e != nil {
 		return plan, e
 	}
-	testify, e := prepareTestifyPackage(libraries[instrument.TestifySuiteImport], replacements, runtime, temp)
+	testify, warning, e := prepareTestifyPackage(libraries[instrument.TestifySuiteImport], replacements, runtime, temp)
 	if e != nil {
 		return plan, e
+	}
+	if warning != "" {
+		plan.Warnings = append(plan.Warnings, warning)
 	}
 	plan.testify = testify != nil
 	if testify != nil {
@@ -265,9 +270,12 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime) (pl
 	}
 	var goleak *LibraryEntry
 	if runtime == Mini {
-		goleak, e = prepareGoleak(libraries[instrument.GoleakImport], replacements, temp)
+		goleak, warning, e = prepareGoleak(libraries[instrument.GoleakImport], replacements, temp)
 		if e != nil {
 			return plan, e
+		}
+		if warning != "" {
+			plan.Warnings = append(plan.Warnings, warning)
 		}
 		if goleak != nil {
 			plan.goleak = true
@@ -332,6 +340,9 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 	if err != nil {
 		fmt.Fprintln(stderr, "ddtest:", err)
 		return 2
+	}
+	for _, warning := range plan.Warnings {
+		fmt.Fprintln(stderr, "ddtest: warning:", warning)
 	}
 	var tool string
 	var env []string

@@ -70,8 +70,15 @@ func TestGoleakCacheAndWarmVersionGuard(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// The version check runs before the build, even with unchanged cached
+	// sources: the unsupported version builds without the integration, and the
+	// cached instrumented object is not reused.
 	out, stderr, code = command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false"), driver, args...)
-	if code != 2 || !strings.Contains(stderr, "requires >=v1.3.0") {
-		t.Fatalf("cached unsupported version accepted: exit=%d\n%s\n%s", code, out, stderr)
+	if code != 0 || !strings.Contains(stderr, "ddtest: warning: goleak v1.2.1 is not instrumented") || strings.Contains(stderr, "tool-overlay") {
+		t.Fatalf("cached unsupported version: exit=%d\n%s\n%s", code, out, stderr)
+	}
+	symbols, stderr, code := command(t, dir, testEnv(), "go", "tool", "nm", filepath.Join(dir, executableName("fixture.test")))
+	if code != 0 || strings.Contains(symbols, "PrepareLeakCheck") {
+		t.Fatalf("unsupported goleak still linked the leak-check hook: exit=%d %s", code, stderr)
 	}
 }

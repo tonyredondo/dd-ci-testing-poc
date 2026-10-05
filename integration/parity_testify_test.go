@@ -255,7 +255,8 @@ func TestTestifyDiagnosticNormalizationRetainsApplicationErrors(t *testing.T) {
 }
 
 func TestTestifySupportedVersionsAndNativeSemantics(t *testing.T) {
-	for _, version := range []string{"v1.11.1", "v1.12.1"} {
+	// The fixture itself needs Testify v1.6.0+ (SuiteInformation, s.Run).
+	for _, version := range []string{"v1.10.0", "v1.11.1", "v1.12.1"} {
 		t.Run(version, func(t *testing.T) {
 			dir, driver := prepareTestifyFixture(t, false)
 			out, stderr, code := command(t, dir, testEnv(), "go", "mod", "edit", "-replace=github.com/stretchr/testify=github.com/stretchr/testify@"+version)
@@ -293,17 +294,36 @@ func TestTestifySupportedVersionsAndNativeSemantics(t *testing.T) {
 	}
 }
 
-func TestTestifyRejectsUnsupportedVersionAndPreservesClientNames(t *testing.T) {
+// An unrecognized Testify entry is skipped with a warning; the build and tests
+// still run, and the rest of the package keeps its instrumentation.
+func TestTestifyUnsupportedEntryWarnsAndPreservesClientNames(t *testing.T) {
 	dir, driver := prepareTestifyFixture(t, false)
-	for _, args := range [][]string{{"mod", "edit", "-replace=github.com/stretchr/testify=github.com/stretchr/testify@v1.10.0"}, {"mod", "download", "github.com/stretchr/testify"}} {
-		out, stderr, code := command(t, dir, testEnv(), "go", args...)
-		if code != 0 {
-			t.Fatal(out, stderr)
-		}
+	cache, stderr, code := command(t, dir, testEnv(), "go", "env", "GOMODCACHE")
+	if code != 0 {
+		t.Fatal(stderr)
 	}
-	out, stderr, code := command(t, dir, testEnv(), driver, "test", "--runtime=mini", "-mod=mod", "-run=^TestParitySuite$/^TestPass$", ".")
-	if code != 2 || !strings.Contains(stderr, "requires >=v1.11.1") {
-		t.Fatalf("unsupported version: %d %s %s", code, out, stderr)
+	changed := t.TempDir()
+	copyTree(t, filepath.Join(strings.TrimSpace(cache), "github.com", "stretchr", "testify@v1.11.1"), changed)
+	suiteFile := filepath.Join(changed, "suite", "suite.go")
+	source, err := os.ReadFile(suiteFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := "func Run(t *testing.T, suite TestingSuite) {"
+	if !strings.Contains(string(source), entry) {
+		t.Fatal("Testify entry changed upstream")
+	}
+	source = []byte(strings.Replace(string(source), entry, "func Run(t *testing.T, suite TestingSuite, _ ...struct{}) {", 1))
+	if err := os.WriteFile(suiteFile, source, 0644); err != nil {
+		t.Fatal(err)
+	}
+	out, stderr, code := command(t, dir, testEnv(), "go", "mod", "edit", "-replace=github.com/stretchr/testify="+changed)
+	if code != 0 {
+		t.Fatal(out, stderr)
+	}
+	out, stderr, code = command(t, dir, testEnv(), driver, "test", "--runtime=mini", "-mod=mod", "-run=^TestParitySuite$/^TestPass$", ".")
+	if code != 0 || !strings.Contains(stderr, "ddtest: warning: Testify v1.11.1 is not instrumented") {
+		t.Fatalf("unsupported entry: %d %s %s", code, out, stderr)
 	}
 	out, stderr, code = command(t, dir, testEnv(), "go", "mod", "edit", "-dropreplace=github.com/stretchr/testify")
 	if code != 0 {

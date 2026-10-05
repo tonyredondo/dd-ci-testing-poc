@@ -89,7 +89,7 @@ The default backend supports module packages with the exact unreplaced SDK.
 The optional mini backend requires this module instead. Standard
 library test targets are unsupported; explicit Go file mode runs native `go test`
 without instrumentation. Testify callers in client and external modules use the original
-selected runner; dedicated version fixtures cover v1.11.1 and v1.12.1.
+selected runner; dedicated version fixtures cover v1.10.0, v1.11.1 and v1.12.1.
 Other APM integrations remain outside the POC.
 The AST transformer validates hook presence and ambiguity and selected shape
 constraints; future Go source/ABI changes still require a new compatibility run.

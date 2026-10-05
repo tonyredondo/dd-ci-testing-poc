@@ -60,9 +60,11 @@ When the selected Mini test graph reaches `go.uber.org/goleak`, `ddtest` prepare
 its `Find` entry. This is automatic in both ordinary and deferred delivery.
 Calling `VerifyNone`, `VerifyTestMain` or a helper in another module reaches that
 same entry. An unused requirement in `go.mod` does not activate the integration.
-The minimum supported version is v1.3.0; v2 needs a separate review. Preparation
-checks the selected version and entry signature before a warm cache can skip
-compilation. The current version fixture uses v1.3.0.
+The minimum supported version is v1.3.0, the first with `IgnoreAnyFunction`;
+v2 needs a separate review. Preparation checks the selected version and entry
+signature before a warm cache can skip compilation. The current version fixture
+uses v1.3.0. An unsupported version or entry produces a warning and the build
+continues without the integration; its leak checks can then report CI workers.
 
 ```mermaid
 flowchart TD

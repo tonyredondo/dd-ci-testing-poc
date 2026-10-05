@@ -5,11 +5,19 @@
 Testify still owns its runner, assertions, lifecycle hooks and `WithStats`.
 Both `--runtime=sdk` and `--runtime=mini` use the same transformation.
 
-The minimum supported version is **Testify v1.11.1**. The compatibility suite
-also exercises v1.12.1. Preparation checks the selected version and the actual
-`Run(*testing.T, TestingSuite)` signature, including versioned and local
-replacements. Other v1 versions above the minimum pass these guards but do not
-have dedicated version fixtures. A v2 module needs a separate review.
+The minimum supported version is **Testify v1.4.0**: from that release on,
+`Run(*testing.T, TestingSuite)` runs each suite method as `t.Run(method)`, which
+is all the registration needs. Releases v1.4.0 through v1.12.1 produced identical
+events for the same suite. The compatibility suite runs v1.10.0, v1.11.1 and
+v1.12.1; its fixture itself needs v1.6.0 or later. Preparation checks the
+selected version and the actual `Run` signature, including versioned and local
+replacements. A v2 module needs a separate review.
+
+An older or newer major version, an unknown version, or an unrecognized `Run`
+entry does not stop the build. `ddtest` prints a warning and leaves Testify
+uninstrumented; its suite methods are still reported as ordinary subtests,
+without Testify suite metadata. Unreadable sources and reserved-name collisions
+remain errors.
 
 ## Preparation and tool selection
 
@@ -164,8 +172,9 @@ suite records that behavior; it does not claim method-level skipping works.
 When updating the SDK, review its Testify advice and
 `gotesting.instrumentTestifySuiteRun`, including the linkname signature. When
 updating Testify, add a version fixture and review `suite.Run` and its lifecycle.
-The hook declaration uses `interface{}` because v1.11.1 declares Go 1.17; using
-`any` there would fail even with a newer installed toolchain.
+The hook declaration uses `interface{}` because supported Testify releases
+declare Go versions before 1.18; using `any` there would fail even with a newer
+installed toolchain.
 
 Bump `testifyContractVersion` when compiler-side edits change without changing
 the prepared inputs. Update the ABI tests and run the full reference comparison.

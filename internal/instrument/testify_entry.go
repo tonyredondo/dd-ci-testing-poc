@@ -51,7 +51,7 @@ func TransformTestifyPackage(files map[string][]byte) (map[string][]byte, error)
 		}
 	}
 	if len(output) == 0 {
-		return nil, fmt.Errorf("unsupported Testify API: expected suite.Run(*testing.T, TestingSuite)")
+		return nil, fmt.Errorf("%w: expected Testify suite.Run(*testing.T, TestingSuite)", ErrUnsupportedAPI)
 	}
 	return output, nil
 }
@@ -74,12 +74,12 @@ func transformTestifyEntry(name string, src []byte, fs *token.FileSet, file *ast
 		return nil, false, err
 	}
 	if run.Body == nil {
-		return nil, false, fmt.Errorf("%s: Testify Run has no body", name)
+		return nil, false, fmt.Errorf("%s: %w: Testify Run has no body", name, ErrUnsupportedAPI)
 	}
 	parameters := make([]string, 2)
 	for i, field := range run.Type.Params.List {
 		if len(field.Names) != 1 || field.Names[0].Name == "_" {
-			return nil, false, fmt.Errorf("%s: Testify Run requires named parameters", name)
+			return nil, false, fmt.Errorf("%s: %w: Testify Run requires named parameters", name, ErrUnsupportedAPI)
 		}
 		parameters[i] = field.Names[0].Name
 	}

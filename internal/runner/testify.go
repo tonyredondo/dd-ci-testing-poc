@@ -2,6 +2,7 @@ package runner
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,7 +12,7 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/instrument"
 )
 
-const minimumTestifyVersion = "v1.11.1"
+const minimumTestifyVersion = "v1.4.0"
 
 // Bump when compiler-side edits change without changing prepared inputs.
 const testifyContractVersion = "ddtest-testify-entry-v1"
@@ -25,10 +26,39 @@ type LibraryEntry struct {
 	Fingerprint string
 }
 
-func prepareTestifyPackage(suite *goPackage, replacements map[string]string, runtime Runtime, temp string) (*LibraryEntry, error) {
+// prepareTestifyPackage returns a warning instead of an entry when the selected
+// Testify is unsupported; its suites then run as ordinary tests.
+func prepareTestifyPackage(suite *goPackage, replacements map[string]string, runtime Runtime, temp string) (*LibraryEntry, string, error) {
 	if suite == nil {
-		return nil, nil
+		return nil, "", nil
 	}
+	entry, err := prepareTestifyEntry(suite, replacements, runtime, temp)
+	var unsupported unsupportedLibrary
+	if errors.As(err, &unsupported) || errors.Is(err, instrument.ErrUnsupportedAPI) {
+		return nil, fmt.Sprintf("Testify %s is not instrumented (%v); its suites run as ordinary tests without Testify suite metadata", testifyVersion(suite), err), nil
+	}
+	return entry, "", err
+}
+
+// unsupportedLibrary reports a selected library version outside the supported range.
+type unsupportedLibrary struct{ message string }
+
+func (u unsupportedLibrary) Error() string { return u.message }
+
+func testifyVersion(suite *goPackage) string {
+	if suite.Module == nil {
+		return "(unknown version)"
+	}
+	if suite.Module.Replace != nil && suite.Module.Replace.Version != "" {
+		return suite.Module.Replace.Version
+	}
+	if suite.Module.Version == "" {
+		return "(unknown version)"
+	}
+	return suite.Module.Version
+}
+
+func prepareTestifyEntry(suite *goPackage, replacements map[string]string, runtime Runtime, temp string) (*LibraryEntry, error) {
 	selected := ""
 	if suite.Module != nil {
 		selected = suite.Module.Version
@@ -37,7 +67,7 @@ func prepareTestifyPackage(suite *goPackage, replacements map[string]string, run
 		}
 	}
 	if !instrument.SupportsTestifyVersion(selected) {
-		return nil, fmt.Errorf("Testify %q is unsupported: suite.Run instrumentation requires >=%s and <v2.0.0", selected, minimumTestifyVersion)
+		return nil, unsupportedLibrary{fmt.Sprintf("requires %s or a later v1 release", minimumTestifyVersion)}
 	}
 	files := map[string][]byte{}
 	actualPaths := map[string]string{}
@@ -86,7 +116,7 @@ func prepareTestifyPackage(suite *goPackage, replacements map[string]string, run
 		hash.Write(src)
 	}
 	if len(tool.Sources) == 0 {
-		return nil, fmt.Errorf("Testify suite.Run entry was not found")
+		return nil, fmt.Errorf("%w: Testify suite.Run entry was not found", instrument.ErrUnsupportedAPI)
 	}
 	if err := os.WriteFile(tool.HookFile, []byte(hookSource), 0600); err != nil {
 		return nil, err
