@@ -20,16 +20,17 @@ flowchart TD
     Unknown -->|No| Known{"Library already<br/>reachable?"}
     Known -->|Yes| Find["go list -find:<br/>selected library<br/>metadata"]
     Known -->|No| Coverage
-    Deps --> Found{"Suite found?"}
+    Deps --> Found{"Library found?"}
     Found -->|No| Coverage
-    Found -->|Yes| Prepare["Validate API/version<br/>before cache lookup;<br/>prepare Run entry<br/>hook"]
+    Found -->|Yes| Prepare["Validate version and API<br/>before cache lookup<br/>and prepare entry hooks"]
     Find --> Prepare
-    Prepare --> Fingerprint["Put transformation<br/>fingerprint in<br/>testing export data"]
+    Prepare --> Fingerprint["Add package cache<br/>fingerprints"]
     Fingerprint --> Coverage{"Testify, Mini goleak or<br/>covered rewritten<br/>testing sources?"}
-    Coverage -->|Neither| Native["go test with<br/>overlay; no toolexec"]
-    Coverage -->|Either| Tool["go test with one<br/>selective tool<br/>wrapper"]
+    Coverage -->|No| Native["go test with<br/>overlay; no toolexec"]
+    Coverage -->|Yes| Tool["go test with one<br/>selective tool<br/>wrapper"]
     Tool --> Dispatch{"Tool and package"}
     Dispatch -->|compile: testify/suite| Entry["Substitute prepared<br/>source or edit<br/>covered Run entry"]
+    Dispatch -->|compile goleak in Mini| Goleak["Prepare Find entry<br/>for CI leak checks"]
     Dispatch -->|cover: testing| Bridge["Read the overlay's<br/>effective testing<br/>sources"]
     Dispatch -->|Anything else| Bypass["Delegate without<br/>reading the plan"]
 ```

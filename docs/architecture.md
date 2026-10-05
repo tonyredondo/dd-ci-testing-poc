@@ -20,7 +20,7 @@ does not need the CLI.
 flowchart TB
     subgraph build["Build time"]
         CLI["ddtest test: choose<br/>sdk or mini"] --> Plan["Resolve packages and<br/>prepare overlay"]
-        Plan --> Selection{"Suite, goleak or covered<br/>testing sources?"}
+        Plan --> Selection{"Testify, Mini goleak or<br/>covered testing sources?"}
         Selection -->|Yes| Tools["Selective<br/>compiler/coverage<br/>wrapper"]
         Selection -->|No| Go["Native go test:<br/>compile and link"]
         Tools --> Go
@@ -34,7 +34,7 @@ flowchart TB
     end
 ```
 
-Orchestrion remains the reference instrumenter in differential tests. The POC
+Orchestrion is the reference instrumenter in differential tests. The POC
 implements only its testing advice. Its front-end prepares one overlay per
 invocation, so compiler processes do not each load an instrumentation engine.
 
@@ -64,11 +64,12 @@ sequenceDiagram
     CLI->>CLI: Parse flags and apply activation default
     CLI->>Go: Targeted go list for testing, runtime and client packages
     Go-->>CLI: Package metadata and test imports
-    opt Suite known or nonstandard test imports need resolution
-        CLI->>Go: go list -find for known suite, otherwise -deps
-        Go-->>CLI: Selected suite source and module metadata
-        CLI->>AST: Validate suite version/API and prepare entry hook
-        AST-->>CLI: Suite edit, hook and content fingerprint
+    opt Library reachable or unknown test imports need resolution
+        CLI->>Go: go list -find for known libraries, otherwise -deps
+        Go-->>CLI: Testify and Mini goleak source and module metadata
+        CLI->>AST: Validate versions and APIs
+        CLI->>AST: Prepare library entry hooks
+        AST-->>CLI: Source edits, hooks and content fingerprints
     end
     CLI->>AST: Effective testing sources
     AST-->>CLI: Validated source edits
@@ -119,10 +120,12 @@ formatted skips, `SkipNow` and `Parallel`. The ownership marker keeps the SDK's
 original Orchestrion name because the runtime uses that symbol to recognize
 woven testing code.
 
-The extracted runtime owns retry, EFD, ITR, quarantine and attempt-to-fix
-decisions. The CLI forwards test arguments and starts the build; it does not
-implement those policies. Formatted error and skip hooks receive the already
-formatted text, so an argument's `String` method runs once.
+The extracted runtime owns retries, early flake detection (EFD), skipping through
+the Intelligent Test Runner (ITR), quarantine and attempt-to-fix decisions. The
+[feature inventory](ci-parity.md#feature-inventory) describes these policies.
+The CLI forwards test arguments and starts the build. Formatted error and skip
+hooks receive the already formatted text, so an argument's `String` method runs
+once.
 
 These hooks are a private ABI. Their signatures, native `testing` layouts and
 source locations must be reviewed when Go or the SDK changes. A successful AST
@@ -184,9 +187,11 @@ that boundary; ordinary child spans receive no CI defaults.
 The client has two synchronization boundaries. `mu` protects queue, closure,
 error and drop state. `sendMu` is a context-aware token that serializes event
 acceptance and delivery, including ownership of the payload buffer. Slow delivery
-can therefore block concurrent finishers. While the client is open, a failed
-flush restores the older batch; when it fills the bounds and cannot be delivered,
-a new event is rejected and counted.
+can therefore block concurrent finishers. In ordinary mode, a failed flush keeps
+its batch; a new event is rejected and counted if that batch fills the queue
+and cannot be delivered. Deferred mode queues through active test groups and
+drains at idle checkpoints. Its pending queue can exceed one batch, while each
+outgoing payload keeps the intake limits.
 
 Ordinary CI telemetry updates use bound handles for their existing tag
 combinations. The global swappable handle retains startup replay and follows

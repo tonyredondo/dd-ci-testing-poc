@@ -28,7 +28,8 @@ python3 scripts/benchmark_report.py \
   --input docs/results/20261005-linux-go1.27.1 --check
 ```
 
-This command needs Python 3.9 or newer. It reads `manifest.json`, `observations.csv`,
+`build_benchmark.py report` needs Python 3.9 or newer. It reads `manifest.json`,
+`observations.csv`,
 `methodology.md` and `notes.md`, then writes `README.md` and `statistics.json`.
 With `--update-readme`, it updates the short report links and measured revision
 in the repository README. Comparison tables stay in dedicated documents. That option requires
@@ -181,14 +182,14 @@ and remaining artifacts are retained; an attempt without a usable timing gets
 an interruption record. Partial matrices cannot produce a successful report.
 The runner does not resume an interrupted matrix. Start a new output directory
 for a new experiment; preserve the partial run if it matters for diagnosis.
-The latest dataset keeps the failed first Native control and the successful
-160-run control separately. Its runtime collection resumed from a preserved
-prefix after an agreed budget pause; all 1,440 original groups remain recorded.
+The latest dataset retains both Native controls and all 1,440 runtime groups,
+including failed and unverified results.
 
 The checked-in report keeps timings, input provenance, summaries, control data,
 traces and qualification hashes. Large test binaries, build caches and full
 stdout/stderr remain in the original local artifact directory. Its absolute paths
-are historical provenance; table regeneration does not require that directory.
+identify the collection environment; table regeneration does not require that
+directory.
 
 ## Update the benchmark inputs
 
@@ -204,7 +205,5 @@ Run a reduced matrix and inspect the traces and symbol checks before repeating
 the expensive series. A new run records the new inputs and belongs in a new
 results directory. After validating the new dataset, update the comparison
 document and README links together. Keep only the latest benchmark dataset in
-the repository; older reports can be recovered from Git history. Do not remove
-SDK provenance, adaptation notes or compatibility fixtures during this cleanup.
-The original exploratory [`scripts/benchmark.py`](../scripts/benchmark.py)
-remains available for its older three-variant fixture protocol.
+the repository. Preserve SDK provenance, adaptation notes and compatibility
+fixtures independently of benchmark data.

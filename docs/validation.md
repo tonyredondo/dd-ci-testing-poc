@@ -92,15 +92,12 @@ selected runner; dedicated version fixtures cover v1.11.1 and v1.12.1.
 Other APM integrations remain outside the POC.
 The AST transformer validates hook presence and ambiguity and selected shape
 constraints; future Go source/ABI changes still require a new compatibility run.
-Go 1.26 and 1.27 are selected from the current [official releases](https://go.dev/dl/).
+The [compatibility workflow](../.github/workflows/compatibility.yml) defines the
+supported test matrix. Adding a Go or SDK version requires exercising its private
+hooks and runtime behavior. Full fuzz campaigns and arbitrary downstream modules
+need separate validation.
 
-The workflow is the source of evidence for the actual Linux/macOS/Windows and Go
-versions it tests. This document describes its coverage, not an unconditional
-compatibility guarantee. The local mini implementation was checked with development Go 1.27 and stable
-Go 1.27.1. See the mini validation report for compile-only measurements. Full
-fuzzing and arbitrary downstream modules remain unverified.
-
-## Mini runtime follow-up
+## Mini runtime contracts
 
 The current mini/SDK wire contract compares CI attributes and metrics while
 explicitly excluding APM sampling, profiling and process enrichment. It also
@@ -108,7 +105,7 @@ checks complete envelope metadata, native hierarchy IDs, duplicate aliases,
 service version and all session-name fallback cases. The unmodified SDK remains
 the oracle; fewer APM fields is intentional.
 
-| Added contract | Proof |
+| Contract | Proof |
 | --- | --- |
 | Service version and session name | `TestMiniCIConfigurationWireParity`: explicit `DD_VERSION`, custom tags, automatic command/job name, explicitly empty session name |
 | CI payload byte limits and gzip | `TestCIByteBatchingAndCompression`: multiple real decoded batches, all events delivered below 5 MiB in both agent/agentless modes |
@@ -119,37 +116,35 @@ the oracle; fewer APM fields is intentional.
 | Original CI assertions | Ported SDK tests, including retry runtime/parallel ownership, coverage writer/profile, ITR backfill, source metadata and lifecycle; [exact provenance](../internal/thirdparty/dd-trace-go/TESTS.json) |
 
 Actual Bazel compiler invocation and real Datadog intake/UI acceptance remain
-unverified. Native platform evidence is recorded below and is tied to its tested
-revisions.
+unverified. Loopback and payload-file fixtures prove their local contracts.
 
-Before the SDK refresh, local verification passed on development Go 1.27:
-the full normal suite and full `-race` suite, followed by focused race checks after strengthening the
-parallel/retry CI assertions. Go 1.27.1 with `-trimpath` passed the new
-configuration, byte-batching, Bazel, coverage-attribution and source-metadata
-contracts. `go vet ./...` and both modules' `go mod verify` passed. The dependency
-check confirms 266 mini runtime packages versus 511 SDK packages and excludes
-`testify` from runtime imports. These checks do not establish real intake
-acceptance or full upstream SDK-suite/platform parity.
+Mini and the CLI import only this module and the Go standard library. Consumer
+fixtures check that adding `testopt` requires no external runtime modules and
+that the resulting program builds offline. Test dependencies in the repository's
+`go.mod` do not enter that consumer graph. The
+[maintenance checks](maintenance.md#verification-before-publication) verify this
+boundary after source updates.
 
-## Verified CI revision
+## Compatibility workflow
 
-On 2026-10-02, [branch CI](https://github.com/tonyredondo/dd-ci-testing-poc/actions/runs/37035170311)
-passed all four jobs for commit `fa7657f2f11e5d4f06cf006d7fb3e2f3a442e4e1`.
-[PR CI](https://github.com/tonyredondo/dd-ci-testing-poc/actions/runs/37035175247)
-also passed all four jobs for merge revision
-`913f359cdddd00736f13e5a36b78f3b659fa58dc`, combining that head with
-`main` at `e46c2dc1c94ff1f24038415726401c55f8d5cb2c`. Job checkout logs confirmed
-those inputs.
+The [workflow](../.github/workflows/compatibility.yml) has six native jobs:
 
-The matrix ran the full compatibility suite on Linux with Go 1.26 and 1.27,
-and on macOS and Windows with Go 1.27. Both Linux jobs also passed the full
-`-race` suite. Source/license audits, their Python contract tests, module
-verification and `go vet` passed. This closes the previously pending native
-platform checks for that implementation, not for future code or SDK changes.
+| Platform | Go | Suite |
+| --- | --- | --- |
+| Linux | 1.26, 1.27 | Separate normal and `-race` jobs for each version |
+| macOS | 1.27 | Normal suite |
+| Windows | 1.27 | Normal suite |
 
-See the [maintenance guide](maintenance.md#verification-before-publication)
-for checks to repeat after an update. CI compatibility checks and the
-[local benchmark matrix](benchmarks.md) provide separate evidence.
+Every job audits incorporated sources and licenses, verifies module inputs,
+runs `go vet` and executes the complete compatibility suite. The report step
+requires the independent Orchestrion reference and exports feature outcomes,
+counts and timings. Logs and JSON reports are uploaded even when a test fails.
+
+For a PR, inspect the jobs for its current head and merge revision. The workflow
+configuration describes what runs; successful execution must be checked on that
+revision. Cross-compilation proves a target builds, while a native job checks
+that target's runtime behavior. The [latest local comparison](benchmarks.md)
+records Linux measurements separately from GitHub Actions.
 
 ## Selective-tool validation
 

@@ -6,6 +6,14 @@
 - Original license: [LICENSE](LICENSE).
 - File/source hashes and local adaptations: [SOURCE.json](SOURCE.json).
 
-Selected Windows Job Object/thread/timer functions and read-only registry operations keep the upstream `windows/` and `windows/registry/` layout. Unix kernel metadata lives in `unix/`. This is an adapted subset, not a complete x/sys copy. Fixed-buffer BSD sysctl behavior and the Solaris runtime trampoline are retained; Linux/AIX use standard-library syscalls. `EXTRACTION.json` identifies each original declaration and source hash. Local ABI, registry and metadata regression tests remain beside the implementation.
+Windows retry processes use the Job Object, thread and timer functions in
+`windows/`. OS metadata uses read-only registry operations in `windows/registry/`.
+Unix kernel metadata lives in `unix/`. Only the required declarations are copied;
+this directory does not provide the complete `x/sys` API.
+
+BSD metadata keeps the upstream fixed-buffer reads and partial-result behavior.
+Solaris keeps its small runtime trampoline; Linux and AIX use standard-library
+syscalls. [EXTRACTION.json](EXTRACTION.json) records each selected declaration
+and its source hash. ABI, registry and metadata tests stay beside the code.
 
 Follow the [shared audit and update procedure](../README.md#audit-and-update).

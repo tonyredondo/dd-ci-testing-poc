@@ -2,16 +2,16 @@
 
 Mini registers `testify/suite` at its original entry, including callers in external
 modules. A 26-case Testify comparison checks the original runner, lifecycle,
-policies and covered helpers. Its native `testing` path passes a 65-scenario
-comparison against the unmodified SDK instrumented by Orchestrion. Additional fixtures exercise manual hierarchy calls, CI child spans,
-multiple package binaries, Unix sockets, a bounded fuzz campaign and CI telemetry.
+policies and covered helpers. The native `testing` path has 65 scenarios against
+the unmodified SDK instrumented by Orchestrion. Together with 17 deferred testing
+and seven deferred Testify cases, these make the 115-case matrix. Additional
+fixtures check manual hierarchy calls, CI child spans, multiple package binaries,
+Unix sockets, a bounded fuzz campaign and CI telemetry.
 This evidence does not establish complete product parity.
 
-Mini also checks 17 of these combinations with deferred delivery and seven
-Testify combinations in that mode. Its automatic goleak fixture checks both
-delivery modes, external helpers, race, covered library inputs and deliberate
-test/HTTP leaks. These local runtime checks are described in
-[delivery and goleak](delivery.md); historical CI revisions below predate them.
+The automatic goleak fixture checks both delivery modes, external helpers,
+race, covered library inputs and deliberate test/HTTP leaks. See
+[delivery and goleak](delivery.md) for its contract.
 
 The SDK reference is `dd-trace-go/main` at
 [`96aedb31048c07e29e7a20a4333dc3b8d289c52d`](https://github.com/DataDog/dd-trace-go/tree/96aedb31048c07e29e7a20a4333dc3b8d289c52d),
@@ -34,7 +34,7 @@ flowchart LR
 
 ## Feature inventory
 
-“Verified” means the named fixtures prove the described contract. “Partial”
+"Verified" means the named fixtures prove the described contract. "Partial"
 identifies narrower evidence or a remaining integration boundary. The individual
 policy combinations and counts are exported by every workflow run.
 
@@ -184,7 +184,7 @@ the table also appears in the GitHub job summary. Artifacts are retained for sev
 days; download them before expiry to keep a run beyond that period. Missing
 evidence, a failed comparison or an omitted reference fails the report step. The Testify fixture
 requires every Testify policy case, timing and count comparison to pass. Reports
-record their own source revision; new evidence does not rewrite old runs.
+record their source revision and the inputs that were actually tested.
 
 The normal and deferred `testing` matrices share one covered set of SDK, Mini
 and Orchestrion binaries. Testify shares its own race/coverage set. Both sets
@@ -197,8 +197,8 @@ to two seconds, as `testing.TempDir` does. Removing the URL file requests
 Orchestrion shutdown; its log handles may close slightly later. A persistent
 cleanup error still fails the harness.
 
-Each scenario still starts a new child process with its own receiver and retry
-state. Cases, comparisons, execution order and report filenames are unchanged.
+Each scenario starts a new child process with its own receiver and retry
+state. Each report retains the cases, comparisons and execution order.
 Builds that deliberately alter flags, sources, overlays, workspaces or library
 versions keep their independent fixtures. Do not add those variants to the
 shared sets without checking their inputs and cleanup ownership.
@@ -216,12 +216,11 @@ scenario durations, event counts and supplemental fixtures; `manifest.json`
 records the execution order, reference versions and harness input hashes.
 The summary keeps medians and ranges without imposing a speed threshold.
 
-Schemas 2 and 3 record `timing.sdk_wall_ns` and `timing.mini_wall_ns` for every matrix
-scenario and additional fixture. The renderer adds separate SDK/Mini walltimes
-in seconds and the signed difference `(Mini / SDK - 1) * 100`. JSON keeps the
-integer nanoseconds returned by the monotonic clock, without table rounding.
-Missing or invalid observations fail the current report. Schema 1 reports remain
-readable and show `Not recorded`; their logs cannot reconstruct separate times.
+The current JSON report uses schema 3. Each scenario and additional fixture
+records `timing.sdk_wall_ns` and `timing.mini_wall_ns` as integer monotonic-clock
+nanoseconds. Markdown shows seconds and the signed change `(Mini / SDK - 1) * 100`.
+Missing or invalid timing observations fail report validation. `execution_block`
+and `execution_order` record continuous blocks separately from per-child clocks.
 
 The matrix times the prebuilt child binary from process start to exit. This
 includes initialization, settings requests, tests/retries and shutdown/flush.
@@ -230,7 +229,7 @@ fixture times the CLI and includes preparation and compilation; its JSON scope
 and separate table identify that difference. The manual fixture deliberately
 uses a 100 ms settings delay. Testify times the full Orchestrion reference against
 Mini for every Testify combination; the POC SDK pass/skip time is also kept in
-that JSON. Historical reports still show the former grouping gap.
+that JSON.
 
 Each invocation records one observation per variant. The default matrix runs SDK first
 and Mini second; Testify cases run the reference SDK, then Mini, with a separate
@@ -307,14 +306,14 @@ checks, which do not replace that differential wire evidence.
 | Offline output | Decode Bazel telemetry files with the same assertions and prove telemetry-disabled runs emit none. This covers the file contract; an actual Bazel invocation remains a separate gate. |
 | Regression gate | Export metric inventories/samples and outcomes per case. Fail on missing Mini metrics or changed CI kinds/tags; run on the existing Linux/macOS/Windows matrix and Linux race harness. |
 
-The payload-drop unit is now aligned with the SDK. One known production
+The payload-drop unit matches the SDK. One known production
 difference remains before a complete telemetry-parity claim:
 
 - SDK `ciVisibilityTransport.send` returns network failures before incrementing
   `endpoint_payload.requests_errors`; Mini records them with `error_type:network`.
   The fixture must expose this difference rather than discard it as an APM metric.
 
-SDK and Mini now increment `endpoint_payload.dropped` once per abandoned batch.
+SDK and Mini increment `endpoint_payload.dropped` once per abandoned batch.
 Mini keeps a failed `Flush` batch for recovery while open; final `Close` failure
 abandons it. HTTP attempts and the number of events do not multiply that count.
 Rejected or oversized individual events increment `DroppedEvents()` only. Tests

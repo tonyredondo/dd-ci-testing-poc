@@ -8,8 +8,9 @@
     "build/README.md": {
       "source": "build-stable/README.md",
       "source_sha256": "f6def4b83a71bc7dc8c798ba6d3767e5ad586de8e49400df89a1bc3c8792aca6",
-      "sha256": "f6def4b83a71bc7dc8c798ba6d3767e5ad586de8e49400df89a1bc3c8792aca6",
-      "bytes": 32872
+      "sha256": "fbbceed3c1cc522092e3cd55118f8c1c836b7549ef38c99f5c7dbd7066693941",
+      "bytes": 32867,
+      "presentation_only": true
     },
     "build/chi--cover-client-cpu32-traces.json": {
       "source": "build-stable/chi--cover-client-cpu32-traces.json",
@@ -164,8 +165,9 @@
     "build/methodology.md": {
       "source": "build-stable/methodology.md",
       "source_sha256": "88c0623f072561d1f3c786b266fe510b038f992feb80595242751e6e7d8d0c4f",
-      "sha256": "88c0623f072561d1f3c786b266fe510b038f992feb80595242751e6e7d8d0c4f",
-      "bytes": 1735
+      "sha256": "0315281c4af6a984931305865a55368db96e177ec61a9caa005b1a644053747b",
+      "bytes": 1730,
+      "presentation_only": true
     },
     "build/observations.csv": {
       "source": "build-stable/observations.csv",
@@ -368,8 +370,9 @@
     "runtime/README.md": {
       "source": "runtime-completion/validated/README.md",
       "source_sha256": "a8c62caaad749327358b235d25f410419819f24d4f8890bd72f2d979173110d5",
-      "sha256": "a8c62caaad749327358b235d25f410419819f24d4f8890bd72f2d979173110d5",
-      "bytes": 65793
+      "sha256": "183e25d9207076c51e9a4df9e8eecf6f4e4e6dbfe41114ee1d6271d599cefeb0",
+      "bytes": 65818,
+      "presentation_only": true
     },
     "runtime/manifest.json": {
       "source": "runtime-completion/validated/manifest.json",
@@ -1232,14 +1235,16 @@
     "parity/README.md": {
       "source": "parity/README.md",
       "source_sha256": "2584c83c7a5613cb66dea91a4b538833618971193de0f3f489439ae708d6b302",
-      "sha256": "2584c83c7a5613cb66dea91a4b538833618971193de0f3f489439ae708d6b302",
-      "bytes": 29940
+      "sha256": "c18f0e2d5b03dc2616ecdcd6391ef54125dd47c281c5bb8253892702a30fb7a3",
+      "bytes": 30228,
+      "presentation_only": true
     },
     "agent/README.md": {
       "source": "runtime-agent/README.md",
       "source_sha256": "db3b2db568d44ae1af16b274362305c98e16aa5549d5fefd5f6d00d4a653d9d7",
-      "sha256": "db3b2db568d44ae1af16b274362305c98e16aa5549d5fefd5f6d00d4a653d9d7",
-      "bytes": 870
+      "sha256": "503ebd4ed5c3a82f03edff408dd0135b3cbdd0849d2045992e7720c1d5be3a41",
+      "bytes": 1060,
+      "presentation_only": true
     },
     "agent/manifest.json": {
       "source": "runtime-agent/manifest.json",

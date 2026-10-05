@@ -202,10 +202,9 @@ the OS page cache stay warm. Builds run serially with rotating variant order.
 Affinity, `GOMAXPROCS` and `-p` match the CPU column.
 
 Plain Gin/Chi use 5/10/20/10/3 repetitions for cold/cache/link/body-edit/constant-edit.
-The other configurations use 3/10/10/5/3. The first 80-run Native link control
-failed the convergence check. A second 160-run control passed the unchanged
-thresholds; both records remain in the archive. That control does not establish
-stability of every matrix cell.
+The other configurations use 3/10/10/5/3. The 160-run Native link control passed
+the recorded convergence thresholds. It checks that control's median, rather
+than the stability of every matrix cell. Both control datasets are retained.
 """]
     sections.append("\n".join(build.table_lines(manifest, build_stats["statistics"], cases=base)))
     sections.append(f"""The unused-constant edit is a diagnostic: compiled code can remain reusable.
@@ -240,10 +239,10 @@ and the successful non-race SDK CI inventory; this fallback is restricted to
 cases without coverage. Eleven otherwise passing coverage groups lack a
 successful SDK coverage oracle and remain unverified.
 
-Go's default `-covermode=set` still produces aggregate Go coverage. The pinned
-SDK and Mini support per-test uploads only in count/atomic modes. The first
-harness classification incorrectly demanded uploads in set mode: all 192 notices
-remain in the original records, alongside their corrected validation results.
+Go's default `-covermode=set` produces aggregate Go coverage. The pinned SDK
+and Mini support per-test uploads only in count/atomic modes. Runtime eligibility
+uses the validated classifications in the archive; the raw records retain every
+observation and classification for audit.
 Gin atomic coverage takes about 6.5–6.9 seconds in the instrumented variants;
 these build improvements do not eliminate that runtime cost. Chi's full suite
 takes about 26 seconds even in Native, so its overall runtime hides small SDK costs.
@@ -266,9 +265,9 @@ the runtime memory matrix above measures complete project test groups.
     sections.append(f"""## Reproduce and interpret
 
 [Collection and regeneration commands](build-benchmarks.md) describe the build
-runner and offline report scripts. Only the latest benchmark dataset is checked
-in; earlier reports remain available in Git history. SDK source records,
-adaptations and compatibility tests are maintained separately.
+runner and offline report scripts. The dataset contains raw observations,
+validation outcomes and input hashes. SDK source records, adaptations and
+compatibility tests have their own maintenance procedure.
 
 These measurements cover the recorded Linux/amd64 inputs and a loopback protocol
 receiver. They do not establish live Datadog intake acceptance or timings on

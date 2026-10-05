@@ -1,9 +1,15 @@
 # Repeated 115-case CI parity comparison
 
-Six rounds per CPU count. All 115 cases and additional fixtures pass each round.
-Continuous clocks for the 65 testing and 17 deferred cases alternate SDK-first and Mini-first, three each.
-Testify uses the repository paired SDK-first order. Individual child clocks exclude fixture compilation and comparisons.
-The Testify fixture is compiled with race/atomic coverage; its elapsed times include race-runtime shutdown delays.
+All 115 cases and supplemental fixtures pass in six rounds at each CPU count.
+The testing block has 65 cases and the deferred block has 17. Their continuous
+clocks include receiver setup, child execution and shutdown, with three rounds
+in each order: SDK first and Mini first. Compilation and comparison are excluded.
+
+The 26 Testify and seven deferred Testify cases run SDK first. Their race/atomic
+coverage binaries include the race runtime's shutdown delay. The sum of all
+115 child clocks is a diagnostic total; it is not the elapsed time of one
+continuous execution. Tables use seconds and medians over all six observations.
+See [the parity contract](../../../ci-parity.md) for features and remaining gaps.
 
 | CPUs | Continuous block | SDK median (s) | Mini median (s) | Mini vs SDK |
 | ---: | --- | ---: | ---: | ---: |

@@ -94,10 +94,9 @@ archives with your Git client.
 
 1. Read the current SDK manifest and freeze the candidate SHA from the SDK's
    default branch. Record its module version and verify that the Git commit and
-   module version identify the same revision. The checked-in
-   `96aedb31048c...` base was the `main` tip when its synchronization began;
-   the next update must resolve the default branch again. This read returns
-   both its name and its current full SHA:
+   module version identify the same revision. Resolve the default branch for
+   every update rather than assuming the pinned base is still its tip. This
+   command returns both the branch name and its current full SHA:
 
 ```sh
 git ls-remote --symref https://github.com/DataDog/dd-trace-go.git HEAD
@@ -250,7 +249,7 @@ Do not expand normalization to hide a changed CI value.
 
 The CI matrix executes Go 1.26/1.27 on Linux and Go 1.27 on macOS/Windows.
 Linux also runs `-race`. Inspect the current head and PR merge checks after
-publication; a historical green run cannot validate changed source.
+publication and verify that their checked-out inputs match the proposed change.
 Cross-compiling another architecture establishes build compatibility only.
 Actual intake acceptance and a real Bazel compiler invocation are separate
 verification tasks.

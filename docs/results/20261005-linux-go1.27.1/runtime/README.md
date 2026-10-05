@@ -1,15 +1,25 @@
-# Runtime comparison of original test executables
+# Runtime of the prebuilt test binaries
 
-Medians in seconds, five repetitions after one warmup. All tests and original flags are retained.
-Compilation and CLI preparation are excluded. Each clock covers concurrent package startup, execution, settings and final delivery.
-Real gzip/MessagePack is sent to a successful loopback HTTP receiver. Telemetry is disabled here and checked separately in parity.
-Mini deferred uses the same executable. Percentages compare total Orchestrion walltime first, then Native.
-A failed repetition makes that variant ineligible for a valid timing comparison; failed durations remain in the raw ledger.
-An empty cell is pending or incomplete. `FAIL n/6` includes warmup failures. Full ranges, CPU and peak memory are retained below.
-Go `-cover` defaults to `set`: aggregate Go coverage works, but the pinned SDK and Mini do not send per-test coverage for that mode.
-The initial temporary harness incorrectly demanded a per-test upload in set mode. Original notices are preserved and revalidated against SDK and Native.
-Atomic coverage still requires nonempty per-test coverage payloads.
-If every SDK race attempt fails, a passing Mini run must match Native and the verified non-race SDK CI inventory; this fallback requires identical Native inventories and no coverage.
+Times are medians in seconds, using five measured runs after one warmup. Each
+run executes all packages with their original flags. The clock includes package
+startup, settings, tests and final delivery; it excludes compilation, CLI
+preparation, receiver startup and offline decoding.
+
+Agentless gzip/MessagePack requests go to a successful loopback receiver.
+Telemetry is disabled in this matrix; the Agent control checks it separately.
+Mini deferred runs the same executable as Mini with deferred delivery enabled.
+Percentages compare total Orchestrion time first, then Native time.
+
+A failed repetition, including warmup, disqualifies that variant's median.
+`FAIL n/6` reports its failed attempts. `UNVERIFIED` means execution passed but a
+required reference comparison is missing. Every duration remains in
+[observations.csv](observations.csv); CPU, memory peaks and ranges are below.
+
+Go's default `-covermode=set` produces aggregate coverage. Per-test CI uploads
+require count or atomic mode in both the SDK and Mini. Passing Mini race runs
+can use the non-race SDK event inventory only when Native inventories match and
+coverage is absent. Coverage groups without a successful SDK oracle remain
+unverified. See [the comparison limits](../../../benchmarks.md#runtime-limits-and-failures).
 
 | Project | Flags | CPUs | Native | Orchestrion | POC SDK | POC Mini | Mini deferred |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |

@@ -88,23 +88,22 @@ itself with the native tool; Windows delegates through a child. Process startup
 still has a cost even when dispatch does little work. The [latest build matrix](benchmarks.md)
 measures the complete invocation, including preparation and tool processes.
 
-Always-on and hybrid prototypes that deferred version validation failed the
-warm-vendor counterexample covered by
-[`TestTestifyVersionGuardWithWarmVendoredSources`](../integration/vendor_cache_test.go).
-The repository uses `-find` for known libraries and `-deps` for unknown test
-imports. Testify and goleak share that lookup, and their selected versions and
-APIs are validated before the build, including when compilation is cached.
+Selected-version validation must run before compilation: cached archives can
+remain usable when vendor metadata changes but source bytes do not.
+[`TestTestifyVersionGuardWithWarmVendoredSources`](../integration/vendor_cache_test.go)
+checks that case. Testify and goleak share the lookup; both libraries' versions
+and APIs are validated even on an unchanged build.
 
 Compiler/linker version identities stay native. The exported suite fingerprint
-in `testing` carries instrumentation inputs into Go's package keys. No custom
-binary cache was added. Coverage of rewritten `testing` sources has its own
-versioned bridge; ordinary client-only coverage needs no bridge.
+in `testing` carries instrumentation inputs into Go's package keys. Go owns
+compiled-object and test-result caching. Coverage of rewritten `testing` sources
+has its own versioned bridge; ordinary client-only coverage needs no bridge.
 
 Goleak has a package-scoped compiler flag marker because it does not import
 `testing`. Its worker filters and connection checkpoint are described in
 [delivery and goleak](delivery.md).
 
-## Delivery follow-up
+## Enqueue and delivery
 
 The ordinary enqueue path records its deadline but creates a context/timer only
 when it must wait for the send token or flush. Both operations share the original
@@ -120,11 +119,10 @@ The optional deferred mode is intended for test isolation, not as a throughput
 claim. It delays delivery until idle and permits queue growth across parallel
 groups. The [delivery contract](delivery.md) describes that tradeoff.
 
-Preparation no longer constructs comment ASTs in the source rewriter; comments
-remain in the original bytes and line directives are handled separately.
-Library discovery walks unknown test-only dependencies to detect goleak as
-well as Testify. No concurrent preparation pipeline was added. Current complete
-invocation costs are in the [build comparison](benchmarks.md).
+The source rewriter preserves comment bytes without constructing comment ASTs;
+it handles line directives separately. Preparation runs sequentially. The
+[build comparison](benchmarks.md) measures its cost as part of the complete CLI
+invocation.
 
 ## Mini runtime optimizations
 
@@ -155,8 +153,8 @@ dependencies remain in the repository without entering Mini's runtime imports.
 
 The [runtime comparison](benchmarks.md#runtime-of-the-prebuilt-test-binaries)
 includes startup, test execution and delivery. Its detailed report records
-event counts and wire bytes. It measures the current implementation rather
-than isolating an individual optimization's before/after cost.
+event counts and wire bytes. It measures the complete implementation. Use focused
+profiles and controlled comparisons to attribute a change to one optimization.
 
 The SDK-specific implementation rules are recorded in
 [ADAPTATIONS.md](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md). Common
@@ -183,17 +181,20 @@ compressor and buffer too. Request and replay readers must all become unable to
 read before either backing buffer is reusable. Calling `Close` on just the
 initial reader does not establish that boundary.
 
-The queue is bounded by event count and byte estimates. A stalled flush can
-block finishing goroutines and reject new events when an older full batch
+In ordinary delivery, the queue is bounded by event count and byte estimates.
+A stalled flush can block finishing goroutines and reject new events when an older full batch
 cannot be delivered. That is observable backpressure, so a throughput change
 must check errors and drops as well as ns/op.
 
-`Client.add` creates a timeout with `FlushTimeout` (10 seconds by default). It
-bounds acquisition of the delivery permit and any flush triggered by a full
-batch. Expiry rejects the incoming event, increments `DroppedEvents` and records
-the error. Delaying timer creation would be a separate optimization: an
-uncontended enqueue need not wait, but a concurrent sender and a full queue still
-need that deadline and the same drop/error semantics.
+Deferred delivery can buffer more than one batch while tests are active. Its
+pending queue has no total size limit; each outgoing payload still obeys the
+intake bounds. Include peak memory when assessing that mode.
+
+`Client.add` records a deadline from `FlushTimeout` (10 seconds by default).
+It creates a timeout context only if it must wait for the delivery token or
+flush a batch. Waiting and flushing share that deadline. Expiry rejects the
+incoming event, increments `DroppedEvents` and records the error. An ordinary
+enqueue that fits the current batch allocates no timeout context or timer.
 
 [Sealed-span tests](../internal/minitracer/sealed_span_test.go),
 [batching tests](../internal/minitracer/batching_test.go),
@@ -201,19 +202,20 @@ need that deadline and the same drop/error semantics.
 [transport reuse tests](../internal/citransport/reuse_test.go) exercise these
 contracts. Preserve them when changing synchronization or pooling.
 
-Common-span metadata sharing is still a proposal. Today every span has a private
-copy of the client's tag entries; Go already shares the strings' underlying data.
-A shared immutable base could hold repeated values
-such as the repository URL, commit and runtime ID, while the span stores only
-its own test name/status and overrides. Reads and serialization would merge the
-base with those overrides; every event would still carry the same CI fields.
-Changing a string tag to a numeric metric would also need to hide the inherited
-string. That ownership/type-transition work has not been applied.
+Common CI/Git/OS/runtime strings live in an immutable snapshot shared by spans.
+Each span stores only its own tags, metrics and overrides. Getters check local
+values before the snapshot. A numeric metric masks a shared string with the same
+key; later text can replace that metric. Delivery puts compatible defaults in
+payload metadata. Mixed snapshots and overridden keys use local values without
+changing the effective CI attributes. See the
+[metadata contract](delivery.md#payload-level-common-metadata) for fallback and
+byte-accounting rules.
 
-The compression-level experiment also remains outside the implementation.
-`gzip.BestSpeed` produces ordinary gzip with less compression work and larger
-payloads. The current pooled writer keeps Go's default compression level; changing
-the level would need delivery and payload-size checks across representative data.
+The pooled test-cycle compressor uses `gzip.BestSpeed`. It produces standard
+gzip with less compression work and potentially more wire bytes. Coverage and
+log writers keep their own SDK compression settings. Compare CPU and transmitted
+bytes when changing this level; decoded content and intake limits must remain
+unchanged.
 
 ## Profiling the native event path
 
@@ -225,8 +227,7 @@ policy startup or full test execution.
 From the repository root, choose a new directory for the artifacts:
 
 ```sh
-PROFILE_DIR="$HOME/.cache/dd-ci-event-profile"
-mkdir -p "$PROFILE_DIR"
+PROFILE_DIR="$(mktemp -d /var/tmp/dd-ci-event-profile.XXXXXX)"
 
 GOMAXPROCS=1 go test ./internal/minitracer -run '^$' \
   -bench '^BenchmarkEventLifecycle/gzip=false$' -benchtime=10s -count=1 -benchmem \
@@ -319,12 +320,6 @@ and qualifies the outputs. Its `report` command regenerates the
 [latest build tables](results/20261005-linux-go1.27.1/build/README.md)
 from every retained CSV observation, without Go or network access.
 
-[`scripts/benchmark.py`](../scripts/benchmark.py) is a smaller fixture runner
-for native, POC SDK and Orchestrion with `GOMAXPROCS=8`. It keeps bounded
-cold/warm/edit samples and wall times. It does not exercise Mini, force a link
-on every warm run, assign CPU affinity or collect full-process-tree CPU. It
-cannot reproduce a four-variant physical-core matrix by itself.
-
 ## Evidence and remaining work
 
 The [latest comparison](benchmarks.md) covers all four variants, Gin/Chi,
@@ -333,7 +328,6 @@ durations, aggregate cgroup memory, variation and event counts, and separates
 the unused-constant diagnostic from the reachable test-body edit. All build
 cells qualified; four Gin race runtime cells contain real failures. The repeated
 115-case parity suite passes, which does not close those application races.
-Only this series is checked in; older benchmark data remain in Git history.
 
 Further profiling can examine MessagePack encoding, tag construction, telemetry
 lookups and time spent waiting for `sendMu`. A proposed change needs before/after

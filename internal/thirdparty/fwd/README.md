@@ -6,6 +6,8 @@
 - Original license: [LICENSE.md](LICENSE.md).
 - File/source hashes and local adaptations: [SOURCE.json](SOURCE.json).
 
-The original root package and tests retain their file names and layout. This subset is used by MessagePack stream encoding/decoding. No external runtime module is required.
+MessagePack encoding and decoding use this subset's buffered reader and writer.
+The sources and tests keep their upstream filenames and root package layout.
+Mini imports this internal copy without requiring the external module.
 
 Follow the [shared audit and update procedure](../README.md#audit-and-update).

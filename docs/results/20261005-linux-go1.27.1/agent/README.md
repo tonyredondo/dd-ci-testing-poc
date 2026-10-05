@@ -1,9 +1,14 @@
 # Gin runtime with Agent delivery and CI telemetry
 
-Supplementary control: three repetitions after one warmup, all original Gin package test binaries.
-CI events and telemetry use the same local HTTP Agent proxy. No API key or external fallback endpoint.
-Agent delivery is uncompressed; the complete agentless matrix separately measures gzip.
-This smaller control measures telemetry-enabled execution and retains its full raw request bodies and clocks.
+This control runs every saved Gin package binary with CI telemetry enabled.
+There are three measured runs after one warmup at each CPU count. Test-cycle
+events and telemetry use one local HTTP EVP proxy, without credentials or an
+external fallback. Agent delivery is uncompressed; the main runtime matrix
+measures Agentless gzip delivery separately.
+
+The clock covers test execution and final delivery. The recorded observations
+keep durations, event counts, request sizes, CPU time and aggregate memory peaks.
+This is a loopback protocol check, not acceptance by a deployed Datadog Agent.
 
 | Project | CPUs | Native | Orchestrion | POC SDK | POC Mini |
 | --- | ---: | ---: | ---: | ---: | ---: |

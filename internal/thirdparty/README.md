@@ -1,8 +1,8 @@
 # Incorporated sources
 
 This directory contains maintained source subsets, not Go module vendoring.
-Consumers add only this module. `vendor` is reserved by Go, so the directory is
-named `thirdparty`. Each origin has a README, exact upstream commit, original
+Mini consumers add only this module. Each origin has a README, exact upstream
+commit, original
 licenses, and a `SOURCE.json` manifest with upstream and local SHA-256 hashes.
 
 | Origin | Local directory | Source base |
@@ -53,5 +53,6 @@ checked-in directives. Run the provenance audit, runtime/dependency checks,
 full SDK differential suite, coverage/race tests, and platform checks. Update
 performance claims only after measuring the changed implementation.
 
-The manifests are the current source record. Existing benchmark/dependency
-artifacts in `docs/` describe their stated historical revisions.
+The manifests identify the source base used by this implementation. The
+[benchmark inputs](../../docs/results/20261005-linux-go1.27.1/build/manifest.json)
+identify the exact code and tool versions used for the latest measurements.

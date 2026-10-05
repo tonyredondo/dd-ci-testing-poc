@@ -108,12 +108,12 @@ coverage generation, preserving the original coverage layout.
 
 ## Payload-level common metadata
 
-Mini already writes test-cycle envelope metadata. The `"*"` entry contains
+Mini writes test-cycle envelope metadata. The `"*"` entry contains
 `language`, `runtime-id`, `library_version` and, when configured, `env`.
 Event-kind entries carry `test_session.name`. This applies defaults across a
 payload without copying those strings into every event.
 
-CI, Git, OS and runtime strings now share an immutable base across CI spans.
+CI, Git, OS and runtime strings share an immutable base across CI spans.
 This includes `ci.*`, `git.*`, `os.*`, `runtime.*` and `_dd.ci.env_vars`. Getters
 read an event's own value first, then that base. A numeric override masks the
 base; later text replaces the metric. Finishing an event seals its local maps
@@ -142,7 +142,7 @@ Different snapshots or an event with no shared base trigger the same local
 fallback for that event kind; other kinds can still share their defaults.
 
 The SDK's tag API publishes updates through `AddCITags` and `AddCITagsMap`, and
-also historically exposes a mutable cached map. Snapshot lookup compares current
+also exposes a mutable cached map. Snapshot lookup compares current
 contents, so sequential direct edits and resets are seen too. A changed snapshot
 gets a new revision; cached, UTF-8-truncated options are rebuilt once. Existing
 spans keep their old values, including when later feature discovery changes tags.
@@ -158,7 +158,7 @@ event, including on delivery failure and retry.
 
 Loopback and Bazel tests compare effective values against the frozen SDK while
 also retaining raw payloads to check placement. Their comparator resolves only
-these newly shared fields and rejects numeric/default collisions. Deployed
+these declared shared fields and rejects numeric/default collisions. Deployed
 Agent/intake acceptance remains a separate check.
 
 ## Delivery combinations

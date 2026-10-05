@@ -1,18 +1,35 @@
-# Compile-only comparison: Native, Orchestrion, POC SDK and POC Mini
+# Compile-only comparison
 
-POC `9d4786fbd27f573bb68c5516bf23b336e8d7bdaa`; `go version go1.27.1 linux/amd64`; SDK `v2.12.0-dev.3.0.20261002145613-96aedb31048c`; Orchestrion `v1.13.2-0.20260917114356-5c24783fcd76`.
+The four variants compile the same source and module graph with
+`go test -c -o <directory>/ -ldflags=-w ./...`. No test executable runs during
+these measurements. Orchestrion loads only the SDK's testing aspects.
 
-Values are medians in seconds. POC percentages show the signed change against total Orchestrion wall time first, then against Native; both use unrounded medians.
+| Input | Recorded value |
+| --- | --- |
+| POC source | `9d4786fbd27f573bb68c5516bf23b336e8d7bdaa` |
+| Go | `go version go1.27.1 linux/amd64` |
+| SDK | `v2.12.0-dev.3.0.20261002145613-96aedb31048c` |
+| Orchestrion | `v1.13.2-0.20260917114356-5c24783fcd76` |
 
-All variants compile with `go test -c -o <directory>/ -ldflags=-w ./...`. Test binaries are never run. The same prepared source and module graph is used for all four variants. Orchestrion loads only the pinned SDK's testing aspects.
+Times are medians in seconds. POC percentages show the signed change against
+total Orchestrion time first, then Native time, calculated from unrounded values.
+Builds run serially with rotating variant order. Affinity, `GOMAXPROCS` and `-p`
+match the CPU column; the manifest records CPU IDs and physical-core topology.
 
-Builds run serially in rotating order. Each cold run has an empty Go build cache and no existing output. Downloads are disabled during timing; modules and OS page cache stay warm. Affinity, `GOMAXPROCS` and `-p` match the selected CPU count; manifest.json records logical CPU IDs and physical core topology.
+Every cold run uses an empty Go build cache and removed output. Downloads are
+disabled during timing; the module cache and OS page cache stay warm. Tool traces
+verify unchanged output reuse, forced links and reachable edits. Binary checks
+verify the testing/Testify hooks and absence of DWARF.
 
-Unchanged output reuse, forced linking and reachable edits are checked with tool traces. Final binaries are checked for the expected testing/Testify hooks and absence of DWARF. CPU and memory include daemons and nested builds through exclusive cgroups. Wall time ends at the top-level command's exit; drain wait is recorded separately.
+The dataset contains 7,153 completed commands and 432 qualified binaries.
+The Native link control has 160 repetitions. CPU and memory are measured in
+exclusive cgroups, including daemons and nested builds. Wall time ends when the
+top-level command exits; process-tree drain time is recorded separately.
 
-7153 completed build commands, 432 qualified binaries. Native control repetitions: 160. A skipped control in a smoke run provides no stability evidence.
-
-[Every observation](observations.csv), [ranges and uncertainty](statistics.json), [inputs](manifest.json) and [binary qualification](final-binaries.json) remain alongside this report. No slow samples are discarded. Fixture results are not a general application performance claim.
+[Every command](observations.csv), [ranges and uncertainty](statistics.json),
+[inputs](manifest.json) and [binary qualification](final-binaries.json) are kept
+with this report. All observations contribute according to their scenario;
+no slow samples are discarded. These results apply to the recorded fixtures.
 
 ## Cold compilation
 

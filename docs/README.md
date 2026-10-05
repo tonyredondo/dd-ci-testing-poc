@@ -1,9 +1,8 @@
 # Maintainer guide
 
-Start with [architecture](architecture.md) to understand the build overlay and
-the native CI runtime. Read [maintenance](maintenance.md) before changing an
-upstream copy or upgrading Go. The [performance guide](performance.md) explains
-the optimizations in the code and how to measure a proposed change.
+Start with [architecture](architecture.md). Its diagrams follow a test from CLI
+preparation to event delivery and show which package owns each step. Then choose
+the guide for the work you need to do:
 
 | You need to... | Read |
 | --- | --- |
@@ -26,9 +25,8 @@ the exact upstream revision, original paths, licenses and local changes.
 The code in `internal/minitracer`, `internal/citransport`, `internal/runner` and
 `internal/instrument` belongs to this POC.
 
-Documentation describes the checked-in implementation. Timing artifacts describe
-the revisions recorded inside them; updating the SDK or moving code does not
-refresh those measurements.
+The guides describe the current implementation. Benchmark manifests record the
+exact inputs used for measurement; editing a guide does not rerun a benchmark.
 
 The [latest dataset](results/20261005-linux-go1.27.1/README.md) contains 6,224
 comparative builds, 1,200 measured runtime groups, memory peaks and twelve

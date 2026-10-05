@@ -4,7 +4,6 @@
 - Default branch: `main`
 - Base commit: `96aedb31048c07e29e7a20a4333dc3b8d289c52d`
 - Go module version: `v2.12.0-dev.3.0.20261002145613-96aedb31048c`
-- Base captured: 2026-10-02; this was the default branch tip when synchronization started.
 - License: original Apache-2.0 text in [LICENSE](LICENSE).
 - Files and hashes: [SOURCE.json](SOURCE.json).
 - Ported test inventory and adaptations: [TESTS.json](TESTS.json).
@@ -26,9 +25,9 @@ platform calls use the adjacent `xsys` subset. Our runtime version is owned by
 mini client and HTTP transport are owned outside this origin.
 
 [ADAPTATIONS.md](ADAPTATIONS.md) records the performance changes retained on top
-of this base: bound CI counters, coherent inline metric points, source-parser
-flags, Testify prefix matching and lazy stack tables. It lists their invariants
-and the checks to run when updating these upstream paths.
+of this base, including shared CI tags, bound counters, inline metric points,
+lazy stack tables, deferred delivery and goleak checkpoints. It explains their
+ownership rules and the checks to run when updating the corresponding paths.
 
 Static library capabilities are published before asynchronous settings loading.
 This keeps fast manual hierarchy calls from losing capabilities while the
@@ -36,12 +35,11 @@ network request is still running; feature decisions still wait for settings.
 
 Local tests/adapters are classified separately in the manifest. Original
 assertions are retained when porting tests. Updating the base also updates the
-SDK differential fixture to the same exact version. Historical benchmark
-references remain frozen to the revision they measured.
+SDK differential fixture to the same exact version.
 
-This synchronization includes the upstream retry environment override,
-ITR missing-line-coverage field/cache-version correction, and serialization
-of the Go runtime coverage emitter, with their regression tests.
+CI behavior includes the retry environment override, ITR missing-line-coverage
+field/cache contract, and serialized Go runtime coverage emission. Their
+regression tests are part of the ported inventory.
 
 Follow the [shared update procedure](../README.md#audit-and-update). A patch
 against the recorded base exposes the complete adaptation diff, instead of

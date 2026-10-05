@@ -77,8 +77,8 @@ client, OTLP stack, or agent statistics pipeline is imported by the mini runtime
 CI configuration, diagnostics and CI telemetry helpers are retained. The native
 runtime reads `DD_TRACE_DEBUG` and `DD_CIVISIBILITY_LOGS_ENABLED` from the
 environment only: APM YAML/Fleet configuration is intentionally unsupported.
-SDK telemetry heartbeats, SCA dependency inventory and REST endpoint inventory
-are removed. Actual CI metrics, delivery diagnostics and lifecycle telemetry
+CI telemetry excludes SDK heartbeats, SCA dependency inventory and REST endpoint
+inventory. Actual CI metrics, delivery diagnostics and lifecycle telemetry
 remain; their shared intake URL contains `apmtelemetry`, but no APM tracer runs.
 `DD_VERSION` sets the service `version` tag on CI events. Session naming reuses
 the SDK algorithm: an explicitly defined `DD_TEST_SESSION_NAME` wins, including
@@ -101,16 +101,12 @@ credentials for the native event client and does not send event HTTP requests.
 The SDK-derived settings loader still requires a nonempty API key to consume
 a settings cache; the offline differential fixture supplies a synthetic key.
 The test verifies zero HTTP requests with all three payload types present.
-The historical dependency snapshot records 256 Linux packages including the standard library,
-versus 511 for the historical original SDK public-runtime snapshot. There are
-no external runtime modules. A fresh consumer's `go get` and `go mod tidy` add
-only `github.com/tonyredondo/dd-ci-testing-poc` to its `go.mod`; the consumer also
-builds offline. Test-only `testify` dependencies support the ported SDK assertions
-and do not enter `go list -deps ./testopt` or the consumer's requirements. The CLI
-has no external package imports. Runtime UUIDv4 generation uses `crypto/rand`
-and does not require `google/uuid`.
-[Dependency and module integrity proof](mini-dependency-proof.json) retains the
-package lists and successful module verification output.
+Mini has **no external runtime module dependencies**. A fresh consumer's
+`go get` and `go mod tidy` add only `github.com/tonyredondo/dd-ci-testing-poc`;
+the consumer also builds offline. Repository test dependencies do not enter
+`go list -deps ./testopt` or the CLI's imports. Runtime UUIDv4 generation uses
+`crypto/rand`. The [maintenance checks](maintenance.md#verification-before-publication)
+show how to audit these dependency boundaries.
 
 CI telemetry metric registries use the standard library's `sync.Map`; only first
 registration is serialized. Global metric references use `sync.OnceValue` so
@@ -191,14 +187,15 @@ manifest, read cache and output files; an actual Bazel build/toolchain invocatio
 has not been run. Full fuzz campaigns remain unverified. The
 [Testify comparison](testify.md) checks suite entry registration, external callers,
 lifecycle, policies and coverage against the original SDK/Orchestrion runner. The
-[verified CI revision](validation.md#verified-ci-revision) covers native Linux,
-macOS and Windows execution; other platforms require their own runtime evidence.
-The exact local checks and their limits are recorded in
-[the validation contract](validation.md#mini-runtime-follow-up).
+[compatibility workflow](validation.md#compatibility-workflow) runs natively on
+Linux, macOS and Windows. Inspect its current PR jobs for platform results.
+[Mini runtime contracts](validation.md#mini-runtime-contracts) describe the
+checks and their limits.
 
-Go rejects overlays targeting a toolchain beneath `GOMODCACHE`. This pre-existing
-limitation affects both backends. Stable Go 1.27.1 was verified using an identical
-toolchain copy outside that cache. The CLI does not relocate toolchains.
+Both backends need a toolchain outside `GOMODCACHE`: Go rejects overlays targeting
+files beneath that cache. If Go downloaded your toolchain there, select an
+installation outside the cache before invoking `ddtest`. The CLI does not relocate
+it for you.
 
 ## Source ownership
 
@@ -222,8 +219,7 @@ compile-only cold/cache/link/edit timings from execution of prebuilt binaries,
 including default/deferred delivery and aggregate memory peaks. Its detailed
 reports retain coverage/race combinations and failed application cases.
 The repeated 115-case SDK/Mini comparison records event counts and durations
-separately. Only this benchmark series is checked in; earlier data remain in
-Git history.
+separately.
 
 ## Reused upstream CI tests
 
@@ -303,17 +299,13 @@ Go versions change. The upstream BSD license is retained in
 [platform extraction record](../internal/thirdparty/xsys/EXTRACTION.json)
 records pinned sources, adaptations and destination hashes.
 
-Local Go 1.27.1 verification passed the full Linux suite, project race checks,
-`go vet`, module integrity and an offline consumer build. Registry value decoding,
-buffer growth and injected BSD formatting/error paths run on Linux. Windows
-Job Object/thread structure sizes, field offsets and constants were checked
-against pinned `x/sys` for amd64, 386 and arm64. Native Windows tests and retry
-integration tests cross-link on all three architectures. OS metadata tests also
-cross-link for Darwin, Linux, FreeBSD, NetBSD, OpenBSD, DragonFly, Solaris,
-illumos and AIX. These builds do not prove native execution on those platforms.
-The [verified CI revision](validation.md#verified-ci-revision) also passed native
-Windows/macOS execution and Linux Go 1.26. The remaining cross-linked platforms
-have build evidence only.
+Platform tests cover registry decoding, buffer growth, BSD formatting and error
+paths. Windows ABI checks compare Job Object/thread structure sizes, offsets and
+constants with the pinned `x/sys` source on amd64, 386 and arm64. Native platform
+jobs and cross-compilation serve different purposes: the
+[compatibility workflow](validation.md#compatibility-workflow) runs Linux, macOS
+and Windows; cross-linking the other Unix targets checks build compatibility.
+A successful build does not establish native execution on those targets.
 
 BSD metadata reads do not use the two-step `syscall.Sysctl` size/read API. They
 retain Uname's single fixed-buffer read and partial-data error behavior. Numeric

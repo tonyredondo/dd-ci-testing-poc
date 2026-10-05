@@ -8,7 +8,7 @@ Its original Apache-2.0 license and notices are retained there.
 | File | Responsibility |
 | --- | --- |
 | `client.go` | Explicit configuration, immutable common metadata, client construction |
-| `batch.go` | Bounded queue, byte accounting, serialization, flush/close and error state |
+| `batch.go` | Event queue, bounded payloads, byte accounting, serialization, flush/close and error state |
 | `runtime.go` | Environment configuration and the process-wide client used by testing hooks |
 | `span.go` | Mutable event fields until Finish, CI identity and read-only final maps |
 | `common_tags.go` | Immutable CI strings, effective byte accounting and event-kind metadata projection |
@@ -16,11 +16,12 @@ Its original Apache-2.0 license and notices are retained there.
 
 `Finish` transfers ownership of the private metadata/metric maps once; setters
 cannot change them afterward. `sendMu` serializes delivery and owns the reusable
-payload buffer. `mu` protects queue/error state; failed delivery keeps the older
-batch and rejects new work when bounds would be exceeded. `Close` prevents new
-events before the final flush. Readers are sealed by `citransport` before buffers
-or compressors are reused. Keep these invariants together when changing code;
-the ownership, failed-delivery and race tests cover the consuming paths.
+payload buffer. `mu` protects queue/error state. In ordinary delivery, a failed
+flush keeps its batch and rejects work that would exceed queue bounds. Deferred
+delivery can buffer multiple batches until idle; it bounds each outgoing payload
+but not the pending queue's total size. `Close` prevents new events before the
+final flush. Readers are sealed by `citransport` before buffers or compressors are
+reused. Keep these rules together when changing synchronization or pooling.
 
 The SDK port binds common CI/Git/system strings once per snapshot revision.
 Spans retain that read-only base and their own overrides. Getters check local

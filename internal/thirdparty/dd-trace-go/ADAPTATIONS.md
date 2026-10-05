@@ -3,7 +3,6 @@
 Base: [`96aedb31048c07e29e7a20a4333dc3b8d289c52d`](https://github.com/DataDog/dd-trace-go/commit/96aedb31048c07e29e7a20a4333dc3b8d289c52d).
 `SOURCE.json` retains each original path/hash alongside the local hash. This
 record explains changes that an upstream synchronization must review manually.
-The base revision and the supported CI behavior remain unchanged.
 
 ## Retained metric handles
 
@@ -45,8 +44,8 @@ whole point under the same lock, then constructs the wire payload after release.
 Every concurrent increment belongs to exactly one collection. `Get` returns
 `NaN` until a submission and after collection, while a submitted zero is a real
 point. Fractional/negative values and gauge replacement keep their semantics.
-Timestamps are captured before competing for the lock, matching the previous
-submission path. They need not be monotonic between concurrent callers.
+Timestamps are captured before competing for the lock. They need not be
+monotonic between concurrent callers.
 
 Rate metrics retain their existing atomic interval start and short-interval
 rule. A short interval does not consume the accumulated count; an eligible
@@ -134,7 +133,7 @@ stack locations globally.
 `civisibility/utils/environmentTags.go` adds `GetCITagsSnapshot`, an owned,
 read-only snapshot with a revision. Current contents are checked with `maps.Equal`
 under the existing mutex. This retains the SDK's sequential direct cached-map
-edits as well as `AddCITags`, `AddCITagsMap` and resets. Prior snapshots never
+edits as well as `AddCITags`, `AddCITagsMap` and resets. Published snapshots never
 change. Do not replace this content check with pointer identity or update-only
 invalidation while the original `GetCITags` map remains mutable.
 
@@ -168,8 +167,7 @@ collisions. Keep the raw-payload placement assertions too.
 
 `internal/minitracer/span.go` encodes the high eight trace-ID bytes directly with
 `hex.EncodeToString`. This retains the same 16-character, zero-padded lowercase
-`_dd.p.tid` value as the prior big-endian integer formatter. It is a Mini change,
-not an upstream source-file adaptation; propagation/event tests cover it.
+`_dd.p.tid` value. It is owned by Mini; propagation and event tests cover it.
 
 The front-end also prunes known dependency queries, decodes package JSON from
 stdout, reserves rewritten-source buffer capacity and reuses the validated
@@ -196,6 +194,3 @@ omits comment AST construction while preserving original comment bytes.
 4. Refresh `TESTS.json` for adapted assertions and `SOURCE.json` using the shared
    [maintenance procedure](../../../docs/maintenance.md). Rerun comparable
    benchmarks if upstream changes a hot path.
-
-Retry-code refactoring remains deferred. Shared CI string metadata is implemented;
-the pre-existing global defaults and event overrides retain their behavior.
