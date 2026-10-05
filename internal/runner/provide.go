@@ -124,10 +124,21 @@ func sourceCheckout() string {
 	}
 	root := filepath.Dir(filepath.Dir(filepath.Dir(file))) // internal/runner/provide.go
 	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
-	if err != nil || !bytes.HasPrefix(bytes.TrimSpace(data), []byte("module "+miniModule+"\n")) {
+	if err != nil || modulePath(data) != miniModule {
 		return ""
 	}
 	return root
+}
+
+// modulePath returns the path in go.mod's module directive. Fields also drop
+// the carriage returns of a Windows checkout.
+func modulePath(data []byte) string {
+	for _, line := range strings.Split(string(data), "\n") {
+		if fields := strings.Fields(line); len(fields) >= 2 && fields[0] == "module" {
+			return strings.Trim(fields[1], `"`)
+		}
+	}
+	return ""
 }
 
 // goTool runs a go command for preparation. GOFLAGS is cleared: flags meant
