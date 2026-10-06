@@ -25,11 +25,23 @@ Then run it from the target module. No changes to the module are needed:
 
 When the module does not require the runtime, `ddtest` adds it to a temporary
 copy of `go.mod` and `go.sum` that Go reads through `-modfile`; the module's own
-files stay unchanged, and `go mod tidy` cannot break a later run. Mini comes
-from the module's `replace` directive for this module if there is one, else from
-the published version that built `ddtest`, else from the checkout `ddtest` was
-built from (a `-trimpath` build cannot locate it). The SDK backend adds its
-pinned version the same way; a different required SDK version is still an error.
+files stay unchanged, and `go mod tidy` cannot break a later run. Mini honors
+the client's `replace` directive first. Otherwise, it uses the sources recorded
+in the CLI when they are still available: either a local checkout or the module
+cache used by `go install`. A local checkout supplies its current contents,
+including edits made after building the CLI.
+
+For a `-trimpath` build or a missing source directory, `ddtest` checks
+`GOMODCACHE` for the exact version recorded in the CLI. Only if no usable local
+copy exists does it fetch that version with `go get`. It does not search for
+other checkouts or substitute a different cached version. A development binary
+without source paths or a published version needs an explicit client `replace`.
+
+The SDK backend uses `go get` to provide its pinned version; a different
+required SDK version is still an error. Before any runtime `go get`, the CLI
+prints a status line and streams Go's download messages and diagnostics to
+`stderr`. This keeps `go test -json` output valid. Go may be quiet while querying
+module metadata, even when the module files are already cached.
 
 With `-mod=mod`, including from `GOFLAGS`, `ddtest` resolves the runtime
 read-only, so it is never added to the module's files. The module's own packages

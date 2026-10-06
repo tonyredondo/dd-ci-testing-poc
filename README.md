@@ -22,7 +22,9 @@ go build -o bin/ddtest ./cmd/ddtest
 If the module does not require the selected runtime (the pinned SDK, or this
 module for Mini), `ddtest` provides it through a temporary copy of `go.mod` and
 `go.sum` passed with `-modfile`. The module's files are never modified, so
-`go mod tidy` cannot break a later run. See [native runtime usage](docs/mini-runtime.md#use-the-local-poc).
+`go mod tidy` cannot break a later run. Mini prefers its local sources or exact
+cached version; any required `go get` reports progress on `stderr`.
+See [native runtime usage](docs/mini-runtime.md#use-the-local-poc).
 
 Runtime selection accepts `--runtime=mini` and `--runtime mini`, before or
 after Go flags and package names. Place it before custom test flags, `-args`
