@@ -205,7 +205,10 @@ test checks that no event is lost.
 
 Deferred delivery can buffer more than one batch while tests are active. Its
 pending queue has no total size limit; each outgoing payload still obeys the
-intake bounds. Include peak memory when assessing that mode.
+intake bounds. Include peak memory when assessing that mode. Its checkpoints
+send up to four payloads at once: one parent test with 100,000 trivial subtests
+delivers all 101 payloads after the parent finishes, which took 5.7 s one at a
+time and takes 1.5 s now against a 50 ms intake.
 
 Each background or checkpoint delivery of a sealed batch is bounded by
 `FlushTimeout` (10 seconds by default). Explicit `Flush` and `Close` use their

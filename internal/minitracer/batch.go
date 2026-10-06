@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
@@ -218,30 +219,75 @@ func (c *Client) deliverReady(ctx context.Context) error {
 	return c.drainLocked(ctx, true)
 }
 
-// drainLocked delivers sealed batches in order; the caller holds the delivery
-// token, which owns c.payload. With perBatchTimeout each batch gets its own
-// flush timeout. It stops at the first failure.
+// drain is the state shared by the senders of one drainLocked call.
+type drain struct {
+	ctx             context.Context
+	perBatchTimeout bool
+	err             error // First failure, guarded by Client.mu.
+}
+
+// drainLocked delivers sealed batches, oldest first; the caller holds the
+// delivery token, which owns c.payload. With perBatchTimeout each batch gets
+// its own flush timeout. No batch starts after the first failure, which is
+// returned.
+//
+// Deferred mode has no background senders, so the caller sends together with
+// up to maxConcurrentSends-1 drainWorker goroutines, all finished before it
+// returns: no delivery goroutine outlives a checkpoint, Flush or Close.
+// Payloads sent together can arrive in any order.
 func (c *Client) drainLocked(ctx context.Context, perBatchTimeout bool) error {
+	d := &drain{ctx: ctx, perBatchTimeout: perBatchTimeout}
+	var workers sync.WaitGroup
+	if c.deferUntilIdle {
+		c.mu.Lock()
+		extra := min(len(c.ready), maxConcurrentSends) - 1
+		c.mu.Unlock()
+		for range extra {
+			workers.Add(1)
+			go c.drainWorker(d, &workers)
+		}
+	}
+	c.drainBatches(d, &c.payload)
+	workers.Wait()
+	return d.err
+}
+
+// drainWorker is an additional deferred-mode sender of one drain, with its own
+// encoding buffer. The goleak shim recognizes this frame.
+func (c *Client) drainWorker(d *drain, done *sync.WaitGroup) {
+	defer done.Done()
+	c.mu.Lock()
+	buffer := c.takeBufferLocked()
+	c.mu.Unlock()
+	c.drainBatches(d, buffer)
+	c.mu.Lock()
+	c.returnBufferLocked(buffer)
+	c.mu.Unlock()
+}
+
+// drainBatches sends sealed batches with the given buffer until the queue is
+// empty or a delivery of the same drain has failed.
+func (c *Client) drainBatches(d *drain, payload *bytes.Buffer) {
 	for {
 		c.mu.Lock()
-		if len(c.ready) == 0 {
+		if len(c.ready) == 0 || d.err != nil {
 			c.mu.Unlock()
-			return nil
+			return
 		}
 		batch := c.popReadyLocked()
 		c.mu.Unlock()
-		sendCtx, cancel := ctx, context.CancelFunc(func() {})
-		if perBatchTimeout {
-			sendCtx, cancel = context.WithTimeout(ctx, c.timeout)
+		sendCtx, cancel := d.ctx, context.CancelFunc(func() {})
+		if d.perBatchTimeout {
+			sendCtx, cancel = context.WithTimeout(d.ctx, c.timeout)
 		}
-		err := c.sendBatch(sendCtx, &c.payload, batch)
+		err := c.sendBatch(sendCtx, payload, batch)
 		cancel()
 		c.mu.Lock()
 		c.completeLocked(batch, err)
-		c.mu.Unlock()
-		if err != nil {
-			return err
+		if err != nil && d.err == nil {
+			d.err = err
 		}
+		c.mu.Unlock()
 	}
 }
 

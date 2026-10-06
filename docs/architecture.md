@@ -199,8 +199,9 @@ that boundary; ordinary child spans receive no CI defaults.
 The client has two synchronization boundaries. `mu` protects the open batch,
 sealed batches, sender, closure, error and drop state. `sendMu` is a
 context-aware token that serializes explicit flushes and idle-checkpoint
-deliveries, including ownership of their payload buffer; background senders
-encode into their own reusable buffers. `Finish` never takes the token and never
+deliveries, including ownership of their payload buffer; background senders and
+the additional deferred-mode senders encode into their own reusable buffers.
+`Finish` never takes the token and never
 performs network I/O: it appends to the open batch and seals it once it reaches
 the event-count or byte threshold.
 
@@ -215,10 +216,11 @@ finishers at the bound until the first delivery fails, at most `FlushTimeout`
 (ten seconds by default). A failed
 batch returns to the front of the queue, and background retries back off from
 one to ten seconds; any successful delivery clears the backoff and the failure
-state. Deferred mode starts no sender and never waits: idle checkpoints deliver
-sealed batches, and the open batch waits for `Close` or an explicit `Flush`.
-Its pending queue can exceed the bound, while each outgoing payload keeps the
-intake limits.
+state. Deferred mode starts no background sender and never waits: idle
+checkpoints deliver sealed batches, up to four at once, and finish every send
+before the next test starts; the open batch waits for `Close` or an explicit
+`Flush`. Its pending queue can exceed the bound, while each outgoing payload
+keeps the intake limits.
 
 Ordinary CI telemetry updates use bound handles for their existing tag
 combinations. The global swappable handle retains startup replay and follows

@@ -225,7 +225,7 @@ asynchronous feature initialization and repository upload in
 `integrations/civisibility.go` and `civisibility_features.go` register with
 `cidelivery.TrackBackground`, so a check first waits for them, including git
 subprocesses, for up to one minute. Named telemetry, coverage and
-log worker functions, and Mini's background test-cycle sender, permit exact
+log worker functions, and Mini's background and checkpoint test-cycle senders, permit exact
 filters without ignoring `net/http` or a user goroutine snapshot. Preserve worker names together with
 `internal/instrument/goleak.go` when moving these functions.
 

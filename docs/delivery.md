@@ -56,6 +56,11 @@ count or 2.5 MiB threshold) and full coverage/log payloads. Partial payloads
 wait for the end of the session, so a serial suite sends one payload per full
 batch rather than one per test.
 
+A checkpoint, deferred `Flush` or `Close` sends up to four test-cycle payloads
+at once and finishes every request before it returns, so the next test starts
+with no CI delivery in flight. Payloads sent together can arrive in any order;
+each keeps its events in order.
+
 Coverage counter snapshots are captured in the before/after hooks. Deferred
 delivery postpones their processing as well as their upload until the whole
 test group is idle. It never captures counters from a later test. In ordinary
@@ -111,8 +116,8 @@ flowchart TD
 ```
 
 The shim adds exact function filters for the CI signal handler, telemetry ticker,
-blocked CI senders, Mini's background test-cycle sender, diagnostic log sender
-and coverage sender. It preserves the
+blocked CI senders, Mini's background and checkpoint test-cycle senders,
+diagnostic log sender and coverage sender. It preserves the
 caller's options and goleak's original validation, retry loop and error result.
 Waiting for an active CI request can add its remaining HTTP/retry time before
 goleak starts that loop; the checkpoint waits for delivery rather than canceling it.
