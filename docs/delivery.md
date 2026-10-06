@@ -11,8 +11,10 @@ Set `DD_CIVISIBILITY_DEFERRED_DELIVERY=true` before running the test binary:
 DD_CIVISIBILITY_DEFERRED_DELIVERY=true ddtest test --runtime=mini -count=1 ./...
 ```
 
-The default is ordinary delivery: finishing an event never waits for the
-network, and a background sender delivers full batches. With the variable
+The default is ordinary delivery: finishing an event never performs network
+I/O, and up to four background senders deliver full batches. When delivery falls
+behind, a finishing test waits for a sender rather than losing events; after a
+failed delivery it drops events beyond the queue bound instead. With the variable
 enabled, delivery runs between completed test groups, and remaining data is sent
 at session close. Sequential tests can have a delivery checkpoint after each
 test. Parallel tests continue together until the whole group finishes; the next
