@@ -444,3 +444,23 @@ omits comment AST construction while preserving original comment bytes.
 4. Refresh `TESTS.json` for adapted assertions and `SOURCE.json` using the shared
    [maintenance procedure](../../../docs/maintenance.md). Rerun comparable
    benchmarks if upstream changes a hot path.
+
+## Source ranges and runtime identity
+
+`civisibility/integrations/manual_api_sourcecache.go` uses `declStartLine` for
+named declarations whose range contains the runtime entry line. Go's
+entry PC can point at the last line of an optimized function. Keep the runtime
+line for matching declarations, especially methods with the same name, but use
+the cached AST for the published range. Missing sources retain the runtime
+fallback, as do unconfirmed declaration matches; closure matching is unchanged.
+No additional source read or parse is needed. During an SDK update, check
+whether upstream has corrected this too.
+
+`TestMiniCLIRuntimeSelectionAndSourceRange` checks emitted lines 5–10 with normal,
+unoptimized and race builds. The source-cache unit tests cover duplicate method
+names, named `func1` declarations, closures, unavailable sources, impacted-test
+classification and process-retry metadata.
+
+`log/log.go` labels native runtime diagnostics `TestOptimization Tracer`, using
+the version owned by `internal/version`. The original SDK's logger is unchanged.
+The native version is also used in event metadata and CI telemetry.
