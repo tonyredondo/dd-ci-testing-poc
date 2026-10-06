@@ -83,54 +83,82 @@ func TestPackFilesFallBackToGitDirectory(t *testing.T) {
 	assert.Empty(t, packDirectories(t, gitDir))
 }
 
-func TestFailedPackFilesLeaveNoDirectory(t *testing.T) {
-	resetGitCommandCachesForTesting(t)
-	tmp, gitDir, bin := t.TempDir(), t.TempDir(), t.TempDir()
-	useTempDir(t, tmp)
+// installFakeGit puts a fake git first in PATH and returns the file where it
+// records each command. It skips the options before the command, which cmd
+// also splits at '=' for git.bat, answers rev-list with one object and
+// rev-parse with a temporary git directory, and for pack-objects either fails
+// or names a pack without writing it.
+func installFakeGit(t *testing.T, packObjectsFails bool) (log, gitDir string) {
+	t.Helper()
+	bin := t.TempDir()
+	gitDir, log = t.TempDir(), filepath.Join(t.TempDir(), "commands")
 	t.Setenv("FAKE_GIT_COMMON_DIR", gitDir)
-	for _, fake := range []struct{ name, script string }{
-		{"git", `#!/bin/sh
-if [ "$1" = "-c" ]; then
-	shift 2
-fi
+	t.Setenv("FAKE_GIT_LOG", log)
+	shPack, batPack := `printf 'packhash\n'`, "echo packhash"
+	if packObjectsFails {
+		shPack, batPack = "exit 1", "exit /b 1"
+	}
+	scripts := map[string]string{
+		"git": `#!/bin/sh
+while [ $# -gt 0 ]; do
+	case "$1" in
+		rev-list|rev-parse|pack-objects) break ;;
+	esac
+	shift
+done
+[ $# -gt 0 ] || exit 0
+printf '%s\n' "$1" >> "$FAKE_GIT_LOG"
 case "$1" in
-	rev-list)
-		printf 'abc123\n'
-		;;
-	rev-parse)
-		printf '%s\n' "$FAKE_GIT_COMMON_DIR"
-		;;
-	pack-objects)
-		exit 1
-		;;
+	rev-list) printf 'abc123\n' ;;
+	rev-parse) printf '%s\n' "$FAKE_GIT_COMMON_DIR" ;;
+	pack-objects) ` + shPack + ` ;;
 esac
 exit 0
-`},
-		{"git.bat", `@echo off
-if "%1"=="-c" (
-	shift
-	shift
-)
-if "%1"=="rev-list" (
-	echo abc123
-	exit /b 0
-)
-if "%1"=="rev-parse" (
-	echo %FAKE_GIT_COMMON_DIR%
-	exit /b 0
-)
-if "%1"=="pack-objects" (
-	exit /b 1
-)
+`,
+		"git.bat": `@echo off
+:next
+if "%~1"=="" exit /b 0
+if "%~1"=="rev-list" goto found
+if "%~1"=="rev-parse" goto found
+if "%~1"=="pack-objects" goto found
+shift
+goto next
+:found
+>>"%FAKE_GIT_LOG%" echo %~1
+if "%~1"=="rev-list" echo abc123
+if "%~1"=="rev-parse" echo %FAKE_GIT_COMMON_DIR%
+if "%~1"=="pack-objects" ` + batPack + `
 exit /b 0
-`},
-	} {
-		require.NoError(t, os.WriteFile(filepath.Join(bin, fake.name), []byte(fake.script), 0o755))
+`,
+	}
+	for name, script := range scripts {
+		require.NoError(t, os.WriteFile(filepath.Join(bin, name), []byte(script), 0o755))
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return log, gitDir
+}
+
+// fakeGitCommands counts the commands the fake git recorded.
+func fakeGitCommands(t *testing.T, log string) map[string]int {
+	t.Helper()
+	data, err := os.ReadFile(log)
+	require.NoError(t, err)
+	counts := map[string]int{}
+	for _, command := range strings.Fields(string(data)) {
+		counts[command]++
+	}
+	return counts
+}
+
+func TestFailedPackFilesLeaveNoDirectory(t *testing.T) {
+	resetGitCommandCachesForTesting(t)
+	tmp := t.TempDir()
+	useTempDir(t, tmp)
+	log, gitDir := installFakeGit(t, true)
 
 	// Both attempts fail: each removes its directory.
 	assert.Empty(t, CreatePackFiles([]string{"HEAD"}, nil))
+	assert.Equal(t, 2, fakeGitCommands(t, log)["pack-objects"], "both attempts must run")
 	assert.Empty(t, packDirectories(t, tmp))
 	assert.Empty(t, packDirectories(t, gitDir))
 }

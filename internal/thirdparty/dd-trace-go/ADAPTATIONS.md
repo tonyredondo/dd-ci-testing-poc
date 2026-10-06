@@ -161,7 +161,41 @@ directory, and `RemovePackFiles` removes the directory after the upload.
 
 Checks: `TestRemovePackFilesRemovesTemporaryDirectory`,
 `TestPackFilesFallBackToGitDirectory`, `TestFailedPackFilesLeaveNoDirectory`
-and the git upload parity case.
+and the git upload parity case, where Mini must leave its temporary directory
+empty. The fake git in these tests and in `TestCreatePackFilesMissingPackFile`
+skips the options before the command, which cmd also splits at `=` for
+`git.bat`, and the tests check that `pack-objects` ran, so Windows exercises the
+same paths.
+
+## Parallel retry accounting
+
+Every execution of a test with additional features (retries, early flake
+detection, attempt to fix) runs as a fresh attempt in
+[`gotesting/retry_attempt_runner.go`](civisibility/integrations/gotesting/retry_attempt_runner.go),
+outside testing's `tRunner`. testing counts each attempt that calls `Parallel`
+as a started parallel test. The first such attempt moves the parallel lease to
+the original test, whose `tRunner` records one end. Upstream records no end for
+later parallel attempts, so after a retried parallel test testing still counts
+a parallel test as running, and `testing.AllocsPerRun` panics in every later
+test of the binary.
+
+Mini records those ends. ddtest's testing overlay adds `ParallelStopHook` from
+`internal/instrument/hooks.go`, only for Mini and only when testing declares
+`parallelStop atomic.Int64`; the linker allows no other access to the counter.
+The hook registers a function in
+[`retry_attempt_parallel_stop.go`](civisibility/integrations/gotesting/retry_attempt_parallel_stop.go).
+`beginRootParallelSchedulerTransfer` marks attempts that go parallel after the
+lease moved, and `finalizeFreshRetryAttempt` records their end before it
+publishes the result, as `tRunner` does before it releases its caller. Both
+edits replace single lines, so no line in a retry's error stack moves. The SDK
+runtime keeps upstream behavior.
+
+Checks: `TestSharedParallelLeaseAttemptsRecordTheirEnd`,
+`TestSequentialAttemptsRecordNoParallelEnd`, `TestParallelStopHookOnlyForMini`,
+`TestToolchainTestingDeclaresParallelStop` and
+`TestMiniInProcessRetryKeepsAllocsPerRun`. This package's own tests run without
+the overlay, so `TestAdditionalFeatureSelectorDoesNotAllocate` measures
+allocations without `testing.AllocsPerRun`.
 
 ## Per-test allocations
 

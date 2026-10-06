@@ -141,10 +141,6 @@ func TestDeferredFailureRetainsUnsentChunks(t *testing.T) {
 	}
 }
 
-type roundTripFunc func(*http.Request) (*http.Response, error)
-
-func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
-
 // A serial suite reaches an idle checkpoint after every test. Only full
 // batches are delivered there; the rest waits for Close.
 func TestDeferredCheckpointsDeliverOnlyFullBatches(t *testing.T) {
