@@ -270,6 +270,34 @@ log writers keep their own SDK compression settings. Compare CPU and transmitted
 bytes when changing this level; decoded content and intake limits must remain
 unchanged.
 
+## CI tag snapshot lookup
+
+Internal readers use `GetCITagsReadOnly`, so a published snapshot can be reused
+without comparing every string on every span. Explicit updates invalidate it.
+A caller that requests the mutable `GetCITags` map opts that map back into full
+content checks, preserving late sequential edits.
+
+`BenchmarkCITagsSnapshot` measures one lookup with 64 initialized tags. Three
+alternating before/after pairs on Linux, Go 1.27 and `GOMAXPROCS=4` gave:
+
+| Lookup | Before, median ns/op | Current, median ns/op | Allocation |
+| --- | ---: | ---: | ---: |
+| Internal read-only callers | 1,074 | 5.25 | 0 B/op, 0 allocs/op |
+| Mutable map exposed | 1,049 | 1,066 | 0 B/op, 0 allocs/op |
+
+The read-only lookup removes about 99.5% of this operation's time. The mutable
+path retains its scan; its observations overlap the baseline range. This is a
+serial microbenchmark, not a prediction of build or whole-suite speedup.
+[Raw observations and inputs](results/ci-tag-snapshot.json) retain all samples.
+Run it with:
+
+```sh
+GOMAXPROCS=4 go test ./internal/thirdparty/dd-trace-go/civisibility/utils \
+  -run='^$' -bench='^BenchmarkCITagsSnapshot$' -benchtime=300ms -count=3
+```
+
+Update and concurrent-reader tests cover the cache's correctness separately.
+
 ## Profiling the native event path
 
 The existing `BenchmarkEventLifecycle` creates and finishes events with common

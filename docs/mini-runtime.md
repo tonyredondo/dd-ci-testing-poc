@@ -191,7 +191,10 @@ capabilities before asynchronous settings loading, so emitted events retain them
 The local suite checks real loopback payloads against the SDK, preserving test
 attributes, statuses, error messages, stack frames and source lines. Mini stack
 comparisons canonicalize the relocated library namespace/root and map the known
-deferred-wrapper location from line 844 to the pinned SDK's line 838. Application
+test-wrapper location from line 840 to the pinned SDK's line 838, plus the
+two subtest calls at `instrumentation_orchestrion.go:321/327` to SDK lines
+319/325. Stack mappings check the function and exact line. Testify's `Error Trace`
+lists only source locations, so its entries use the exact file and line. Application
 frames and other library locations remain strict. The expanded comparator keeps CI
 metadata, metrics, service/resource/type, custom tags, capability tags and ITR
 correlation. It explicitly excludes APM sampling/profiling/process enrichment

@@ -59,10 +59,6 @@ allocations per test to `testing`'s own 17.
   in a global `sync.Map`, with one store and one delete per test. Under
   `t.Parallel` this shows measurable contention. The `testing` overlay could add
   a field to `testing.common` instead.
-- **CI tag snapshot.** `GetCITagsSnapshot` compares all CI tags with
-  `maps.Equal` for every span (about 4% of CPU with trivial tests). The adaptation
-  record keeps that check while `GetCITags` exposes its mutable map; removing it
-  means returning a copy and dropping direct-edit compatibility.
 - **CI metric options.** Numeric CI metrics build new options for every span by
   design ("fresh per call"); caching them by revision needs the same decision.
 

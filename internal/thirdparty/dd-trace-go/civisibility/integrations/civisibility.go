@@ -121,7 +121,7 @@ func internalCiVisibilityInitialization(tracerInitializer func([]tracer.StartOpt
 		utils.AddCITagsMap(libraryCapabilities())
 
 		// Preload all CI, Git, and CodeOwners tags.
-		ciTags := utils.GetCITags()
+		ciTags := utils.GetCITagsReadOnly()
 		_ = utils.GetCIMetrics()
 
 		// Check if DD_SERVICE has been set; otherwise default to the repo name (from the spec).

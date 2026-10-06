@@ -28,7 +28,12 @@ func TestMiniRuntimeProvisionUsesModuleOverlay(t *testing.T) {
 	})
 	for _, modfile := range []string{"go.mod", "custom.mod"} {
 		t.Run(modfile, func(t *testing.T) {
-			dir := t.TempDir()
+			// Go resolves its working directory physically. macOS temp paths may
+			// contain /var -> /private/var; overlay keys must use that same path.
+			dir, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
 			original := "module example.com/overlayclient\n\ngo 1.26.0\n"
 			writeBuildFixture(t, dir, map[string]string{
 				"go.mod": original, modfile: original,
