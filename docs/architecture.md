@@ -205,7 +205,7 @@ the additional deferred-mode senders encode into their own reusable buffers.
 performs network I/O: it appends to the open batch and seals it once it reaches
 the event-count or byte threshold.
 
-In ordinary mode, up to four background senders deliver sealed batches
+In ordinary mode, up to eight background senders deliver sealed batches
 concurrently, like the SDK's concurrent flushes, each bounded by
 `FlushTimeout`. At most eight sealed batches, including those in flight, plus
 the open batch are retained. A finisher that reaches that bound waits for a
@@ -217,7 +217,7 @@ finishers at the bound until the first delivery fails, at most `FlushTimeout`
 batch returns to the front of the queue, and background retries back off from
 one to ten seconds; any successful delivery clears the backoff and the failure
 state. Deferred mode starts no background sender and never waits: idle
-checkpoints deliver sealed batches, up to four at once, and finish every send
+checkpoints deliver sealed batches, up to eight at once, and finish every send
 before the next test starts; the open batch waits for `Close` or an explicit
 `Flush`. Its pending queue can exceed the bound, while each outgoing payload
 keeps the intake limits.

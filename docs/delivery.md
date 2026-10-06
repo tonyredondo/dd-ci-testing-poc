@@ -12,7 +12,7 @@ DD_CIVISIBILITY_DEFERRED_DELIVERY=true ddtest test --runtime=mini -count=1 ./...
 ```
 
 The default is ordinary delivery: finishing an event never performs network
-I/O, and up to four background senders deliver full batches. When delivery falls
+I/O, and up to eight background senders deliver full batches. When delivery falls
 behind, a finishing test waits for a sender rather than losing events; after a
 failed delivery it drops events beyond the queue bound instead. With the variable
 enabled, delivery runs between completed test groups, and remaining data is sent
@@ -56,7 +56,7 @@ count or 2.5 MiB threshold) and full coverage/log payloads. Partial payloads
 wait for the end of the session, so a serial suite sends one payload per full
 batch rather than one per test.
 
-A checkpoint, deferred `Flush` or `Close` sends up to four test-cycle payloads
+A checkpoint, deferred `Flush` or `Close` sends up to eight test-cycle payloads
 at once and finishes every request before it returns, so the next test starts
 with no CI delivery in flight. Payloads sent together can arrive in any order;
 each keeps its events in order.

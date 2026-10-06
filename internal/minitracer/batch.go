@@ -17,7 +17,7 @@ import (
 // SDK's concurrent flushes, so intake latency does not cap event throughput.
 // maxPendingBatches bounds the sealed batches waiting for or in delivery.
 const (
-	maxConcurrentSends = 4
+	maxConcurrentSends = 8
 	maxPendingBatches  = 8
 )
 

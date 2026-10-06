@@ -106,7 +106,7 @@ Goleak has a package-scoped compiler flag marker because it does not import
 ## Enqueue and delivery
 
 Enqueueing takes only the client mutex: it never waits for the delivery token,
-creates no timer and performs no network I/O. Network work happens in up to four
+creates no timer and performs no network I/O. Network work happens in up to eight
 background senders when batches fill, and at the end of the session. A test that
 finishes fewer events than one batch (1,000 by default) sees no delivery work
 concurrent with its tests.
@@ -196,8 +196,8 @@ compressor and buffer too. Request and replay readers must all become unable to
 read before either backing buffer is reusable. Calling `Close` on just the
 initial reader does not establish that boundary.
 
-In ordinary delivery, the queue is bounded: eight sealed batches, including up
-to four in flight, plus the open batch, each limited by event count and byte
+In ordinary delivery, the queue is bounded: eight sealed batches, all of which
+can be in flight, plus the open batch, each limited by event count and byte
 estimates. At the bound a finisher waits for a sender while deliveries succeed,
 and is rejected and counted only after a delivery has failed. A throughput change
 must therefore check waiting, errors and drops as well as ns/op; the slow-intake
@@ -206,9 +206,9 @@ test checks that no event is lost.
 Deferred delivery can buffer more than one batch while tests are active. Its
 pending queue has no total size limit; each outgoing payload still obeys the
 intake bounds. Include peak memory when assessing that mode. Its checkpoints
-send up to four payloads at once: one parent test with 100,000 trivial subtests
+send up to eight payloads at once: one parent test with 100,000 trivial subtests
 delivers all 101 payloads after the parent finishes, which took 5.7 s one at a
-time and takes 1.5 s now against a 50 ms intake.
+time and takes 0.8 s now against a 50 ms intake.
 
 Each background or checkpoint delivery of a sealed batch is bounded by
 `FlushTimeout` (10 seconds by default). Explicit `Flush` and `Close` use their
