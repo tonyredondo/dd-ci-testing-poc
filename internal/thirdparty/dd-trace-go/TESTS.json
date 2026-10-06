@@ -600,6 +600,10 @@
     {
       "path": "civisibility/integrations/gotesting/testify_lookup_test.go",
       "purpose": "Offset-based Testify lookup resolves the same suite method as reflection for methods, nested subtests, unmatched siblings and ordinary tests."
+    },
+    {
+      "path": "civisibility/utils/git_packfiles_test.go",
+      "purpose": "Pack files fall back to the git directory instead of the working tree, and every attempt, empty result and upload removes its temporary directory."
     }
   ],
   "local_delivery_checks": [

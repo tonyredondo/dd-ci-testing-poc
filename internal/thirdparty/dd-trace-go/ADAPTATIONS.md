@@ -143,6 +143,26 @@ The SDK's other method-registration and suite-grouping rules stay in place.
 Run Testify parity with method filtering, lifecycle hooks, helpers, retries and
 coverage whenever upstream changes this advice.
 
+## Pack file cleanup
+
+Upstream `CreatePackFiles` in [`civisibility/utils/git.go`](civisibility/utils/git.go)
+runs `git pack-objects` into a `.dd-pack-objects*` directory in the temporary
+directory, then in the working directory when git cannot move its pack across
+devices, which is the usual case for a tmpfs `/tmp`. After the upload,
+`sendObjectsPackFile` removed only the `.pack` files. The failed attempt's empty
+directory stayed in the temporary directory, and the fallback left a directory
+with git's `.idx` and `.rev` files in the user's working tree.
+
+Here the fallback is the repository's common git directory: it holds the
+objects, so the move succeeds, and the working tree never receives a temporary
+directory. `git rev-parse --git-common-dir` runs without command telemetry, so
+git metrics match the SDK. A failed attempt or an empty result removes its
+directory, and `RemovePackFiles` removes the directory after the upload.
+
+Checks: `TestRemovePackFilesRemovesTemporaryDirectory`,
+`TestPackFilesFallBackToGitDirectory`, `TestFailedPackFilesLeaveNoDirectory`
+and the git upload parity case.
+
 ## Per-test allocations
 
 Each instrumented test runs the SDK's span creation, source lookup and Testify
