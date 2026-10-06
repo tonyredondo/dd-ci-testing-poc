@@ -33,6 +33,41 @@ Checks: `TestBoundCountReplaysSwapsAndResets`,
 telemetry parity matrix. Verify the feature-tag fallback and disabled behavior,
 not just the ordinary three-counter benchmark.
 
+## Startup metric replay
+
+[`telemetry/metrichandle.go`](telemetry/metrichandle.go) uses `startupMu` to
+coordinate recording a submission with the first handle swap and replay.
+A producer that observed an empty pointer checks it again under this lock.
+It either records before replay or submits to the installed handle. This
+prevents an increment from entering the recorder after it has been drained.
+
+The active-client path still loads the atomic pointer and submits directly.
+Recorder bounds, overflow logging and later client swaps keep their existing
+behavior. During an SDK update, preserve this handover even if the recorder's
+own queue is already safe for concurrent access: queue safety alone does not
+make recording and replay one operation.
+
+Checks: `TestMetricStartupReplayIncludesConcurrentSubmissions` overlaps 64
+producers with installation, below the recorder limit, and checks every
+increment. Run it with `-race`, alongside client-swap and HTTP telemetry tests.
+
+## Close-action registration
+
+[`civisibility/integrations/civisibility.go`](civisibility/integrations/civisibility.go)
+appends close actions and pre-close barriers, then executes each list backwards.
+Registration grows linearly with the number of actions. Coverage registers an
+action per test, so prepending a copied slice would allocate quadratically.
+
+Keep LIFO ordering within each list, and run every pre-close barrier before the
+ordinary actions. A barrier can register an ordinary action; shutdown must
+include it. The existing locks, single shutdown owner and wait for that owner
+also apply to signal-triggered shutdown.
+
+Checks: `TestCloseActionsKeepLIFOAndRunBarriersFirst`,
+`TestConcurrentCloseActionsRunOnce` and the signal-handler tests. Use
+`BenchmarkCloseActionRegistration` to compare allocation growth at 1,000,
+4,000 and 16,000 registrations.
+
 ## Counter points kept inline
 
 [`telemetry/metrics.go`](telemetry/metrics.go) keeps a metric's value, timestamp
@@ -326,6 +361,12 @@ wire/concurrency/bounds tests and the SDK/Mini parity matrices. The differential
 capture expands only the declared shared CI keys before semantic comparison;
 its negative controls retain missing/wrong values, overrides and numeric
 collisions. Keep the raw-payload placement assertions too.
+
+`BenchmarkCommonMetadataLifecycle` counts request bytes and requests with
+atomics because its transport is shared by concurrent senders. Keep those
+counters synchronized when changing the sink; a data race invalidates the
+`wire-B/event` result. `TestCommonMetadataTransportCountsConcurrentSends`
+checks both totals during ordinary test runs, including `-race` runs.
 
 ## POC-owned code outside this source subset
 

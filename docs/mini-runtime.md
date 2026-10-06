@@ -31,6 +31,12 @@ the published version that built `ddtest`, else from the checkout `ddtest` was
 built from (a `-trimpath` build cannot locate it). The SDK backend adds its
 pinned version the same way; a different required SDK version is still an error.
 
+With `-mod=mod`, including from `GOFLAGS`, `ddtest` resolves the runtime
+read-only, so it is never added to the module's files. The module's own packages
+can still update `go.mod` and `go.sum`, as `go test` would. When `ddtest`
+provides the runtime, requirements needed only by test files go to the temporary
+copy instead.
+
 To pin the runtime in `go.mod` instead, require it and keep the requirement with
 a file that `go mod tidy` and `go mod vendor` see but builds ignore:
 

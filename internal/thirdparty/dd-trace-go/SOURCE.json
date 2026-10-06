@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "23814156ad346d05a5cd4bc426ba11893b1f1e560c9fd603aa3ec81b15c0524e",
+      "sha256": "0e1a482b9491ccb454cb2afa8fdb5ce5767985d61078381e447326ea6ed49b29",
       "role": "local"
     },
     {
@@ -138,7 +138,7 @@
     },
     {
       "path": "civisibility/integrations/civisibility.go",
-      "sha256": "3f9bfdeb7e3bc8aa31acd1c0e49d4d278063783b0214032bff3139e6c4dab8cc",
+      "sha256": "2d7e58e001473a2e3826bb5d17b354b14dadbb72e486a190d04b5617c4536783",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/civisibility.go",
       "source_sha256": "1ef15ef198bb3b318e69b7602c562faccbeb40f94d505ba1cef67c36059c90d5"
@@ -193,8 +193,13 @@
       "source_sha256": "02c7164b23ce0e0941f53170dd07b651eebedcbc1e751a11f62cabc97dc04d48"
     },
     {
+      "path": "civisibility/integrations/close_actions_test.go",
+      "sha256": "0b48bd0e1fa27fb13a019784b343c28b360618015c92a1656afebd9fa3f30ccf",
+      "role": "local"
+    },
+    {
       "path": "civisibility/integrations/common_metadata_benchmark_test.go",
-      "sha256": "ebd3e2f30863425700def109db2f43a529d02ea05dd2f8b8ef8459f106e0baaa",
+      "sha256": "575c61ac78e0a21b38cdbe4063aec5cea832522b53815f5de20e997d2bb11e0d",
       "role": "local"
     },
     {
@@ -1601,7 +1606,7 @@
     },
     {
       "path": "telemetry/concurrency_test.go",
-      "sha256": "8fcc2da24e0d7b237158bbb7fbb5fcff542329633738c42ec61605feaaf6aa7f",
+      "sha256": "2ff8b313900e8a97e7bd472ff882dc228667b75b1aca6e6902495f5aa65f12ed",
       "role": "local"
     },
     {
@@ -1859,7 +1864,7 @@
     },
     {
       "path": "telemetry/metrichandle.go",
-      "sha256": "0993ac80332eacfb5f99bb25785419e091fde8f4f8e3351b927a6e4b32db7e99",
+      "sha256": "8af97c35a6d4f206006b89c055dd0b25386c268cd96366841dc052210c6c431c",
       "role": "adapted",
       "source_path": "internal/telemetry/metrichandle.go",
       "source_sha256": "6a572b5da4419ad1f1368704d164ebe055041c7aabbd0687f9a0b9db8da436c6"

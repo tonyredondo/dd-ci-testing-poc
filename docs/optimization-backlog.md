@@ -38,8 +38,9 @@ SDK when warm), plus a second full `go list`.
 - Cache the resulting `go.mod`/`go.sum` in the user cache directory (outside the
   repository), keyed by the module's `go.mod` and `go.sum` contents, the runtime,
   its version and the Go version.
-- Read `GOMOD` from the first `go list` (`Module.GoMod`) instead of separate
-  `go env GOMOD` calls, and query `GOWORK` with the same command.
+- Provisioning queries `GOMOD` and `GOWORK` together with `go env -json`.
+  Avoiding that remaining command would require obtaining both values from
+  information already collected during preparation.
 - List only the runtime package with the provided modfile instead of repeating
   the full package list.
 

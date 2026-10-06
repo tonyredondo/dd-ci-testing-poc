@@ -23,6 +23,25 @@ func runConcurrent(workers int, f func(int)) {
 	wg.Wait()
 }
 
+func TestMetricStartupReplayIncludesConcurrentSubmissions(t *testing.T) {
+	// Stay below the recorder's bound. This tests the handover, not overflow.
+	const workers = 64
+	for round := range 256 {
+		handle := &swappableMetricHandle{recorder: internal.NewRecorder[MetricHandle]()}
+		target := &count{}
+		runConcurrent(workers+1, func(i int) {
+			if i == workers {
+				handle.swap(target)
+			} else {
+				handle.Submit(1)
+			}
+		})
+		if got := target.Get(); got != workers {
+			t.Fatalf("round %d: got %v of %d submissions", round, got, workers)
+		}
+	}
+}
+
 func TestMetricRegistrationIsCanonical(t *testing.T) {
 	for _, kind := range []transport.MetricType{transport.CountMetric, transport.GaugeMetric, transport.RateMetric} {
 		t.Run(string(kind), func(t *testing.T) {
