@@ -151,10 +151,17 @@ that mutation because its background clocks are not safe under it.
 
 [`telemetry/globalclient.go`](telemetry/globalclient.go) runs the flush in
 `StartApp` synchronously in both delivery modes; the SDK starts it in a
-goroutine in normal mode. CI initialization calls `StartApp` before the first
-test, so no test waits for the startup requests or runs while they read
-`time.Local`, and `go test` does not count them in a test's duration. As in the
-SDK, `app-started` is a standalone request followed by a `message-batch`: the
+goroutine in normal mode. The settings client uses
+`NewClientWithConcurrentTelemetry` in
+[`civisibility/utils/net/client.go`](civisibility/utils/net/client.go) to overlap
+that flush with settings initialization. The constructor returns a wait
+function; `ensureSettingsInitialization` defers it inside its `sync.Once`
+callback. That join must cover every return path, including cached settings,
+offline modes and request errors. Other client constructors stay synchronous.
+
+Both operations finish before test admission, so no test runs while startup
+requests read `time.Local`, and `go test` does not count them in a test's
+duration. As in the SDK, `app-started` is a standalone request followed by a `message-batch`: the
 mapper keeps `app-started` out of batches. A slow endpoint delays the session
 start within the client timeouts. `StopApp` still waits on the existing
 WaitGroup, so a concurrent close sends `app-closing` after startup.
@@ -174,6 +181,11 @@ fallback and payload accounting retain their SDK rules.
 Checks: `TestStartupTelemetrySendsBeforeTests` blocks a real loopback startup
 response and checks that `StartApp` waits for it, initial configuration, retry,
 concurrent close and failed initialization in both modes.
+`integration/TestMiniStartupOverlapsSettingsAndTelemetry` independently blocks
+the two HTTP responses, verifies overlap and holds test admission until both
+finish, including failed requests. It runs the test binary with `-race` in
+ordinary and deferred modes. Keep that join when updating the client or settings
+initialization; asynchronous startup without it reintroduces the clock race.
 `TestStoppedTickerCannotRestart` checks terminal close.
 `TestWriterFlushWaitsForResponseCompletion` holds the transport's return-to-idle
 handshake for successful and failed responses.

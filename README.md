@@ -19,6 +19,10 @@ go build -o bin/ddtest ./cmd/ddtest
 /path/to/ddtest test -count=1 -race ./...
 ```
 
+Use a Go 1.26 or 1.27 toolchain. The minimum is Go 1.26.0; a client module
+can declare an older Go version. When providing Mini locally, `ddtest` raises
+the Go directive only in its temporary module file to meet Mini's requirement.
+
 If the module does not require the selected runtime (the pinned SDK, or this
 module for Mini), `ddtest` provides it through a temporary copy of `go.mod` and
 `go.sum` passed with `-modfile`. The module's files are never modified, so

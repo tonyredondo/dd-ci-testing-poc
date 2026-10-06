@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/version"
 	"io"
 	"os"
 	"os/exec"
@@ -67,7 +68,9 @@ func provideRuntime(ctx context.Context, dir string, opts options, selected Runt
 	}
 	_, sourceFile, _, _ := runtime.Caller(0)
 	root := miniSourceRoot(sourceFile, environment.GOMODCACHE, version)
-	return modfile, requireMini(ctx, dir, modfile, root, version, progress)
+	// Local replacements are relative to the module root, even when the user
+	// runs ddtest from a subpackage or supplies a separate -modfile.
+	return modfile, requireMini(ctx, filepath.Dir(environment.GOMOD), modfile, root, version, progress)
 }
 
 // requireMini respects the client's replacement before using the CLI's local
@@ -78,6 +81,7 @@ func requireMini(ctx context.Context, dir, modfile, localRoot, version string, p
 		return err
 	}
 	var parsed struct {
+		Go      string
 		Replace []struct {
 			Old, New struct{ Path, Version string }
 		}
@@ -97,18 +101,40 @@ func requireMini(ctx context.Context, dir, modfile, localRoot, version string, p
 			// A module replacement needs checksums, which go get records.
 			err = goGetRuntime(ctx, dir, modfile, miniModule+"@"+version, progress)
 		} else {
-			_, err = goTool(ctx, dir, nil, "mod", "edit", "-modfile="+modfile, "-require="+miniModule+"@"+version)
+			err = requireLocalMini(ctx, dir, modfile, r.New.Path, version, parsed.Go, false)
 		}
 		return err
 	}
 	if localRoot != "" {
-		_, err := goTool(ctx, dir, nil, "mod", "edit", "-modfile="+modfile, "-require="+miniModule+"@v0.0.0", "-replace="+miniModule+"="+localRoot)
-		return err
+		return requireLocalMini(ctx, dir, modfile, localRoot, "v0.0.0", parsed.Go, true)
 	}
 	if version != "" {
 		return goGetRuntime(ctx, dir, modfile, miniModule+"@"+version, progress)
 	}
 	return fmt.Errorf("cannot provide %s: ddtest has no available local sources or published version; require it in the module or add a replace directive", miniModule)
+}
+
+// requireLocalMini raises only the temporary module's Go directive when the
+// selected local runtime requires it, just as go get does for a published one.
+// Read the selected replacement's requirement, not the CLI's toolchain version.
+func requireLocalMini(ctx context.Context, dir, modfile, root, selectedVersion, goVersion string, addReplace bool) error {
+	path := root
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(dir, path)
+	}
+	data, err := os.ReadFile(filepath.Join(path, "go.mod"))
+	if err != nil {
+		return fmt.Errorf("read local Mini module: %w", err)
+	}
+	args := []string{"mod", "edit", "-modfile=" + modfile, "-require=" + miniModule + "@" + selectedVersion}
+	if required := moduleDirective(data, "go"); required != "" && version.Compare("go"+goVersion, "go"+required) < 0 {
+		args = append(args, "-go="+required)
+	}
+	if addReplace {
+		args = append(args, "-replace="+miniModule+"="+root)
+	}
+	_, err = goTool(ctx, dir, nil, args...)
+	return err
 }
 
 // publishedVersion excludes development builds, whose version cannot be fetched.
@@ -147,8 +173,12 @@ func validMiniSource(root string) bool {
 // modulePath returns the path in go.mod's module directive. Fields also drop
 // the carriage returns of a Windows checkout.
 func modulePath(data []byte) string {
+	return moduleDirective(data, "module")
+}
+
+func moduleDirective(data []byte, directive string) string {
 	for _, line := range strings.Split(string(data), "\n") {
-		if fields := strings.Fields(line); len(fields) >= 2 && fields[0] == "module" {
+		if fields := strings.Fields(line); len(fields) >= 2 && fields[0] == directive {
 			return strings.Trim(fields[1], `"`)
 		}
 	}

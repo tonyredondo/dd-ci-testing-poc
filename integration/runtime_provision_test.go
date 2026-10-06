@@ -52,24 +52,28 @@ func TestMiniLocalProvisionAvoidsProxy(t *testing.T) {
 		http.Error(w, "module lookup should not be necessary", http.StatusForbidden)
 	}))
 	defer proxy.Close()
-	dir := t.TempDir()
-	original := "module example.com/localmini\n\ngo 1.26.0\n"
-	writeBuildFixture(t, dir, map[string]string{
-		"go.mod":         original,
-		"client_test.go": "package localmini\nimport \"testing\"\nfunc TestLocal(t *testing.T) {}\n",
-	})
-	out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false", "GOPROXY="+proxy.URL, "GONOPROXY=none"), driver, "test", "-count=1", "-json")
-	if code != 0 {
-		t.Fatalf("exit=%d\n%s\n%s", code, out, stderr)
-	}
-	if requests.Load() != 0 || strings.Contains(stderr, "go get") {
-		t.Fatalf("local runtime caused %d requests: %s", requests.Load(), stderr)
-	}
-	if contents, err := os.ReadFile(filepath.Join(dir, "go.mod")); err != nil || string(contents) != original {
-		t.Fatalf("client go.mod changed: %s, %v", contents, err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "go.sum")); !os.IsNotExist(err) {
-		t.Fatalf("client go.sum was created: %v", err)
+	for _, goVersion := range []string{"1.21.0", "1.25.0", "1.26.0"} {
+		t.Run(goVersion, func(t *testing.T) {
+			dir := t.TempDir()
+			original := "module example.com/localmini\n\ngo " + goVersion + "\n"
+			writeBuildFixture(t, dir, map[string]string{
+				"go.mod":         original,
+				"client_test.go": "package localmini\nimport \"testing\"\nfunc TestLocal(t *testing.T) {}\n",
+			})
+			out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false", "GOPROXY="+proxy.URL, "GONOPROXY=none"), driver, "test", "-mod=readonly", "-count=1", "-json")
+			if code != 0 {
+				t.Fatalf("exit=%d\n%s\n%s", code, out, stderr)
+			}
+			if requests.Load() != 0 || strings.Contains(stderr, "go get") {
+				t.Fatalf("local runtime caused %d requests: %s", requests.Load(), stderr)
+			}
+			if contents, err := os.ReadFile(filepath.Join(dir, "go.mod")); err != nil || string(contents) != original {
+				t.Fatalf("client go.mod changed: %s, %v", contents, err)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "go.sum")); !os.IsNotExist(err) {
+				t.Fatalf("client go.sum was created: %v", err)
+			}
+		})
 	}
 }
 

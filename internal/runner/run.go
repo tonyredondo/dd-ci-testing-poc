@@ -252,14 +252,14 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		replacements[logical] = backing
 		return nil
 	}
-	for logical, src := range rewritten {
+	for logical, src := range rewritten.Files {
 		backing := filepath.Join(temp, filepath.Base(logical))
 		if e = os.WriteFile(backing, src, 0600); e != nil {
 			return plan, e
 		}
 		replacements[logical] = backing
 	}
-	if e = add(filepath.Join(native.Dir, "zz_dd_ci_visibility_hooks.go"), hooksForRuntime(runtime, instrument.DeclaresParallelStop(files))); e != nil {
+	if e = add(filepath.Join(native.Dir, "zz_dd_ci_visibility_hooks.go"), hooksForRuntime(runtime, rewritten.ParallelStop)); e != nil {
 		return plan, e
 	}
 	for _, p := range packages {
@@ -323,7 +323,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	}
 	plan.coverOverlay = needsCoverOverlay(dir, opts, packages, []goPackage{*native})
 	plan.File = filepath.Join(temp, "overlay.json")
-	plan.InstrumentedFiles = len(rewritten)
+	plan.InstrumentedFiles = len(rewritten.Files)
 	encoded, e := json.Marshal(Overlay{Replace: replacements, Testify: testify, Goleak: goleak})
 	if e != nil {
 		return plan, e

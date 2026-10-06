@@ -31,6 +31,12 @@ in the CLI when they are still available: either a local checkout or the module
 cache used by `go install`. A local checkout supplies its current contents,
 including edits made after building the CLI.
 
+The toolchain must be Go 1.26 or newer; CI covers 1.26 and 1.27. The client's
+`go.mod` may declare an older version. For a local runtime, the temporary
+module uses at least the Go version required by that runtime's `go.mod`,
+including when the client supplies a `replace`. A newer client Go directive
+is retained. This needs no proxy request and leaves the client's files intact.
+
 For a `-trimpath` build or a missing source directory, `ddtest` checks
 `GOMODCACHE` for the exact version recorded in the CLI. Only if no usable local
 copy exists does it fetch that version with `go get`. It does not search for
