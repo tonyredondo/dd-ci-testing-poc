@@ -171,6 +171,15 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		cmd.Dir = dir
 		return readPackages(cmd, "resolve packages")
 	}
+	if runtime == Mini && opts.mod != "mod" {
+		plan.Modfile, e = preprovideMini(ctx, dir, opts, temp, replacements, progress)
+		if e != nil {
+			return plan, e
+		}
+		if plan.Modfile != "" {
+			opts.buildFlags = append(opts.buildFlags, "-modfile="+plan.Modfile)
+		}
+	}
 	patterns := append(append([]string(nil), opts.packages...), "testing", runtimePackage)
 	var packages []goPackage
 	if opts.mod == "mod" {
@@ -191,7 +200,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		return plan, e
 	}
 	for _, p := range packages {
-		if p.ImportPath == runtimePackage && p.Error != nil {
+		if p.ImportPath == runtimePackage && p.Error != nil && plan.Modfile == "" {
 			// The module does not require the runtime: provide it through a
 			// temporary go.mod instead of failing or editing the module.
 			if plan.Modfile, e = provideRuntime(ctx, dir, opts, runtime, temp, replacements, progress); e != nil {

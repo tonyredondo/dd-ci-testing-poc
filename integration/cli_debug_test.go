@@ -114,6 +114,28 @@ func TestCLIDebugFailuresAndNativeBypass(t *testing.T) {
 	}
 }
 
+// No initial package query should run against a module that cannot resolve Mini.
+func TestCLIDebugEarlyLocalProvisioning(t *testing.T) {
+	_, driver := prepareMiniFixture(t)
+	dir := t.TempDir()
+	writeBuildFixture(t, dir, map[string]string{
+		"go.mod":         "module example.com/earlymini\n\ngo 1.25.0\n",
+		"client_test.go": "package earlymini\nimport \"testing\"\nfunc TestLocal(t *testing.T) {}\n",
+	})
+	out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false", "DD_TRACE_DEBUG=true", "GOWORK=off", "GOPROXY=off"), driver, "test", "-count=1", ".")
+	logs := cliDebugLines(stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d %s %s", code, out, stderr)
+	}
+	if strings.Count(logs, "resolve packages started") != 1 || !strings.Contains(logs, "resolve runtime module finished duration=") {
+		t.Fatalf("repeated package query: %s", logs)
+	}
+	provided, queried := strings.Index(logs, "provide runtime finished"), strings.Index(logs, "resolve packages started")
+	if provided < 0 || queried < 0 || provided > queried {
+		t.Fatalf("runtime provided after package query: %s", logs)
+	}
+}
+
 func TestCLIDebugLocalProvisioning(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
 	_, stderr, code := command(t, dir, testEnv(), "go", "mod", "edit", "-droprequire=github.com/tonyredondo/dd-ci-testing-poc")

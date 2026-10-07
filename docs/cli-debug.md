@@ -31,6 +31,9 @@ The log records:
 - The selected runtime, its resolved module version and replacement status, and
   the effective working directory, including `-C`.
 - Package resolution, with the number of requested patterns and resolved packages.
+- An early `resolve runtime module` probe when Mini is absent from the effective
+  module text. It uses a temporary module and checksum file. An unknown module
+  is an expected result; Go still resolves every package after provisioning.
 - Runtime provisioning and each `go env`, `go mod` or `go get` invocation.
   Mini reports whether it uses a client replacement, local CLI sources, or a
   published version. Local CLI sources can be a checkout or its exact cached
@@ -72,6 +75,33 @@ A normal `go test` duration includes building and running tests. With `-c`, it
 covers building only. To inspect Go's individual compiler and linker commands,
 combine debug with native `-x`; the CLI does not profile those tools itself.
 
+## Runtime timing
+
+Mini records these additional durations under the same debug setting:
+
+| Log field | What the duration includes |
+| --- | --- |
+| `runtime bootstrap finished` | CI tags, tracer setup and other synchronous bootstrap work |
+| `settings initialization finished` | Settings setup and its join with initial telemetry, including error paths |
+| `ciVisibilityHttpClient: request finished` | One attempt, serialization, response consumption and any retry backoff |
+| `telemetry: request finished` | One endpoint attempt through response EOF and close |
+
+The bootstrap can launch feature initialization asynchronously. Its duration
+therefore does not mean the runtime is ready to enter a test. Settings and
+`app-started` overlap; do not sum their durations. HTTP summaries identify the
+endpoint path or telemetry request type, status and retry information without
+adding headers, query strings or bodies.
+
+The telemetry debug duration includes response consumption. The existing
+`telemetry_api.ms` metric keeps its measurement at response headers. Logging
+must not redefine that metric or change request accounting.
+
+These logs can produce a phase table for one invocation. Repeated invocations
+are needed for medians and ranges. They do not measure the exact first test-body
+entry, individual compiler/linker durations, CPU time or memory. A normal
+`go test` duration includes both building and executing tests; use `-c` for a
+build-only observation.
+
 ## Output, cache and ownership
 
 Debug lines stay out of `stdout`, including `go test -json`. The CLI does not
@@ -93,7 +123,9 @@ The logger is invocation-local in `internal/runner/debug.go`. A context carries
 it through preparation and Go helpers; package APIs such as `PrepareRuntime`
 stay silent even when the environment enables debug. The debug writer also
 serializes Go's `stderr` with cancellation messages, so callers can safely use
-a buffer for that stream. No runtime or incorporated SDK sources are changed.
+a buffer for that stream. Runtime durations use the incorporated SDK logger;
+its adaptations and update checks are recorded in
+[`ADAPTATIONS.md`](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md).
 
 The CLI tests compare debug-disabled and debug-enabled binaries byte for byte,
 check JSON output and Go cache reuse, and cover build errors, downloads,
