@@ -151,7 +151,7 @@
     },
     {
       "path": "civisibility/codeownership/locator_test.go",
-      "sha256": "382659ad284a916b15ccce3f985a03ee2628cc77ce248d37381a79abf664e23a",
+      "sha256": "6a19cabb6e6fe09188f92cd5f7cca7ee016f19886980f376d33854caf08a893b",
       "role": "adapted",
       "source_path": "tracer/test/Datadog.Trace.Tests/Ci/CodeOwnersFallbackTests.cs",
       "source_sha256": "527a4b79410f67a1b6d05445a14cc94023245741760d62f4d1ce233afa073692",

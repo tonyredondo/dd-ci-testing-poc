@@ -25,12 +25,18 @@ func TestOfficialLocationPriority(t *testing.T) {
 		{"github", []string{".github", "", "docs"}}, {"gitlab", []string{"", "docs", ".gitlab"}},
 	} {
 		t.Run(tc.provider, func(t *testing.T) {
-			root := t.TempDir()
+			workspace := t.TempDir()
+			// Discovery returns physical paths. TempDir may retain /var's symlink on
+			// macOS or a short/case-normalized spelling on Windows.
+			root, err := filepath.EvalSymlinks(workspace)
+			if err != nil {
+				t.Fatal(err)
+			}
 			for i, folder := range tc.folders {
 				writeRules(t, root, folder, "* @owner"+string(rune('a'+i)))
 			}
 			for i, folder := range tc.folders {
-				resolver, err := Discover(Locations{Workspace: root, Provider: tc.provider})
+				resolver, err := Discover(Locations{Workspace: workspace, Provider: tc.provider})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -45,7 +51,7 @@ func TestOfficialLocationPriority(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			resolver, err := Discover(Locations{Workspace: root, Provider: tc.provider})
+			resolver, err := Discover(Locations{Workspace: workspace, Provider: tc.provider})
 			if err != nil || resolver != nil {
 				t.Fatalf("%v %v", resolver, err)
 			}
@@ -90,7 +96,11 @@ func TestOtherDialectLocationIsIgnored(t *testing.T) {
 func TestRepositoryRootAndWorkspaceRebasing(t *testing.T) {
 	for _, gitFile := range []bool{false, true} {
 		t.Run(map[bool]string{false: "directory", true: "worktree-file"}[gitFile], func(t *testing.T) {
-			root := t.TempDir()
+			workspaceRoot := t.TempDir()
+			root, err := filepath.EvalSymlinks(workspaceRoot)
+			if err != nil {
+				t.Fatal(err)
+			}
 			gitPath := filepath.Join(root, ".git")
 			if gitFile {
 				if err := os.WriteFile(gitPath, []byte("gitdir: outside"), 0600); err != nil {
@@ -101,7 +111,7 @@ func TestRepositoryRootAndWorkspaceRebasing(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			workspace := filepath.Join(root, "src")
+			workspace := filepath.Join(workspaceRoot, "src")
 			if err := os.Mkdir(workspace, 0700); err != nil {
 				t.Fatal(err)
 			}
