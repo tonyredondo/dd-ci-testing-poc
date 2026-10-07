@@ -22,7 +22,10 @@ const miniModule = "github.com/tonyredondo/dd-ci-testing-poc"
 // require it, for example after go mod tidy removed an unused requirement. Go
 // then reads a temporary copy of go.mod and go.sum through -modfile; the
 // module's own files are never modified. It returns that copy's path.
-func provideRuntime(ctx context.Context, dir string, opts options, selected Runtime, temp string, replacements map[string]string, progress io.Writer) (string, error) {
+func provideRuntime(ctx context.Context, dir string, opts options, selected Runtime, temp string, replacements map[string]string, progress io.Writer) (result string, err error) {
+	logger := debugFromContext(ctx)
+	phase := logger.start("provide runtime")
+	defer func() { phase.finish(err) }()
 	out, err := goTool(ctx, dir, nil, "env", "-json", "GOMOD", "GOWORK", "GOMODCACHE")
 	if err != nil {
 		return "", err
@@ -97,6 +100,7 @@ func requireMini(ctx context.Context, dir, modfile, localRoot, version string, p
 		if version == "" {
 			version = "v0.0.0"
 		}
+		debugFromContext(ctx).printf("mini source=client-replacement local=%t", r.New.Version == "")
 		if r.New.Version != "" {
 			// A module replacement needs checksums, which go get records.
 			err = goGetRuntime(ctx, dir, modfile, miniModule+"@"+version, progress)
@@ -106,9 +110,11 @@ func requireMini(ctx context.Context, dir, modfile, localRoot, version string, p
 		return err
 	}
 	if localRoot != "" {
+		debugFromContext(ctx).printf("mini source=cli-local")
 		return requireLocalMini(ctx, dir, modfile, localRoot, "v0.0.0", parsed.Go, true)
 	}
 	if version != "" {
+		debugFromContext(ctx).printf("mini source=published-version")
 		return goGetRuntime(ctx, dir, modfile, miniModule+"@"+version, progress)
 	}
 	return fmt.Errorf("cannot provide %s: ddtest has no available local sources or published version; require it in the module or add a replace directive", miniModule)
@@ -128,6 +134,7 @@ func requireLocalMini(ctx context.Context, dir, modfile, root, selectedVersion, 
 	}
 	args := []string{"mod", "edit", "-modfile=" + modfile, "-require=" + miniModule + "@" + selectedVersion}
 	if required := moduleDirective(data, "go"); required != "" && version.Compare("go"+goVersion, "go"+required) < 0 {
+		debugFromContext(ctx).printf("temporary module go directive raised from=%s to=%s", goVersion, required)
 		args = append(args, "-go="+required)
 	}
 	if addReplace {
@@ -189,7 +196,13 @@ func moduleDirective(data []byte, directive string) string {
 // for the user's build, such as -mod=vendor, do not apply to module edits.
 // A non-nil progress writer receives both streams as they arrive; otherwise
 // stdout is returned and stderr is included in errors.
-func goTool(ctx context.Context, dir string, progress io.Writer, args ...string) (string, error) {
+func goTool(ctx context.Context, dir string, progress io.Writer, args ...string) (output string, err error) {
+	// Only the known operation is logged; arguments may contain private URLs.
+	var phase debugPhase
+	if logger := debugFromContext(ctx); logger != nil {
+		phase = logger.start("go " + args[0])
+	}
+	defer func() { phase.finish(err) }()
 	cmd := exec.CommandContext(ctx, "go", args...)
 	cmd.Dir = dir
 	cmd.Env = append(cmd.Environ(), "GOFLAGS=")

@@ -1,0 +1,93 @@
+package runner
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
+	"strings"
+	"sync"
+	"testing"
+)
+
+func TestCLIDebugActivation(t *testing.T) {
+	for _, value := range []string{"", "false", "0", "invalid", "true", "1", "TRUE"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("DD_TRACE_DEBUG", value)
+			var output bytes.Buffer
+			parent := context.Background()
+			ctx := withCLIDebug(parent, &output)
+			logger := debugFromContext(ctx)
+			want := value == "true" || value == "1" || value == "TRUE"
+			if (logger != nil) != want {
+				t.Fatalf("logger enabled=%t, want %t", logger != nil, want)
+			}
+			if !want && ctx != parent {
+				t.Fatal("disabled logging changed context")
+			}
+			phase := logger.start("fixture")
+			phase.finish(nil)
+			if got := output.String(); strings.Contains(got, "ddtest: DEBUG") != want {
+				t.Fatalf("output=%q", got)
+			}
+		})
+	}
+	t.Setenv("DD_TRACE_DEBUG", "true")
+	if debugFromContext(withCLIDebug(context.Background(), nil)) != nil {
+		t.Fatal("nil writer enabled logging")
+	}
+}
+
+func TestCLIDebugPhasesAndConcurrentStderr(t *testing.T) {
+	t.Setenv("DD_TRACE_DEBUG", "true")
+	var output bytes.Buffer
+	logger := debugFromContext(withCLIDebug(context.Background(), &output))
+	var workers sync.WaitGroup
+	for range 8 {
+		workers.Go(func() {
+			for range 100 {
+				phase := logger.start("fixture")
+				_, _ = io.WriteString(logger.writer, "native stderr\n")
+				phase.finish(errors.New("private diagnostic must stay out of phase summaries"))
+			}
+		})
+	}
+	workers.Wait()
+	var starts, finishes, native int
+	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+		switch {
+		case strings.HasSuffix(line, "fixture started"):
+			starts++
+		case strings.Contains(line, "fixture finished duration=") && strings.HasSuffix(line, "status=error"):
+			finishes++
+		case line == "native stderr":
+			native++
+		default:
+			t.Fatalf("torn or unexpected log line: %q", line)
+		}
+	}
+	if starts != 800 || finishes != 800 || native != 800 {
+		t.Fatalf("starts=%d finishes=%d native=%d", starts, finishes, native)
+	}
+}
+
+func BenchmarkCLIDebugDisabled(b *testing.B) {
+	logger := (*cliDebug)(nil)
+	b.ReportAllocs()
+	for b.Loop() {
+		phase := logger.start("prepare")
+		phase.finish(nil)
+		logger.printf("plan ready")
+	}
+}
+
+type failingDebugWriter struct{}
+
+func (failingDebugWriter) Write([]byte) (int, error) { return 0, errors.New("log sink closed") }
+
+func TestCLIDebugWriteFailure(t *testing.T) {
+	t.Setenv("DD_TRACE_DEBUG", "true")
+	if code := RunRuntime(t.Context(), []string{"-p"}, Mini, nil, io.Discard, failingDebugWriter{}); code != 2 {
+		t.Fatalf("broken debug writer changed parse-error exit=%d", code)
+	}
+}
