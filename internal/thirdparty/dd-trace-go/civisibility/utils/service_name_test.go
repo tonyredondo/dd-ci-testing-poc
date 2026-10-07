@@ -55,7 +55,7 @@ func TestCodeOwnersPackageService(t *testing.T) {
 			t.Setenv(ServiceFromCodeOwnersFormatEnv, tc.format)
 			t.Setenv("DD_SERVICE", tc.service)
 			writeCodeOwnersFile(t, filepath.Join(root, "CODEOWNERS"), tc.rules+"\n")
-			RegisterTestPackageSource(filepath.Join(root, tc.directory, "virtual_test.go"))
+			registerCodeOwnersTestPackage(t, filepath.Join(root, tc.directory, "virtual_test.go"))
 			if got := ServiceFromCodeOwners(); got != tc.want {
 				t.Fatalf("service=%q, want %q", got, tc.want)
 			}
@@ -98,7 +98,7 @@ func TestCodeOwnersServiceMissingInputs(t *testing.T) {
 			if tc.workspaceMissing {
 				originalCiTags = map[string]string{}
 			}
-			RegisterTestPackageSource(source)
+			registerCodeOwnersTestPackage(t, source)
 			if got := ServiceFromCodeOwners(); got != "" {
 				t.Fatalf("fallback overridden: %q", got)
 			}
@@ -115,7 +115,7 @@ func TestCodeOwnersServiceCacheConcurrentReaders(t *testing.T) {
 	t.Setenv(ServiceFromCodeOwnersFormatEnv, "dd-go-$(owner)")
 	t.Setenv("DD_SERVICE", "")
 	writeCodeOwnersFile(t, filepath.Join(root, "CODEOWNERS"), "/pkg/ @org/team\n")
-	RegisterTestPackageSource(filepath.Join(root, "pkg", "virtual_test.go"))
+	registerCodeOwnersTestPackage(t, filepath.Join(root, "pkg", "virtual_test.go"))
 	var workers sync.WaitGroup
 	for range 32 {
 		workers.Go(func() {
@@ -151,6 +151,37 @@ func TestCodeOwnersPackageDirectoryPaths(t *testing.T) {
 		got, ok := codeOwnersPackageDirectory(root, tags, &location)
 		if !ok || got != "nested/pkg" {
 			t.Fatalf("%+v: %q %t", location, got, ok)
+		}
+	}
+}
+
+// Overlay files are virtual, but their source package directories exist. Keep
+// that invariant when TMPDIR itself is a symlink, as on macOS runners.
+func registerCodeOwnersTestPackage(t *testing.T, source string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(source), 0755); err != nil {
+		t.Fatal(err)
+	}
+	RegisterTestPackageSource(source)
+}
+
+func TestCodeOwnersPackageDirectorySymlink(t *testing.T) {
+	root := t.TempDir()
+	packageDir := filepath.Join(root, "pkg")
+	if err := os.MkdirAll(packageDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	workspace := filepath.Join(t.TempDir(), "workspace")
+	if err := os.Symlink(root, workspace); err != nil {
+		t.Skipf("directory symlinks unavailable: %v", err)
+	}
+	for _, source := range []string{
+		filepath.Join(packageDir, "virtual_test.go"),
+		filepath.Join(workspace, "pkg", "virtual_test.go"),
+	} {
+		directory, ok := codeOwnersPackageDirectory(workspace, nil, &testPackageLocation{source: source})
+		if !ok || directory != "pkg" {
+			t.Fatalf("source=%q: directory=%q inside=%t", source, directory, ok)
 		}
 	}
 }
