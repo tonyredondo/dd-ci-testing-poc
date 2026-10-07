@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
@@ -27,10 +28,27 @@ func TestCLIDebugActivation(t *testing.T) {
 			if !want && ctx != parent {
 				t.Fatal("disabled logging changed context")
 			}
+			before := time.Now()
 			phase := logger.start("fixture")
 			phase.finish(nil)
+			after := time.Now()
 			if got := output.String(); strings.Contains(got, version.BuildLogPrefix+" DEBUG") != want {
 				t.Fatalf("output=%q", got)
+			}
+			if want {
+				for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+					fields := strings.Fields(line)
+					if len(fields) < 5 {
+						t.Fatalf("missing timestamp: %q", line)
+					}
+					stamp, err := time.Parse(time.RFC3339Nano, strings.TrimPrefix(fields[3], "time="))
+					if err != nil || stamp.Before(before) || stamp.After(after) {
+						t.Fatalf("invalid wall-clock timestamp: %q (%v)", line, err)
+					}
+					if _, err := time.ParseDuration(strings.TrimPrefix(fields[4], "+")); err != nil {
+						t.Fatalf("missing elapsed time: %q", line)
+					}
+				}
 			}
 		})
 	}

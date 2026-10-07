@@ -40,7 +40,8 @@ func (d *cliDebug) printf(format string, args ...any) {
 		return
 	}
 	// One write keeps each diagnostic together when Go also writes stderr.
-	line := fmt.Sprintf(version.BuildLogPrefix+" DEBUG +%s ", time.Since(d.started).Round(time.Microsecond))
+	now := time.Now()
+	line := fmt.Sprintf(version.BuildLogPrefix+" DEBUG time=%s +%s ", now.Format(time.RFC3339Nano), now.Sub(d.started).Round(time.Microsecond))
 	line += fmt.Sprintf(format, args...) + "\n"
 	_, _ = io.WriteString(d.writer, line)
 }
