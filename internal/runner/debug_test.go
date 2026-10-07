@@ -38,14 +38,14 @@ func TestCLIDebugActivation(t *testing.T) {
 			if want {
 				for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
 					fields := strings.Fields(line)
-					if len(fields) < 5 {
+					if len(fields) < 6 || fields[4] != "DEBUG:" {
 						t.Fatalf("missing timestamp: %q", line)
 					}
-					stamp, err := time.Parse(time.RFC3339Nano, strings.TrimPrefix(fields[3], "time="))
-					if err != nil || stamp.Before(before) || stamp.After(after) {
+					stamp, err := time.ParseInLocation("2006/01/02 15:04:05", fields[0]+" "+fields[1], time.Local)
+					if err != nil || stamp.Before(before.Truncate(time.Second)) || stamp.After(after) {
 						t.Fatalf("invalid wall-clock timestamp: %q (%v)", line, err)
 					}
-					if _, err := time.ParseDuration(strings.TrimPrefix(fields[4], "+")); err != nil {
+					if _, err := time.ParseDuration(strings.TrimPrefix(fields[5], "+")); err != nil {
 						t.Fatalf("missing elapsed time: %q", line)
 					}
 				}

@@ -23,8 +23,9 @@ usual warnings, errors and live `go get` progress.
 
 ## Read the output
 
-Each debug line includes `time=` with an RFC 3339 wall-clock timestamp and its
-zone offset, followed by `+` elapsed time since the CLI began. A phase has a
+Each debug line starts with local date and time (`YYYY/MM/DD HH:MM:SS`),
+followed by the component, version and log level, matching Mini's runtime logger.
+The message starts with `+` elapsed time since the CLI began. A phase has a
 `started` line followed by `finished duration=... status=ok|error`. The start
 line appears before work begins, so a stalled command still shows where it is
 waiting. Durations include subprocess waiting and I/O; they do not measure CPU.
@@ -58,18 +59,18 @@ For example, these abbreviated lines explain a local Mini build. The times
 illustrate the format; they are not benchmark results:
 
 ```text
-TestOptimization.build v0.0.0 DEBUG time=2026-10-07T10:00:00.000120+02:00 +120µs runtime=mini
-TestOptimization.build v0.0.0 DEBUG time=2026-10-07T10:00:00.000200+02:00 +200µs prepare started
-TestOptimization.build v0.0.0 DEBUG time=2026-10-07T10:00:00.000400+02:00 +400µs resolve packages started
-TestOptimization.build v0.0.0 DEBUG time=2026-10-07T10:00:00.024000+02:00 +24ms resolve packages finished duration=23.6ms status=ok
-TestOptimization.build v0.0.0 DEBUG time=2026-10-07T10:00:00.024100+02:00 +24.1ms provide runtime started
-TestOptimization.build v0.0.0 DEBUG time=2026-10-07T10:00:00.031000+02:00 +31ms mini source=cli-local
-TestOptimization.build v0.0.0 DEBUG time=2026-10-07T10:00:00.036000+02:00 +36ms provide runtime finished duration=11.9ms status=ok
-TestOptimization.build v0.0.0 DEBUG time=2026-10-07T10:00:00.058000+02:00 +58ms plan ready testing_files=3 test_packages=1 overlay_entries=5 generated_backing_files=2 temporary_modfile=true cover_bridge=false
-TestOptimization.build v0.0.0 DEBUG time=2026-10-07T10:00:00.059000+02:00 +59ms tool selection testify=false goleak=false cover=false user_toolexec=false
-TestOptimization.build v0.0.0 DEBUG time=2026-10-07T10:00:00.060000+02:00 +60ms go test started
-TestOptimization.build v0.0.0 DEBUG time=2026-10-07T10:00:00.410000+02:00 +410ms go test finished duration=350ms status=ok
-TestOptimization.build v0.0.0 DEBUG time=2026-10-07T10:00:00.410100+02:00 +410.1ms go test exit_code=0
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +120µs runtime=mini
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +200µs prepare started
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +400µs resolve packages started
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +24ms resolve packages finished duration=23.6ms status=ok
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +24.1ms provide runtime started
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +31ms mini source=cli-local
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +36ms provide runtime finished duration=11.9ms status=ok
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +58ms plan ready testing_files=3 test_packages=1 overlay_entries=5 generated_backing_files=2 temporary_modfile=true cover_bridge=false
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +59ms tool selection testify=false goleak=false cover=false user_toolexec=false
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +60ms go test started
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +410ms go test finished duration=350ms status=ok
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +410.1ms go test exit_code=0
 ```
 
 Preparation contains the smaller preparation phases. Whole-CLI time contains

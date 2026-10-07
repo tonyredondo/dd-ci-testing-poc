@@ -14,7 +14,8 @@ import (
 func cliDebugLines(stderr string) string {
 	var lines []string
 	for _, line := range strings.Split(stderr, "\n") {
-		if strings.HasPrefix(line, version.BuildLogPrefix+" DEBUG ") {
+		const timestampLength = len("2006/01/02 15:04:05 ")
+		if len(line) >= timestampLength && strings.HasPrefix(line[timestampLength:], version.BuildLogPrefix+" DEBUG: ") {
 			lines = append(lines, line)
 		}
 	}

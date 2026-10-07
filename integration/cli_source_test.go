@@ -56,7 +56,7 @@ func TestMiniCLIRuntimeSelectionAndSourceRange(t *testing.T) {
 			if !strings.Contains(logs, version.RunLogPrefix+" DEBUG:") ||
 				strings.Contains(logs, "Datadog Tracer") ||
 				strings.Contains(logs, "TestOptimization Tracer") ||
-				!strings.Contains(stderr, version.BuildLogPrefix+" DEBUG ") {
+				!strings.Contains(stderr, version.BuildLogPrefix+" DEBUG: ") {
 				t.Fatalf("unexpected runtime/logger:\n%s\n%s", out, stderr)
 			}
 			receiver.mu.Lock()
