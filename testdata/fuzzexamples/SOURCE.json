@@ -58,8 +58,8 @@
       "path": "internal/mockci/mockci.go",
       "source_path": "internal/civisibility/integrations/gotesting/fixtures/itrbackfill/internal/mockci/mockci.go",
       "source_sha256": "c0c3526a577a7339e758368d05dff0fc60173a8da1f1a362d5c0f94733e13548",
-      "sha256": "e2cbe16d50879fabc5af980b5300528e2a904736c8522e6e7e25310c237f95ca",
-      "adaptation": "Original assertions; export wire/coverage data, enable coverage variants and isolate real read cache per fixture execution"
+      "sha256": "780d2fd02e98d6836878cbfe8207f1d9d86987713eccfb4ef473825e3858b1d0",
+      "adaptation": "Original assertions; export wire/coverage data, enable coverage variants, isolate real cache per intake and pass its root to children; restore exact OS environment"
     },
     {
       "path": "LICENSE",
@@ -67,6 +67,18 @@
       "source_sha256": "71af67b41ee226793c67e48f29be03eecf0bca592993fb8bbd3de84f1e1475f0",
       "sha256": "71af67b41ee226793c67e48f29be03eecf0bca592993fb8bbd3de84f1e1475f0",
       "adaptation": "None"
+    },
+    {
+      "path": "app/cache_control_test.go",
+      "sha256": "69d9e22cec703af77f942cf7d8cd949f9c838b1e0e2cb7007ac7ff18350fc08d",
+      "role": "local",
+      "adaptation": "Fixture cache inheritance/isolation control; not SDK production code"
+    },
+    {
+      "path": "internal/mockci/cache_scope_test.go",
+      "sha256": "dbd2628ac1c3436ef51219f91d75d069acbbe1ef87346621efacbdcbdfe8647f",
+      "role": "local",
+      "adaptation": "Fixture cache inheritance/isolation control; not SDK production code"
     }
   ],
   "licenses": [

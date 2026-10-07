@@ -262,7 +262,7 @@ func runFuzzExampleScenario(t *testing.T, fixture fuzzExampleFixture, scenario s
 func runFuzzExampleWithCoverage(t *testing.T, fixture fuzzExampleFixture, scenario string, deferred, covered bool) ([]map[string]any, map[string][]byte, time.Duration) {
 	t.Helper()
 	report := filepath.Join(t.TempDir(), "events.jsonl")
-	env := testEnv("GOFLAGS=", "GOWORK=off", "DD_FUZZ_EXAMPLE_MODE="+fixture.mode, "DD_FUZZ_EXAMPLE_SCENARIO="+scenario, "DD_FUZZ_EXAMPLE_REPORT="+report, "DD_FUZZ_EXAMPLE_CACHE_ROOT="+filepath.Dir(report), "DD_SERVICE=fuzz-examples", "DD_CIVISIBILITY_DEFERRED_DELIVERY="+fmt.Sprint(deferred), "DD_FUZZ_EXAMPLE_COVERAGE="+fmt.Sprint(covered))
+	env := testEnv("GOFLAGS=", "GOWORK=off", "DD_FUZZ_EXAMPLE_MODE="+fixture.mode, "DD_FUZZ_EXAMPLE_SCENARIO="+scenario, "DD_FUZZ_EXAMPLE_REPORT="+report, "DD_FUZZ_EXAMPLE_CACHE_ROOT="+filepath.Dir(report), "XDG_CACHE_HOME="+filepath.Join(filepath.Dir(report), "default-cache"), "DD_SERVICE=fuzz-examples", "DD_CIVISIBILITY_DEFERRED_DELIVERY="+fmt.Sprint(deferred), "DD_FUZZ_EXAMPLE_COVERAGE="+fmt.Sprint(covered))
 	if os.Getenv("FUZZ_EXAMPLE_DIAGNOSTICS") == "true" {
 		env = append(env, "DD_TRACE_DEBUG=true")
 	}
@@ -275,6 +275,12 @@ func runFuzzExampleWithCoverage(t *testing.T, fixture fuzzExampleFixture, scenar
 	}
 	if strings.Contains(stderr, "DATA RACE") {
 		t.Fatalf("race in %s: %s", scenario, stderr)
+	}
+	fallback := filepath.Join(filepath.Dir(report), "default-cache", "dd-trace-go", "civisibility-read-cache")
+	if _, err := os.Stat(fallback); err == nil {
+		t.Fatal("fixture child used the default read cache instead of its intake-owned root")
+	} else if !os.IsNotExist(err) {
+		t.Fatal(err)
 	}
 	file, err := os.Open(report)
 	if err != nil {
@@ -623,5 +629,21 @@ func TestFuzzRootStackAliasIsLimitedToThePort(t *testing.T) {
 		if canonicalFuzzStack(changed) == canonicalFuzzStack(sdk) {
 			t.Fatal("unknown function or application line was hidden")
 		}
+	}
+}
+
+func TestFuzzFixtureCacheIsolation(t *testing.T) {
+	for _, backend := range []string{"sdk", "mini"} {
+		t.Run(backend, func(t *testing.T) {
+			fixture := prepareFuzzExampleFixture(t, backend, "manual")
+			args := []string{"test", "-mod=readonly", "-count=1", "./internal/mockci"}
+			if os.Getenv("PARITY_TEST_MODE") == "race" {
+				args = append(args, "-race")
+			}
+			out, stderr, code := command(t, fixture.dir, testEnv("DD_CIVISIBILITY_ENABLED=false"), "go", args...)
+			if code != 0 {
+				t.Fatal(out, stderr)
+			}
+		})
 	}
 }

@@ -137,8 +137,12 @@ race support. On Windows, set `ORCHESTRION_BIN` to `orchestrion.exe`.
 
 The SDK reference is downloaded at the recorded module version. The harness
 rejects version upgrades and replacements, so a modified checkout cannot
-silently substitute for the oracle. Each fixture execution has its own read
-cache; separate mock intakes must not exchange data when TCP ports are reused.
+silently substitute for the oracle. Each mock intake has its own read cache. `app/cache_control_test.go` applies the
+inherited root before the child/worker branches of `TestMain`, so subprocesses
+use the same intake-owned cache. A new server gets a new root even if its TCP
+port is reused. The cache stays enabled. The harness rejects a child falling
+back to the default user cache, and tests distinct roots and environment restore.
+Fixture attributes require LF on every platform so hashes check the same bytes.
 
 ## Manual entrypoints
 

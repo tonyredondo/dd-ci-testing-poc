@@ -22,7 +22,6 @@ import (
 
 	"github.com/DataDog/dd-trace-go/v2/internal/civisibility/utils/filebitmap"
 	"github.com/DataDog/dd-trace-go/v2/internal/civisibility/utils/net"
-	"github.com/DataDog/dd-trace-go/v2/internal/env"
 )
 
 // SkippableTest describes one backend ITR candidate returned by the mock.
@@ -92,10 +91,17 @@ func StartWithTestManagement(
 	coverage map[string][]byte,
 	management *net.TestManagementTestsResponseDataModules,
 ) *Server {
-	if root := os.Getenv("DD_FUZZ_EXAMPLE_CACHE_ROOT"); root != "" {
-		// Separate intakes can reuse a TCP port but serve different fixture data.
-		// Keep production cache behavior within one execution, including children.
-		net.SetReadCacheHooksForTesting(root, nil, nil, nil, nil)
+	cacheRoot := os.Getenv("DD_FUZZ_EXAMPLE_CACHE_ROOT")
+	callerCacheRoot := cacheRoot
+	if cacheRoot != "" {
+		// Every intake owns one cache, shared with children using that intake.
+		// A later server may reuse its URL while serving a different policy.
+		var err error
+		cacheRoot, err = os.MkdirTemp(cacheRoot, "intake-cache-")
+		if err != nil {
+			panic(err)
+		}
+		net.SetReadCacheHooksForTesting(cacheRoot, nil, nil, nil, nil)
 	}
 	if os.Getenv("DD_FUZZ_EXAMPLE_COVERAGE") == "true" {
 		settings.CodeCoverage = true
@@ -131,7 +137,7 @@ func StartWithTestManagement(
 		}
 	}))
 
-	mock.restore = applyEnv(map[string]string{
+	mockEnv := map[string]string{
 		"DD_CIVISIBILITY_ENABLED":           "true",
 		"DD_CIVISIBILITY_AGENTLESS_ENABLED": "true",
 		"DD_CIVISIBILITY_AGENTLESS_URL":     mock.server.URL,
@@ -139,7 +145,17 @@ func StartWithTestManagement(
 		"DD_GIT_REPOSITORY_URL":             "https://github.com/DataDog/dd-trace-go.git",
 		"DD_GIT_COMMIT_SHA":                 "1234567890abcdef1234567890abcdef12345678",
 		"DD_GIT_BRANCH":                     "main",
-	})
+	}
+	if cacheRoot != "" {
+		mockEnv["DD_FUZZ_EXAMPLE_CACHE_ROOT"] = cacheRoot
+	}
+	restoreEnv := applyEnv(mockEnv)
+	mock.restore = func() {
+		restoreEnv()
+		if cacheRoot != "" {
+			net.SetReadCacheHooksForTesting(callerCacheRoot, nil, nil, nil, nil)
+		}
+	}
 	return mock
 }
 
@@ -692,7 +708,9 @@ func writeTestManagement(w http.ResponseWriter, management *net.TestManagementTe
 func applyEnv(updates map[string]string) func() {
 	previous := map[string]*string{}
 	for key, value := range updates {
-		if current, ok := env.Lookup(key); ok {
+		// Fixture controls are not SDK configuration keys. Restore the exact
+		// process environment, without alias resolution or SDK validation.
+		if current, ok := os.LookupEnv(key); ok {
 			copy := current
 			previous[key] = &copy
 		} else {
