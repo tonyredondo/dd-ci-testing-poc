@@ -1,0 +1,14 @@
+# SDK Fuzz and Examples fixtures
+
+These workloads and their assertions come from DataDog/dd-trace-go PR #5442
+at `7b32e1812cb5c1fb807a63cc5042750f3d3cd672`. [SOURCE.json](SOURCE.json)
+records every original path, original hash and local hash. [LICENSE](LICENSE)
+is the upstream Apache-2.0 license.
+
+The integration harness copies these sources into isolated SDK and Mini modules.
+It relocates helper imports; Mini also relocates runtime imports. The mock intake
+exports wire events and optional coverage observations. Covered variants add a
+production helper and calls to it without changing the original assertions.
+The runtime, workloads and original expectations remain separate from the
+wire comparator. See [Fuzz and Examples](../../docs/fuzz-examples.md) for cases,
+commands and update checks.
