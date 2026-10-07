@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
 type cliDebugKey struct{}
@@ -38,7 +40,7 @@ func (d *cliDebug) printf(format string, args ...any) {
 		return
 	}
 	// One write keeps each diagnostic together when Go also writes stderr.
-	line := fmt.Sprintf("ddtest: DEBUG +%s ", time.Since(d.started).Round(time.Microsecond))
+	line := fmt.Sprintf(version.BuildLogPrefix+" DEBUG +%s ", time.Since(d.started).Round(time.Microsecond))
 	line += fmt.Sprintf(format, args...) + "\n"
 	_, _ = io.WriteString(d.writer, line)
 }

@@ -14,6 +14,8 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strings"
+
+	pocversion "github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
 const miniModule = "github.com/tonyredondo/dd-ci-testing-poc"
@@ -284,7 +286,7 @@ func goTool(ctx context.Context, dir string, progress io.Writer, args ...string)
 
 func goGetRuntime(ctx context.Context, dir, modfile, query string, progress io.Writer) error {
 	if progress != nil {
-		fmt.Fprintf(progress, "ddtest: preparing runtime with go get %s\n", query)
+		fmt.Fprintf(progress, pocversion.BuildLogPrefix+" INFO: preparing runtime with go get %s\n", query)
 	}
 	_, err := goTool(ctx, dir, progress, "get", "-modfile="+modfile, query)
 	return err

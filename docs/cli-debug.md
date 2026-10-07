@@ -1,8 +1,10 @@
 # CLI build diagnostics
 
 Set `DD_TRACE_DEBUG=true` to see what `ddtest` does before the test runtime
-starts. The CLI writes diagnostics to `stderr` with the prefix `ddtest: DEBUG`.
-The selected runtime reads the same variable for its own logs.
+starts. The CLI writes diagnostics to `stderr` with the prefix
+`TestOptimization.build v0.0.0`. Mini runtime logs use
+`TestOptimization.run  v0.0.0`. Both prefixes use the version in
+`internal/version`; the SDK backend keeps its own logger and SDK version.
 
 ```sh
 DD_TRACE_DEBUG=true ddtest test -count=1 ./...
@@ -55,18 +57,18 @@ For example, these abbreviated lines explain a local Mini build. The times
 illustrate the format; they are not benchmark results:
 
 ```text
-ddtest: DEBUG +120µs runtime=mini
-ddtest: DEBUG +200µs prepare started
-ddtest: DEBUG +400µs resolve packages started
-ddtest: DEBUG +24ms resolve packages finished duration=23.6ms status=ok
-ddtest: DEBUG +24.1ms provide runtime started
-ddtest: DEBUG +31ms mini source=cli-local
-ddtest: DEBUG +36ms provide runtime finished duration=11.9ms status=ok
-ddtest: DEBUG +58ms plan ready testing_files=3 test_packages=1 overlay_entries=5 generated_backing_files=2 temporary_modfile=true cover_bridge=false
-ddtest: DEBUG +59ms tool selection testify=false goleak=false cover=false user_toolexec=false
-ddtest: DEBUG +60ms go test started
-ddtest: DEBUG +410ms go test finished duration=350ms status=ok
-ddtest: DEBUG +410.1ms go test exit_code=0
+TestOptimization.build v0.0.0 DEBUG +120µs runtime=mini
+TestOptimization.build v0.0.0 DEBUG +200µs prepare started
+TestOptimization.build v0.0.0 DEBUG +400µs resolve packages started
+TestOptimization.build v0.0.0 DEBUG +24ms resolve packages finished duration=23.6ms status=ok
+TestOptimization.build v0.0.0 DEBUG +24.1ms provide runtime started
+TestOptimization.build v0.0.0 DEBUG +31ms mini source=cli-local
+TestOptimization.build v0.0.0 DEBUG +36ms provide runtime finished duration=11.9ms status=ok
+TestOptimization.build v0.0.0 DEBUG +58ms plan ready testing_files=3 test_packages=1 overlay_entries=5 generated_backing_files=2 temporary_modfile=true cover_bridge=false
+TestOptimization.build v0.0.0 DEBUG +59ms tool selection testify=false goleak=false cover=false user_toolexec=false
+TestOptimization.build v0.0.0 DEBUG +60ms go test started
+TestOptimization.build v0.0.0 DEBUG +410ms go test finished duration=350ms status=ok
+TestOptimization.build v0.0.0 DEBUG +410.1ms go test exit_code=0
 ```
 
 Preparation contains the smaller preparation phases. Whole-CLI time contains

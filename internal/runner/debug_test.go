@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
 func TestCLIDebugActivation(t *testing.T) {
@@ -27,7 +29,7 @@ func TestCLIDebugActivation(t *testing.T) {
 			}
 			phase := logger.start("fixture")
 			phase.finish(nil)
-			if got := output.String(); strings.Contains(got, "ddtest: DEBUG") != want {
+			if got := output.String(); strings.Contains(got, version.BuildLogPrefix+" DEBUG") != want {
 				t.Fatalf("output=%q", got)
 			}
 		})

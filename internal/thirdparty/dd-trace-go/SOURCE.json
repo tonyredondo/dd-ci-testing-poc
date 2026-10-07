@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "37aaa238b2e77fa0e420a89cd86b5deffcefa247423d71ca8fc1a1e6ff328ed8",
+      "sha256": "7bb352ee38b64ce6b010102f6e1c7dc018443707e5174d3f9112d6678280f6f1",
       "role": "local"
     },
     {
@@ -1585,7 +1585,7 @@
     },
     {
       "path": "log/log.go",
-      "sha256": "b310c6f6b8158f2c3f6654d539859b137df55c8ca89712e9962401662e37f0b5",
+      "sha256": "4d01b782c480666d63c2300f084e8ad9492b03588adc914594bdc4cc29ace11e",
       "role": "adapted",
       "source_path": "internal/log/log.go",
       "source_sha256": "021fafa9f8f8b154356fdf3a80a099cd949fecd9eba8d212946ee61597600e74"

@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	pocversion "github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
 // Observe real Go output before its module download is allowed to finish.
@@ -111,7 +113,7 @@ func TestRuntimeDownloadProgress(t *testing.T) {
 			case <-ctx.Done():
 				t.Fatalf("download output was buffered until completion: %s", progress)
 			}
-			if !strings.Contains(progress.String(), "go get started") || !strings.Contains(progress.String(), "ddtest: preparing runtime with go get "+miniModule+"@"+version) {
+			if !strings.Contains(progress.String(), "go get started") || !strings.Contains(progress.String(), pocversion.BuildLogPrefix+" INFO: preparing runtime with go get "+miniModule+"@"+version) {
 				t.Fatalf("missing initial status: %s", progress)
 			}
 			if outcome == "cancel" {

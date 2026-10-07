@@ -489,9 +489,11 @@ unoptimized and race builds. The source-cache unit tests cover duplicate method
 names, named `func1` declarations, closures, unavailable sources, impacted-test
 classification and process-retry metadata.
 
-`log/log.go` labels native runtime diagnostics `TestOptimization Tracer`, using
-the version owned by `internal/version`. The original SDK's logger is unchanged.
-The native version is also used in event metadata and CI telemetry.
+`log/log.go` uses `internal/version.RunLogPrefix` for native runtime diagnostics:
+`TestOptimization.run  v0.0.0`. CLI diagnostics use `BuildLogPrefix`:
+`TestOptimization.build v0.0.0`. Both prefixes share the native version, also
+used in event metadata and CI telemetry. Preserve this identity when updating
+the incorporated logger. The original SDK's logger is unchanged.
 
 ## Fuzz and executable Examples
 

@@ -7,12 +7,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
 func cliDebugLines(stderr string) string {
 	var lines []string
 	for _, line := range strings.Split(stderr, "\n") {
-		if strings.HasPrefix(line, "ddtest: DEBUG ") {
+		if strings.HasPrefix(line, version.BuildLogPrefix+" DEBUG ") {
 			lines = append(lines, line)
 		}
 	}

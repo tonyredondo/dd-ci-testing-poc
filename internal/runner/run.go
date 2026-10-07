@@ -421,14 +421,14 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 	}
 	opts, err := parseOptions(args, os.Getenv("GOFLAGS"))
 	if err != nil {
-		fmt.Fprintln(stderr, "ddtest:", err)
+		fmt.Fprintln(stderr, version.BuildLogPrefix+" ERROR:", err)
 		return 2
 	}
 	dir := workingDirectory(cwd, opts)
 	debug.printf("working_directory=%q package_patterns=%d build_flags=%d", dir, len(opts.packages), len(opts.buildFlags))
 	if opts.help || explicitFiles(dir, opts.packages) {
 		if !opts.help {
-			fmt.Fprintln(stderr, "ddtest: warning: explicit Go files run without CI Visibility instrumentation")
+			fmt.Fprintln(stderr, version.BuildLogPrefix+" WARN: explicit Go files run without CI Visibility instrumentation")
 		}
 		debug.printf("instrumentation bypass help=%t explicit_files=%t", opts.help, !opts.help)
 		// Native go test handles -C, help and file mode itself.
@@ -443,11 +443,11 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 		return interruptedStatus(interrupted)
 	}
 	if err != nil {
-		fmt.Fprintln(stderr, "ddtest:", err)
+		fmt.Fprintln(stderr, version.BuildLogPrefix+" ERROR:", err)
 		return 2
 	}
 	for _, warning := range plan.Warnings {
-		fmt.Fprintln(stderr, "ddtest: warning:", warning)
+		fmt.Fprintln(stderr, version.BuildLogPrefix+" WARN:", warning)
 	}
 	var tool string
 	var env []string
@@ -552,7 +552,7 @@ func runGo(ctx context.Context, dir string, args, envOverrides []string, signals
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, stderr
 	cmd.WaitDelay = 5 * time.Second
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintln(stderr, "ddtest:", err)
+		fmt.Fprintln(stderr, version.BuildLogPrefix+" ERROR:", err)
 		return 2
 	}
 	done := make(chan error, 1)
@@ -572,7 +572,7 @@ func runGo(ctx context.Context, dir string, args, envOverrides []string, signals
 				}
 				return exit.ExitCode()
 			}
-			fmt.Fprintln(stderr, "ddtest:", err)
+			fmt.Fprintln(stderr, version.BuildLogPrefix+" ERROR:", err)
 			return 2
 		case s := <-signals:
 			debug.printf("forwarding signal to go test")
