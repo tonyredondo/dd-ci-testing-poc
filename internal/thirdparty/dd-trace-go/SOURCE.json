@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "66730bedd64e6a08af3cabb77d674197e99ec4e2923d3a0e28a00fe1b17a6dd4",
+      "sha256": "f8e382ebdfd33539faaa509ade86088e53a3a6ecb1694f1a50594f9269ddcca8",
       "role": "local"
     },
     {
@@ -35,7 +35,7 @@
     },
     {
       "path": "TESTS.json",
-      "sha256": "4eb4b3ee239dc8ed5d14544230161cd95636d757cb22efd456cabf8f370d23e3",
+      "sha256": "939f81b1c6164a70ccebc4c06e85c13ea10dd34fc80c820ca6686ddee9181baf",
       "role": "local"
     },
     {
@@ -67,77 +67,77 @@
       "source_sha256": "a46f72a63f56847040396580407ace35a18479800743376e87ea4773b76fa182"
     },
     {
-      "path": "civisibility/codeownership/benchmark_test.go",
+      "path": "civisibility/utils/codeownership/benchmark_test.go",
       "sha256": "888224c44f0f2c528a1b9d20cbfe757702ce9eb077425d4ae540156fd0b94680",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/codeowners.go",
+      "path": "civisibility/utils/codeownership/codeowners.go",
       "sha256": "55e60a135f6017a3ba506888c773b067071d7670a92514b6328a5b682f0d2bf7",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/codeowners_test.go",
+      "path": "civisibility/utils/codeownership/codeowners_test.go",
       "sha256": "1ec7a030cb3bb53c311018709e948b825e1fb2cf7eeda68cb61a5e3cf3345160",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/example_test.go",
+      "path": "civisibility/utils/codeownership/example_test.go",
       "sha256": "59aa94c4b728a6a1bfe63aabe468c7c830bbeaa6b8823b62c599c2bf7b75aec9",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/file.go",
+      "path": "civisibility/utils/codeownership/file.go",
       "sha256": "587158d97e82e2429439a08dfd7658e9dae5bd71aac0c3ea335a990b43f67df6",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/github.go",
+      "path": "civisibility/utils/codeownership/github.go",
       "sha256": "27967b451f167196a446197de6deacd66f46be3d27bda5ee5fa25688efdec2dc",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/github_test.go",
+      "path": "civisibility/utils/codeownership/github_test.go",
       "sha256": "21b723aadd07db8d4b6462394a4e2f4f530ce2bc1646e51a9f47b4712b5f0015",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/gitlab.go",
+      "path": "civisibility/utils/codeownership/gitlab.go",
       "sha256": "392d09febe833710251434420254c913c0d17acfb1ca5c94c753f84a6b581433",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/gitlab_test.go",
+      "path": "civisibility/utils/codeownership/gitlab_test.go",
       "sha256": "bb6c1a2132efbabe33a632685424b436998f898ba38f32f3e799ae80ebd8022d",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/glob.go",
+      "path": "civisibility/utils/codeownership/glob.go",
       "sha256": "a84916a143e0244e03e2713e7fcdd96fd79eaf52d3abcefdc3842dced35e3588",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/locator.go",
+      "path": "civisibility/utils/codeownership/locator.go",
       "sha256": "697714464a8a1c661fc21222a4954ce192823ab45842ea004ad298b5b058b019",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/locator_test.go",
+      "path": "civisibility/utils/codeownership/locator_test.go",
       "sha256": "6a19cabb6e6fe09188f92cd5f7cca7ee016f19886980f376d33854caf08a893b",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/rule_cases_test.go",
+      "path": "civisibility/utils/codeownership/rule_cases_test.go",
       "sha256": "4390048d5fad97c0886988a5af173d66b4c6a8b20cdac56223517c23cea2bd44",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/testdata/github.CODEOWNERS",
+      "path": "civisibility/utils/codeownership/testdata/github.CODEOWNERS",
       "sha256": "86db2d5d90cb4a7af6a5a75cbd604b7aadbacbada2703b06fbff073213c3ca97",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/testdata/gitlab.CODEOWNERS",
+      "path": "civisibility/utils/codeownership/testdata/gitlab.CODEOWNERS",
       "sha256": "bcf8e8d80fddd82bef2efc0659c1da91d7fb1234127d15dc118137df5913fe94",
       "role": "local"
     },
@@ -860,7 +860,7 @@
     },
     {
       "path": "civisibility/integrations/manual_api_sourcecache.go",
-      "sha256": "1cd7c0eb9206c45efea701e2add6b9b64d62d64435f275aacc73b6e8e2b3b4c4",
+      "sha256": "f6767c6d00c9a177fe6b60048de4af89afb7cce2ea6893df89844fee0f67f81e",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/manual_api_sourcecache.go",
       "source_sha256": "6b0f586904032e1839cd96cc40de9cdb0aa2f55f2b76808b7b7fa5cb51542942"
@@ -902,7 +902,7 @@
     },
     {
       "path": "civisibility/integrations/manual_api_sourcecache_test.go",
-      "sha256": "9a68e70cfdd2231409f5c76994259211ff56ebd8bf676d4ed54d7b41830988f9",
+      "sha256": "a6c34f8d2c0ea1e01c99b52bfa017e566d61be231b11ae470349d0dd6f2baaef",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/manual_api_sourcecache_test.go",
       "source_sha256": "aff071e72f16cc26f99ecc09ef478cffc02a52a4cee72634e1653ab610d8c793"
@@ -956,7 +956,7 @@
     },
     {
       "path": "civisibility/utils/codeowners_discovery.go",
-      "sha256": "1b51f5fc255392547f5831d234f49316947a465ea5db2412bd76a891faddd013",
+      "sha256": "443895f0319c459fbc6546116b07d7623c2b73afaf7a6db2bf769eb5f92efdfa",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/codeowners.go",
       "source_sha256": "8ff322ff747fc769a24852dbcdaa2521605545e5942e69bb41c3514f941ea18f"
@@ -2129,12 +2129,6 @@
       "sha256": "5c76eca7763b9e6b475f2da159821c708a917930e96508e8612228acd9bf2e57",
       "commit": "7b32e1812cb5c1fb807a63cc5042750f3d3cd672",
       "purpose": "F.Fuzz hook signature and advice implemented by the Mini AST transformer"
-    },
-    {
-      "path": "tracer/test/Datadog.Trace.Tests/Ci/CodeOwnersTests.cs",
-      "sha256": "30a40a170062eab9428b8c3b6ae73a0fe41f0765b8ae402094572db76880a38c",
-      "commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-      "purpose": "Complete original fixture theories executed by scripts/codeownership/generate.py"
     }
   ],
   "feature_ports": [

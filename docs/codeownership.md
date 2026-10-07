@@ -1,6 +1,6 @@
 # CODEOWNERS implementation
 
-`internal/thirdparty/dd-trace-go/civisibility/codeownership` is the SDK package
+`internal/thirdparty/dd-trace-go/civisibility/utils/codeownership` is the SDK package
 that parses ownership rules. It has no dependency on CI initialization.
 CI Visibility uses it for `test.codeowners` and, when enabled, for package
 service names. [Service configuration](codeowners-service.md) describes the
@@ -104,10 +104,10 @@ goleak, external tests, coverage, `-race`, `-trimpath` and directory changes in
 TestMain. The compatibility workflow runs these tests on Linux, macOS and Windows.
 
 ```sh
-go test -race ./internal/thirdparty/dd-trace-go/civisibility/codeownership
+go test -race ./internal/thirdparty/dd-trace-go/civisibility/utils/codeownership
 go test -race -run 'Test(GetCodeOwners|CodeOwners)' \
   ./internal/thirdparty/dd-trace-go/civisibility/utils
 go test -run '^TestMiniCodeOwners' ./integration
 go test -run '^$' -fuzz FuzzMatch -fuzztime 10s \
-  ./internal/thirdparty/dd-trace-go/civisibility/codeownership
+  ./internal/thirdparty/dd-trace-go/civisibility/utils/codeownership
 ```

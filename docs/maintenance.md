@@ -312,7 +312,7 @@ Testify contract, validation inventory and performance guide together.
 
 ## CODEOWNERS source updates
 
-`civisibility/codeownership` is maintained with the SDK code and recorded as
+`civisibility/utils/codeownership` is maintained with the SDK code and recorded as
 local additions until an upstream Go revision includes it. The
 [package guide](codeownership.md) describes matching, Unicode behavior and
 checks. Update it through the same SDK workflow; keep the Go rule tables,

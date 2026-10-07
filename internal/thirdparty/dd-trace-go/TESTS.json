@@ -481,7 +481,7 @@
       "source": "internal/civisibility/integrations/manual_api_sourcecache_test.go",
       "destination": "internal/thirdparty/dd-trace-go/civisibility/integrations/manual_api_sourcecache_test.go",
       "source_sha256": "aff071e72f16cc26f99ecc09ef478cffc02a52a4cee72634e1653ab610d8c793",
-      "adapted_sha256": "9a68e70cfdd2231409f5c76994259211ff56ebd8bf676d4ed54d7b41830988f9",
+      "adapted_sha256": "a6c34f8d2c0ea1e01c99b52bfa017e566d61be231b11ae470349d0dd6f2baaef",
       "kind": "full",
       "adaptation": "Native spans replace unused APM mock resets; an explicit CODEOWNERS fixture supplies the upstream repository input; current repository URL is relocated; confirmed named source ranges start at the AST declaration, including same-named methods and named func1 declarations, instead of the runtime entry PC"
     },
@@ -696,10 +696,10 @@
     }
   ],
   "local_codeownership_checks": {
-    "rule_tables": "civisibility/codeownership/github_test.go and gitlab_test.go: GitHub/GitLab rule precedence, owners, sections, exclusions, escaping, globstars, classes and diagnostics",
-    "go_examples": "civisibility/codeownership/example_test.go and testdata: public API example, Go package ownership, rune-based wildcards, Go Unicode casing and email owners",
-    "boundaries": "civisibility/codeownership/codeowners_test.go: immutable results, concurrent readers, missing files, bounded matching, large tokens/headers/lines, duplicate compaction, encodings and line endings",
-    "discovery": "civisibility/codeownership/locator_test.go: host locations, repository/worktree roots, workspace rebasing, traversal rejection, read errors and stable decisions",
+    "rule_tables": "civisibility/utils/codeownership/github_test.go and gitlab_test.go: GitHub/GitLab rule precedence, owners, sections, exclusions, escaping, globstars, classes and diagnostics",
+    "go_examples": "civisibility/utils/codeownership/example_test.go and testdata: public API example, Go package ownership, rune-based wildcards, Go Unicode casing and email owners",
+    "boundaries": "civisibility/utils/codeownership/codeowners_test.go: immutable results, concurrent readers, missing files, bounded matching, large tokens/headers/lines, duplicate compaction, encodings and line endings",
+    "discovery": "civisibility/utils/codeownership/locator_test.go: host locations, repository/worktree roots, workspace rebasing, traversal rejection, read errors and stable decisions",
     "integration": "integration/codeowners_service_test.go: actual owner/service payloads, normal/deferred delivery, compiled binaries, coverage, race, trimpath, Testify and goleak"
   }
 }

@@ -79,7 +79,7 @@ service in a runtime debug message.
 - `internal/runner/run.go` emits the Mini registration call;
   `testopt/testopt.go` captures its caller once.
 - `civisibility/utils/service_name.go` owns selection and process caching.
-  `utils/codeowners_discovery.go` caches discovery; `codeownership/` owns parsing,
+  `utils/codeowners_discovery.go` caches discovery; `utils/codeownership/` owns parsing,
   file selection and both kinds of queries.
 - The CI bootstrap applies the selected name to the tracer. CI clients reuse
   it for settings, telemetry and logs; explicit client names retain priority.

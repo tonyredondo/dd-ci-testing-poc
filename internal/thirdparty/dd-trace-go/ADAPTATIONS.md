@@ -567,7 +567,7 @@ source when disabled. Runtime resolution keeps absolute/trimpath source paths
 and workspace boundaries. The result is process-local and immutable after its
 first resolution. Test-only resets require stopped readers.
 
-`civisibility/codeownership/` owns host-specific discovery, parsing and compiled
+`civisibility/utils/codeownership/` owns host-specific discovery, parsing and compiled
 file/directory matching. `utils/codeowners_discovery.go` supplies CI context and caches
 its resolver. The package implements GitHub and GitLab rules, including
 inline-comment differences, ownerless GitHub rules, sections, defaults,
