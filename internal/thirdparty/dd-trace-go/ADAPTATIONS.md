@@ -569,43 +569,30 @@ first resolution. Test-only resets require stopped readers.
 
 `civisibility/codeownership/` owns host-specific discovery, parsing and compiled
 file/directory matching. `utils/codeowners_discovery.go` supplies CI context and caches
-its resolver. The separately recorded .NET port provides GitHub/GitLab rules,
-including inline-comment differences, ownerless GitHub rules, GitLab sections,
-defaults, exclusions, roles and character classes. File selection follows each
-host's location priority, including `docs/CODEOWNERS`.
+its resolver. The package implements GitHub and GitLab rules, including
+inline-comment differences, ownerless GitHub rules, sections, defaults,
+exclusions, roles and character classes. File selection follows each host's
+location priority, including `docs/CODEOWNERS`.
 
-Results keep private state. Owner lists are deduplicated once; tags are prepared
-with each result. Matching does not copy already-normalized paths. Character
-classes are compiled once, and matching is iterative with work limits. Single
-rule results are reused. GitLab owner unions preserve declaration order for
-first-owner service selection. File and service caches retain their lifetimes.
+Matching and owner classification use Go runes and standard Unicode tables.
+Section names use `strings.ToUpper`. Keep these contracts when updating the
+SDK; the package does not carry Unicode compatibility tables. Pattern and
+matching limits apply per segment. File decoding accepts BOMs and common line
+endings separately from the UTF-8 parser.
+
+Results have private immutable state. Owner lists are deduplicated once and
+tags are prepared with each result. File and directory patterns share compiled
+tokens, ASCII literals use string equality, and rooted literal prefixes are
+checked once before wildcard matching. A section without exclusions stops at
+its winning rule. Sections with exclusions retain the scan needed for sticky
+exclusions. Owner unions allocate only when another section adds an owner;
+small lists use slices and large lists use a map, preserving declaration order.
+
 Directory queries use an explicit target: a trailing slash includes the package
 itself, terminal `/*` selects direct children, and other directory patterns can
-be inherited. No guessed filename determines the service.
-
-The port uses the same UTF-16 units, segment bounds, file loading and parsing
-diagnostics as the .NET algorithm. It has no additional path-level limit.
-Unicode overrides reconcile Go 1.26/1.27 with the recorded .NET reference.
-Review those tables, immutable getter contracts and diagnostics during updates.
-Malformed rules do not cause a file read failure; I/O errors remain retryable.
-The [parser guide](../../../docs/codeownership.md) lists the exact source,
-license, directory differences and update procedure.
-
-The performance adaptations in `codeownership` are local to this port. Shared
-compiled segments must stay immutable; file and directory globstar requirements
-remain separate. Rooted ASCII prefixes include a separator boundary check, and
-non-ASCII/wildcard matching still uses the original UTF-16 step limit. Stack
-scratch space is never retained by parsed rules or returned owners.
-
-GitLab sections stop at the first reversed match only when their compacted
-rules contain no exclusions. Union allocation is deferred until a new owner
-appears. Small unions scan a slice, switching to a map at 16 owners; large
-initial owner lists use the map even if later sections contribute only duplicates.
-This keeps stable order without introducing quadratic work. ASCII fast paths,
-role comparisons and unchanged pattern keys avoid temporary allocations.
-During synchronization, rerun the original specification/differential/Unicode
-corpora, directory boundary tests, large unions and concurrent-reader tests.
-Benchmarks and commands are in `docs/codeownership-performance.md`.
+be inherited. No guessed filename determines the service. File and service
+caches retain their process lifetimes. The [package guide](../../../docs/codeownership.md)
+describes the contracts and Go tests to keep during an SDK update.
 
 The CI bootstrap and `civisibility/utils/net/client.go` share the selected
 service. Preserve that binding during SDK updates: settings and telemetry must
@@ -613,8 +600,8 @@ not name a different service from events or logs. The new environment keys are
 registered in local `env/ci_service.go`, without editing the generated SDK map.
 The SDK base remains independently pinned.
 
-Checks: all 72 original parser test methods via `TestDotNetSpecification`,
-`TestDotNetDifferential`, `TestDotNetUnicodeProperties`, parser
+Checks: `TestGitHubRules`, `TestGitLabRules`, `TestRepositoryExamples`,
+`TestUnicodePaths`, `TestGoUnicodeSectionsAndOwners`, parser
 bounds/concurrency/discovery tests,
 `TestCodeOwnersPackageService`,
 `TestCodeOwnersServiceMissingInputs`, `TestCodeOwnersServiceCacheConcurrentReaders`,

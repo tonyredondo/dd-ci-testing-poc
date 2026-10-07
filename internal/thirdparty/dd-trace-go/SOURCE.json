@@ -6,13 +6,12 @@
   "version": "v2.12.0-dev.3.0.20261002145613-96aedb31048c",
   "module": "github.com/DataDog/dd-trace-go/v2",
   "licenses": [
-    "LICENSE",
-    "civisibility/codeownership/LICENSE"
+    "LICENSE"
   ],
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "d7c16ddfad63733530ab6dd618b00918d65a32e1464ff1d4701216e7c0ad2eb1",
+      "sha256": "66730bedd64e6a08af3cabb77d674197e99ec4e2923d3a0e28a00fe1b17a6dd4",
       "role": "local"
     },
     {
@@ -31,12 +30,12 @@
     },
     {
       "path": "README.md",
-      "sha256": "a55db20efe3f36923976e755db96c91a53fba3016d11aec8fddf49ed2a1a8b93",
+      "sha256": "62c952a03c9da440f72a6adfba5d35f7751d59d7acb0ac78c544c6b8d7bafd25",
       "role": "local"
     },
     {
       "path": "TESTS.json",
-      "sha256": "57f73c31e2ea676087b9651e59de0b56643c4700e73848d8b50d24f6786066ac",
+      "sha256": "4eb4b3ee239dc8ed5d14544230161cd95636d757cb22efd456cabf8f370d23e3",
       "role": "local"
     },
     {
@@ -68,146 +67,79 @@
       "source_sha256": "a46f72a63f56847040396580407ace35a18479800743376e87ea4773b76fa182"
     },
     {
-      "path": "civisibility/codeownership/LICENSE",
-      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-      "role": "license",
-      "source_path": "LICENSE",
-      "source_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-      "source_commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-      "source_repository": "https://github.com/DataDog/dd-trace-dotnet"
-    },
-    {
-      "path": "civisibility/codeownership/README.md",
-      "sha256": "73a3875d02440fc39a462ed3ddfc6a56ea7a97556823f43da1a067717437e936",
-      "role": "local"
-    },
-    {
       "path": "civisibility/codeownership/benchmark_test.go",
       "sha256": "888224c44f0f2c528a1b9d20cbfe757702ce9eb077425d4ae540156fd0b94680",
       "role": "local"
     },
     {
       "path": "civisibility/codeownership/codeowners.go",
-      "sha256": "4cc6e670d368dba9ca93f8f787ba9ef1f9cc2a2195304dcd1377e30c7830143d",
-      "role": "adapted",
-      "source_path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwners.cs",
-      "source_sha256": "4640fe6e3b9c35309723dc4ed9a0acc7722c9c16b3a492bd725359fb3d5fb279",
-      "source_commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-      "source_repository": "https://github.com/DataDog/dd-trace-dotnet"
+      "sha256": "55e60a135f6017a3ba506888c773b067071d7670a92514b6328a5b682f0d2bf7",
+      "role": "local"
     },
     {
       "path": "civisibility/codeownership/codeowners_test.go",
-      "sha256": "2ec095098975fe3731ce605243ca3fdd9c520b07e55299dc3637419c19d37335",
-      "role": "adapted",
-      "source_path": "tracer/test/Datadog.Trace.Tests/Ci/CodeOwnersSpecTests.cs",
-      "source_sha256": "5952c2e7b181eb08835691c3be133677c145f7e4fdc41dc634f334b1731c280f",
-      "source_commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-      "source_repository": "https://github.com/DataDog/dd-trace-dotnet"
+      "sha256": "1ec7a030cb3bb53c311018709e948b825e1fb2cf7eeda68cb61a5e3cf3345160",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/codeownership/example_test.go",
+      "sha256": "59aa94c4b728a6a1bfe63aabe468c7c830bbeaa6b8823b62c599c2bf7b75aec9",
+      "role": "local"
     },
     {
       "path": "civisibility/codeownership/file.go",
-      "sha256": "498da9a62de67d38a572a0a464d40520847970644de6e3390968d15a1aa5b4f0",
-      "role": "adapted",
-      "source_path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwners.cs",
-      "source_sha256": "4640fe6e3b9c35309723dc4ed9a0acc7722c9c16b3a492bd725359fb3d5fb279",
-      "source_commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-      "source_repository": "https://github.com/DataDog/dd-trace-dotnet"
+      "sha256": "587158d97e82e2429439a08dfd7658e9dae5bd71aac0c3ea335a990b43f67df6",
+      "role": "local"
     },
     {
       "path": "civisibility/codeownership/github.go",
-      "sha256": "e2451a08db6631b71add471068bfae3610f943cca3d1bbc6091e818689b10616",
-      "role": "adapted",
-      "source_path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwners.GitHub.cs",
-      "source_sha256": "58049ddc09e1f3a6443355ff733977d64a0079a1f8fd95a9b6e465ada3dfc6f5",
-      "source_commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-      "source_repository": "https://github.com/DataDog/dd-trace-dotnet"
+      "sha256": "27967b451f167196a446197de6deacd66f46be3d27bda5ee5fa25688efdec2dc",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/codeownership/github_test.go",
+      "sha256": "21b723aadd07db8d4b6462394a4e2f4f530ce2bc1646e51a9f47b4712b5f0015",
+      "role": "local"
     },
     {
       "path": "civisibility/codeownership/gitlab.go",
-      "sha256": "f0ae12fcdd491ab9b1f602284a30c4a68e2e115300572c6fbf3daa3a4759b185",
-      "role": "adapted",
-      "source_path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwners.GitLab.cs",
-      "source_sha256": "968bf4e5d435bd221ae22178553a7b8ad074e3e0f4b042c8c7e1a7c2ca01c082",
-      "source_commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-      "source_repository": "https://github.com/DataDog/dd-trace-dotnet"
+      "sha256": "392d09febe833710251434420254c913c0d17acfb1ca5c94c753f84a6b581433",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/codeownership/gitlab_test.go",
+      "sha256": "bb6c1a2132efbabe33a632685424b436998f898ba38f32f3e799ae80ebd8022d",
+      "role": "local"
     },
     {
       "path": "civisibility/codeownership/glob.go",
-      "sha256": "d7bedd0c9932f079a323bef17c4f2d223639f9c092b0fce7fd082a1992a75443",
-      "role": "adapted",
-      "source_path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwners.cs",
-      "source_sha256": "4640fe6e3b9c35309723dc4ed9a0acc7722c9c16b3a492bd725359fb3d5fb279",
-      "source_commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-      "source_repository": "https://github.com/DataDog/dd-trace-dotnet"
+      "sha256": "a84916a143e0244e03e2713e7fcdd96fd79eaf52d3abcefdc3842dced35e3588",
+      "role": "local"
     },
     {
       "path": "civisibility/codeownership/locator.go",
-      "sha256": "56404096d0eba31b2152ced2f349d3b96eee8cb6df5bbf525791762d6d280384",
-      "role": "adapted",
-      "source_path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwnersFileLocator.cs",
-      "source_sha256": "e60907d21b80e85940090a8d6103362b8e675d93f31a108d5b72f750cbc7d612",
-      "source_commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-      "source_repository": "https://github.com/DataDog/dd-trace-dotnet"
+      "sha256": "697714464a8a1c661fc21222a4954ce192823ab45842ea004ad298b5b058b019",
+      "role": "local"
     },
     {
       "path": "civisibility/codeownership/locator_test.go",
       "sha256": "6a19cabb6e6fe09188f92cd5f7cca7ee016f19886980f376d33854caf08a893b",
-      "role": "adapted",
-      "source_path": "tracer/test/Datadog.Trace.Tests/Ci/CodeOwnersFallbackTests.cs",
-      "source_sha256": "527a4b79410f67a1b6d05445a14cc94023245741760d62f4d1ce233afa073692",
-      "source_commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-      "source_repository": "https://github.com/DataDog/dd-trace-dotnet"
-    },
-    {
-      "path": "civisibility/codeownership/testdata/CODEOWNERS_GITHUB",
-      "sha256": "a26ac21e8ac2f4e88a9e178da73f8617a97e6c6ff9a5d4da4040e9e1090baea5",
-      "role": "adapted",
-      "source_path": "tracer/test/Datadog.Trace.ClrProfiler.IntegrationTests/CI/Data/CODEOWNERS_GITHUB",
-      "source_sha256": "a26ac21e8ac2f4e88a9e178da73f8617a97e6c6ff9a5d4da4040e9e1090baea5",
-      "source_commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-      "source_repository": "https://github.com/DataDog/dd-trace-dotnet"
-    },
-    {
-      "path": "civisibility/codeownership/testdata/CODEOWNERS_GITLAB",
-      "sha256": "673856054dc5e608bbddabb9a9bdc9113eb1db193c55ae45bf72441b87e5dde4",
-      "role": "adapted",
-      "source_path": "tracer/test/Datadog.Trace.ClrProfiler.IntegrationTests/CI/Data/CODEOWNERS_GITLAB",
-      "source_sha256": "673856054dc5e608bbddabb9a9bdc9113eb1db193c55ae45bf72441b87e5dde4",
-      "source_commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-      "source_repository": "https://github.com/DataDog/dd-trace-dotnet"
-    },
-    {
-      "path": "civisibility/codeownership/testdata/dotnet-differential.json.gz",
-      "sha256": "253a1755d9f27801e7ef62858fd18f792e1b77edefcd4cf34912c28e6f6b5a79",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/testdata/dotnet-spec.json.gz",
-      "sha256": "28f8b6d3689e3d92dd4e59d575fe7af54ea61ec47631daca0ae079d0c6de6c56",
-      "role": "adapted",
-      "source_path": "tracer/test/Datadog.Trace.Tests/Ci/CodeOwnersSpecTests.cs",
-      "source_sha256": "5952c2e7b181eb08835691c3be133677c145f7e4fdc41dc634f334b1731c280f",
-      "source_commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-      "source_repository": "https://github.com/DataDog/dd-trace-dotnet"
-    },
-    {
-      "path": "civisibility/codeownership/testdata/dotnet-tests.json",
-      "sha256": "92e4103fccfec584d28c1a54892fa567ae8f757582e1d6fd0db052b3db0094e4",
+      "path": "civisibility/codeownership/rule_cases_test.go",
+      "sha256": "4390048d5fad97c0886988a5af173d66b4c6a8b20cdac56223517c23cea2bd44",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/testdata/dotnet-unicode.json.gz",
-      "sha256": "e934f11696da164b52ccf5e4d772df931fbfc6b89b244f3247245c9c01e61153",
+      "path": "civisibility/codeownership/testdata/github.CODEOWNERS",
+      "sha256": "86db2d5d90cb4a7af6a5a75cbd604b7aadbacbada2703b06fbff073213c3ca97",
       "role": "local"
     },
     {
-      "path": "civisibility/codeownership/unicode.go",
-      "sha256": "2046ca5b693371ce049a41507e9fd8773b8df403cf9aed6cffd3d3ff22cedd98",
-      "role": "adapted",
-      "source_path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwners.GitLab.cs",
-      "source_sha256": "968bf4e5d435bd221ae22178553a7b8ad074e3e0f4b042c8c7e1a7c2ca01c082",
-      "source_commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-      "source_repository": "https://github.com/DataDog/dd-trace-dotnet"
+      "path": "civisibility/codeownership/testdata/gitlab.CODEOWNERS",
+      "sha256": "bcf8e8d80fddd82bef2efc0659c1da91d7fb1234127d15dc118137df5913fe94",
+      "role": "local"
     },
     {
       "path": "civisibility/constants/ci.go",
@@ -2263,80 +2195,6 @@
           "source_sha256": "143475d3970c0ded6bbe602dc79906669a4538e312d159e318348bc374b72791"
         }
       ]
-    },
-    {
-      "name": "codeownership-dotnet",
-      "repository": "https://github.com/DataDog/dd-trace-dotnet",
-      "default_branch": "master",
-      "commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-      "files": [
-        {
-          "path": "civisibility/codeownership/LICENSE",
-          "source_path": "LICENSE",
-          "source_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
-        },
-        {
-          "path": "civisibility/codeownership/codeowners.go",
-          "source_path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwners.cs",
-          "source_sha256": "4640fe6e3b9c35309723dc4ed9a0acc7722c9c16b3a492bd725359fb3d5fb279"
-        },
-        {
-          "path": "civisibility/codeownership/codeowners_test.go",
-          "source_path": "tracer/test/Datadog.Trace.Tests/Ci/CodeOwnersSpecTests.cs",
-          "source_sha256": "5952c2e7b181eb08835691c3be133677c145f7e4fdc41dc634f334b1731c280f"
-        },
-        {
-          "path": "civisibility/codeownership/github.go",
-          "source_path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwners.GitHub.cs",
-          "source_sha256": "58049ddc09e1f3a6443355ff733977d64a0079a1f8fd95a9b6e465ada3dfc6f5"
-        },
-        {
-          "path": "civisibility/codeownership/gitlab.go",
-          "source_path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwners.GitLab.cs",
-          "source_sha256": "968bf4e5d435bd221ae22178553a7b8ad074e3e0f4b042c8c7e1a7c2ca01c082"
-        },
-        {
-          "path": "civisibility/codeownership/glob.go",
-          "source_path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwners.cs",
-          "source_sha256": "4640fe6e3b9c35309723dc4ed9a0acc7722c9c16b3a492bd725359fb3d5fb279"
-        },
-        {
-          "path": "civisibility/codeownership/locator.go",
-          "source_path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwnersFileLocator.cs",
-          "source_sha256": "e60907d21b80e85940090a8d6103362b8e675d93f31a108d5b72f750cbc7d612"
-        },
-        {
-          "path": "civisibility/codeownership/locator_test.go",
-          "source_path": "tracer/test/Datadog.Trace.Tests/Ci/CodeOwnersFallbackTests.cs",
-          "source_sha256": "527a4b79410f67a1b6d05445a14cc94023245741760d62f4d1ce233afa073692"
-        },
-        {
-          "path": "civisibility/codeownership/file.go",
-          "source_path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwners.cs",
-          "source_sha256": "4640fe6e3b9c35309723dc4ed9a0acc7722c9c16b3a492bd725359fb3d5fb279"
-        },
-        {
-          "path": "civisibility/codeownership/unicode.go",
-          "source_path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwners.GitLab.cs",
-          "source_sha256": "968bf4e5d435bd221ae22178553a7b8ad074e3e0f4b042c8c7e1a7c2ca01c082"
-        },
-        {
-          "path": "civisibility/codeownership/testdata/dotnet-spec.json.gz",
-          "source_path": "tracer/test/Datadog.Trace.Tests/Ci/CodeOwnersSpecTests.cs",
-          "source_sha256": "5952c2e7b181eb08835691c3be133677c145f7e4fdc41dc634f334b1731c280f"
-        },
-        {
-          "path": "civisibility/codeownership/testdata/CODEOWNERS_GITHUB",
-          "source_path": "tracer/test/Datadog.Trace.ClrProfiler.IntegrationTests/CI/Data/CODEOWNERS_GITHUB",
-          "source_sha256": "a26ac21e8ac2f4e88a9e178da73f8617a97e6c6ff9a5d4da4040e9e1090baea5"
-        },
-        {
-          "path": "civisibility/codeownership/testdata/CODEOWNERS_GITLAB",
-          "source_path": "tracer/test/Datadog.Trace.ClrProfiler.IntegrationTests/CI/Data/CODEOWNERS_GITLAB",
-          "source_sha256": "673856054dc5e608bbddabb9a9bdc9113eb1db193c55ae45bf72441b87e5dde4"
-        }
-      ],
-      "adaptations": "Private immutable ownership and valid JSON tags; precompiled character classes; explicit package-directory target. UTF-16 matching, bounds, owner extraction and diagnostics are checked against the complete frozen .NET parser suite; Go source-path resolution remains separate."
     }
   ]
 }

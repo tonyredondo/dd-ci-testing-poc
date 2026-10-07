@@ -312,11 +312,11 @@ Testify contract, validation inventory and performance guide together.
 
 ## CODEOWNERS source updates
 
-The CODEOWNERS parser has a separate dd-trace-dotnet revision in the
-`feature_ports` entry named `codeownership-dotnet`. Its [update guide](codeownership.md)
-records host semantics, source mappings, licenses and validation. Select that
-revision with `--source-commit`; the SDK archive remains the input for CI
-adapter updates.
+`civisibility/codeownership` is maintained with the SDK code and recorded as
+local additions until an upstream Go revision includes it. The
+[package guide](codeownership.md) describes matching, Unicode behavior and
+checks. Update it through the same SDK workflow; keep the Go rule tables,
+examples and wire tests alongside the implementation.
 
 ## Fuzz and Examples source updates
 

@@ -1,6 +1,5 @@
 // Copyright 2017 Datadog, Inc. Licensed under the Apache License, Version 2.0.
 // Go adaptation Copyright 2026 Datadog, Inc.
-// Derived from dd-trace-dotnet CodeOwnership; see README.md for the frozen source.
 
 // Package codeownership parses GitHub and GitLab CODEOWNERS and resolves
 // immutable ownership for repository-relative files and package directories.
@@ -88,7 +87,7 @@ type section struct {
 	hasExclusions bool
 }
 
-// Diagnostics reports malformed rules and headers. As in .NET, an ignored
+// Diagnostics reports malformed rules and headers. An ignored
 // oversized GitHub file has no parsing diagnostics.
 func (c *CodeOwners) Diagnostics() int {
 	if c == nil {
@@ -120,7 +119,7 @@ func Load(filename string, dialect Dialect) (*CodeOwners, error) {
 	return parseFile(file, dialect)
 }
 
-// Parse compiles decoded UTF-8 lines separated by LF, like .NET Parse(lines).
+// Parse compiles UTF-8 rules separated by LF.
 // File encoding, BOMs and file-size limits belong to Load. Lines have no 64 KiB limit.
 // A read failure never returns a partially parsed ruleset.
 func Parse(reader io.Reader, dialect Dialect) (*CodeOwners, error) {
@@ -323,5 +322,5 @@ func compileRule(pattern string, dialect Dialect, owners []string, exclusion boo
 	return rule{glob: file, directoryGlob: directory, ownership: newOwnership(owners), exclusion: exclusion}, true
 }
 
-// ownerSeparator matches the frozen upstream space/tab owner tokenizer.
+// Owner tokens are separated by ASCII spaces or tabs.
 func ownerSeparator(r rune) bool { return r == ' ' || r == '\t' }

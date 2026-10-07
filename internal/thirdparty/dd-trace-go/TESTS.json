@@ -75,7 +75,7 @@
       "source_sha256": "017d81ee71314d617983dbdeb6e1f373efa6ddb53c041e1805ab6c078a9b8219",
       "adapted_sha256": "7b6ad6695080fa5ab820d377a3bf863dc76cbf21e1003095b1262ddbdfb063cf",
       "kind": "selected",
-      "adaptation": "Discovery/cache assertions retained through the new resolver. Parser expectations move to codeownership tests, using the frozen .NET specification. Correct GitHub interior slash anchoring, host location priority, comments, GitLab defaults/exclusions and valid long-line handling. Mutable Entry/Section tests are replaced by immutable ownership tests."
+      "adaptation": "Discovery/cache assertions retained through the new resolver. Parser expectations move to codeownership tests, using native Go rule tables and examples. Correct GitHub interior slash anchoring, host location priority, comments, GitLab defaults/exclusions and valid long-line handling. Mutable Entry/Section tests are replaced by immutable ownership tests."
     },
     {
       "source": "internal/civisibility/utils/environmentTags_test.go",
@@ -695,21 +695,11 @@
       "additional_combinations": "Manual/automatic entrypoints and normal/deferred delivery; additional goleak/coverage cases are local regressions"
     }
   ],
-  "codeownership_dotnet": {
-    "repository": "https://github.com/DataDog/dd-trace-dotnet",
-    "commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
-    "specification_source": "tracer/test/Datadog.Trace.Tests/Ci/CodeOwnersSpecTests.cs",
-    "specification_source_sha256": "5952c2e7b181eb08835691c3be133677c145f7e4fdc41dc634f334b1731c280f",
-    "fixture": "internal/thirdparty/dd-trace-go/civisibility/codeownership/testdata/dotnet-spec.json.gz",
-    "dynamic_cases": "codeowners_test.go: original recorded workloads and diagnostics, missing files, bounded concurrent matching, large tokens/headers/lines, duplicate compaction, immutable results, UTF-16 approvals, file encodings and line endings",
-    "discovery_cases": "locator_test.go: dialect and location priority, repository/worktree roots, workspace rebasing, traversal rejection, read errors and stable decisions",
-    "integration": "integration/codeowners_service_test.go: actual owner/service payloads, normal/deferred delivery, compiled binaries, coverage, race, trimpath, Testify and goleak",
-    "adaptations": "Go strings are non-nullable; owner results are immutable and JSON-escaped; explicit package directory queries. Parser/matcher expectations retain original owner order and parsing diagnostics. .NET-specific CI source-path tests are separate from the parser scope.",
-    "upstream_methods": 72,
-    "original_test_executions": 137,
-    "inventory": "internal/thirdparty/dd-trace-go/civisibility/codeownership/testdata/dotnet-tests.json",
-    "reference_harness": "scripts/codeownership/generate.py",
-    "differential_rulesets": 1800,
-    "differential_file_queries": 18000
+  "local_codeownership_checks": {
+    "rule_tables": "civisibility/codeownership/github_test.go and gitlab_test.go: GitHub/GitLab rule precedence, owners, sections, exclusions, escaping, globstars, classes and diagnostics",
+    "go_examples": "civisibility/codeownership/example_test.go and testdata: public API example, Go package ownership, rune-based wildcards, Go Unicode casing and email owners",
+    "boundaries": "civisibility/codeownership/codeowners_test.go: immutable results, concurrent readers, missing files, bounded matching, large tokens/headers/lines, duplicate compaction, encodings and line endings",
+    "discovery": "civisibility/codeownership/locator_test.go: host locations, repository/worktree roots, workspace rebasing, traversal rejection, read errors and stable decisions",
+    "integration": "integration/codeowners_service_test.go: actual owner/service payloads, normal/deferred delivery, compiled binaries, coverage, race, trimpath, Testify and goleak"
   }
 }

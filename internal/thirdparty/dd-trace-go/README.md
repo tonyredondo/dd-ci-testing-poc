@@ -10,9 +10,9 @@
 - Fuzz/Examples feature port: [PR #5442](https://github.com/DataDog/dd-trace-go/pull/5442),
   `7b32e1812cb5c1fb807a63cc5042750f3d3cd672`, recorded separately in `feature_ports`.
 
-The [CODEOWNERS parser](civisibility/codeownership/README.md) is a separate
-port from dd-trace-dotnet at `843640c32bae5fe6dcdf790906f6431fe15f6973`.
-Its source records and Apache-2.0 license remain independent of the SDK base.
+The [CODEOWNERS package](../../../docs/codeownership.md) is maintained here
+with the SDK's CI Visibility code. It is registered as local SDK additions
+until an upstream Go revision includes it.
 
 ## Layout and adaptations
 

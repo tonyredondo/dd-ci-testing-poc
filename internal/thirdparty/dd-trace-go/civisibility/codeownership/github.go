@@ -1,6 +1,5 @@
 // Copyright 2017 Datadog, Inc. Licensed under the Apache License, Version 2.0.
 // Go adaptation Copyright 2026 Datadog, Inc.
-// Port of CodeOwners.GitHub.cs; see README.md.
 package codeownership
 
 import "strings"

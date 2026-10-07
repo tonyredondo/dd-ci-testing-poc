@@ -10,8 +10,7 @@ import (
 	"unicode/utf16"
 )
 
-// File.ReadLines in .NET detects BOMs; Parse(IEnumerable<string>) does not.
-// Keep file decoding separate from parsing so both entry points agree.
+// Decode file encodings before parsing. A BOM is recognized only at file start.
 func parseFile(reader io.Reader, dialect Dialect) (*CodeOwners, error) {
 	r := bufio.NewReader(reader)
 	prefix, _ := r.Peek(4)
@@ -58,7 +57,7 @@ func parseFile(reader io.Reader, dialect Dialect) (*CodeOwners, error) {
 	return Parse(&fileLineReader{reader: strings.NewReader(decoded.String())}, dialect)
 }
 
-// StreamReader.ReadLine recognizes CR, LF and CRLF, including across reads.
+// Normalize CR, LF and CRLF, including across reads.
 // Translate only file input; Parse accepts the caller's already decoded lines.
 type fileLineReader struct {
 	reader  io.Reader

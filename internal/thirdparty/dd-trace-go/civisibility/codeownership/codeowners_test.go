@@ -3,9 +3,7 @@
 package codeownership
 
 import (
-	"compress/gzip"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,133 +18,6 @@ import (
 	"unicode/utf16"
 )
 
-// The corpus records every parser call made by the original .NET spec suite.
-// Original assertions are executed before its expectations are exported.
-func TestDotNetSpecification(t *testing.T) { checkDotNetCorpus(t, "testdata/dotnet-spec.json.gz") }
-func TestDotNetDifferential(t *testing.T) {
-	checkDotNetCorpus(t, "testdata/dotnet-differential.json.gz")
-}
-func checkDotNetCorpus(t *testing.T, filename string) {
-	t.Helper()
-	file, err := os.Open(filename)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer file.Close()
-	reader, err := gzip.NewReader(file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer reader.Close()
-	var corpus struct {
-		Runs    []struct{ Name, Status string }
-		Inputs  []struct{ Name, Dialect, Mode, Rules string }
-		Queries []struct {
-			Input       int
-			Path        *string
-			Owners      []string
-			Diagnostics int
-			HasPath     bool
-		}
-	}
-	if err := json.NewDecoder(reader).Decode(&corpus); err != nil {
-		t.Fatal(err)
-	}
-	seen := make(map[string]bool)
-	for index, input := range corpus.Inputs {
-		t.Run(fmt.Sprintf("%s/%03d", input.Name, index), func(t *testing.T) {
-			seen[input.Name] = true
-			started := time.Now()
-			defer func() {
-				if elapsed := time.Since(started); elapsed > 10*time.Second {
-					t.Fatalf("upstream work bound exceeded: %s", elapsed)
-				}
-			}()
-			dialect := GitHub
-			if input.Dialect == "GitLab" {
-				dialect = GitLab
-			}
-			var rules *CodeOwners
-			if input.Mode == "load" {
-				filename := filepath.Join(t.TempDir(), "CODEOWNERS")
-				if err = os.WriteFile(filename, []byte(input.Rules), 0600); err != nil {
-					t.Fatal(err)
-				}
-				rules, err = Load(filename, dialect)
-			} else {
-				rules, err = Parse(strings.NewReader(input.Rules), dialect)
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, query := range corpus.Queries {
-				if query.Input != index {
-					continue
-				}
-				if rules.Diagnostics() != query.Diagnostics {
-					t.Fatalf("diagnostics=%d want=%d", rules.Diagnostics(), query.Diagnostics)
-				}
-				if !query.HasPath {
-					continue
-				}
-				// Go strings have no null value. The upstream null test uses the empty
-				// query on its catch-all rules; nil rules are tested separately below.
-				value := ""
-				if query.Path != nil {
-					value = *query.Path
-				}
-				owners, _ := rules.Match(value)
-				if !equalOwners(owners.Owners(), query.Owners) {
-					t.Fatalf("path=%q owners=%v want=%v", value, owners.Owners(), query.Owners)
-				}
-			}
-		})
-	}
-	if len(corpus.Runs) != 0 {
-		data, err := os.ReadFile("testdata/dotnet-tests.json")
-		if err != nil {
-			t.Fatal(err)
-		}
-		var inventory struct {
-			UpstreamMethods  []string `json:"upstream_methods"`
-			OriginalTestRuns int      `json:"original_test_runs"`
-		}
-		if err := json.Unmarshal(data, &inventory); err != nil {
-			t.Fatal(err)
-		}
-		methods := make(map[string]bool)
-		for _, run := range corpus.Runs {
-			methods[run.Name] = true
-		}
-		if len(corpus.Runs) != inventory.OriginalTestRuns || len(methods) != len(inventory.UpstreamMethods) {
-			t.Fatal("the original .NET suite is incomplete")
-		}
-		for _, name := range inventory.UpstreamMethods {
-			if !methods[name] {
-				t.Fatalf("upstream method missing: %s", name)
-			}
-		}
-	}
-	for _, run := range corpus.Runs {
-		if run.Status != "passed" {
-			t.Fatalf("unverified upstream test: %s", run.Name)
-		}
-		if !seen[run.Name] && run.Name != "TryLoadReturnsFalseWhenCodeOwnersDisappearsBeforeOpening" {
-			t.Fatalf("upstream test missing from corpus: %s", run.Name)
-		}
-	}
-}
-func equalOwners(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
 func TestTheoryAndBoundaryCases(t *testing.T) {
 	for _, tc := range []struct {
 		name, rules, path string
@@ -181,14 +52,14 @@ func TestTheoryAndBoundaryCases(t *testing.T) {
 				t.Fatal(err)
 			}
 			got, _ := c.Match(tc.path)
-			if !equalOwners(got.Owners(), tc.owners) {
+			if !slices.Equal(got.Owners(), tc.owners) {
 				t.Fatalf("got %v want %v", got.Owners(), tc.owners)
 			}
 		})
 	}
 	for _, role := range []string{"@@developer", "@@developers", "@@maintainer", "@@maintainers", "@@owner", "@@OwNeRs"} {
-		c, _ := Parse(strings.NewReader("*.cs "+role), GitLab)
-		got, _ := c.Match("/file.cs")
+		c, _ := Parse(strings.NewReader("*.go "+role), GitLab)
+		got, _ := c.Match("/file.go")
 		if got.FirstOwner() != role {
 			t.Fatalf("role=%q owners=%v", role, got.Owners())
 		}
@@ -230,7 +101,7 @@ func TestDiagnostics(t *testing.T) {
 		{"[Docs]] @leaked\nREADME.md", GitLab, 2},
 		{"[Docs][x] @leaked\nREADME.md", GitLab, 2},
 		{"[   ] @blank\nREADME.md", GitLab, 1},
-		{"[Broken", GitLab, 1}, {"*.cs @@banana @valid", GitLab, 1},
+		{"[Broken", GitLab, 1}, {"*.go @@banana @valid", GitLab, 1},
 		{"!*.rb malformed@", GitLab, 0}, {"*.go", GitLab, 1},
 	} {
 		t.Run(tc.rules, func(t *testing.T) {
@@ -423,7 +294,7 @@ func TestPathologicalMatchingAndLargeOwnerLists(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		t.Fatal("concurrent matching exceeded the upstream timeout")
+		t.Fatal("concurrent matching exceeded the matching timeout")
 	}
 	c, _ = Parse(strings.NewReader("* @global\n*"+strings.Repeat("a", 256)+"b @slow"), GitHub)
 	got, _ = c.Match("/" + strings.Repeat("a", 2000) + "b")
@@ -431,19 +302,19 @@ func TestPathologicalMatchingAndLargeOwnerLists(t *testing.T) {
 		t.Fatal("match work limit was not applied")
 	}
 	var text strings.Builder
-	text.WriteString("*.cs")
+	text.WriteString("*.go")
 	for i := range 5000 {
 		fmt.Fprintf(&text, " @owner%d", i)
 	}
 	c, _ = Parse(strings.NewReader(text.String()), GitHub)
 	for range 20 {
-		got, _ := c.Match("/file.cs")
+		got, _ := c.Match("/file.go")
 		if len(got.owners) != 5000 {
 			t.Fatal(len(got.owners))
 		}
 	}
 	var absent *CodeOwners
-	if _, ok := absent.Match("/file.cs"); ok {
+	if _, ok := absent.Match("/file.go"); ok {
 		t.Fatal("nil rules matched")
 	}
 }
@@ -480,33 +351,7 @@ func TestBOMOnlyAtFileStart(t *testing.T) {
 	}
 }
 
-func TestDotNetUnicodeProperties(t *testing.T) {
-	file, err := os.Open("testdata/dotnet-unicode.json.gz")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer file.Close()
-	reader, err := gzip.NewReader(file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer reader.Close()
-	var facts [][3]int
-	if err = json.NewDecoder(reader).Decode(&facts); err != nil {
-		t.Fatal(err)
-	}
-	for _, fact := range facts {
-		char := rune(fact[0])
-		if upper := invariantUpper(char); upper != rune(fact[1]) {
-			t.Fatalf("upper U+%04X: got U+%04X want U+%04X", char, upper, fact[1])
-		}
-		if char <= 0xffff && int(unitClasses(uint16(char))) != fact[2] {
-			t.Fatalf("classification U+%04X: got %d want %d", char, unitClasses(uint16(char)), fact[2])
-		}
-	}
-}
-
-func TestDotNetFileEncodingsAndLines(t *testing.T) {
+func TestFileEncodingsAndLines(t *testing.T) {
 	text := "* @fallback\r*.go @go\r\n*.md @docs\n"
 	for _, encoding := range []string{"utf8", "utf8-bom", "utf16-le", "utf16-be", "utf32-le", "utf32-be"} {
 		t.Run(encoding, func(t *testing.T) {
@@ -564,7 +409,7 @@ func TestDotNetFileEncodingsAndLines(t *testing.T) {
 	}
 	owners, _ = c.Match("/a.go")
 	if owners.FirstOwner() != "" {
-		t.Fatal("Parse removed an upstream literal BOM")
+		t.Fatal("Parse removed a literal BOM")
 	}
 	for _, text := range []string{"a\r\nb\r\rc\nd", "a\r\n", "\r\n"} {
 		reader := &fileLineReader{reader: strings.NewReader(text)}
@@ -583,19 +428,6 @@ func TestDotNetFileEncodingsAndLines(t *testing.T) {
 		want := strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
 		if output.String() != want {
 			t.Fatalf("line endings: %q want %q", output.String(), want)
-		}
-	}
-}
-
-func TestDotNetApprovalDigitsUseCharUnits(t *testing.T) {
-	for _, number := range []string{"𝟙", "𞓰"} {
-		c, err := Parse(strings.NewReader("[Docs]["+number+"] @team\n*.go"), GitLab)
-		if err != nil {
-			t.Fatal(err)
-		}
-		owners, _ := c.Match("/a.go")
-		if owners.FirstOwner() != "" || c.Diagnostics() != 2 {
-			t.Fatalf("number=%q owners=%v diagnostics=%d; .NET expects no owners and two diagnostics", number, owners.Owners(), c.Diagnostics())
 		}
 	}
 }

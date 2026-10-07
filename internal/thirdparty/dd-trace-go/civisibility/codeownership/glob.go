@@ -1,11 +1,9 @@
 // Copyright 2017 Datadog, Inc. Licensed under the Apache License, Version 2.0.
 // Go adaptation Copyright 2026 Datadog, Inc.
-// Port of the compiled segment matcher in CodeOwners.cs; see README.md.
 package codeownership
 
 import (
 	"strings"
-	"unicode/utf16"
 	"unicode/utf8"
 )
 
@@ -23,11 +21,11 @@ type globSegment struct {
 }
 type segmentToken struct {
 	kind    byte
-	literal uint16
-	ranges  []unitRange
+	literal rune
+	ranges  []runeRange
 	negated bool
 }
-type unitRange struct{ start, end uint16 }
+type runeRange struct{ start, end rune }
 
 // File and directory targets share immutable compiled tokens. Their globstar
 // requirements differ, so only the small segment lists are copied.
@@ -100,9 +98,8 @@ func compileGlobs(pattern string, dialect Dialect) (globPattern, globPattern, bo
 	return file, directory, true
 }
 
-// ASCII literals need no token array or UTF-16 conversion. Equality has the
-// same result here: a valid literal is at most 1,024 units, below the step bound.
-// Escapes, wildcards and non-ASCII retain the char-unit matcher.
+// ASCII literals need no token array. Escapes, wildcards and non-ASCII use
+// compiled rune tokens; matching never allocates a copy of the path.
 func compilePathSegment(pattern string, dialect Dialect) (globSegment, bool) {
 	literal := len(pattern) != 0
 	for i := 0; i < len(pattern); i++ {
@@ -236,21 +233,27 @@ func nextSegment(value string, end int) int {
 }
 
 func compileSegment(pattern string, dialect Dialect) ([]segmentToken, bool) {
-	var storage [64]uint16
-	units := utf16Units(pattern, storage[:])
-	if len(units) > maximumPatternLength {
+	var storage [64]rune
+	chars := storage[:0]
+	for _, char := range pattern {
+		if len(chars) == maximumPatternLength {
+			return nil, false
+		}
+		chars = append(chars, char)
+	}
+	if len(chars) > maximumPatternLength {
 		return nil, false
 	}
-	tokens := make([]segmentToken, 0, len(units))
-	for i := 0; i < len(units); i++ {
-		char := units[i]
+	tokens := make([]segmentToken, 0, len(chars))
+	for i := 0; i < len(chars); i++ {
+		char := chars[i]
 		switch char {
 		case '\\':
 			i++
-			if i == len(units) {
+			if i == len(chars) {
 				return nil, false
 			}
-			tokens = append(tokens, segmentToken{kind: 'l', literal: units[i]})
+			tokens = append(tokens, segmentToken{kind: 'l', literal: chars[i]})
 		case '*':
 			if len(tokens) == 0 || tokens[len(tokens)-1].kind != '*' {
 				tokens = append(tokens, segmentToken{kind: '*'})
@@ -259,7 +262,7 @@ func compileSegment(pattern string, dialect Dialect) ([]segmentToken, bool) {
 			tokens = append(tokens, segmentToken{kind: '?'})
 		case '[':
 			if dialect == GitLab {
-				token, end, state := compileClass(units, i)
+				token, end, state := compileClass(chars, i)
 				if state < 0 {
 					return nil, false
 				}
@@ -278,7 +281,7 @@ func compileSegment(pattern string, dialect Dialect) ([]segmentToken, bool) {
 }
 
 // state is zero for a literal unclosed [, negative for an invalid class.
-func compileClass(pattern []uint16, start int) (segmentToken, int, int) {
+func compileClass(pattern []rune, start int) (segmentToken, int, int) {
 	token := segmentToken{kind: '['}
 	atom := start + 1
 	if atom < len(pattern) && (pattern[atom] == '!' || pattern[atom] == '^') {
@@ -313,16 +316,16 @@ func compileClass(pattern []uint16, start int) (segmentToken, int, int) {
 				if a > b {
 					return token, 0, -1
 				}
-				token.ranges = append(token.ranges, unitRange{a, b})
+				token.ranges = append(token.ranges, runeRange{a, b})
 				atom = end
 				continue
 			}
 		}
-		token.ranges = append(token.ranges, unitRange{a, a})
+		token.ranges = append(token.ranges, runeRange{a, a})
 	}
 	return token, close, 1
 }
-func classAtom(pattern []uint16, index, close int) (uint16, bool, int) {
+func classAtom(pattern []rune, index, close int) (rune, bool, int) {
 	escaped := pattern[index] == '\\' && index+1 < close
 	if escaped {
 		index++
@@ -330,37 +333,24 @@ func classAtom(pattern []uint16, index, close int) (uint16, bool, int) {
 	return pattern[index], escaped, index + 1
 }
 
-// utf16Cursor reads .NET char units without allocating a UTF-16 copy of a path.
-// A cursor can be copied when a wildcard remembers its last retry position.
-type utf16Cursor struct {
-	offset int
-	low    uint16
-}
+// A cursor keeps a UTF-8 byte offset. Copying it preserves a wildcard's retry
+// position without allocating a rune slice for each query.
+type runeCursor struct{ offset int }
 
-func (c utf16Cursor) hasNext(value string) bool { return c.low != 0 || c.offset < len(value) }
-func (c *utf16Cursor) next(value string) uint16 {
-	if c.low != 0 {
-		unit := c.low
-		c.low = 0
-		return unit
-	}
+func (c runeCursor) hasNext(value string) bool { return c.offset < len(value) }
+func (c *runeCursor) next(value string) rune {
 	if value[c.offset] < utf8.RuneSelf {
-		unit := value[c.offset]
+		char := rune(value[c.offset])
 		c.offset++
-		return uint16(unit)
+		return char
 	}
-	r, size := utf8.DecodeRuneInString(value[c.offset:])
+	char, size := utf8.DecodeRuneInString(value[c.offset:])
 	c.offset += size
-	if r > 0xffff {
-		hi, lo := utf16.EncodeRune(r)
-		c.low = uint16(lo)
-		return uint16(hi)
-	}
-	return uint16(r)
+	return char
 }
 func matchSegment(tokens []segmentToken, value string) bool {
 	ti, star := 0, -1
-	var cursor, starPath utf16Cursor
+	var cursor, starPath runeCursor
 	steps := maximumMatchSteps
 	for cursor.hasNext(value) {
 		steps--
@@ -392,7 +382,7 @@ func matchSegment(tokens []segmentToken, value string) bool {
 	}
 	return ti == len(tokens)
 }
-func (t segmentToken) matches(char uint16) bool {
+func (t segmentToken) matches(char rune) bool {
 	switch t.kind {
 	case '?':
 		return true

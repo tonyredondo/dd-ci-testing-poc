@@ -1,6 +1,5 @@
 // Copyright 2017 Datadog, Inc. Licensed under the Apache License, Version 2.0.
 // Go adaptation Copyright 2026 Datadog, Inc.
-// Port of CodeOwners.GitLab.cs; see README.md.
 package codeownership
 
 import (
@@ -8,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf16"
 	"unicode/utf8"
 )
 
@@ -29,7 +27,7 @@ func (p *gitLabParser) parseLine(raw string, diagnostics *int) {
 			return
 		}
 		p.defaults = defaults
-		key := foldSectionName(name)
+		key := strings.ToUpper(name)
 		index, found := p.named[key]
 		if !found {
 			index = len(p.sections)
@@ -169,14 +167,13 @@ func parseSectionHeader(raw string) (string, []string, bool, bool) {
 	}
 	return name, owners, true, bad || !strict || end < len(raw) || !valid
 }
-func sectionDigit(r rune) bool { return r <= 0xffff && unitClasses(uint16(r))&2 != 0 }
+func sectionDigit(r rune) bool { return unicode.IsDigit(r) }
 func sectionOwnerCharacter(r rune) bool {
-	return r <= 0xffff && (unitClasses(uint16(r)) != 0 || strings.ContainsRune("@.-/", r))
+	return ownerWordCharacter(r) || unicode.IsSpace(r) || strings.ContainsRune("@.-/", r)
 }
 
-// Owner extraction uses UTF-16 indices, like the upstream char-based tokenizer.
-// In particular, supplementary letters are not regex word characters here,
-// and the 100/255 email limits count char units rather than Unicode code points.
+// Owner extraction scans namespaces, roles and emails independently. Length
+// limits count Unicode code points, and classification uses Go Unicode tables.
 func gitLabOwners(text string) ([]string, bool) {
 	var owners []string
 	seen := make(map[string]bool)
@@ -188,44 +185,47 @@ func gitLabOwners(text string) ([]string, bool) {
 		}
 	}
 	for token := range strings.FieldsFuncSeq(text, ownerSeparator) {
-		var storage [128]uint16
-		units := utf16Units(token, storage[:])
-		start, end, ok := findNamespace(units, 0)
-		if ok && start == 0 && end == len(units) || validGitLabRole(units) {
+		var storage [128]rune
+		chars := storage[:0]
+		for _, char := range token {
+			chars = append(chars, char)
+		}
+		start, end, ok := findNamespace(chars, 0)
+		if ok && start == 0 && end == len(chars) || validGitLabRole(chars) {
 			add(token)
 			continue
 		}
 		found := false
 		for search := 0; ; {
-			start, end, ok = findNamespace(units, search)
+			start, end, ok = findNamespace(chars, search)
 			if !ok {
 				break
 			}
-			add(string(utf16.Decode(units[start:end])))
+			add(string(chars[start:end]))
 			found = true
 			search = end
 		}
-		for at := 0; at+1 < len(units); at++ {
-			if units[at] != '@' || units[at+1] != '@' || at > 0 && (regexWordCharacter(units[at-1]) || units[at-1] == '@') {
+		for at := 0; at+1 < len(chars); at++ {
+			if chars[at] != '@' || chars[at+1] != '@' || at > 0 && (ownerWordCharacter(chars[at-1]) || chars[at-1] == '@') {
 				continue
 			}
 			end := at + 2
-			for end < len(units) && !unicode.IsSpace(rune(units[end])) {
+			for end < len(chars) && !unicode.IsSpace(chars[end]) {
 				end++
 			}
-			if validGitLabRole(units[at:end]) {
-				add(string(utf16.Decode(units[at:end])))
+			if validGitLabRole(chars[at:end]) {
+				add(string(chars[at:end]))
 				found = true
 			}
 		}
 		for search := 0; ; {
-			start, end, ok = findEmail(units, search)
+			start, end, ok = findEmail(chars, search)
 			if !ok {
 				break
 			}
-			email := units[start:end]
+			email := chars[start:end]
 			if _, _, hasNamespace := findNamespace(email, 0); !hasNamespace {
-				add(string(utf16.Decode(email)))
+				add(string(email))
 				found = true
 			}
 			search = end
@@ -236,22 +236,21 @@ func gitLabOwners(text string) ([]string, bool) {
 	}
 	return owners, valid
 }
-func validGitLabRole(units []uint16) bool {
-	if len(units) < 3 || units[0] != '@' || units[1] != '@' {
+func validGitLabRole(chars []rune) bool {
+	if len(chars) < 3 || chars[0] != '@' || chars[1] != '@' {
 		return false
 	}
-	// Roles contain ASCII letters. OrdinalIgnoreCase does not fold dotted I,
-	// dotless I, or long s into ASCII as a Unicode lower-case conversion might.
+	// Role names are ASCII identifiers and accept ASCII case variants.
 	for _, role := range []string{"developer", "developers", "maintainer", "maintainers", "owner", "owners"} {
-		if len(units)-2 != len(role) {
+		if len(chars)-2 != len(role) {
 			continue
 		}
 		equal := true
-		for i, unit := range units[2:] {
+		for i, unit := range chars[2:] {
 			if unit >= 'A' && unit <= 'Z' {
 				unit += 'a' - 'A'
 			}
-			if unit != uint16(role[i]) {
+			if unit != rune(role[i]) {
 				equal = false
 				break
 			}
@@ -262,7 +261,7 @@ func validGitLabRole(units []uint16) bool {
 	}
 	return false
 }
-func findNamespace(token []uint16, start int) (int, int, bool) {
+func findNamespace(token []rune, start int) (int, int, bool) {
 	for at := start; at < len(token); at++ {
 		if token[at] != '@' || at+1 == len(token) {
 			continue
@@ -286,7 +285,7 @@ func findNamespace(token []uint16, start int) (int, int, bool) {
 			if i == segmentStart && !namespaceStart(char) || !namespaceStart(char) && char != '-' {
 				break
 			}
-			if asciiUnit(char) || char == '_' || char == '-' {
+			if asciiNamespaceCharacter(char) || char == '_' || char == '-' {
 				lastEnd = i + 1
 			}
 		}
@@ -296,18 +295,24 @@ func findNamespace(token []uint16, start int) (int, int, bool) {
 	}
 	return 0, 0, false
 }
-func asciiUnit(char uint16) bool          { return char < 128 && asciiWord(byte(char)) }
-func namespaceStart(char uint16) bool     { return asciiUnit(char) || char == '_' || char == '.' }
-func wordCharacter(char uint16) bool      { return unitClasses(char)&3 != 0 || char == '_' }
-func regexWordCharacter(char uint16) bool { return unitClasses(char)&(1|2|8) != 0 }
-func findEmail(token []uint16, search int) (int, int, bool) {
+func asciiNamespaceCharacter(char rune) bool { return char < 128 && asciiWord(byte(char)) }
+func namespaceStart(char rune) bool {
+	return asciiNamespaceCharacter(char) || char == '_' || char == '.'
+}
+func wordCharacter(char rune) bool {
+	return unicode.IsLetter(char) || unicode.IsDigit(char) || char == '_'
+}
+func ownerWordCharacter(char rune) bool {
+	return wordCharacter(char) || unicode.Is(unicode.Mn, char) || unicode.Is(unicode.Pc, char)
+}
+func findEmail(token []rune, search int) (int, int, bool) {
 	for at := search; at < len(token); at++ {
 		if token[at] != '@' {
 			continue
 		}
 		local, length := at, 0
 		for local > search && length < 100 {
-			r := rune(token[local-1])
+			r := token[local-1]
 			if r == '@' || unicode.IsSpace(r) {
 				break
 			}
@@ -323,7 +328,7 @@ func findEmail(token []uint16, search int) (int, int, bool) {
 			if token[end] == '@' || unicode.IsSpace(rune(token[end])) {
 				break
 			}
-			if regexWordCharacter(token[end]) {
+			if ownerWordCharacter(token[end]) {
 				lastWord = end + 1
 			}
 			end++
@@ -360,16 +365,4 @@ func gitLabPatternKey(pattern string) string {
 		key += "**/*"
 	}
 	return key
-}
-
-// .NET OrdinalIgnoreCase uses invariant upper-case mappings. The ASCII range
-// intentionally stays distinct from long s and dotless i; Kelvin's upper-case
-// mapping is itself. This is narrower than Go's SimpleFold equivalence cycles.
-func foldSectionName(name string) string {
-	return strings.Map(func(r rune) rune {
-		if r == '\u017f' || r == '\u0131' {
-			return r
-		}
-		return invariantUpper(r)
-	}, name)
 }

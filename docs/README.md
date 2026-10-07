@@ -14,7 +14,6 @@ the guide for the work you need to do:
 | Diagnose CLI preparation, runtime provisioning or native build time | [CLI build diagnostics](cli-debug.md) |
 | Change allocations, batching, compression or build preparation | [Performance and ownership constraints](performance.md) |
 | Maintain CODEOWNERS parsing | [CODEOWNERS implementation](codeownership.md) |
-| Measure CODEOWNERS CPU and allocations | [Parser benchmarks](codeownership-performance.md) |
 | Name package services from CODEOWNERS | [CODEOWNERS service configuration](codeowners-service.md) |
 | Configure Mini or use its public API | [Native runtime usage](mini-runtime.md) |
 | Compare CI features and policy combinations with the SDK | [Feature parity and event counts](ci-parity.md) |
@@ -37,5 +36,4 @@ exact inputs used for measurement; editing a guide does not rerun a benchmark.
 The [latest dataset](results/20261005-linux-go1.27.1/README.md) contains 6,224
 comparative builds, 1,200 measured runtime groups, memory peaks and twelve
 rounds of the 115-case parity comparison. Four Gin race cells have real runtime
-failures; their records remain explicit. CODEOWNERS microbenchmarks have their
-own samples in the parser measurement guide.
+failures; their records remain explicit.
