@@ -310,6 +310,14 @@ status separately. A cross-compiled CLI is build proof; the workflow must run
 the integration fixtures natively on that platform. Update the architecture,
 Testify contract, validation inventory and performance guide together.
 
+## CODEOWNERS source updates
+
+The CODEOWNERS parser has a separate dd-trace-dotnet revision in the
+`feature_ports` entry named `codeownership-dotnet`. Its [update guide](codeownership.md)
+records host semantics, source mappings, licenses and validation. Select that
+revision with `--source-commit`; the SDK archive remains the input for CI
+adapter updates.
+
 ## Fuzz and Examples source updates
 
 The general SDK base and PR #5442 feature have separate revisions. Use

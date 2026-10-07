@@ -1,0 +1,119 @@
+{
+  "repository": "https://github.com/DataDog/dd-trace-dotnet",
+  "commit": "843640c32bae5fe6dcdf790906f6431fe15f6973",
+  "scope": "Complete CodeOwnersSpecTests and CodeOwnersTests: parser/matcher/file-loading algorithm. Go-specific discovery and compiler-path handling have separate regression tests. Repository-wide CSharp ownership assertions are checks of the .NET repository, not parser tests.",
+  "source_files": [
+    {
+      "path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwners.cs",
+      "sha256": "4640fe6e3b9c35309723dc4ed9a0acc7722c9c16b3a492bd725359fb3d5fb279"
+    },
+    {
+      "path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwners.GitHub.cs",
+      "sha256": "58049ddc09e1f3a6443355ff733977d64a0079a1f8fd95a9b6e465ada3dfc6f5"
+    },
+    {
+      "path": "tracer/src/Datadog.Trace/Ci/CodeOwnership/CodeOwners.GitLab.cs",
+      "sha256": "968bf4e5d435bd221ae22178553a7b8ad074e3e0f4b042c8c7e1a7c2ca01c082"
+    },
+    {
+      "path": "tracer/test/Datadog.Trace.Tests/Ci/CodeOwnersSpecTests.cs",
+      "sha256": "5952c2e7b181eb08835691c3be133677c145f7e4fdc41dc634f334b1731c280f"
+    },
+    {
+      "path": "tracer/test/Datadog.Trace.Tests/Ci/CodeOwnersTests.cs",
+      "sha256": "30a40a170062eab9428b8c3b6ae73a0fe41f0765b8ae402094572db76880a38c"
+    },
+    {
+      "path": "tracer/test/Datadog.Trace.ClrProfiler.IntegrationTests/CI/Data/CODEOWNERS_GITHUB",
+      "sha256": "a26ac21e8ac2f4e88a9e178da73f8617a97e6c6ff9a5d4da4040e9e1090baea5"
+    },
+    {
+      "path": "tracer/test/Datadog.Trace.ClrProfiler.IntegrationTests/CI/Data/CODEOWNERS_GITLAB",
+      "sha256": "673856054dc5e608bbddabb9a9bdc9113eb1db193c55ae45bf72441b87e5dde4"
+    }
+  ],
+  "upstream_methods": [
+    "GithubInlineCommentsAndEmailOwners",
+    "GithubRootedDirectoryPatternMatchesSubdirectoriesOnlyAtRoot",
+    "GithubWildcardSegmentDoesNotOwnNestedFiles",
+    "GithubDirectoryPatternOwnsEverythingUnderneath",
+    "GithubDirectoryAndTerminalGlobstarPatternsRequireDescendants",
+    "GitlabTerminalGlobstarMatchesOnePathSegment",
+    "GitlabGlobstarBeforeTrailingSlashMatchesImmediateAndNestedChildren",
+    "GithubRootedVersusUnrootedPatterns",
+    "PatternsWithMiddleSlashFollowDialectSemantics",
+    "GithubGlobstarDirectoryPatternOwnsDirectoryContents",
+    "OwnerlessEntryLeavesSubtreeUnowned",
+    "PathsAreCaseSensitive",
+    "LastMatchingRuleWinsGloballyForGitHub",
+    "GitLabSectionSyntaxDoesNotScopeGitHubRules",
+    "GlobstarMatchesZeroDirectories",
+    "RelativePathsMatchAtAnyDepth",
+    "GitLabSectionsAreEvaluatedIndependentlyAndCombined",
+    "GitLabSectionDefaultsApplyOnlyAfterARuleMatches",
+    "SectionDefaultOwnersApplyOnlyToEntriesWithoutExplicitOwners",
+    "OptionalSectionsAndApprovalCountsDoNotAffectMatching",
+    "RoleOwnersAreKeptAsOwners",
+    "ExclusionsAreStickyWithinSection",
+    "ExclusionsApplyPerSection",
+    "InlineCommentsAreUnsupportedInGitLab",
+    "CommentLinesWithLeadingWhitespaceAreIgnored",
+    "DirectoryPatternsMatchWithWindowsSeparators",
+    "DuplicateEntriesUseLastWithinSection",
+    "GitLabLastDuplicatePatternReplacesEarlierEntriesIncludingExclusions",
+    "GitLabDuplicateNormalizationUnescapesLeadingHashBeforeReplacement",
+    "GitLabCharacterClassesSupportSetsRangesAndNegationWithoutCrossingDirectories",
+    "GitLabMalformedCharacterClassesCannotAbortParserInitialization",
+    "GitLabCharacterClassesCannotStartWithClosingBracket",
+    "GitLabBackslashEscapesGlobMetacharactersAndOrdinaryCharacters",
+    "GithubBackslashEscapesMetacharactersSpacesAndInlineCommentMarkers",
+    "WhitespaceOnlyGitLabSectionHeaderStartsInvalidNamedSection",
+    "UnparsableGitLabSectionHeaderIsSkippedInsteadOfBecomingPattern",
+    "GitLabMalformedSectionSuffixCannotLeakDefaultOwners",
+    "GitLabPermissiveSectionParsingKeepsOnlyTheRecognizedOwnerSpan",
+    "GitLabRecognizedRolesAreKeptAsOwners",
+    "GitLabUnknownRolesAreIgnored",
+    "OwnerValidationFollowsDialectRulesAndDoesNotApplyDefaultsToMalformedExplicitOwners",
+    "OwnerExtractionRejectsImpossibleGithubReferencesAndCanonicalizesGitLabReferences",
+    "GithubAcceptsEnterpriseManagedUserNames",
+    "GitLabNamespaceReferencesMayEndWithHyphens",
+    "GitLabReferenceExtractionScansNamesRolesAndEmailsIndependently",
+    "GitLabExclusionsIgnoreOwnerTextForDiagnostics",
+    "GitLabOwnerlessEntriesAreDiagnosedWithoutChangingMatchingSemantics",
+    "EscapedSlashesRemainPathSeparators",
+    "FormerGlobstarSentinelTextIsMatchedLiterally",
+    "PathologicalPatternMatchingIsDeterministicBoundedAndThreadSafe",
+    "OverlongSegmentPatternIsRejectedBeforeMatching",
+    "SegmentWildcardMatchingStopsAtWorkLimit",
+    "LargeUniqueOwnerListsHaveLinearRepeatedMatchCost",
+    "LongMalformedGitLabOwnerTokensHaveBoundedParsingCost",
+    "LongMalformedGitLabSectionHeadersHaveBoundedParsingCost",
+    "DuplicateOwnersAreDeduplicatedOnceInStableOrder",
+    "LargeGitLabDuplicatePatternSetsAreCompactedLinearly",
+    "GithubIgnoresCodeOwnersFilesOverThreeMegabytesOnly",
+    "TryLoadReturnsFalseWhenCodeOwnersDisappearsBeforeOpening",
+    "GitLabDuplicateSectionsAreCombinedCaseInsensitively",
+    "GitLabDuplicateSectionExclusionsAreStickyAcrossOccurrences",
+    "GitLabDuplicateSectionDefaultsApplyToEntriesUnderEachHeader",
+    "UnsupportedGithubSyntaxIsIgnored",
+    "RealWorldHashicorpTerraformGitHubFile",
+    "RealWorldGitLabSectionedFile",
+    "MultipleLeadingSlashesAreNormalized",
+    "NullPathReturnsNoOwners",
+    "QuestionMarkDoesNotMatchSlash",
+    "DoubleStarIsGlobstarOnlyAsAWholeSegment",
+    "DescendantMatchingIsStableAcrossRepeatedCalls",
+    "CheckGithubCodeOwners",
+    "CheckGitlabCodeOwners"
+  ],
+  "original_test_runs": 137,
+  "go_corpus_test": "TestDotNetSpecification",
+  "additional_contract_tests": {
+    "TryLoadReturnsFalseWhenCodeOwnersDisappearsBeforeOpening": "TestReadFailuresAndFileLimit",
+    "PathologicalPatternMatchingIsDeterministicBoundedAndThreadSafe": "TestPathologicalMatchingAndLargeOwnerLists",
+    "DuplicateOwnersAreDeduplicatedOnceInStableOrder": "TestOwnershipIsImmutableAndStable",
+    "additional_directory_target": "TestDirectorySemantics",
+    "discovery": "locator_test.go",
+    "source_boundary": "TestSourceFileCodeOwnerRejectsForeignPaths"
+  }
+}

@@ -567,22 +567,56 @@ source when disabled. Runtime resolution keeps absolute/trimpath source paths
 and workspace boundaries. The result is process-local and immutable after its
 first resolution. Test-only resets require stopped readers.
 
-`civisibility/utils/codeowners.go` extracts the original pattern predicate into
-`codeOwnerPatternMatches`. Existing file matching retains its order and
-multi-section behavior. `MatchDirectory` uses the local
-`codeowners_directory.go` predicate in that same precedence pass. It supports
-ancestor directory ownership, segment wildcards and recursive `**` patterns,
-including zero intermediate segments. A terminal `/*` selects direct children;
-a trailing `/` includes descendants. File metadata continues using the original
-SDK predicate. Do not change its semantics during service matcher updates.
+`civisibility/codeownership/` owns host-specific discovery, parsing and compiled
+file/directory matching. `utils/codeowners_discovery.go` supplies CI context and caches
+its resolver. The separately recorded .NET port provides GitHub/GitLab rules,
+including inline-comment differences, ownerless GitHub rules, GitLab sections,
+defaults, exclusions, roles and character classes. File selection follows each
+host's location priority, including `docs/CODEOWNERS`.
+
+Results keep private state. Owner lists are deduplicated once; tags are prepared
+with each result. Matching does not copy already-normalized paths. Character
+classes are compiled once, and matching is iterative with work limits. Single
+rule results are reused. GitLab owner unions preserve declaration order for
+first-owner service selection. File and service caches retain their lifetimes.
+Directory queries use an explicit target: a trailing slash includes the package
+itself, terminal `/*` selects direct children, and other directory patterns can
+be inherited. No guessed filename determines the service.
+
+The port uses the same UTF-16 units, segment bounds, file loading and parsing
+diagnostics as the .NET algorithm. It has no additional path-level limit.
+Unicode overrides reconcile Go 1.26/1.27 with the recorded .NET reference.
+Review those tables, immutable getter contracts and diagnostics during updates.
+Malformed rules do not cause a file read failure; I/O errors remain retryable.
+The [parser guide](../../../docs/codeownership.md) lists the exact source,
+license, directory differences and update procedure.
+
+The performance adaptations in `codeownership` are local to this port. Shared
+compiled segments must stay immutable; file and directory globstar requirements
+remain separate. Rooted ASCII prefixes include a separator boundary check, and
+non-ASCII/wildcard matching still uses the original UTF-16 step limit. Stack
+scratch space is never retained by parsed rules or returned owners.
+
+GitLab sections stop at the first reversed match only when their compacted
+rules contain no exclusions. Union allocation is deferred until a new owner
+appears. Small unions scan a slice, switching to a map at 16 owners; large
+initial owner lists use the map even if later sections contribute only duplicates.
+This keeps stable order without introducing quadratic work. ASCII fast paths,
+role comparisons and unchanged pattern keys avoid temporary allocations.
+During synchronization, rerun the original specification/differential/Unicode
+corpora, directory boundary tests, large unions and concurrent-reader tests.
+Benchmarks and commands are in `docs/codeownership-performance.md`.
 
 The CI bootstrap and `civisibility/utils/net/client.go` share the selected
 service. Preserve that binding during SDK updates: settings and telemetry must
 not name a different service from events or logs. The new environment keys are
 registered in local `env/ci_service.go`, without editing the generated SDK map.
-No upstream revision is changed by this adaptation.
+The SDK base remains independently pinned.
 
-Checks: all original GitHub/GitLab CODEOWNERS tests, `TestCodeOwnersPackageService`,
+Checks: all 72 original parser test methods via `TestDotNetSpecification`,
+`TestDotNetDifferential`, `TestDotNetUnicodeProperties`, parser
+bounds/concurrency/discovery tests,
+`TestCodeOwnersPackageService`,
 `TestCodeOwnersServiceMissingInputs`, `TestCodeOwnersServiceCacheConcurrentReaders`,
 `TestCodeOwnersPackageDirectoryPaths`, `TestMiniCodeOwnersPackageServices` and
 `TestMiniCodeOwnersCompiledServices`. Keep the compiled-binary cases with the
