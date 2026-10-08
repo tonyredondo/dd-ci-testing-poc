@@ -1,3 +1,5 @@
+//go:build go1.26
+
 // The hook advice follows dd-trace-go main@96aedb31048c07e29e7a20a4333dc3b8d289c52d, Apache-2.0.
 package instrument
 

@@ -1,8 +1,11 @@
+//go:build go1.26
+
 package runner
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -34,6 +37,9 @@ func (p Plan) toolMode() string {
 	var modes []string
 	if p.sdkCI {
 		modes = append(modes, "mini-sdk")
+		if p.sdkMirrorDisabled {
+			modes = append(modes, "nomirror")
+		}
 	}
 	if p.orchestrion {
 		modes = append(modes, "orchestrion")
@@ -69,7 +75,7 @@ func ToolNeedsPlan(mode string, args []string, importPath string) bool {
 		pkg, _, _ := strings.Cut(importPath, " [")
 		return pkg == "testing"
 	}
-	if tool == "compile" && (mode == "mini-sdk" || strings.HasPrefix(mode, "mini-sdk-")) && (isSDKCIPackage(importPath) || importPath == sdkTracerPackage) && !(len(args) == 2 && args[1] == "-V=full") {
+	if tool == "compile" && (mode == "mini-sdk" || strings.HasPrefix(mode, "mini-sdk-")) && (isSDKCIPackage(importPath) || importPath == sdkTracerPackage && !strings.Contains(mode, "nomirror")) && !(len(args) == 2 && args[1] == "-V=full") {
 		return true
 	}
 	if tool != "compile" || !strings.Contains(mode, "testify") && !strings.Contains(mode, "goleak") {
@@ -95,6 +101,12 @@ func RunTool(ctx context.Context, overlay string, args []string, stdin io.Reader
 	if pkg := os.Getenv("TOOLEXEC_IMPORTPATH"); isSDKCIPackage(pkg) || pkg == sdkTracerPackage {
 		forwarded, cleanup, err := prepareSDKCICompile(args, os.Getenv("TOOLEXEC_IMPORTPATH"))
 		if err != nil {
+			if pkg == sdkTracerPackage && errors.Is(err, instrument.ErrUnsupportedAPI) {
+				// Orchestrion can introduce a tracer after package resolution.
+				// Original inputs remain intact; CI gates are separate transforms.
+				fmt.Fprintln(stderr, version.BuildLogPrefix+" WARN: SDK span copies disabled:", err)
+				return runChainedTool(ctx, args, stdin, stdout, stderr)
+			}
 			fmt.Fprintln(stderr, err)
 			return 2
 		}

@@ -1,3 +1,5 @@
+//go:build go1.26
+
 // Package messagepack owns the pinned generator version and runtime import relocation.
 package messagepack
 

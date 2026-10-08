@@ -1,3 +1,5 @@
+//go:build go1.26
+
 // Command vendor-msgpack refreshes the pinned MessagePack runtime sources.
 package main
 

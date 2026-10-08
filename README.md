@@ -109,8 +109,9 @@ The SDK backend requires the exact version pinned in
 | Bazel | Offline manifest and payload-file contracts; a real Bazel toolchain invocation is not part of the validation. [Details](docs/mini-runtime.md#delivery-and-offline-output) |
 | Platforms | Linux with Go 1.26/1.27, macOS and Windows with Go 1.27; Linux also runs the full suite with `-race`. [CI matrix](docs/validation.md#compatibility-workflow) |
 
-A client's `go.mod` can declare an older Go version; the installed toolchain
-must meet Mini's Go 1.26 minimum. Future Go and private SDK layouts need their
+A client's `go.mod` can declare Go 1.21 or newer; the installed toolchain
+must meet Mini's Go 1.26 minimum. Instrumentation preserves the client's
+language version, including its loop-variable behavior. Future Go and private SDK layouts need their
 own compatibility runs. Standard-library test targets are unsupported. Explicit
 `.go` file mode runs native Go without instrumentation and prints a warning.
 The [validation contract](docs/validation.md) distinguishes loopback protocol

@@ -22,22 +22,22 @@
     },
     {
       "path": "README.md",
-      "sha256": "f9cabd3f40dc485420faed65d00417503207662d1b184c5ebad59e774c068426",
+      "sha256": "c850a92059731cb9a3b00c110fa4768b55b5434ab1a71daf1a186c8b86d90a20",
       "role": "local"
     },
     {
       "path": "unix/uname.go",
-      "sha256": "dd5576ec7f58ebee2fb0b054027fb31b01cb880a8d70ac56efc1f1edf5515e3e",
+      "sha256": "84e89824ca799ee0bf6396f5119a88c02b9121970be3a7398260dd0eb962d27b",
       "role": "adapted-subset"
     },
     {
       "path": "unix/uname_bsd.go",
-      "sha256": "49dd73d6794e167e266673edf1aca53d342e8bad7293b11cb01e2ed60d34825c",
+      "sha256": "ec20681f5740048426e72d388c6be916126212917b2ee1f48513111ade8f086d",
       "role": "adapted-subset"
     },
     {
       "path": "unix/uname_solaris.go",
-      "sha256": "d539c4930b69d9c6c020052cfea53d82e30a5b6cc12432e1ae9969aab2cd6fc2",
+      "sha256": "84c0e646db62b4939905d9891e49596971137f6b975ebb5c34de700592f5c442",
       "role": "adapted-subset"
     },
     {
@@ -47,62 +47,62 @@
     },
     {
       "path": "unix/uname_syscall.go",
-      "sha256": "cf6c0c7792cfb4a32934fe83773476beffe43f4c967fd795385a2c27a093895a",
+      "sha256": "c63853ea0a03d46a56f7a336ee74bbdbef9643e9bad81b6e863421766cb5cc1a",
       "role": "adapted-subset"
     },
     {
       "path": "unix/uname_sysctl.go",
-      "sha256": "38dbd2d11ba4b78a9edb7e5c5ef60807cb5fbe579dc3601db2f11f54129931fb",
+      "sha256": "8684cee77ad79b547d7334f7532afa908427047fb4b41cd221fd939a6c4ed7a2",
       "role": "adapted-subset"
     },
     {
       "path": "unix/uname_test.go",
-      "sha256": "3795f1e32fe4bf49b2fb859b88af4261858053add59e1c3cdfad1f1b3f82174e",
+      "sha256": "bb2c85f3665ce3af28f018ef759eaa0dba1bef70c8fb95c3a3cc17987dc6559f",
       "role": "local"
     },
     {
       "path": "windows/calls_windows.go",
-      "sha256": "d3fc5421ae05b89cc5a0260ea636d529934d78e59b18c7e3c096095b0bc5af86",
+      "sha256": "0b5d9bf520df0489b854edd92a0962b4e9242a8726620b818e153d404be0fc6f",
       "role": "adapted-subset"
     },
     {
       "path": "windows/calls_windows_test.go",
-      "sha256": "50286d07e1ab4587a48d86b68cb3db09b30467d41ab8087a0d90c2dde9121dc0",
+      "sha256": "fa4a14c54af560ccba6d9e40069b101de08b07c6927d13438ff8462603e9861d",
       "role": "local"
     },
     {
       "path": "windows/dll_windows.go",
-      "sha256": "3a56274572b49e81ddb755d03f6c0ca24964ed7019f1e6fde5e78f878ac52d22",
+      "sha256": "dfcaa912b6428ded759a5ba81629f3989818516777d4c600d010bc5ab0bbfe34",
       "role": "adapted-subset"
     },
     {
       "path": "windows/job_layout_386.go",
-      "sha256": "650f2b7bd9c8711b7128605e717e7def3def136c9aee05882c59d718e692f59c",
+      "sha256": "64cd209a391609d3213d6f72475a36b2d8809f9e19e4551910df7f73f22811d6",
       "role": "adapted-subset"
     },
     {
       "path": "windows/job_layout_64.go",
-      "sha256": "3ac8ed99af642b63ebecd6d147bfed0437e1443ba3e39e6defe4a23a16f946eb",
+      "sha256": "48ec128ded94f75d625676ebfc56e39ed6e148ee797d05ceca55f8edf4d906e9",
       "role": "adapted-subset"
     },
     {
       "path": "windows/registry/key_windows.go",
-      "sha256": "8a8931255f3e3c48c0cf0ec832ad8459b27de83102c05d90cf9f3d51e2d2e1e4",
+      "sha256": "fd1c3928fd3f5fabe47c7197dc1e60d67b2d32e71debce699702ce8cc4ae6690",
       "role": "adapted-subset"
     },
     {
       "path": "windows/registry/key_windows_test.go",
-      "sha256": "42ba40022a6de13aeeb1758df29566fb23e896445942dc559e93b1884c6f7559",
+      "sha256": "476be98fef1bfa08342db7f5eb0b9ce025e63bac4bf70bce43e7d965654d4edb",
       "role": "local"
     },
     {
       "path": "windows/registry/values.go",
-      "sha256": "af372b38424ba2032014f5d518df1311c1b1171263e1dd8644d85f7b57dbdbf0",
+      "sha256": "81a51d94e37d2105d655b3ebc657d9197a3adcbfc59db48d571e61696a7e3d65",
       "role": "adapted-subset"
     },
     {
       "path": "windows/registry/values_test.go",
-      "sha256": "2a4a725915aa6b1756a8d5e5154b4ceba4772e958fdb64c8761716f3971700e9",
+      "sha256": "f3286f540ef5f8967b11eb6647895dadb2c5b86870e55f1cfb7d238944515eb0",
       "role": "local"
     }
   ],

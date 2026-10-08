@@ -17,55 +17,55 @@
     },
     {
       "path": "README.md",
-      "sha256": "da2147e5da1e0c72469fa0c2c06f89ea0476b7822ab6b3bdd455bdab56557450",
+      "sha256": "19daa3fc58a3ebee56e6a1cc0ada56095cb96047fe03d072ea6779c42995881e",
       "role": "local"
     },
     {
       "path": "reader.go",
-      "sha256": "88f5751d45838451210c319b234cf367a90e6fca7147e3bebcea18de296f53fc",
-      "role": "upstream",
+      "sha256": "65de0b4a96e9dbdc291a53f2913a7f7af280aabbaf8ecbb2228944d4f5ae2ac9",
+      "role": "adapted",
       "source_path": "reader.go",
       "source_sha256": "88f5751d45838451210c319b234cf367a90e6fca7147e3bebcea18de296f53fc"
     },
     {
       "path": "reader_test.go",
-      "sha256": "952100de4af00d2f2077291b01a7823a46b07f25cb396eba0866704bc207aaf3",
-      "role": "upstream",
+      "sha256": "d9c4e73a321d73f5af1b49711d5f622ba99146a2380fc26bc0133bc5f0e22188",
+      "role": "adapted",
       "source_path": "reader_test.go",
       "source_sha256": "952100de4af00d2f2077291b01a7823a46b07f25cb396eba0866704bc207aaf3"
     },
     {
       "path": "writer.go",
-      "sha256": "8c476ac3d403f6c9bd6bf753921a8afbe49311ab69d20c32e9062d00cdfa80fb",
-      "role": "upstream",
+      "sha256": "678380c13239f24f103398dc858285baf0c3b40d19c761020224a7920954d8ec",
+      "role": "adapted",
       "source_path": "writer.go",
       "source_sha256": "8c476ac3d403f6c9bd6bf753921a8afbe49311ab69d20c32e9062d00cdfa80fb"
     },
     {
       "path": "writer_appengine.go",
-      "sha256": "c013679a8f71aeb0647e34d978a478dab37226459f8e05aa5c374e40cd9bf4cf",
-      "role": "upstream",
+      "sha256": "937f7a8c608a461c3511724f15f158685a38dfc176b9e84e919b74f3f46c9bc1",
+      "role": "adapted",
       "source_path": "writer_appengine.go",
       "source_sha256": "c013679a8f71aeb0647e34d978a478dab37226459f8e05aa5c374e40cd9bf4cf"
     },
     {
       "path": "writer_test.go",
-      "sha256": "8cca5099144e2c2479db91fcff4b2a5ace24923de74b11f62cdebb31db4c71cb",
-      "role": "upstream",
+      "sha256": "83363368aaf9fe53b1ab7a867a164cc70e1a38a8791cb55ac970f7da6f0bf27d",
+      "role": "adapted",
       "source_path": "writer_test.go",
       "source_sha256": "8cca5099144e2c2479db91fcff4b2a5ace24923de74b11f62cdebb31db4c71cb"
     },
     {
       "path": "writer_tinygo.go",
-      "sha256": "c9a263f367f5dfcc3e90b45e4caf3b272233762a9f5c8756206eb1079c8bf397",
-      "role": "upstream",
+      "sha256": "02969dc4b4572b2283448fb32796021cdac84251d9d38e294e22aa245e477b66",
+      "role": "adapted",
       "source_path": "writer_tinygo.go",
       "source_sha256": "c9a263f367f5dfcc3e90b45e4caf3b272233762a9f5c8756206eb1079c8bf397"
     },
     {
       "path": "writer_unsafe.go",
-      "sha256": "34956ec561f9e4d085ff9548ac6940079b98d42ece75cfd69cdfea51649e70cd",
-      "role": "upstream",
+      "sha256": "621126d8ede1933bd897b97697d41cb3775a3b2deed07638023c903c29d650b2",
+      "role": "adapted",
       "source_path": "writer_unsafe.go",
       "source_sha256": "34956ec561f9e4d085ff9548ac6940079b98d42ece75cfd69cdfea51649e70cd"
     }

@@ -1,3 +1,5 @@
+//go:build go1.26
+
 // Copyright 2026 Datadog, Inc. Licensed under the Apache License, Version 2.0.
 
 package env

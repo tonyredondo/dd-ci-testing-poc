@@ -1,3 +1,5 @@
+//go:build go1.26
+
 package runner
 
 import (
@@ -92,6 +94,8 @@ type options struct {
 	toolexec             string
 	coverage             bool
 	coverPatterns        []string
+	// workfile applies only to preparation children, never os.Setenv.
+	workfile string
 	// help and fileMode select native go test without instrumentation.
 	help, fileMode bool
 }

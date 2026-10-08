@@ -1,3 +1,5 @@
+//go:build go1.26
+
 package msgp
 
 type timer interface {

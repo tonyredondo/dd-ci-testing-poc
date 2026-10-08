@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && go1.26
 
 package windows
 

@@ -1,4 +1,4 @@
-//go:build (!linux && !tinygo && !windows) || appengine
+//go:build ((!linux && !tinygo && !windows) || appengine) && go1.26
 
 package msgp
 

@@ -1,3 +1,5 @@
+//go:build go1.26
+
 // Package minitracer records native CI events independently of the APM tracer.
 package minitracer
 

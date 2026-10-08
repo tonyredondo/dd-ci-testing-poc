@@ -1,3 +1,5 @@
+//go:build go1.26
+
 package runner
 
 import (
@@ -151,10 +153,10 @@ func TestRequireMiniPrefersLocalSourcesAndClientReplacement(t *testing.T) {
 // The selected runtime's minimum matters; the CLI may use a newer toolchain.
 func TestRequireLocalMiniGoVersion(t *testing.T) {
 	for _, tc := range []struct{ client, runtime, want string }{
-		{"1.25.0", "1.26.0", "1.26.0"},
-		{"1.26.1", "1.26.0", "1.26.1"},
-		{"1.21.0", "1.25.0", "1.25.0"},
-		{"", "1.26.0", "1.26.0"},
+		{"1.25.0", "1.21.0", "1.25.0"},
+		{"1.26.1", "1.21.0", "1.26.1"},
+		{"1.21.0", "1.26.0", "1.21.0"},
+		{"", "1.26.0", ""},
 	} {
 		t.Run(tc.client+"-"+tc.runtime, func(t *testing.T) {
 			dir := t.TempDir()
@@ -176,8 +178,10 @@ func TestRequireLocalMiniGoVersion(t *testing.T) {
 			if err := os.WriteFile(modfile, []byte(contents), 0600); err != nil {
 				t.Fatal(err)
 			}
-			if err := requireLocalMini(t.Context(), dir, modfile, "./runtime", "v0.0.0", tc.client, true); err != nil {
-				t.Fatal(err)
+			err := requireLocalMini(t.Context(), dir, modfile, "./runtime", "v0.0.0", tc.client, true)
+			needsNewer := compareGoVersion(tc.client, tc.runtime) < 0
+			if (err != nil) != needsNewer {
+				t.Fatalf("newer=%t, error=%v", needsNewer, err)
 			}
 			got, err := os.ReadFile(modfile)
 			if err != nil {
@@ -202,7 +206,7 @@ func TestProvideMiniRelativeReplacementFromSubdirectory(t *testing.T) {
 	original := "module example.com/client\n\ngo 1.25.0\nreplace " + miniModule + " => ./runtime\n"
 	for path, contents := range map[string]string{
 		filepath.Join(dir, "go.mod"):            original,
-		filepath.Join(dir, "runtime", "go.mod"): "module " + miniModule + "\n\ngo 1.26.0\n",
+		filepath.Join(dir, "runtime", "go.mod"): "module " + miniModule + "\n\ngo 1.21.0\n",
 	} {
 		if err := os.WriteFile(path, []byte(contents), 0600); err != nil {
 			t.Fatal(err)
@@ -213,7 +217,7 @@ func TestProvideMiniRelativeReplacementFromSubdirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	contents, err := os.ReadFile(modfile)
-	if err != nil || moduleDirective(contents, "go") != "1.26.0" {
+	if err != nil || moduleDirective(contents, "go") != "1.25.0" {
 		t.Fatalf("temporary Go directive: %s, %v", contents, err)
 	}
 	if contents, err := os.ReadFile(filepath.Join(dir, "go.mod")); err != nil || string(contents) != original {

@@ -206,22 +206,16 @@ flowchart LR
     CI["CI and Git tags"] --> Snapshot["Owned immutable snapshot"]
     Snapshot --> Span["Shared base and local overrides"]
     Span --> Getter["Effective getter value"]
-    Span --> Batch["Check batch compatibility"]
-    Batch --> Common["Defaults by event kind"]
-    Batch --> Local["Local overrides and fallback tags"]
-    Common --> Payload["Test-cycle payload"]
-    Local --> Payload
+    Span --> Projection["Resolve effective event metadata"]
+    Projection --> Payload["Test-cycle event payload"]
 ```
 
-At delivery, homogeneous test/session/module/suite events use their event-kind
-metadata entry. CI fields stay out of `"*"`, so ordinary child spans do not gain
-CI tags. An override stays on its event and takes precedence. If any event
-overrides a common key with text or a metric, that key stays out of the new
-defaults for its kind in that batch. Peers carry the string locally instead.
-This avoids numeric inheritance and excludes an unused original string from the
-payload and its byte budget, even when the original value was very large.
-Different snapshots or an event with no shared base trigger the same local
-fallback for that event kind; other kinds can still share their defaults.
+At delivery, CI, Git, OS and runtime strings are written on each event, matching
+the SDK's wire representation. The immutable base saves map entries during test
+execution; it does not require intake to inherit new keys from the envelope.
+Text overrides replace defaults. Numeric overrides omit the string, so the
+payload never contains both forms of the same tag. Projection owns its maps and
+does not modify a finished span. Byte limits account for all effective strings.
 
 The SDK's tag API publishes updates through `AddCITags` and `AddCITagsMap`, and
 also exposes a mutable cached map. Internal readers use `GetCITagsReadOnly`,

@@ -5,7 +5,7 @@
 
 // This file is exactly pulled from datadog-agent/pkg/util/hostname
 
-//go:build !windows
+//go:build !windows && go1.26
 
 package hostname
 

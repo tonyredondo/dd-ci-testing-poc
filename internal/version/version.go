@@ -1,3 +1,5 @@
+//go:build go1.26
+
 // Package version identifies the CLI and native CI runtime independently of the upstream SDK base.
 package version
 

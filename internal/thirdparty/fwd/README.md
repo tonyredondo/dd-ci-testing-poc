@@ -11,3 +11,8 @@ The sources and tests keep their upstream filenames and root package layout.
 Mini imports this internal copy without requiring the external module.
 
 Follow the [shared audit and update procedure](../README.md#audit-and-update).
+
+Go source files retain Go 1.26 language semantics with file-specific build
+constraints. The root module's Go 1.21 directive preserves the consumer's
+language version. Keep the constraints and legacy build lines synchronized with
+`gofmt` during source updates.

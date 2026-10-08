@@ -135,13 +135,28 @@ the oracle; fewer APM fields is intentional.
 Actual Bazel compiler invocation and real Datadog intake/UI acceptance remain
 unverified. Loopback and payload-file fixtures prove their local contracts.
 
-Mini and the CLI import only this module and the Go standard library. Consumer
-fixtures check that adding `testopt` requires no external runtime modules and
-that the resulting program builds offline. The repository's test dependencies
-never enter the consumer's packages; its module graph lists only them, at the
-old versions this module requires, and the check rejects a newer Testify. The
-[maintenance checks](maintenance.md#verification-before-publication) verify this
-boundary after source updates.
+Mini, the CLI and ported SDK assertion helpers use only this module and the Go
+standard library. Consumer tests run `go mod tidy` and verify the exact module
+graph. Older Testify, go-spew and YAML versions stay unchanged with both readonly
+and mod flags. The CI dependency gate rejects any external requirement or runtime
+package; printing the dependency list alone is insufficient.
+
+The transparency and safety regressions cover these contracts:
+
+| Contract | Regression coverage |
+| --- | --- |
+| Credential-safe transport errors | `TestRequestErrorsHideEndpointCredentials`, `TestResponseErrorsRedactEchoedCredentials`: query/fragment credentials and echoed keys are absent; error identity remains available |
+| Cancel package resolution with inherited stdout | `TestReadPackagesCancelsAnInheritedStdout`: cancellation returns while a descendant still owns the pipe |
+| Reserved span fields | `TestReservedTagsUpdateEventFields`, `TestReservedTagsReachWireFieldsAndEventKind`: names, service, resource and type reach the decoded event fields |
+| Reentrant tag values | `TestTagFormattingCanReadItsSpan`: stringers, formatters, slices and errors can read the span; a callback that finishes it cannot add a late tag |
+| Consumer dependency versions | `TestMiniPreservesOlderConsumerDependencies`, `TestMiniConsumerAddsOnlyOwnModule`: readonly/mod builds keep old Testify, go-spew and YAML; consumer tidy adds only Mini |
+| Consumer language version | `TestMiniPreservesConsumerLanguage`: Go 1.21, 1.22 and 1.26 loop closures match native Go |
+| Optional SDK mirror compatibility | `TestMiniUnsupportedSDKMirrorRetainsTestReporting`: SDK 2.10.1 builds twice, warns, and retains one test/session per run without duplicate SDK reporting |
+| Package setup failures | `TestMiniContinuesAfterPackageSetupFailures`: valid packages execute beside mixed-package, missing and empty targets with native exit status |
+| Event metadata placement | `TestMiniCIConfigurationWireParity` and common-tag wire tests: CI/Git/system attributes stay on event fields, without normalization hiding their location |
+| Workspace and vendor provisioning | `TestMiniProvisionsWorkspaceWithoutChangingModules`, `TestMiniProvisionsVendorAndPreservesPatchedSources`: preserve caller files, loop semantics, local patches and explicit modfiles; runner tests cover selected versions, forks, source overlays and symlink files |
+| Enforced dependency boundary | `scripts/test_dependency_boundary.py`: reject unused external requirements and nonstandard packages outside this module |
+
 
 ## Compatibility workflow
 

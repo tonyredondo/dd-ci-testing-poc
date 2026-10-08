@@ -1,7 +1,7 @@
 // Copyright 2009 The Go Authors. All rights reserved.
 // Fixed-buffer Uname queries adapted from x/sys v0.47.0; BSD license in ../LICENSE.
 
-//go:build darwin || dragonfly || freebsd || netbsd || openbsd
+//go:build (darwin || dragonfly || freebsd || netbsd || openbsd) && go1.26
 
 package unix
 

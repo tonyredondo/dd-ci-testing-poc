@@ -1,3 +1,5 @@
+//go:build go1.26
+
 package minitracer
 
 import (
@@ -60,14 +62,13 @@ func (c *CommonTags) Option() StartSpanOption {
 	}
 }
 
-// Account for effective event strings and the potential envelope overhead.
-// Replaced defaults consume no bytes: projection puts such keys on peer events
-// instead of adding an unused (possibly large) value to the envelope.
+// Account for all effective strings, including immutable defaults. Overrides
+// replace those strings rather than adding both values to the wire payload.
 func eventSize(event *ciEvent) int {
 	size := event.Msgsize()
 	if event.common != nil {
-		// A new event-kind metadata entry also needs its key and map headers.
-		size += event.common.bytes + msgp.StringPrefixSize + len(event.Type) + 2*msgp.MapHeaderSize
+		// Include a metadata map even when the event has no local strings.
+		size += event.common.bytes + msgp.MapHeaderSize
 		for key := range event.Content.Meta {
 			if value, replaced := event.common.values[key]; replaced {
 				size -= 2*msgp.StringPrefixSize + len(key) + len(value)
@@ -85,97 +86,35 @@ func eventSize(event *ciEvent) int {
 	return size
 }
 
-// prepareCommonMetadata leaves sealed spans untouched. A homogeneous event kind
-// shares its snapshot in the envelope. Mixed snapshots (including an event with
-// no defaults) fall back to per-event strings for that kind in this batch.
-// An override removes only that new default from the envelope; peers get the
-// string on their event. This prevents numeric inheritance and unused strings
-// escaping the effective-event byte budget when every event overrides a key.
+// prepareCommonMetadata keeps CI/Git/system strings on each event, matching
+// the SDK's intake representation. The shared snapshot remains immutable in
+// memory; projection owns the copy and never changes a finished span.
 func prepareCommonMetadata(base map[string]map[string]string, events ciEvents) (map[string]map[string]string, ciEvents) {
-	groups := make(map[string]*CommonTags)
-	for _, event := range events {
-		common, seen := groups[event.Type]
-		if !seen {
-			groups[event.Type] = event.common
-		} else if common != event.common {
-			groups[event.Type] = nil
-		}
-	}
-	defaults := make(map[string]map[string]string)
-	metadata := base
-	for kind, common := range groups {
-		if isCIEventKind(kind) && common != nil && len(common.values) != 0 {
-			defaults[kind] = maps.Clone(common.values)
-		}
-	}
-	for _, event := range events {
-		for key := range event.Content.Meta {
-			delete(defaults[event.Type], key)
-		}
-		for key := range event.Content.Metrics {
-			delete(defaults[event.Type], key)
-		}
-	}
-	if len(defaults) != 0 {
-		metadata = maps.Clone(base)
-		if metadata == nil {
-			metadata = make(map[string]map[string]string, len(defaults))
-		}
-		for kind, values := range defaults {
-			merged := maps.Clone(base[kind])
-			if merged == nil {
-				merged = make(map[string]string, len(values))
-			}
-			maps.Copy(merged, values)
-			metadata[kind] = merged
-		}
-	}
 	var projected ciEvents
 	for i, event := range events {
-		if event.common == nil {
+		if event.common == nil || len(event.common.values) == 0 {
 			continue
 		}
-		if groups[event.Type] == event.common && len(defaults[event.Type]) == len(event.common.values) {
-			continue // Ordinary batch: the whole base is already in the envelope.
-		}
-		var meta map[string]string
+		meta := make(map[string]string, len(event.Content.Meta)+len(event.common.values))
+		maps.Copy(meta, event.Content.Meta)
 		for key, value := range event.common.values {
-			if _, local := event.Content.Meta[key]; local {
+			if _, local := meta[key]; local {
 				continue
 			}
 			if _, numeric := event.Content.Metrics[key]; numeric {
 				continue
 			}
-			if shared, present := defaults[event.Type][key]; present && shared == value {
-				continue
-			}
-			if meta == nil {
-				meta = maps.Clone(event.Content.Meta)
-				if meta == nil {
-					meta = make(map[string]string, len(event.common.values))
-				}
-			}
 			meta[key] = value
 		}
-		if meta != nil {
-			if projected == nil {
-				projected = append(ciEvents(nil), events...)
-			}
-			copy := *event
-			copy.Content.Meta = meta
-			projected[i] = &copy
+		if projected == nil {
+			projected = append(ciEvents(nil), events...)
 		}
+		copy := *event
+		copy.Content.Meta = meta
+		projected[i] = &copy
 	}
 	if projected == nil {
 		projected = events
 	}
-	return metadata, projected
-}
-
-func isCIEventKind(kind string) bool {
-	switch kind {
-	case "test", "test_session_end", "test_module_end", "test_suite_end":
-		return true
-	}
-	return false
+	return base, projected
 }

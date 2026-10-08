@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: |
           (cd testdata/fixture && go mod download && go mod verify)
-          go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./cmd/ddtest
+          python scripts/dependency_boundary.py
           go vet ./...
       - name: Unit, runtime and differential compatibility
         shell: bash

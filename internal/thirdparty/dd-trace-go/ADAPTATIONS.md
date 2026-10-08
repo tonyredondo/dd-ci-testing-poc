@@ -452,11 +452,14 @@ envelope metadata in payload-file mode. New CI metrics or special tag handling
 in upstream require review of this boundary.
 
 Mini's `internal/minitracer/common_tags.go` owns getters and wire projection.
-Homogeneous event kinds share strings in metadata; text/numeric overrides or a
-mixed snapshot fall back to local strings without mutating sealed maps. Child
-spans do not receive CI defaults. Accounting excludes replaced default values
-and includes envelope overhead conservatively, even when the wire payload
-shrinks. A large masked default must never reject a smaller valid event.
+The immutable snapshot avoids rebuilding maps when spans start. Delivery copies
+the effective strings onto each CI event, matching the SDK representation.
+Text and numeric overrides retain their precedence; sealed maps never change.
+Child spans do not receive CI defaults. Accounting includes the event strings
+and excludes masked defaults. A large masked default must never reject a smaller
+valid event. Standard language/runtime ID/library/env/session envelope entries
+remain unchanged. Per-event projection adds wire bytes and delivery allocations;
+changing that placement requires evidence from the real intake.
 
 Checks: `TestCITagsSnapshotUpdatesAndRetainsOldValues`,
 `TestCommonTagOptionsKeepUpdatesTruncationAndBazelFiltering`, the native shared-tag
@@ -632,3 +635,23 @@ Checks: `TestNativeContextWithoutSDK`, `TestSDKMirrorScopeAndCancellation`,
 `TestSDKMirrorAPIDrift`, `TestMiniSDKSpanMirror` and
 `TestMiniSDKMirrorContextMatrix`. The [mirror guide](../../../docs/sdk-span-mirror.md)
 describes selection, delivery and the process-retry boundary.
+
+## Dependency-free test assertions and source language
+
+Ported SDK tests retain their inputs and boolean/fatal assertion behavior through
+`internal/testassert` and `internal/testassert/require`. These helpers use the
+standard library. Keeping external assertion imports in dependency tests would
+make a consumer's `go mod tidy` resolve Testify even without runtime imports.
+When synchronizing tests, relocate assert/require imports and add any missing
+helper behavior with its own regression tests.
+
+Source files keep Go 1.26 language semantics through file-specific build
+constraints, combined with existing OS and build tags. The root module declares
+Go 1.21 so adding Mini does not change a Go 1.21 client's loop-variable semantics.
+Run gofmt to synchronize legacy `+build` lines. The source manifests retain the
+original upstream hashes and record these files as local adaptations.
+
+Checks: `TestAssertionResults`, `TestFatalAssertionStopsExecution`,
+`TestMiniConsumerAddsOnlyOwnModule`, `TestMiniPreservesConsumerLanguage` and
+`TestMiniPreservesOlderConsumerDependencies`, plus the full SDK assertion suite
+on Go 1.26 and 1.27.

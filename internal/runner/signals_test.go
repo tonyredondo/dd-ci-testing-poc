@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build go1.26 && !windows
 
 package runner
 

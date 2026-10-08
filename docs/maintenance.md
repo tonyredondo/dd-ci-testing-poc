@@ -233,17 +233,23 @@ go list -deps -f '{{if and (not .Standard) .Module}}{{.Module.Path}}{{end}}' ./t
 ```
 
 The final command should list only `github.com/tonyredondo/dd-ci-testing-poc`.
-Test-only dependencies in the root module are expected. Their presence in
-`go.mod` alone does not establish a runtime dependency, but Go's minimal version
-selection applies them to consumers' module graphs. Keep
-`github.com/stretchr/testify` at v1.7.5: the oldest release used by the
-ported tests and consumer dependency checks. A consumer with
-Testify v1.7.5 or newer keeps its version; one without Testify gains no
-requirement, only `go.sum` checksums for Testify's `go.mod`.
-`TestMiniConsumerAddsOnlyOwnModule` fails if the requirement is raised. Adapt a
-ported assertion that needs a newer Testify instead of raising the requirement:
-before v1.8.2, for example, `Nil` rejects a nil `unsafe.Pointer`, so those
-checks use `Zero`.
+The distributed module has no `require` directives. This includes test-only
+dependencies: a consumer's `go mod tidy` also examines dependency tests. Ported
+SDK assertions use [`internal/testassert`](../internal/testassert/assert.go) and
+its fatal `require` wrappers. Preserve the assertion inputs and results when
+updating SDK tests; extend the helpers with standard-library code when needed.
+
+The module declares Go 1.21. Source files that need Mini's Go 1.26 language use
+`//go:build go1.26`, combined with their platform constraints. This keeps the
+consumer's own `go` directive and loop semantics intact. Use `gofmt` after editing
+constraints so legacy `+build` lines stay consistent. The setof generator emits
+the same language constraint for its generated sources. Run both supported Go
+toolchains after changing these constraints.
+
+Run `python scripts/dependency_boundary.py` before publication. The compatibility
+workflow runs it too. It fails on any external requirement or nonstandard runtime
+package outside this module. Consumer regressions cover older dependencies,
+readonly/mod flags and Go 1.21 language behavior.
 
 Install the frozen Orchestrion reference used by the
 [workflow](../.github/workflows/compatibility.yml), then export

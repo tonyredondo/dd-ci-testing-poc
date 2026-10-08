@@ -1,3 +1,5 @@
+//go:build go1.26
+
 package minitracer
 
 import (
@@ -57,8 +59,8 @@ func TestCommonTagsWireOverridesAndGetters(t *testing.T) {
 			if err := client.Close(context.Background()); err != nil {
 				t.Fatal(err)
 			}
-			if len(payload.Events) != 5 || payload.Metadata["test"]["ci.job.name"] != "older-default" || payload.Metadata["test"]["git.commit.sha"] != "commit" {
-				t.Fatalf("common metadata not lifted: %+v", payload.Metadata)
+			if len(payload.Events) != 5 || payload.Metadata["test"]["ci.job.name"] != "older-default" {
+				t.Fatalf("configured metadata changed: %+v", payload.Metadata)
 			}
 			if _, exists := payload.Metadata["test"]["os.platform"]; exists {
 				t.Fatal("numeric event inherited a string default")
@@ -73,8 +75,8 @@ func TestCommonTagsWireOverridesAndGetters(t *testing.T) {
 				if !exists || got != want || effectiveCommonMeta(&payload, payload.Events[i])["ci.job.name"] != want {
 					t.Fatalf("getter/wire override %d: %q %t", i, got, exists)
 				}
-				if _, repeated := payload.Events[i].Content.Meta["git.commit.sha"]; repeated {
-					t.Fatal("common Git value repeated on event")
+				if payload.Events[i].Content.Meta["git.commit.sha"] != "commit" {
+					t.Fatal("event missing its Git value")
 				}
 			}
 			if _, text := spans[2].Meta("os.platform"); text || spans[2].content.Metrics["os.platform"] != 42 {
@@ -104,7 +106,7 @@ func TestCommonMetadataMixedSnapshotsAndSealedMaps(t *testing.T) {
 	}
 	base := map[string]map[string]string{"*": {"language": "go"}}
 	metadata, wire := prepareCommonMetadata(base, events)
-	if _, lifted := metadata["test"]; lifted || metadata["test_module_end"]["git.commit.sha"] != "two" {
+	if _, lifted := metadata["test"]; lifted || metadata["test_module_end"]["git.commit.sha"] != "" {
 		t.Fatalf("mixed kind defaults: %v", metadata)
 	}
 	for i, want := range []string{"one", "two", "", "two"} {

@@ -1,3 +1,5 @@
+//go:build go1.26
+
 package runner
 
 import (
@@ -47,18 +49,21 @@ type Plan struct {
 	InstrumentedFiles, TestPackages int
 	// Modfile is a temporary go.mod that provides a runtime the module does
 	// not require; the module's own go.mod and go.sum stay untouched.
-	Modfile string
+	Modfile        string
+	Workfile       string
+	modfileOverlay bool // A vendor workspace reads the explicit modfile through its overlay.
 	// Warnings name optional integrations skipped for unsupported libraries.
-	Warnings         []string
-	coverOverlay     bool
-	orchestrionChain string
-	launcher         *goLauncher
-	orchestrion      bool
-	mini             bool
-	sdkCI            bool
-	testify          bool
-	goleak           bool
-	goleakCache      string
+	Warnings          []string
+	coverOverlay      bool
+	orchestrionChain  string
+	launcher          *goLauncher
+	orchestrion       bool
+	mini              bool
+	sdkCI             bool
+	sdkMirrorDisabled bool
+	testify           bool
+	goleak            bool
+	goleakCache       string
 }
 
 // Prepare creates a complete plan before native Go compilation starts. Callers
@@ -163,6 +168,62 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			_ = os.RemoveAll(temp)
 		}
 	}()
+	if runtime == Mini {
+		if work := workspaceFile(dir); work != "" {
+			plan.Workfile, e = provideMiniWorkspace(ctx, dir, work, temp, replacements)
+			if e != nil {
+				return plan, e
+			}
+
+			if opts.mod != "mod" && opts.mod != "readonly" {
+				vendor := filepath.Join(filepath.Dir(work), "vendor")
+				if _, err := os.Stat(filepath.Join(vendor, "modules.txt")); err == nil {
+					if e = snapshotVendor(vendor, filepath.Join(temp, "vendor"), replacements); e != nil {
+						return plan, e
+					}
+				}
+			}
+			opts.workfile = plan.Workfile
+		} else if opts.mod != "mod" && opts.mod != "readonly" {
+			root := moduleRoot(dir)
+			if root != "" {
+				vendor := filepath.Join(root, "vendor")
+				_, manifestErr := os.Stat(filepath.Join(vendor, "modules.txt"))
+				_, runtimeErr := os.Stat(filepath.Join(vendor, filepath.FromSlash(miniModule), "testopt"))
+				if manifestErr == nil && os.IsNotExist(runtimeErr) {
+					if opts.modfile != "" {
+						source := opts.modfile
+						if !filepath.IsAbs(source) {
+							source = filepath.Join(dir, source)
+						}
+						backing := filepath.Join(temp, "vendor-client.mod")
+						if e = copyModuleFile(source, backing, replacements); e != nil {
+							return plan, e
+						}
+						replacements[filepath.Join(root, "go.mod")] = backing
+						plan.modfileOverlay = true
+						flags := opts.buildFlags[:0]
+						for _, flag := range opts.buildFlags {
+							if !strings.HasPrefix(flag, "-modfile=") {
+								flags = append(flags, flag)
+							}
+						}
+						opts.buildFlags = flags
+					}
+					plan.Workfile, e = provideMiniVendorWorkspace(ctx, dir, root, temp, replacements)
+					if e != nil {
+						return plan, e
+					}
+					opts.workfile = plan.Workfile
+				}
+			}
+		}
+	}
+	if plan.Workfile != "" && len(replacements) != 0 {
+		if e = writeProvisionOverlay(temp, &opts, replacements); e != nil {
+			return plan, e
+		}
+	}
 	list := func(patterns ...string) (packages []goPackage, err error) {
 		phase := debug.start("resolve packages")
 		defer func() {
@@ -176,9 +237,12 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		// package directories with the spelling of dir, even through symbolic
 		// links. Relative patterns are matched against that same spelling.
 		cmd.Dir = dir
-		return readPackages(cmd, "resolve packages")
+		if opts.workfile != "" {
+			cmd.Env = append(cmd.Environ(), "GOWORK="+opts.workfile)
+		}
+		return readPackages(ctx, cmd, "resolve packages")
 	}
-	if runtime == Mini && opts.mod != "mod" {
+	if runtime == Mini && opts.mod != "mod" && plan.Workfile == "" {
 		plan.Modfile, e = preprovideMini(ctx, dir, opts, temp, replacements, progress)
 		if e != nil {
 			return plan, e
@@ -220,11 +284,19 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			break
 		}
 	}
+	validPackages := packages[:0]
 	for _, p := range packages {
 		if p.Error != nil {
-			return plan, fmt.Errorf("%s: %s", p.ImportPath, p.Error.Err)
+			if p.ImportPath == "testing" || p.ImportPath == runtimePackage {
+				return plan, fmt.Errorf("%s: %s", p.ImportPath, p.Error.Err)
+			}
+			// Preserve the original package arguments. Go reports setup failures
+			// and executes the remaining packages; invalid packages receive no hook.
+			continue
 		}
+		validPackages = append(validPackages, p)
 	}
+	packages = validPackages
 	var native *goPackage
 	foundRuntime := false
 	for i := range packages {
@@ -287,7 +359,13 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	plan.sdkCI = plan.mini && (plan.orchestrion || sdkCI)
 	hooks := hooksForRuntime(runtime, rewritten.ParallelStop)
 	if plan.sdkCI {
-		hooks += miniSDKCICacheMarker
+		if warning := preflightSDKMirror(libraries[sdkTracerPackage], replacements); warning != "" {
+			plan.sdkMirrorDisabled = true
+			plan.Warnings = append(plan.Warnings, warning)
+			hooks += miniSDKCIOnlyCacheMarker
+		} else {
+			hooks += miniSDKCICacheMarker
+		}
 	}
 	if e = add(filepath.Join(native.Dir, "zz_dd_ci_visibility_hooks.go"), hooks); e != nil {
 		return plan, e
@@ -497,6 +575,9 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 	}
 	debug.printf("tool selection testify=%t goleak=%t cover=%t user_toolexec=%t orchestrion=%t sdk_ci_gate=%t", plan.testify, plan.goleak, plan.coverOverlay, opts.toolexec != "", plan.orchestrion, plan.sdkCI)
 	forwarded := goTestArguments(plan, opts, tool)
+	if plan.Workfile != "" {
+		env = append(env, "GOWORK="+plan.Workfile)
+	}
 	if plan.launcher != nil {
 		ctx = context.WithValue(ctx, goLauncherKey{}, *plan.launcher)
 	}
@@ -549,7 +630,7 @@ func goTestArguments(plan Plan, opts options, tool string) []string {
 		}
 	}
 	for i, argument := range opts.arguments {
-		if argument.flag == "overlay" || argument.flag == "toolexec" && tool != "" || argument.flag == "modfile" && plan.Modfile != "" {
+		if argument.flag == "overlay" || argument.flag == "toolexec" && tool != "" || argument.flag == "modfile" && (plan.Modfile != "" || plan.modfileOverlay) {
 			continue
 		}
 		forwarded = append(forwarded, argument.raw...)

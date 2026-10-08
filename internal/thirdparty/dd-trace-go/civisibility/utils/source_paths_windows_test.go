@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && go1.26
 
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
@@ -13,7 +13,7 @@ import (
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 
-	"github.com/stretchr/testify/assert"
+	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 )
 
 func TestResolveSourceFilePathWindows(t *testing.T) {

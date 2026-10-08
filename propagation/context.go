@@ -1,3 +1,5 @@
+//go:build go1.26
+
 // Package propagation exchanges trace identity without importing a tracing SDK.
 package propagation
 

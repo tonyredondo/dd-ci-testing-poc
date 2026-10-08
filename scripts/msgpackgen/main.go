@@ -1,3 +1,5 @@
+//go:build go1.26
+
 // Command msgpackgen runs the pinned generator and relocates its runtime import.
 package main
 

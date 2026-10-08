@@ -1,3 +1,5 @@
+//go:build go1.26
+
 // Package cidelivery coordinates opt-in delivery between instrumented tests.
 // It starts no goroutines. A checkpoint owns admission until all queued work
 // completes; tests already admitted may continue to run in parallel.

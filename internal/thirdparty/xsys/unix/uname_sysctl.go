@@ -1,7 +1,7 @@
 // Copyright 2009 The Go Authors. All rights reserved.
 // Uname formatting adapted from x/sys v0.47.0; BSD license in ../LICENSE.
 
-//go:build unix
+//go:build unix && go1.26
 
 package unix
 
