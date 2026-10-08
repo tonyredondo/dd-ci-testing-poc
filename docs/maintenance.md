@@ -353,3 +353,14 @@ exercise the SDK's manual test shim and v2.11 configuration boundaries.
 `TestMiniLegacySDKShim` verifies the same boundary without Orchestrion, including
 native SDK builds before and after Mini, failed tests and APM HTTP delivery.
 No SDK source in the module cache or incorporated runtime is changed by this guard.
+
+The same compiler boundary installs the SDK span mirror. Maintain its construction,
+`SpanContext` snapshot, finish and deferred-unlock anchors together. Capture owns
+detached maps before the SDK can pool a span; delivery must run after its unlock.
+The native context binding in `gotesting/context.go`, `testing.go` and
+`instrumentation_orchestrion.go` is a local runtime adaptation. Register local
+helpers and tests in `SOURCE.json`; retain the original SDK hashes and base.
+Keep SDK-free context binding allocation-free, and rerun the real APM/CI receivers,
+parallel/retry isolation, pooled-context, coverage and Orchestrion cases described
+in [SDK span copies](sdk-span-mirror.md). Bump the cache marker when compiler hooks
+change, including generated initialization code.
