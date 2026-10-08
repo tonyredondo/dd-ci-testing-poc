@@ -71,10 +71,13 @@ metrics. The copy also records `apm.trace_id` and `apm.span_id` for diagnosis.
 Mini owns the CI hierarchy, origin and runtime identity; SDK sampling and
 APM control metrics are omitted from the copy.
 
-Capture runs while the SDK span lock protects its data. Metadata and metrics
-are detached before the SDK can clear a pooled span. Enqueuing runs after the
-SDK unlocks, so Mini backpressure cannot hold that lock. Repeated or concurrent
-`Finish` calls produce at most one copy.
+Capture runs at the exit of SDK `finish`, while the span lock still protects
+its data. It includes field updates after trace bookkeeping and later SDK
+defers. A completion marker prevents early returns or a panic before bookkeeping
+from emitting an unfinished span. Metadata and metrics are detached before
+the SDK can clear a pooled span. Enqueuing runs after the SDK unlocks, so Mini
+backpressure cannot hold that lock. Repeated or concurrent `Finish` calls
+produce at most one copy.
 
 Copies use Mini's existing byte limits, gzip, HTTP retries and flush/close
 handling. `DD_CIVISIBILITY_DEFERRED_DELIVERY=true` defers their delivery while
@@ -87,8 +90,22 @@ goleak policy.
 
 ## Maintenance and checks
 
-`internal/instrument/sdk_mirror.go` validates the SDK construction, context
-snapshot and finish/lock anchors. Missing or ambiguous hooks fail compilation.
+`internal/instrument/sdk_mirror.go` dispatches the edits;
+`sdk_mirror_match.go` validates construction, context snapshots and finish/lock
+anchors. The matcher follows each variable's role in the AST. Renaming a
+receiver, parameter or local variable does not change the hook. Both short
+declarations and `var` declarations can construct the returned SDK context.
+Comments and strings containing `__ddtest` are allowed; identifiers with that
+prefix are reserved for generated code.
+
+Each operation needs one anchor. Duplicate constructors, snapshot builders or
+finish calls fail compilation. The snapshot must come from the supplied span
+under its nil guard and be used with that span and the incoming context.
+Finish needs a direct lock and deferred unlock. Extra mutex references,
+receiver aliases or reassignment are rejected because the hook cannot prove
+that capture still owns the protected data. Moving these operations into new
+helpers requires an explicit matcher update and behavioral tests.
+
 The current fixtures use v2.11.0-rc.2 and the SDK revision pinned in
 `internal/version`. Other private SDK layouts need validation before support
 can be claimed.
@@ -108,5 +125,9 @@ against real APM and CI HTTP receivers. `TestMiniSDKMirrorContextMatrix`
 checks parallel isolation, cleanup cancellation, pooled contexts, in-process
 retries, agent/agentless delivery, deferred delivery, goleak, Orchestrion and
 `-race` with SDK coverage. The regular compatibility workflow runs these
-checks on Linux, macOS and Windows. Unit tests cover detached map ownership,
-concurrent capture, API drift and the SDK-free allocation path.
+checks on Linux, macOS and Windows. `TestSDKMirrorCosmeticChanges` compiles and
+executes transformed fixtures, including renames, context import aliases,
+declaration styles, late field updates, early returns and panics. Rejection
+tests cover duplicate anchors, foreign snapshots and unsupported locking.
+Runtime unit tests cover detached map ownership, concurrent capture and the
+SDK-free allocation path.

@@ -22,7 +22,7 @@ func isSDKCIPackage(pkg string) bool {
 // This exported testing constant changes the SDK's cache inputs through
 // internal/env's testing dependency. Bump it when SDK guard or mirror compiler edits change.
 const miniSDKCICacheMarker = `
-const DDTestMiniSDKCIContract = "mini-sdk-ci-mirror-v3"
+const DDTestMiniSDKCIContract = "mini-sdk-ci-mirror-v4"
 `
 
 // prepareSDKCICompile rewrites the compiler's actual inputs, including covered

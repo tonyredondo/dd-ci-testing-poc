@@ -357,6 +357,10 @@ No SDK source in the module cache or incorporated runtime is changed by this gua
 The same compiler boundary installs the SDK span mirror. Maintain its construction,
 `SpanContext` snapshot, finish and deferred-unlock anchors together. Capture owns
 detached maps before the SDK can pool a span; delivery must run after its unlock.
+Register capture's defer after the SDK unlock defer and delivery's defer before
+it. Their execution order is capture, unlock, delivery. Only completed trace
+bookkeeping enables capture. Keep the compiled fixture tests for final fields,
+panic/early-return behavior and local renames when changing the matcher.
 The native context binding in `gotesting/context.go`, `testing.go` and
 `instrumentation_orchestrion.go` is a local runtime adaptation. Register local
 helpers and tests in `SOURCE.json`; retain the original SDK hashes and base.
