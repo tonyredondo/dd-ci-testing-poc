@@ -61,6 +61,16 @@ class ShardTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "execution selection"):
                 ci_shards.check_results(selected, {}, set())
 
+    def test_tip_revision_accepts_git_abbreviations_and_checks_the_actual_commit(self):
+        sha = "2557edd671b4ec84af8a5841a621a6abab39774b"
+        for version in ("go1.28-devel_2557edd6 Thu Oct 8 11:55:37 2026 -0700",
+                        "devel go1.28-2557edd671b4", "go1.28-devel_" + sha):
+            ci_shards.validate_tip_version(version, sha)
+        for version, source in (("go1.28", sha), ("go1.28-devel_2557edd6", ""),
+                                ("go1.28-devel_deadbeef", sha), ("go1.28-devel_2557edd6", "deadbeef" * 5)):
+            with self.assertRaisesRegex(ValueError, "differs from toolchain"):
+                ci_shards.validate_tip_version(version, source)
+
     def test_stream_keeps_logs_and_json_with_subtests_and_failure(self):
         events = [dict(Action="output", Output="native diagnostic\n"),
                   dict(Action="pass", Test="TestOne/child"),

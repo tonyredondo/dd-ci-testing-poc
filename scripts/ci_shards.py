@@ -8,7 +8,6 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
-import sys
 import time
 
 import parity_report
@@ -114,6 +113,14 @@ def allowed_skips(platform, shard):
     return set()
 
 
+def validate_tip_version(version, source_sha):
+    # cmd/dist uses Git's abbreviated hash. Both its current devel_ form and
+    # older devel prefixes are valid; the abbreviation length is not fixed.
+    match = re.search(r"(?:go[0-9.]+-devel_|devel go[0-9.]+-)([0-9a-f]{7,40})\b", version)
+    if not re.fullmatch(r"[0-9a-f]{40}", source_sha) or not match or not source_sha.startswith(match[1]):
+        raise ValueError(f"Go tip source revision {source_sha!r} differs from toolchain {version!r}")
+
+
 def stream_tests(command, output, units):
     """Keep native output readable while retaining Go's complete JSON event stream."""
     results = {}
@@ -155,9 +162,7 @@ def run(args):
     environment = json.loads(capture("go", "env", "-json", "GOVERSION", "GOOS", "GOARCH"))
     version = environment["GOVERSION"]
     if args.go == "tip":
-        tip_sha = os.environ.get("GO_TIP_SHA", "")
-        if not re.fullmatch(r"[0-9a-f]{40}", tip_sha) or tip_sha[:12] not in version:
-            raise ValueError("Go tip source revision is missing or differs from the toolchain")
+        validate_tip_version(version, os.environ.get("GO_TIP_SHA", ""))
     elif not version.startswith("go" + args.go.removesuffix(".x") + "."):
         raise ValueError(f"unexpected toolchain {version} for {args.go}")
     expected_os = PLATFORMS[args.os]
