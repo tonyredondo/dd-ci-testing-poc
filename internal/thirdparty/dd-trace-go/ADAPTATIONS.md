@@ -664,3 +664,10 @@ Checks: `TestAssertionResults`, `TestFatalAssertionStopsExecution`,
 `TestMiniModModeResolvesClientRequirements` and
 `TestMiniPreservesOlderConsumerDependencies`, plus the ported SDK tests on
 Go 1.25, 1.26, 1.27 and tip.
+
+Container and OS-release discovery check scanner errors and report them at debug
+level. They retain metadata read before a later failure, preserving the SDK's
+best-effort behavior. OS-release parsing skips malformed lines without a value.
+`TestContainerReadersHandleReadErrors`, `TestContainerReaderStopsAtFirstID` and
+`TestOSReleaseHandlesMalformedLinesAndReadErrors` cover these paths; tip's
+scanner analyzer checks the error handling with `go vet`.

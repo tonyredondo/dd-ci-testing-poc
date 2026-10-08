@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "2aadeaa863ef139bfdebb5787fd00caf41c0cd1133b5765a67d25828870db702",
+      "sha256": "58683bf2d2fb3a0c472961a466bc0f9a70755a098ff09eabd31087c38f8d66e6",
       "role": "local"
     },
     {
@@ -1438,10 +1438,15 @@
     },
     {
       "path": "container_linux.go",
-      "sha256": "6d87cf42b60ea046389f28d70baa5c0c127ea31e67d57508ca5cb7e90d14e061",
+      "sha256": "f1d68263008214d3c349e6a1e992432f177404ddb5e5d71e906fd61852650906",
       "role": "adapted",
       "source_path": "internal/container_linux.go",
       "source_sha256": "6d87cf42b60ea046389f28d70baa5c0c127ea31e67d57508ca5cb7e90d14e061"
+    },
+    {
+      "path": "container_scanner_linux_test.go",
+      "sha256": "149013b9ca830a746a2b0b11c11c794a8e2c6607e88c19546f6786c42d263091",
+      "role": "local"
     },
     {
       "path": "container_stub.go",
@@ -1681,14 +1686,14 @@
     },
     {
       "path": "osinfo/osinfo_unix.go",
-      "sha256": "dc7323fdd22808def825a484fdbe5201656fc846a5caa0b64b55ea0eaf16aa4d",
+      "sha256": "dabfb206246533bad3544033f400a4aa251d4ea48b7e7b984e801ba02e74126b",
       "role": "adapted",
       "source_path": "internal/osinfo/osinfo_unix.go",
       "source_sha256": "24beb920b042b2f753e409b95c0509b52a4ccf0afc03207f4a897d4701db98aa"
     },
     {
       "path": "osinfo/osinfo_unix_test.go",
-      "sha256": "b7e65d58f482b81e5cca8a66531ce30168c9bf0bba0cf3d59b24e5372f578c78",
+      "sha256": "d6067f813b4b0b49ef3cde88d34fef8aeaab7caa8260ad02201e709cb3b3d5f0",
       "role": "local"
     },
     {
