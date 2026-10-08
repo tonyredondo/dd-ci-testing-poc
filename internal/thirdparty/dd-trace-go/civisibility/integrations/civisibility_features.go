@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
@@ -412,7 +411,7 @@ func ensureAdditionalFeaturesInitialization(_ string) {
 		}
 
 		// wait group to wait for all the additional features to be loaded
-		var wg compat.WaitGroup
+		var wg sync.WaitGroup
 
 		// if early flake detection is enabled then we run the known tests request
 		if currentSettings.KnownTestsEnabled {

@@ -12,8 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 func TestWorkspaceProvisionResolvesExistingMainModules(t *testing.T) {
@@ -24,7 +22,7 @@ func TestWorkspaceProvisionResolvesExistingMainModules(t *testing.T) {
 		}
 	}
 	for file, data := range map[string]string{
-		"go.work":          "go 1.26.0\nuse(\n./client\n./helper\n)\n",
+		"go.work":          "go 1.25.0\nuse(\n./client\n./helper\n)\n",
 		"client/go.mod":    "module example.com/client\ngo 1.21\nrequire example.com/helper v0.0.0\n",
 		"helper/go.mod":    "module example.com/helper\ngo 1.21\n",
 		"helper/helper.go": "package helper\n",
@@ -33,7 +31,7 @@ func TestWorkspaceProvisionResolvesExistingMainModules(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	work, err := provideMiniWorkspace(compat.Context(t), filepath.Join(root, "client"), filepath.Join(root, "go.work"), t.TempDir(), nil)
+	work, err := provideMiniWorkspace(t.Context(), filepath.Join(root, "client"), filepath.Join(root, "go.work"), t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +116,7 @@ func TestWorkspaceProvisionKeepsSelectedRuntime(t *testing.T) {
 			t.Setenv("GOSUMDB", "off")
 			t.Setenv("GOMODCACHE", cache)
 			clientMod := "module example.com/client\ngo 1.21\nrequire " + miniModule + " v0.1.0\n"
-			work := "go 1.26.0\nuse ./client\n"
+			work := "go 1.25.0\nuse ./client\n"
 			replace := "replace " + miniModule + " => " + path + " " + version + "\n"
 			if replacement == "workspace" {
 				work += replace
@@ -133,7 +131,7 @@ func TestWorkspaceProvisionKeepsSelectedRuntime(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			target, err := provideMiniWorkspace(compat.Context(t), client, original, t.TempDir(), nil)
+			target, err := provideMiniWorkspace(t.Context(), client, original, t.TempDir(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -209,7 +207,7 @@ func TestWorkspaceNewerRuntimePreservesProgramDefaults(t *testing.T) {
 		work:                                 "go 1.21\nuse ./client\nreplace " + miniModule + " => ./mini\n",
 		filepath.Join(client, "go.mod"):      "module example.com/client\ngo 1.21\n",
 		filepath.Join(client, "main.go"):     "package main\nimport(\"fmt\";\"time\")\nfunc main(){timer:=time.NewTimer(time.Hour);defer timer.Stop();fmt.Println(cap(timer.C))}\n",
-		filepath.Join(runtimeRoot, "go.mod"): "module " + miniModule + "\ngo 1.26.0\n",
+		filepath.Join(runtimeRoot, "go.mod"): "module " + miniModule + "\ngo 1.25.0\n",
 		filepath.Join(runtimeRoot, "testopt", "testopt.go"): "package testopt\n",
 	} {
 		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
@@ -227,7 +225,7 @@ func TestWorkspaceNewerRuntimePreservesProgramDefaults(t *testing.T) {
 		return string(out)
 	}
 	native := run(work)
-	supplied, err := provideMiniWorkspace(compat.Context(t), client, work, t.TempDir(), nil)
+	supplied, err := provideMiniWorkspace(t.Context(), client, work, t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,8 +236,19 @@ func TestWorkspaceNewerRuntimePreservesProgramDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "go 1.26.0") || !strings.Contains(string(data), "default=go1.21") {
+	if !strings.Contains(string(data), "go 1.25.0") || !strings.Contains(string(data), "default=go1.21") {
 		t.Fatalf("workspace does not preserve defaults: %s", data)
+	}
+}
+
+func TestFormattedGoDebug(t *testing.T) {
+	text := "module example.com/client\ngo 1.21\ngodebug (\n\t// A runtime override.\n\tdefault=go1.25 // Keep modern timers.\n\t\"asynctimerchan=0\"\n)\nreplace example.com/helper => ../godebug\n"
+	got, err := formattedGoDebug(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != (goDebugSetting{"default", "go1.25"}) || got[1] != (goDebugSetting{"asynctimerchan", "0"}) {
+		t.Fatalf("runtime defaults: %+v", got)
 	}
 }
 
@@ -257,11 +266,11 @@ func TestVendorWorkspaceKeepsNativeModuleRoot(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	work, err := provideMiniVendorWorkspace(compat.Context(t), root, root, t.TempDir(), nil)
+	work, err := provideMiniVendorWorkspace(t.Context(), root, root, t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := goTool(compat.Context(t), root, nil, "work", "edit", "-json", work)
+	out, err := goTool(t.Context(), root, nil, "work", "edit", "-json", work)
 	if err != nil {
 		t.Fatal(err)
 	}

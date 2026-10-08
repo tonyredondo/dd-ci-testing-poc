@@ -23,7 +23,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "f91a26e177315b630bd6de17dc10523ab90771ccaae9d4f9d43e520ef4830fa9",
+      "sha256": "a6ea7942ed6b0c1bf334012aa22cd110d7b9855463aeab299f06b9fb34d1ce89",
       "role": "local"
     },
     {
@@ -355,7 +355,7 @@
     },
     {
       "path": "msgp/write.go",
-      "sha256": "170cbcd3934aea995ed17c3176ed41d2581fd918bf64fa7db6cfefea94a03410",
+      "sha256": "458f3891d440c0fc088b1a782a8f1afaeeb375e7bdd90c66c52bcd5fce7d8716",
       "role": "adapted",
       "source_path": "msgp/write.go",
       "source_sha256": "bdee975448f05b596f97fd8dfc74df45582abfefa330de7cbd43905b1969557c"

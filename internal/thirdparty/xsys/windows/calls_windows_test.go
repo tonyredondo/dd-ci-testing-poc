@@ -8,19 +8,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 	"unsafe"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 func TestSystemDLLAndPerformanceCounter(t *testing.T) {
 	dll := NewLazySystemDLL("kernel32.dll")
 	counter := dll.NewProc("QueryPerformanceCounter")
 	frequency := dll.NewProc("QueryPerformanceFrequency")
-	var wg compat.WaitGroup
+	var wg sync.WaitGroup
 	for i := 0; i < 16; i++ {
 		wg.Go(func() {
 			if err := counter.Find(); err != nil {

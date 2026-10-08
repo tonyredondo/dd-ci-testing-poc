@@ -1,5 +1,3 @@
-//go:build go1.25
-
 package runner
 
 import (
@@ -8,10 +6,10 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
@@ -64,7 +62,7 @@ func TestCLIDebugPhasesAndConcurrentStderr(t *testing.T) {
 	t.Setenv("DD_TRACE_DEBUG", "true")
 	var output bytes.Buffer
 	logger := debugFromContext(withCLIDebug(context.Background(), &output))
-	var workers compat.WaitGroup
+	var workers sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		workers.Go(func() {
 			for i := 0; i < 100; i++ {
@@ -109,7 +107,7 @@ func (failingDebugWriter) Write([]byte) (int, error) { return 0, errors.New("log
 
 func TestCLIDebugWriteFailure(t *testing.T) {
 	t.Setenv("DD_TRACE_DEBUG", "true")
-	if code := RunRuntime(compat.Context(t), []string{"-p"}, Mini, nil, io.Discard, failingDebugWriter{}); code != 2 {
+	if code := RunRuntime(t.Context(), []string{"-p"}, Mini, nil, io.Discard, failingDebugWriter{}); code != 2 {
 		t.Fatalf("broken debug writer changed parse-error exit=%d", code)
 	}
 }

@@ -1,6 +1,7 @@
 package msgp
 
 import (
+	"encoding"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -10,8 +11,6 @@ import (
 	"reflect"
 	"sync"
 	"time"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 const (
@@ -902,8 +901,8 @@ func GuessSize(i any) int {
 var bytesPool = sync.Pool{New: func() any { return make([]byte, 0, 1024) }}
 
 // WriteBinaryAppender will write the bytes from the given
-// compat.BinaryAppender as a bin array.
-func (mw *Writer) WriteBinaryAppender(b compat.BinaryAppender) (err error) {
+// encoding.BinaryAppender as a bin array.
+func (mw *Writer) WriteBinaryAppender(b encoding.BinaryAppender) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("msgp: panic during AppendBinary: %v", r)
@@ -919,8 +918,8 @@ func (mw *Writer) WriteBinaryAppender(b compat.BinaryAppender) (err error) {
 }
 
 // WriteTextAppender will write the bytes from the given
-// compat.TextAppender as a bin array.
-func (mw *Writer) WriteTextAppender(b compat.TextAppender) (err error) {
+// encoding.TextAppender as a bin array.
+func (mw *Writer) WriteTextAppender(b encoding.TextAppender) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("msgp: panic during AppendText: %v", r)
@@ -936,8 +935,8 @@ func (mw *Writer) WriteTextAppender(b compat.TextAppender) (err error) {
 }
 
 // WriteTextAppenderString will write the bytes from the given
-// compat.TextAppender as a string.
-func (mw *Writer) WriteTextAppenderString(b compat.TextAppender) (err error) {
+// encoding.TextAppender as a string.
+func (mw *Writer) WriteTextAppenderString(b encoding.TextAppender) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("msgp: panic during AppendText: %v", r)

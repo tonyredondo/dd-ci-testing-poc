@@ -1,5 +1,3 @@
-//go:build go1.25
-
 // Copyright 2017 Datadog, Inc. Licensed under the Apache License, Version 2.0.
 // Go adaptation Copyright 2026 Datadog, Inc.
 package codeownership
@@ -14,11 +12,10 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode/utf16"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 func TestTheoryAndBoundaryCases(t *testing.T) {
@@ -140,7 +137,7 @@ func TestOwnershipIsImmutableAndStable(t *testing.T) {
 			t.Fatalf("unstable section order: %s", got.Tag())
 		}
 	}
-	var workers compat.WaitGroup
+	var workers sync.WaitGroup
 	for i := 0; i < 32; i++ {
 		workers.Go(func() {
 			for i := 0; i < 100; i++ {
@@ -280,7 +277,7 @@ func TestPathologicalMatchingAndLargeOwnerLists(t *testing.T) {
 	if got.FirstOwner() != "@slow" {
 		t.Fatal(got.Tag())
 	}
-	var workers compat.WaitGroup
+	var workers sync.WaitGroup
 	start := make(chan struct{})
 	done := make(chan struct{})
 	for i := 0; i < 4; i++ {

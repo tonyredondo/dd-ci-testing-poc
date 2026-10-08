@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 )
 
@@ -117,7 +117,7 @@ func TestCodeOwnersServiceCacheConcurrentReaders(t *testing.T) {
 	t.Setenv("DD_SERVICE", "")
 	writeCodeOwnersFile(t, filepath.Join(root, "CODEOWNERS"), "/pkg/ @org/team\n")
 	registerCodeOwnersTestPackage(t, filepath.Join(root, "pkg", "virtual_test.go"))
-	var workers compat.WaitGroup
+	var workers sync.WaitGroup
 	for i := 0; i < 32; i++ {
 		workers.Go(func() {
 			if got := ServiceFromCodeOwners(); got != "dd-go-team" {

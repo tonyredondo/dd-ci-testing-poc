@@ -2,10 +2,10 @@ package minitracer
 
 import (
 	"context"
+	"maps"
 	"sync"
 	"testing"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/propagation"
 )
 
@@ -49,7 +49,7 @@ func TestSDKMirrorCaptureOwnsFinalData(t *testing.T) {
 	mirror := sdkMirrorStart(ContextWithTest(context.Background(), owner), nil, "initial").(*sdkMirror)
 	meta := map[string]string{"custom": "final", "_dd.origin": "apm", "_dd.p.tid": "foreign", "_dd.parent_id": "foreign", "runtime-id": "sdk", "test_session_id": "foreign"}
 	metrics := map[string]float64{"custom": 42, "_sampling_priority_v1": 0, "_dd.top_level": 1, "test_suite_id": 999}
-	delivery := sdkMirrorCapture(mirror, "final", "service", "resource", "http", 100, 200, 1, compat.MapSequence(meta), metrics, [16]byte{1}, 101).(*sdkMirrorDelivery)
+	delivery := sdkMirrorCapture(mirror, "final", "service", "resource", "http", 100, 200, 1, maps.All(meta), metrics, [16]byte{1}, 101).(*sdkMirrorDelivery)
 	clear(meta)
 	clear(metrics) // Model the SDK clearing a pooled span before delivery.
 	e := delivery.event
@@ -65,7 +65,7 @@ func TestSDKMirrorCaptureOwnsFinalData(t *testing.T) {
 	if _, exists := e.Content.Meta["_dd.parent_id"]; exists {
 		t.Fatal("APM reparenting metadata leaked into CI")
 	}
-	if sdkMirrorCapture(mirror, "again", "", "", "", 0, 0, 0, compat.MapSequence(meta), metrics, [16]byte{}, 0) != nil {
+	if sdkMirrorCapture(mirror, "again", "", "", "", 0, 0, 0, maps.All(meta), metrics, [16]byte{}, 0) != nil {
 		t.Fatal("repeated Finish generated another copy")
 	}
 }
@@ -73,12 +73,12 @@ func TestSDKMirrorCaptureOwnsFinalData(t *testing.T) {
 func TestSDKMirrorConcurrentCapture(t *testing.T) {
 	owner, _ := newSpan(&Client{}, context.Background(), "test")
 	mirror := sdkMirrorStart(ContextWithTest(context.Background(), owner), nil, "root")
-	var wg compat.WaitGroup
+	var wg sync.WaitGroup
 	var mu sync.Mutex
 	deliveries := 0
 	for i := 0; i < 32; i++ {
 		wg.Go(func() {
-			if sdkMirrorCapture(mirror, "root", "", "", "", 10, -1, 0, compat.MapSequence(map[string]string{}), nil, [16]byte{}, 101) != nil {
+			if sdkMirrorCapture(mirror, "root", "", "", "", 10, -1, 0, maps.All(map[string]string{}), nil, [16]byte{}, 101) != nil {
 				mu.Lock()
 				deliveries++
 				mu.Unlock()

@@ -1,11 +1,10 @@
 package cidelivery
 
 import (
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 func TestIdleDeliveryWaitsForWholeParallelGroup(t *testing.T) {
@@ -64,7 +63,7 @@ func TestConcurrentActivityRetainsQueuedWork(t *testing.T) {
 	var coordinator Coordinator
 	parent := coordinator.begin()
 	var delivered atomic.Int32
-	var group compat.WaitGroup
+	var group sync.WaitGroup
 	for i := 0; i < 100; i++ {
 		group.Go(func() {
 			release := coordinator.begin()

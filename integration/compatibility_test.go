@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/runner"
 )
 
@@ -215,9 +214,8 @@ func buildConcurrently(t *testing.T, builds ...fixtureBuild) {
 		}
 		return
 	}
-	var wg compat.WaitGroup
+	var wg sync.WaitGroup
 	for i := range builds {
-		i := i
 		wg.Go(func() { run(i) })
 	}
 	wg.Wait()

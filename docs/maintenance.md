@@ -239,27 +239,29 @@ SDK assertions use [`internal/testassert`](../internal/testassert/assert.go) and
 its fatal `require` wrappers. Preserve the assertion inputs and results when
 updating SDK tests; extend the helpers with standard-library code when needed.
 
-The module declares Go 1.21 so importing Mini does not change the consumer's
-language version or loop-variable behavior. Ordinary source uses that syntax:
-numeric loops use indexed loops. Copy a loop variable only when a callback
-outlives its iteration, such as a goroutine, a queued close action or a parallel
-subtest. Sequential `t.Run`, `b.Run` and `filepath.WalkDir` calls finish before
-the loop continues and need no copy. Prefer goroutine arguments when possible;
-callback APIs such as `WaitGroup.Go` need a local binding for captured values.
-`internal/compat` supplies allocation-free string scanning and small equivalents
-for newer standard-library helpers. Keep native test lifetimes, map clearing and
-error matching intact when updating these helpers. Version guards belong at
-native API boundaries and in tests that exercise a specific Go feature; do not
-add a newer language constraint to every source file. Benchmarks keep the exact
-`for b.Loop()` form: Go's compiler protection against dead-code elimination
-requires that syntax, so those test files carry a Go 1.25 constraint.
+The module declares Go 1.25 and uses that release's standard library APIs.
+`internal/compat` has only two Go 1.26 equivalents: `AsType` and `Pointer`.
+Keep native error matching and value ownership when changing them. Version
+constraints belong at private testing layouts or APIs that differ by toolchain;
+ordinary source files need no language header.
 
-Root `godebug default=go1.26` sets the CLI and test harness runtime defaults
-independently of their language version. Go ignores dependency-module `godebug`
-directives, so client binaries keep their own defaults. Temporary workspaces
-must preserve the caller's effective defaults too. See
-[Go's GODEBUG contract](https://go.dev/doc/godebug). Check both toolchains in the
-current compatibility matrix after changing language or runtime defaults.
+A modern toolchain can compile a client with an older language version. Preserve
+that distinction: do not bump the client's `go` directive to satisfy Mini.
+Preparation supplies Mini as a separate main module in a temporary workspace.
+Each module keeps its language, and the workspace retains the caller's effective
+GODEBUG defaults. Native `-mod=mod` may update the client's own requirements;
+Mini's injected imports must never cause those updates. Alternate modfiles,
+overlays, workspaces and vendored patches participate in this contract.
+See [Go's GODEBUG contract](https://go.dev/doc/godebug).
+
+Check Go 1.25, 1.26, 1.27 and tip after changing these paths. The frozen SDK
+requires Go 1.26, so the Go 1.25 job runs all local runtime packages and explicit
+Mini fixtures with `GOTOOLCHAIN=local`. The latter assert the child runtime
+version and cover Testify, goleak, coverage, fuzz/examples and deferred delivery.
+Go 1.26 and 1.27 run the complete SDK differential suite. Tip runs the native
+Mini fixtures and manual SDK span-copy cases; the frozen Orchestrion reference
+cannot currently serve as a tip oracle. Check Orchestrion separately before
+extending the tip job to those comparisons.
 
 Run `python scripts/dependency_boundary.py` before publication. The compatibility
 workflow runs it too. It fails on any external requirement or nonstandard runtime
@@ -291,7 +293,7 @@ processes and failure paths. Its comparison preserves CI attributes and
 hierarchy semantics while allowing the documented APM-only differences.
 Do not expand normalization to hide a changed CI value.
 
-The CI matrix executes Go 1.26/1.27 on Linux and Go 1.27 on macOS/Windows.
+The CI matrix executes Go 1.25/1.26/1.27 and tip on Linux, and Go 1.27 on macOS/Windows.
 Linux also runs `-race`. Inspect the current head and PR merge checks after
 publication and verify that their checked-out inputs match the proposed change.
 Cross-compiling another architecture establishes build compatibility only.
@@ -376,7 +378,7 @@ inactive in the full SDK while Mini owns reporting. Check the SDK consumers
 when these private APIs change. Do not disable CI by changing the process
 environment: Mini needs it, and runtime mutation could race with tests.
 
-Bump `miniSDKCICacheMarker` when the guard semantics change. Verify both
+Bump the contracts in `sdkCompilerCacheMarker` when the guard semantics change. Verify both
 build orders against SDK mode, and retain the actual APM HTTP test; a mock span
 alone cannot establish which transport the SDK uses. The composition tests also
 exercise the SDK's manual test shim and v2.11 configuration boundaries.

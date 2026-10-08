@@ -645,20 +645,22 @@ make a consumer's `go mod tidy` resolve Testify even without runtime imports.
 When synchronizing tests, relocate assert/require imports and add any missing
 helper behavior with its own regression tests.
 
-The root module declares Go 1.21 so adding Mini preserves a Go 1.21 client's
-loop-variable semantics. Ordinary sources use that syntax: numeric loops have
-explicit bounds. Captures that outlive the iteration keep their own values;
-sequential subtests and parser visitors need no copies. Small standard
-library equivalents live in `internal/compat`. Go-version constraints remain
-only at native API boundaries, including synctest and MessagePack iterators.
-The source manifests retain upstream hashes and record each local adaptation.
+The root module declares Go 1.25 and uses native APIs for contexts, test helpers,
+string sequences, reflection, maps, random values and `WaitGroup.Go`.
+`internal/compat` retains only `AsType` and `Pointer`, the Go 1.26 helpers used
+by this port. Keep real Go-version constraints around private `testing` layouts;
+do not add a language header to ordinary files. Source manifests retain the
+upstream hashes and record each local adaptation.
 
-Root `godebug default=go1.26` selects modern timers for the CLI and its tests.
-Go ignores a dependency's directive in client programs. Temporary workspaces
-preserve the client's defaults when adding a runtime with a newer Go directive;
-regressions compare timer behavior as well as loop closures against native Go.
+An older client language is preserved through a temporary workspace: Mini is a
+separate main module, and each client's `go` directive still governs its sources.
+The workspace keeps the caller's GODEBUG defaults, including explicit overrides.
+Native `-mod=mod` first resolves the client's test imports; adding Mini does not
+add requirements or raise the client's language. No process-wide environment
+variables are changed.
 
 Checks: `TestAssertionResults`, `TestFatalAssertionStopsExecution`,
-`TestMiniConsumerAddsOnlyOwnModule`, `TestMiniPreservesConsumerLanguage` and
-`TestMiniPreservesOlderConsumerDependencies`, plus the full SDK assertion suite
-on Go 1.26 and 1.27.
+`TestMiniConsumerAddsOnlyOwnModule`, `TestMiniPreservesConsumerLanguage`,
+`TestMiniModModeResolvesClientRequirements` and
+`TestMiniPreservesOlderConsumerDependencies`, plus the ported SDK tests on
+Go 1.25, 1.26, 1.27 and tip.

@@ -11,13 +11,13 @@ import (
 )
 
 func TestGoleakCacheAndWarmVersionGuard(t *testing.T) {
-	_, driver := prepareMiniFixture(t)
+	driver := sharedDriver(t, "..")
 	root, err := filepath.Abs("..")
 	if err != nil {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	mod := fmt.Sprintf("module example.com/goleak-cache\n\ngo 1.26.0\nrequire (\ngithub.com/tonyredondo/dd-ci-testing-poc v0.0.0\ngo.uber.org/goleak v1.3.0\n)\nreplace github.com/tonyredondo/dd-ci-testing-poc => %s\nreplace go.uber.org/goleak => go.uber.org/goleak v1.3.0\n", filepath.ToSlash(root))
+	mod := fmt.Sprintf("module example.com/goleak-cache\n\ngo 1.25.0\nrequire (\ngithub.com/tonyredondo/dd-ci-testing-poc v0.0.0\ngo.uber.org/goleak v1.3.0\n)\nreplace github.com/tonyredondo/dd-ci-testing-poc => %s\nreplace go.uber.org/goleak => go.uber.org/goleak v1.3.0\n", filepath.ToSlash(root))
 	source := "package guard\nimport (\"testing\";\"go.uber.org/goleak\";_ \"github.com/tonyredondo/dd-ci-testing-poc/testopt\")\nfunc TestClean(t *testing.T){goleak.VerifyNone(t)}\n"
 	for name, data := range map[string]string{"go.mod": mod, "guard_test.go": source} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0600); err != nil {

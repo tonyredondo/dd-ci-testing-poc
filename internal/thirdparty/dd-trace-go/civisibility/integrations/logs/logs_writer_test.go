@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/net"
 )
@@ -103,7 +102,7 @@ func TestLogsWriterConcurrentAddFlushStopRace(t *testing.T) {
 
 	acceptedMu := sync.Mutex{}
 	accepted := map[string]int{}
-	var wg compat.WaitGroup
+	var wg sync.WaitGroup
 	for i := 0; i < 128; i++ {
 		message := fmt.Sprintf("concurrent-%d", i)
 		wg.Go(func() {

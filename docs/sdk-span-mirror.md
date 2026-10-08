@@ -114,11 +114,11 @@ guards remain active to prevent duplicate test reporting. Preparation validates
 selected sources before compilation; late compiler inputs receive the same
 optional-mirror fallback. Other layouts need their own mirror validation.
 
-Bump `miniSDKCICacheMarker` whenever the compiler edits or generated hook
+Bump the contracts in `sdkCompilerCacheMarker` whenever the compiler edits or generated hook
 change. Go does not hash wrapper-generated source into its original build
 action, so an unchanged marker can reuse an incompatible SDK archive.
-Mirror-enabled and mirror-disabled modes have distinct markers. Native/SDK builds
-must remain independent of either marker.
+CI guards and span copies have separate package-scoped compiler markers.
+Disabled mirrors omit the tracer marker. Native/SDK builds use neither marker.
 
 The runtime uses cached typed `testing` offsets to bind the native context
 before the test body runs. It preserves `cancelCtx`. SDK-free Mini binaries

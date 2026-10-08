@@ -12,8 +12,6 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 // fakeGo installs a shell script named go first in PATH.
@@ -24,6 +22,26 @@ func fakeGo(t *testing.T, script string) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestPrepareRejectsOldToolchainBeforeModuleWrites(t *testing.T) {
+	fakeGo(t, "printf '%s\\n' '{\"GOVERSION\":\"go1.24.9\"}'\n")
+	dir := t.TempDir()
+	mod := []byte("module example.com/client\ngo 1.21\n")
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), mod, 0600); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := PrepareRuntime(t.Context(), dir, nil, Mini)
+	if err == nil || !strings.Contains(err.Error(), "requires Go 1.25") {
+		t.Fatalf("old toolchain: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil || !bytes.Equal(got, mod) {
+		t.Fatalf("client changed: %q %v", got, err)
+	}
+	if _, err := os.Stat(plan.Dir); !os.IsNotExist(err) {
+		t.Fatalf("failed preparation left %s: %v", plan.Dir, err)
+	}
 }
 
 func TestRunGoForwardsSignalsAndKeepsExitStatus(t *testing.T) {
@@ -87,13 +105,13 @@ func TestSignalDuringPreparationStopsAndCleansUp(t *testing.T) {
 func TestCLIDebugCanceledPreparation(t *testing.T) {
 	fakeGo(t, "exec sleep 30\n")
 	t.Setenv("DD_TRACE_DEBUG", "true")
-	ctx, cancel := context.WithTimeout(compat.Context(t), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 	var stderr bytes.Buffer
 	if code := RunRuntime(ctx, []string{"."}, Mini, nil, io.Discard, &stderr); code != 2 {
 		t.Fatalf("canceled preparation exit=%d", code)
 	}
-	for _, want := range []string{"resolve packages finished duration=", "prepare finished duration=", "status=error", "ddtest exit_code=2"} {
+	for _, want := range []string{"go env finished duration=", "prepare finished duration=", "status=error", "ddtest exit_code=2"} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Fatalf("missing %q: %s", want, &stderr)
 		}

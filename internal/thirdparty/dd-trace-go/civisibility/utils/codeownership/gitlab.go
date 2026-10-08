@@ -8,8 +8,6 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 type gitLabParser struct {
@@ -186,8 +184,7 @@ func gitLabOwners(text string) ([]string, bool) {
 			owners = append(owners, owner)
 		}
 	}
-	for iterator := compat.FieldsFunc(text, ownerSeparator); iterator.Next(); {
-		token := iterator.Value()
+	for token := range strings.FieldsFuncSeq(text, ownerSeparator) {
 		var storage [128]rune
 		chars := storage[:0]
 		for _, char := range token {

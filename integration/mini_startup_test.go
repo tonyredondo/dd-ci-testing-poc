@@ -16,8 +16,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 // Exercise the real startup path: neither settings nor telemetry may hold up
@@ -88,7 +86,7 @@ func TestStarted(t *testing.T) { if err := os.WriteFile(os.Getenv("DDTEST_STARTE
 				defer server.Close()
 				defer releaseSettings()
 				defer releaseTelemetry()
-				ctx, cancel := context.WithTimeout(compat.Context(t), 30*time.Second)
+				ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 				defer cancel()
 				marker := filepath.Join(t.TempDir(), "started")
 				cmd := exec.CommandContext(ctx, binary, "-test.run=^TestStarted$", "-test.count=1")

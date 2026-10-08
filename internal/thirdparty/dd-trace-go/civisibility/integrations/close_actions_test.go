@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 )
 
@@ -54,13 +54,13 @@ func TestConcurrentCloseActionsRunOnce(t *testing.T) {
 	t.Cleanup(restoreCIVisibilityBootstrapForTesting)
 	initializeCIVisibilityLifecycleForTesting()
 	seen := make([]int, 128)
-	var registrations compat.WaitGroup
+	var registrations sync.WaitGroup
 	for i := range seen {
 		i := i // Both the worker and its queued close callback retain this index.
 		registrations.Go(func() { PushCiVisibilityCloseAction(func() { seen[i]++ }) })
 	}
 	registrations.Wait()
-	var exits compat.WaitGroup
+	var exits sync.WaitGroup
 	for i := 0; i < 4; i++ {
 		exits.Go(ExitCiVisibility)
 	}

@@ -166,7 +166,6 @@ func TestPackagePatternsMatchGoBuildFlags(t *testing.T) {
 	}
 	patterns := []string{".", "./...", "./sub", "./sub/...", "..", "../...", "testing", "std", "all", "work", "...", "example.com/m/...", filepath.ToSlash(dir) + "/..."}
 	for _, pattern := range patterns {
-		pattern := pattern
 		t.Run("qualified "+pattern, func(t *testing.T) {
 			t.Parallel()
 			probed := selected(t, "-gcflags="+pattern+"=-ddtestprobe", "./...")
@@ -175,7 +174,6 @@ func TestPackagePatternsMatchGoBuildFlags(t *testing.T) {
 	}
 	// Unqualified flags apply only to command-line packages.
 	for _, target := range []string{"./...", "./sub", "."} {
-		target := target
 		t.Run("unqualified "+target, func(t *testing.T) {
 			t.Parallel()
 			probed := selected(t, "-gcflags=-ddtestprobe", target)

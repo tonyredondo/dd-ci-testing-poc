@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/runner"
 )
 
@@ -45,7 +44,7 @@ func TestSharedGeneratedFiles(t *testing.T) {
 	t.Setenv("GOFLAGS", "")
 	prepare := func() (runner.Plan, runner.Overlay) {
 		t.Helper()
-		plan, err := runner.Prepare(compat.Context(t), dir, []string{"./alpha", "./beta", "./gamma"})
+		plan, err := runner.Prepare(t.Context(), dir, []string{"./alpha", "./beta", "./gamma"})
 		if err != nil {
 			t.Fatal(err)
 		}

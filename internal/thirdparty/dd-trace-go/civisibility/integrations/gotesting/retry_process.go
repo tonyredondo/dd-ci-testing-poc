@@ -2573,8 +2573,7 @@ func finishProcessRetryTestEvent(
 		module.SetTag(ext.Error, true)
 	}
 	if attempt.OutputTail != "" {
-		for iterator := compat.Split(attempt.OutputTail, "\n"); iterator.Next(); {
-			line := iterator.Value()
+		for line := range strings.SplitSeq(attempt.OutputTail, "\n") {
 			if line != "" {
 				test.Log(line, "")
 			}

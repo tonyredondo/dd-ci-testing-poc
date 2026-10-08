@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 )
@@ -127,9 +126,8 @@ func TestInitializeWriteLogStopConcurrentRace(t *testing.T) {
 	}()
 	<-sendEntered
 
-	var writeWG compat.WaitGroup
+	var writeWG sync.WaitGroup
 	for i := 0; i < 128; i++ {
-		i := i
 		writeWG.Go(func() {
 			WriteLog(uint64(i+1), "module", "suite", "test", fmt.Sprintf("message-%d", i), "")
 		})

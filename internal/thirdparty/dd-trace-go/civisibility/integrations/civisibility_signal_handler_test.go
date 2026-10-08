@@ -6,11 +6,11 @@
 package integrations
 
 import (
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility"
 )
@@ -39,7 +39,7 @@ func TestStopCIVisibilitySignalHandlerIsIdempotent(t *testing.T) {
 	handler := currentCIVisibilitySignalHandlerForTesting()
 	require.NotNil(t, handler)
 
-	var wg compat.WaitGroup
+	var wg sync.WaitGroup
 	for i := 0; i < 16; i++ {
 		wg.Go(func() {
 			stopCIVisibilitySignalHandler()
@@ -231,7 +231,7 @@ func assertSignalHandlerDone(t *testing.T, handler *ciVisibilitySignalHandler) {
 }
 
 // waitForSignalHandlerStopCalls waits for concurrent stop calls to finish.
-func waitForSignalHandlerStopCalls(t *testing.T, wg *compat.WaitGroup) {
+func waitForSignalHandlerStopCalls(t *testing.T, wg *sync.WaitGroup) {
 	t.Helper()
 	done := make(chan struct{})
 	go func() {

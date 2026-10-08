@@ -18,8 +18,6 @@ import (
 	"testing"
 	"time"
 	"unsafe"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 // getFieldPointerFrom gets an unsafe.Pointer (gc-safe type of pointer) to a struct field
@@ -223,7 +221,7 @@ func (c *commonPrivateFields) AppendOutput(output []byte) {
 // getInternalTestArray gets the pointer to the testing.InternalTest array inside a
 // testing.M instance containing all the "root" tests
 func getInternalTestArray(m *testing.M) *[]testing.InternalTest {
-	if ptr, err := getFieldPointerFromWithType(m, "tests", compat.TypeFor[[]testing.InternalTest]()); err == nil && ptr != nil {
+	if ptr, err := getFieldPointerFromWithType(m, "tests", reflect.TypeFor[[]testing.InternalTest]()); err == nil && ptr != nil {
 		return (*[]testing.InternalTest)(ptr)
 	}
 	return nil
@@ -232,7 +230,7 @@ func getInternalTestArray(m *testing.M) *[]testing.InternalTest {
 // getInternalFuzzTargetArray gets the pointer to the testing.InternalFuzzTarget array inside a
 // testing.M instance containing all the "root" fuzz targets.
 func getInternalFuzzTargetArray(m *testing.M) *[]testing.InternalFuzzTarget {
-	if ptr, err := getFieldPointerFromWithType(m, "fuzzTargets", compat.TypeFor[[]testing.InternalFuzzTarget]()); err == nil && ptr != nil {
+	if ptr, err := getFieldPointerFromWithType(m, "fuzzTargets", reflect.TypeFor[[]testing.InternalFuzzTarget]()); err == nil && ptr != nil {
 		return (*[]testing.InternalFuzzTarget)(ptr)
 	}
 	return nil
@@ -241,7 +239,7 @@ func getInternalFuzzTargetArray(m *testing.M) *[]testing.InternalFuzzTarget {
 // getInternalExampleArray gets the pointer to the testing.InternalExample array inside a
 // testing.M instance containing all the "root" examples.
 func getInternalExampleArray(m *testing.M) *[]testing.InternalExample {
-	if ptr, err := getFieldPointerFromWithType(m, "examples", compat.TypeFor[[]testing.InternalExample]()); err == nil && ptr != nil {
+	if ptr, err := getFieldPointerFromWithType(m, "examples", reflect.TypeFor[[]testing.InternalExample]()); err == nil && ptr != nil {
 		return (*[]testing.InternalExample)(ptr)
 	}
 	return nil
@@ -701,7 +699,7 @@ func copyTestWithoutParentReflect(source *testing.T, target *testing.T) {
 	_ = copyFieldUsingPointers[context.Context](source, target, "ctx")
 	_ = copyFieldUsingPointers[context.CancelFunc](source, target, "cancelCtx")
 
-	if field, ok := denyParallelField(compat.TypeFor[testing.T]()); ok && field.available {
+	if field, ok := denyParallelField(reflect.TypeFor[testing.T]()); ok && field.available {
 		copyDenyParallelField(unsafe.Pointer(source), unsafe.Pointer(target), field)
 	}
 	_ = copyFieldUsingPointers[unsafe.Pointer](source, target, "tstate") // For running tests and subtests.
@@ -1127,7 +1125,7 @@ func getThreadSafeWriter(writer io.Writer) io.Writer {
 // getInternalBenchmarkArray gets the pointer to the testing.InternalBenchmark array inside
 // a testing.M instance containing all the "root" benchmarks
 func getInternalBenchmarkArray(m *testing.M) *[]testing.InternalBenchmark {
-	if ptr, err := getFieldPointerFromWithType(m, "benchmarks", compat.TypeFor[[]testing.InternalBenchmark]()); err == nil && ptr != nil {
+	if ptr, err := getFieldPointerFromWithType(m, "benchmarks", reflect.TypeFor[[]testing.InternalBenchmark]()); err == nil && ptr != nil {
 		return (*[]testing.InternalBenchmark)(ptr)
 	}
 	return nil

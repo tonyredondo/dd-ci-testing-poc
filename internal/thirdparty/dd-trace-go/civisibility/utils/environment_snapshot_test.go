@@ -2,9 +2,8 @@ package utils
 
 import (
 	"fmt"
+	"sync"
 	"testing"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 func TestCITagsSnapshotUpdatesAndRetainsOldValues(t *testing.T) {
@@ -65,7 +64,7 @@ func TestCITagsSnapshotsConcurrentReadersAndUpdates(t *testing.T) {
 	ResetCITags()
 	t.Cleanup(ResetCITags)
 	originalCiTags = map[string]string{"fixture": "zero"}
-	var wg compat.WaitGroup
+	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		wg.Go(func() {
 			for i := 0; i < 100; i++ {

@@ -13,7 +13,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/telemetry"
@@ -866,7 +865,7 @@ func acceptableError(err error) bool {
 func useLocalGitFixture(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
-	compat.Chdir(t, dir)
+	t.Chdir(dir)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 	for _, args := range [][]string{{"-c", "init.templateDir=", "init"}, {"-c", "user.name=CI Fixture", "-c", "user.email=ci-fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "fixture"}} {

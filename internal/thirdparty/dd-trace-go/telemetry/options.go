@@ -8,7 +8,6 @@ package telemetry
 import (
 	"strings"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/stacktrace"
 )
 
@@ -42,8 +41,7 @@ func WithTags(tags []string) LogOption {
 		builder.Grow(len(key.tags) + len(compiled) + 1)
 
 		// Add existing tags
-		for iterator := compat.Split(key.tags, ","); iterator.Next(); {
-			tag := iterator.Value()
+		for tag := range strings.SplitSeq(key.tags, ",") {
 			if builder.Len() > 0 {
 				builder.WriteByte(',')
 			}
@@ -52,8 +50,7 @@ func WithTags(tags []string) LogOption {
 		}
 
 		// Add new tags, skipping duplicates
-		for iterator := compat.Split(compiled, ","); iterator.Next(); {
-			tag := iterator.Value()
+		for tag := range strings.SplitSeq(compiled, ",") {
 			if _, exists := seen[tag]; !exists {
 				if builder.Len() > 0 {
 					builder.WriteByte(',')

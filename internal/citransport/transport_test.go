@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,8 +14,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 func TestDeferredTransportOwnsItsConnections(t *testing.T) {
@@ -61,7 +60,7 @@ func (t *customConnectionTransport) CloseIdleConnections() { t.closed.Add(1) }
 
 func TestAgentlessGzipRoundTripsPayloadShapes(t *testing.T) {
 	random := make([]byte, 64<<10)
-	if _, err := compat.NewChaCha8([32]byte{1}).Read(random); err != nil {
+	if _, err := rand.NewChaCha8([32]byte{1}).Read(random); err != nil {
 		t.Fatal(err)
 	}
 	for _, data := range [][]byte{nil, []byte("small payload"), bytes.Repeat([]byte("test.name:subtest,error.type:fixture;"), 8000), random, bytes.Repeat([]byte("x"), TestCycleMaxPayloadBytes)} {

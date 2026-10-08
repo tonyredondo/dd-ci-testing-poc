@@ -1,5 +1,3 @@
-//go:build go1.25
-
 package gotesting
 
 import (
@@ -9,20 +7,18 @@ import (
 	"testing"
 	"time"
 	"unsafe"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 func TestTestingFReflectionLayout(t *testing.T) {
 	t.Helper()
 	f := &testing.F{}
-	typ := compat.TypeFor[testing.F]()
+	typ := reflect.TypeFor[testing.F]()
 	common, ok := typ.FieldByName("common")
-	if !ok || common.Offset != 0 || common.Type != compat.TypeFor[testing.T]().Field(0).Type {
+	if !ok || common.Offset != 0 || common.Type != reflect.TypeFor[testing.T]().Field(0).Type {
 		t.Fatal("testing.F must embed testing.common at offset zero for shared lifecycle fields")
 	}
 	state, ok := typ.FieldByName("tstate")
-	tState, tStateOK := compat.TypeFor[testing.T]().FieldByName("tstate")
+	tState, tStateOK := reflect.TypeFor[testing.T]().FieldByName("tstate")
 	if !ok || !tStateOK || state.Type.Kind() != reflect.Pointer || state.Type != tState.Type {
 		t.Fatal("testing.F.tstate must have the same pointer type as testing.T.tstate")
 	}
@@ -35,7 +31,7 @@ func TestTestingFReflectionLayout(t *testing.T) {
 	if getFuzzTestState(f) != wantState {
 		t.Fatal("testing.F scheduler state lookup must use the F-specific field offset")
 	}
-	fuzzCalled, err := getFieldPointerFromWithType(f, "fuzzCalled", compat.TypeFor[bool]())
+	fuzzCalled, err := getFieldPointerFromWithType(f, "fuzzCalled", reflect.TypeFor[bool]())
 	if err != nil || fuzzCalled == nil {
 		t.Fatalf("testing.F.fuzzCalled must be a readable bool: %v", err)
 	}
@@ -50,7 +46,7 @@ func TestTestingFReflectionLayout(t *testing.T) {
 		t.Fatal("testing.M fuzz target and example descriptors must retain their expected slice types")
 	}
 	for _, native := range []any{f, &testing.T{}} {
-		if ptr, err := getFieldPointerFromWithType(native, "duration", compat.TypeFor[time.Duration]()); err != nil || ptr == nil {
+		if ptr, err := getFieldPointerFromWithType(native, "duration", reflect.TypeFor[time.Duration]()); err != nil || ptr == nil {
 			t.Fatalf("%T.duration must retain its time.Duration type: %v", native, err)
 		}
 	}
@@ -65,7 +61,7 @@ func BenchmarkFuzzNativeResult(b *testing.B) {
 			if kind == "root" {
 				native = &testing.F{}
 			}
-			ptr, err := getFieldPointerFromWithType(native, "duration", compat.TypeFor[time.Duration]())
+			ptr, err := getFieldPointerFromWithType(native, "duration", reflect.TypeFor[time.Duration]())
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -89,7 +85,7 @@ func TestFuzzOffsetsRejectLayoutDrift(t *testing.T) {
 	}
 	common := reflect.StructField{Name: "common", PkgPath: "gotesting", Type: layout.tCommon.typ}
 	state := reflect.StructField{Name: "tstate", PkgPath: "gotesting", Type: layout.tstate.typ}
-	called := reflect.StructField{Name: "fuzzCalled", PkgPath: "gotesting", Type: compat.TypeFor[bool]()}
+	called := reflect.StructField{Name: "fuzzCalled", PkgPath: "gotesting", Type: reflect.TypeFor[bool]()}
 	for _, tc := range []struct {
 		name                        string
 		fields                      []reflect.StructField
@@ -97,10 +93,10 @@ func TestFuzzOffsetsRejectLayoutDrift(t *testing.T) {
 	}{
 		{"valid", []reflect.StructField{common, state, called}, true, true, true},
 		{"missing-common", []reflect.StructField{state, called}, false, false, false},
-		{"moved-common", []reflect.StructField{{Name: "Padding", Type: compat.TypeFor[int]()}, common, state, called}, false, false, false},
-		{"wrong-common", []reflect.StructField{{Name: "common", PkgPath: "gotesting", Type: compat.TypeFor[int]()}, state, called}, false, false, false},
-		{"wrong-state", []reflect.StructField{common, {Name: "tstate", PkgPath: "gotesting", Type: compat.TypeFor[*int]()}, called}, true, false, true},
-		{"wrong-called", []reflect.StructField{common, state, {Name: "fuzzCalled", PkgPath: "gotesting", Type: compat.TypeFor[int]()}}, true, true, false},
+		{"moved-common", []reflect.StructField{{Name: "Padding", Type: reflect.TypeFor[int]()}, common, state, called}, false, false, false},
+		{"wrong-common", []reflect.StructField{{Name: "common", PkgPath: "gotesting", Type: reflect.TypeFor[int]()}, state, called}, false, false, false},
+		{"wrong-state", []reflect.StructField{common, {Name: "tstate", PkgPath: "gotesting", Type: reflect.TypeFor[*int]()}, called}, true, false, true},
+		{"wrong-called", []reflect.StructField{common, state, {Name: "fuzzCalled", PkgPath: "gotesting", Type: reflect.TypeFor[int]()}}, true, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := buildFuzzFieldsLayout(reflect.StructOf(tc.fields), layout)
@@ -109,12 +105,12 @@ func TestFuzzOffsetsRejectLayoutDrift(t *testing.T) {
 			}
 		})
 	}
-	for _, typ := range []reflect.Type{nil, compat.TypeFor[int]()} {
+	for _, typ := range []reflect.Type{nil, reflect.TypeFor[int]()} {
 		if got := buildFuzzFieldsLayout(typ, layout); got.commonOK {
 			t.Fatal("accepted non-struct F layout")
 		}
 	}
-	if got := buildFuzzFieldsLayout(compat.TypeFor[testing.F](), &testingInternalsLayout{disabled: true}); got.commonOK {
+	if got := buildFuzzFieldsLayout(reflect.TypeFor[testing.F](), &testingInternalsLayout{disabled: true}); got.commonOK {
 		t.Fatal("accepted invalid common layout")
 	}
 }
@@ -128,7 +124,7 @@ func TestFuzzFatalResultDoesNotReadActiveDuration(t *testing.T) {
 	mu.Lock()
 	*fieldPtr[bool](base, layout.common.failed) = true
 	mu.Unlock()
-	var wg compat.WaitGroup
+	var wg sync.WaitGroup
 	wg.Go(func() {
 		for i := 0; i < 10000; i++ {
 			*duration = time.Duration(i)

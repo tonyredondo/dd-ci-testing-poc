@@ -19,15 +19,15 @@ func isSDKCIPackage(pkg string) bool {
 	return pkg == sdkCIEnvironmentPackage || pkg == sdkCIConfigPackage
 }
 
-// This exported testing constant changes the SDK's cache inputs through
-// internal/env's testing dependency. Bump it when SDK guard or mirror compiler edits change.
-const miniSDKCICacheMarker = `
-const DDTestMiniSDKCIContract = "mini-sdk-ci-mirror-v5"
-`
-
-const miniSDKCIOnlyCacheMarker = `
-const DDTestMiniSDKCIContract = "mini-sdk-ci-only-v5"
-`
+// Direct package keys are needed because transitive testing export data can
+// stay unchanged even when a toolchain rebuilds testing with different hooks.
+// Bump these contracts when the corresponding compiler edits change.
+func sdkCompilerCacheMarker(pkg string) string {
+	if pkg == sdkTracerPackage {
+		return "-I=ddtest-sdk-span-mirror-v6"
+	}
+	return "-I=ddtest-sdk-ci-guard-v6"
+}
 
 // Mirror hooks are optional. CI ownership guards remain mandatory so an APM
 // SDK can keep its transport without reporting a second copy of the tests.
@@ -158,5 +158,5 @@ func prepareSDKCICompile(args []string, pkg string) ([]string, func(), error) {
 		cleanup()
 		return nil, nil, fmt.Errorf("unsupported SDK CI configuration API in %s", pkg)
 	}
-	return forwarded, cleanup, nil
+	return removeCompilerCacheMarker(forwarded, sdkCompilerCacheMarker(pkg)), cleanup, nil
 }

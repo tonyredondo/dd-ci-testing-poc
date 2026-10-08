@@ -16,7 +16,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 )
 
@@ -171,11 +170,8 @@ var (
 // and callers fall back to the reflection implementation.
 func getTestingInternalsLayout() *testingInternalsLayout {
 	testingInternalsLayoutOnce.Do(func() {
-		testingInternalsLayoutValue = buildTestingInternalsLayout(
-			compat.TypeFor[testing.T](),
-			compat.TypeFor[testing.B](),
-		)
-		testingInternalsLayoutValue.fuzz = buildFuzzFieldsLayout(compat.TypeFor[testing.F](), testingInternalsLayoutValue)
+		testingInternalsLayoutValue = buildTestingInternalsLayout(reflect.TypeFor[testing.T](), reflect.TypeFor[testing.B]())
+		testingInternalsLayoutValue.fuzz = buildFuzzFieldsLayout(reflect.TypeFor[testing.F](), testingInternalsLayoutValue)
 	})
 	return testingInternalsLayoutValue
 }
@@ -211,53 +207,53 @@ func buildTestingInternalsLayout(tType, bType reflect.Type) (layout *testingInte
 	l.bCommon = commonFromB
 	commonType := commonFromT.typ
 
-	l.common.mu, _ = exactField(commonType, "mu", compat.TypeFor[sync.RWMutex](), false)
-	l.common.output, _ = exactField(commonType, "output", compat.TypeFor[[]byte](), false)
-	l.common.w, _ = exactField(commonType, "w", compat.TypeFor[io.Writer](), false)
-	l.common.ran, _ = exactField(commonType, "ran", compat.TypeFor[bool](), false)
-	l.common.failed, _ = exactField(commonType, "failed", compat.TypeFor[bool](), false)
-	l.common.skipped, _ = exactField(commonType, "skipped", compat.TypeFor[bool](), false)
-	l.common.done, _ = exactField(commonType, "done", compat.TypeFor[bool](), false)
-	l.common.helperPCs, _ = exactField(commonType, "helperPCs", compat.TypeFor[map[uintptr]struct{}](), false)
-	l.common.helperNames, _ = exactField(commonType, "helperNames", compat.TypeFor[map[string]struct{}](), false)
-	l.common.cleanups, _ = exactField(commonType, "cleanups", compat.TypeFor[[]func()](), false)
-	l.common.cleanupName, _ = exactField(commonType, "cleanupName", compat.TypeFor[string](), false)
-	l.common.cleanupPc, _ = exactField(commonType, "cleanupPc", compat.TypeFor[[]uintptr](), false)
-	l.common.finished, _ = exactField(commonType, "finished", compat.TypeFor[bool](), false)
-	l.common.inFuzzFn, _ = exactField(commonType, "inFuzzFn", compat.TypeFor[bool](), false)
-	l.common.isSynctest, _ = optionalExactField(commonType, "isSynctest", compat.TypeFor[bool]())
+	l.common.mu, _ = exactField(commonType, "mu", reflect.TypeFor[sync.RWMutex](), false)
+	l.common.output, _ = exactField(commonType, "output", reflect.TypeFor[[]byte](), false)
+	l.common.w, _ = exactField(commonType, "w", reflect.TypeFor[io.Writer](), false)
+	l.common.ran, _ = exactField(commonType, "ran", reflect.TypeFor[bool](), false)
+	l.common.failed, _ = exactField(commonType, "failed", reflect.TypeFor[bool](), false)
+	l.common.skipped, _ = exactField(commonType, "skipped", reflect.TypeFor[bool](), false)
+	l.common.done, _ = exactField(commonType, "done", reflect.TypeFor[bool](), false)
+	l.common.helperPCs, _ = exactField(commonType, "helperPCs", reflect.TypeFor[map[uintptr]struct{}](), false)
+	l.common.helperNames, _ = exactField(commonType, "helperNames", reflect.TypeFor[map[string]struct{}](), false)
+	l.common.cleanups, _ = exactField(commonType, "cleanups", reflect.TypeFor[[]func()](), false)
+	l.common.cleanupName, _ = exactField(commonType, "cleanupName", reflect.TypeFor[string](), false)
+	l.common.cleanupPc, _ = exactField(commonType, "cleanupPc", reflect.TypeFor[[]uintptr](), false)
+	l.common.finished, _ = exactField(commonType, "finished", reflect.TypeFor[bool](), false)
+	l.common.inFuzzFn, _ = exactField(commonType, "inFuzzFn", reflect.TypeFor[bool](), false)
+	l.common.isSynctest, _ = optionalExactField(commonType, "isSynctest", reflect.TypeFor[bool]())
 	l.common.chatty, _ = wordField(commonType, "chatty", false)
-	l.common.bench, _ = exactField(commonType, "bench", compat.TypeFor[bool](), false)
-	l.common.hasSub, _ = exactField(commonType, "hasSub", compat.TypeFor[atomic.Bool](), false)
-	l.common.cleanupStarted, _ = exactField(commonType, "cleanupStarted", compat.TypeFor[atomic.Bool](), false)
-	l.common.runner, _ = exactField(commonType, "runner", compat.TypeFor[string](), false)
-	l.common.isParallel, _ = exactField(commonType, "isParallel", compat.TypeFor[bool](), false)
+	l.common.bench, _ = exactField(commonType, "bench", reflect.TypeFor[bool](), false)
+	l.common.hasSub, _ = exactField(commonType, "hasSub", reflect.TypeFor[atomic.Bool](), false)
+	l.common.cleanupStarted, _ = exactField(commonType, "cleanupStarted", reflect.TypeFor[atomic.Bool](), false)
+	l.common.runner, _ = exactField(commonType, "runner", reflect.TypeFor[string](), false)
+	l.common.isParallel, _ = exactField(commonType, "isParallel", reflect.TypeFor[bool](), false)
 	l.common.parent, _ = wordField(commonType, "parent", false)
-	l.common.level, _ = exactField(commonType, "level", compat.TypeFor[int](), false)
-	l.common.creator, _ = exactField(commonType, "creator", compat.TypeFor[[]uintptr](), false)
-	l.common.modulePath, _ = optionalExactField(commonType, "modulePath", compat.TypeFor[string]())
-	l.common.importPath, _ = optionalExactField(commonType, "importPath", compat.TypeFor[string]())
-	l.common.name, _ = exactField(commonType, "name", compat.TypeFor[string](), false)
+	l.common.level, _ = exactField(commonType, "level", reflect.TypeFor[int](), false)
+	l.common.creator, _ = exactField(commonType, "creator", reflect.TypeFor[[]uintptr](), false)
+	l.common.modulePath, _ = optionalExactField(commonType, "modulePath", reflect.TypeFor[string]())
+	l.common.importPath, _ = optionalExactField(commonType, "importPath", reflect.TypeFor[string]())
+	l.common.name, _ = exactField(commonType, "name", reflect.TypeFor[string](), false)
 	l.common.start, _ = pointerSizedField(commonType, "start", false)
-	l.common.duration, _ = exactField(commonType, "duration", compat.TypeFor[time.Duration](), false)
-	l.common.barrier, _ = exactField(commonType, "barrier", compat.TypeFor[chan bool](), false)
-	l.common.signal, _ = exactField(commonType, "signal", compat.TypeFor[chan bool](), false)
-	l.common.sub, _ = exactField(commonType, "sub", compat.TypeFor[[]*testing.T](), false)
-	l.common.lastRaceErrors, _ = exactField(commonType, "lastRaceErrors", compat.TypeFor[atomic.Int64](), false)
-	l.common.raceErrorLogged, _ = exactField(commonType, "raceErrorLogged", compat.TypeFor[atomic.Bool](), false)
-	l.common.tempDir, _ = exactField(commonType, "tempDir", compat.TypeFor[string](), false)
-	l.common.tempDirErr, _ = exactField(commonType, "tempDirErr", compat.TypeFor[error](), false)
-	l.common.tempDirSeq, _ = exactField(commonType, "tempDirSeq", compat.TypeFor[int32](), false)
-	l.common.isEnvSet, _ = optionalExactField(commonType, "isEnvSet", compat.TypeFor[bool]())
+	l.common.duration, _ = exactField(commonType, "duration", reflect.TypeFor[time.Duration](), false)
+	l.common.barrier, _ = exactField(commonType, "barrier", reflect.TypeFor[chan bool](), false)
+	l.common.signal, _ = exactField(commonType, "signal", reflect.TypeFor[chan bool](), false)
+	l.common.sub, _ = exactField(commonType, "sub", reflect.TypeFor[[]*testing.T](), false)
+	l.common.lastRaceErrors, _ = exactField(commonType, "lastRaceErrors", reflect.TypeFor[atomic.Int64](), false)
+	l.common.raceErrorLogged, _ = exactField(commonType, "raceErrorLogged", reflect.TypeFor[atomic.Bool](), false)
+	l.common.tempDir, _ = exactField(commonType, "tempDir", reflect.TypeFor[string](), false)
+	l.common.tempDirErr, _ = exactField(commonType, "tempDirErr", reflect.TypeFor[error](), false)
+	l.common.tempDirSeq, _ = exactField(commonType, "tempDirSeq", reflect.TypeFor[int32](), false)
+	l.common.isEnvSet, _ = optionalExactField(commonType, "isEnvSet", reflect.TypeFor[bool]())
 	l.common.context, _ = optionalWordField(commonType, "context")
-	l.common.ctx, _ = optionalExactField(commonType, "ctx", compat.TypeFor[context.Context]())
-	l.common.cancelCtx, _ = optionalExactField(commonType, "cancelCtx", compat.TypeFor[context.CancelFunc]())
+	l.common.ctx, _ = optionalExactField(commonType, "ctx", reflect.TypeFor[context.Context]())
+	l.common.cancelCtx, _ = optionalExactField(commonType, "cancelCtx", reflect.TypeFor[context.CancelFunc]())
 	l.common.o, _ = optionalPointerToStructField(commonType, "o")
 
 	l.denyParallel, _ = denyParallelField(tType)
 	l.tstate, _ = optionalWordField(tType, "tstate")
-	l.benchmark.benchFunc, _ = exactField(bType, "benchFunc", compat.TypeFor[func(*testing.B)](), false)
-	l.benchmark.result, _ = exactField(bType, "result", compat.TypeFor[testing.BenchmarkResult](), false)
+	l.benchmark.benchFunc, _ = exactField(bType, "benchFunc", reflect.TypeFor[func(*testing.B)](), false)
+	l.benchmark.result, _ = exactField(bType, "result", reflect.TypeFor[testing.BenchmarkResult](), false)
 
 	l.buildOutputWriterLayout()
 	l.buildContextMatcherLayout()
@@ -272,12 +268,12 @@ func (l *testingInternalsLayout) buildTestStateLayout() {
 		return
 	}
 	testStateType := l.tstate.typ.Elem()
-	mu, muOK := exactField(testStateType, "mu", compat.TypeFor[sync.Mutex](), false)
-	startParallel, startParallelOK := exactField(testStateType, "startParallel", compat.TypeFor[chan bool](), false)
-	running, runningOK := exactField(testStateType, "running", compat.TypeFor[int](), false)
-	numWaiting, numWaitingOK := exactField(testStateType, "numWaiting", compat.TypeFor[int](), false)
-	maxParallel, maxParallelOK := exactField(testStateType, "maxParallel", compat.TypeFor[int](), false)
-	deadline, deadlineOK := exactField(testStateType, "deadline", compat.TypeFor[time.Time](), false)
+	mu, muOK := exactField(testStateType, "mu", reflect.TypeFor[sync.Mutex](), false)
+	startParallel, startParallelOK := exactField(testStateType, "startParallel", reflect.TypeFor[chan bool](), false)
+	running, runningOK := exactField(testStateType, "running", reflect.TypeFor[int](), false)
+	numWaiting, numWaitingOK := exactField(testStateType, "numWaiting", reflect.TypeFor[int](), false)
+	maxParallel, maxParallelOK := exactField(testStateType, "maxParallel", reflect.TypeFor[int](), false)
+	deadline, deadlineOK := exactField(testStateType, "deadline", reflect.TypeFor[time.Time](), false)
 	if !muOK || !startParallelOK || !runningOK || !numWaitingOK || !maxParallelOK || !deadlineOK {
 		return
 	}
@@ -298,7 +294,7 @@ func (l *testingInternalsLayout) buildOutputWriterLayout() {
 	}
 	outputWriterType := l.common.o.typ.Elem()
 	cField, cOK := pointerField(outputWriterType, "c", false)
-	partialField, partialOK := exactField(outputWriterType, "partial", compat.TypeFor[[]byte](), false)
+	partialField, partialOK := exactField(outputWriterType, "partial", reflect.TypeFor[[]byte](), false)
 	if !cOK || !partialOK {
 		return
 	}
@@ -327,8 +323,8 @@ func (l *testingInternalsLayout) buildContextMatcherLayout() {
 	}
 
 	matcherType := matchField.typ.Elem()
-	muField, muOK := exactField(matcherType, "mu", compat.TypeFor[sync.Mutex](), false)
-	subNamesField, subNamesOK := exactField(matcherType, "subNames", compat.TypeFor[map[string]int32](), false)
+	muField, muOK := exactField(matcherType, "mu", reflect.TypeFor[sync.Mutex](), false)
+	subNamesField, subNamesOK := exactField(matcherType, "subNames", reflect.TypeFor[map[string]int32](), false)
 	if !muOK || !subNamesOK {
 		return
 	}
@@ -348,9 +344,9 @@ func (l *testingInternalsLayout) buildChattyPrinterLayout() {
 		return
 	}
 	chattyType := l.common.chatty.typ.Elem()
-	wField, wOK := exactField(chattyType, "w", compat.TypeFor[io.Writer](), false)
-	lastNameField, lastNameOK := exactField(chattyType, "lastName", compat.TypeFor[string](), false)
-	jsonField, jsonOK := exactField(chattyType, "json", compat.TypeFor[bool](), false)
+	wField, wOK := exactField(chattyType, "w", reflect.TypeFor[io.Writer](), false)
+	lastNameField, lastNameOK := exactField(chattyType, "lastName", reflect.TypeFor[string](), false)
+	jsonField, jsonOK := exactField(chattyType, "json", reflect.TypeFor[bool](), false)
 	if !wOK || !lastNameOK || !jsonOK {
 		return
 	}
@@ -410,7 +406,7 @@ func denyParallelField(owner reflect.Type) (unsafeField, bool) {
 	if !ok || !field.available {
 		return field, ok
 	}
-	if field.typ != compat.TypeFor[bool]() && field.typ != compat.TypeFor[string]() {
+	if field.typ != reflect.TypeFor[bool]() && field.typ != reflect.TypeFor[string]() {
 		log.Debug("civisibility: testing.T.denyParallel has unexpected type %s; disabling retry fast path", field.typ)
 		return unsafeField{name: "denyParallel", optional: true}, false
 	}
@@ -587,9 +583,9 @@ func copyTypedField[T any](sourceBase, targetBase unsafe.Pointer, field unsafeFi
 
 func copyDenyParallelField(sourceBase, targetBase unsafe.Pointer, field unsafeField) {
 	switch field.typ {
-	case compat.TypeFor[bool]():
+	case reflect.TypeFor[bool]():
 		copyTypedField[bool](sourceBase, targetBase, field)
-	case compat.TypeFor[string]():
+	case reflect.TypeFor[string]():
 		copyTypedField[string](sourceBase, targetBase, field)
 	default:
 		panic("unsupported testing.T.denyParallel field type")

@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/filebitmap"
 )
@@ -263,7 +262,7 @@ func repositoryRootFromModuleInfo() string {
 	}
 	repoRoot := moduleDir
 	if moduleRepoPrefix := moduleRepositoryRelativePrefix(modulePath); moduleRepoPrefix != "" {
-		for iterator := compat.Split(moduleRepoPrefix, "/"); iterator.Next(); {
+		for range strings.SplitSeq(moduleRepoPrefix, "/") {
 			repoRoot = filepath.Dir(repoRoot)
 		}
 	}

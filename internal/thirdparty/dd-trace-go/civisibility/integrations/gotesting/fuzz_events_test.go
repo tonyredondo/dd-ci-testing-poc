@@ -1,5 +1,3 @@
-//go:build go1.25
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -10,12 +8,13 @@ package gotesting
 import (
 	"fmt"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 	"unsafe"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations"
@@ -58,7 +57,7 @@ func TestFuzzEventsPreserveExecutionDuration(t *testing.T) {
 	for _, kind := range []string{"root", "seed"} {
 		for _, nativeFinished := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/native_finished=%t", kind, nativeFinished), func(t *testing.T) {
-				compat.Synctest(t, func(t *testing.T) {
+				synctest.Test(t, func(t *testing.T) {
 					var native testing.TB = &testing.T{}
 					if kind == "root" {
 						native = &testing.F{}
@@ -106,7 +105,7 @@ func TestFuzzEventsSkipHooksWaitForCleanup(t *testing.T) {
 		} {
 			for _, cleanupFails := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/%s/cleanup_fails=%t", kind, hook.name, cleanupFails), func(t *testing.T) {
-					compat.Synctest(t, func(t *testing.T) {
+					synctest.Test(t, func(t *testing.T) {
 						nativeT := &testing.T{}
 						var native testing.TB = nativeT
 						if kind == "root" {
@@ -145,7 +144,7 @@ func TestFuzzEventsSkipHooksWaitForCleanup(t *testing.T) {
 							close(done)
 						}()
 						<-entered
-						compat.SynctestWait()
+						synctest.Wait()
 						require.Zero(t, event.closeCount, "skip must not close while cleanup is blocked")
 						close(release)
 						<-done
@@ -204,9 +203,9 @@ func TestFuzzEventsPreserveCleanupPanicDetails(t *testing.T) {
 
 func TestFuzzEventsFatalDrainDoesNotReadUnprotectedDuration(t *testing.T) {
 	native := &testing.F{}
-	ptr, err := getFieldPointerFromWithType(native, "duration", compat.TypeFor[time.Duration]())
+	ptr, err := getFieldPointerFromWithType(native, "duration", reflect.TypeFor[time.Duration]())
 	require.NoError(t, err)
-	done, err := getFieldPointerFromWithType(native, "done", compat.TypeFor[bool]())
+	done, err := getFieldPointerFromWithType(native, "done", reflect.TypeFor[bool]())
 	require.NoError(t, err)
 	started, stop, stopped := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	go func() {
@@ -246,7 +245,7 @@ func (e *fuzzTimedRecordingTest) Close(status integrations.TestResultStatus, opt
 		fn := reflect.ValueOf(option)
 		value := reflect.New(fn.Type().In(0).Elem())
 		fn.Call([]reflect.Value{value})
-		ptr, err := getFieldPointerFromWithType(value.Interface(), "finishTime", compat.TypeFor[time.Time]())
+		ptr, err := getFieldPointerFromWithType(value.Interface(), "finishTime", reflect.TypeFor[time.Time]())
 		if err == nil && !(*time.Time)(ptr).IsZero() {
 			e.finish = *(*time.Time)(ptr)
 		}
@@ -257,7 +256,7 @@ func TestFuzzEventsConcurrentAdmissionAndRepeatedFinish(t *testing.T) {
 	queue := &fuzzEventQueue{}
 	const count = 1000
 	events := make([]*processRetryRecordingTest, count)
-	var workers compat.WaitGroup
+	var workers sync.WaitGroup
 	for i := 0; i < count; i++ {
 		events[i] = newProcessRetryRecordingTestForTesting("seed")
 		workers.Go(func() {
@@ -285,7 +284,7 @@ func TestFuzzEventsAdmissionOverlapsFatalDrain(t *testing.T) {
 	queue := &fuzzEventQueue{}
 	const count = 1000
 	events := make([]*processRetryRecordingTest, count)
-	var workers compat.WaitGroup
+	var workers sync.WaitGroup
 	for i := 0; i < count; i++ {
 		events[i] = newProcessRetryRecordingTestForTesting("seed")
 		workers.Go(func() {
@@ -313,7 +312,7 @@ func requireFuzzQueueDrained(t *testing.T, queue *fuzzEventQueue) {
 
 func setFuzzNativeField[V any](t *testing.T, native any, name string, value V) {
 	t.Helper()
-	ptr, err := getFieldPointerFromWithType(native, name, compat.TypeFor[V]())
+	ptr, err := getFieldPointerFromWithType(native, name, reflect.TypeFor[V]())
 	require.NoError(t, err)
 	*(*V)(ptr) = value
 }

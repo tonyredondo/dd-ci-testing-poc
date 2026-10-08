@@ -14,7 +14,6 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 )
 
@@ -162,8 +161,8 @@ func TestProcessRetryParityFreshAttemptHasNoMutableAliases(t *testing.T) {
 
 	require.Equal(t, t.Name(), first.test.Name())
 	require.Equal(t, t.Name(), second.test.Name())
-	require.NotSame(t, compat.Context(t), compat.Context(first.test))
-	require.NotSame(t, compat.Context(first.test), compat.Context(second.test))
+	require.NotSame(t, t.Context(), first.test.Context())
+	require.NotSame(t, first.test.Context(), second.test.Context())
 	require.Equal(t, getTestState(t), getTestState(first.test))
 	require.Equal(t, getTestState(t), getTestState(second.test))
 
@@ -221,7 +220,7 @@ func TestProcessRetryParityFreshAttemptHasNoMutableAliases(t *testing.T) {
 func TestProcessRetryParityFreshAttemptSnapshotsHelpersUnderNativeLock(t *testing.T) {
 	started := make(chan struct{})
 	stop := make(chan struct{})
-	var worker compat.WaitGroup
+	var worker sync.WaitGroup
 	var stopWorker sync.Once
 	cleanupWorker := func() {
 		stopWorker.Do(func() { close(stop) })
@@ -255,8 +254,8 @@ func TestProcessRetryParityFreshAttemptContextCancellationIsLocal(t *testing.T) 
 	require.Empty(t, reason)
 	require.NotNil(t, attempt)
 
-	originalContext := compat.Context(t)
-	attemptContext := compat.Context(attempt.test)
+	originalContext := t.Context()
+	attemptContext := attempt.test.Context()
 	require.NoError(t, originalContext.Err())
 	require.NoError(t, attemptContext.Err())
 

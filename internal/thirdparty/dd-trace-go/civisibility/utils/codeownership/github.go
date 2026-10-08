@@ -4,8 +4,6 @@ package codeownership
 
 import (
 	"strings"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 func (c *CodeOwners) parseGitHub(raw string) {
@@ -25,8 +23,7 @@ func (c *CodeOwners) parseGitHub(raw string) {
 		return
 	}
 	var owners []string
-	for iterator := compat.FieldsFunc(text, ownerSeparator); iterator.Next(); {
-		owner := iterator.Value()
+	for owner := range strings.FieldsFuncSeq(text, ownerSeparator) {
 		if !validGitHubOwner(owner) {
 			c.diagnostics++
 			return
@@ -71,8 +68,7 @@ func unsupportedGitHubPattern(pattern string) bool {
 func validGitHubOwner(owner string) bool {
 	if len(owner) > 1 && owner[0] == '@' && owner[1] != '@' {
 		count := 0
-		for iterator := compat.Split(owner[1:], "/"); iterator.Next(); {
-			part := iterator.Value()
+		for part := range strings.SplitSeq(owner[1:], "/") {
 			count++
 			if count > 2 {
 				return false

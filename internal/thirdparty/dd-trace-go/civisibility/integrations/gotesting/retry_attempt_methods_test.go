@@ -10,9 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 )
 
@@ -28,7 +28,7 @@ func TestProcessRetryParityFreshRunnerStablePublicState(t *testing.T) {
 		deadline, ok := local.Deadline()
 		observedDeadlineOK = ok
 		observedDeadlineEqual = deadline == originalDeadline
-		observedContextDistinct = compat.Context(t) != compat.Context(local)
+		observedContextDistinct = t.Context() != local.Context()
 		observedInitiallyPassed = !local.Failed() && !local.Skipped()
 	})
 	require.Empty(t, reason)
@@ -54,7 +54,7 @@ func TestProcessRetryParityFreshRunnerRestoresSetenvAndChdir(t *testing.T) {
 	attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
 		local.Setenv(key, "attempt-value")
 		setenvObserved = os.Getenv(key) == "attempt-value"
-		compat.Chdir(local, targetDir)
+		local.Chdir(targetDir)
 		chdirObserved, err = os.Getwd()
 		if err != nil {
 			local.Error(err)
@@ -92,7 +92,7 @@ func TestProcessRetryParityFreshRunnerAttrValidationAndCapture(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
-				compat.Attr(local, tc.key, tc.value)
+				local.Attr(tc.key, tc.value)
 			})
 			require.Empty(t, reason)
 			require.NotNil(t, attempt)
@@ -110,10 +110,9 @@ func TestProcessRetryParityFreshRunnerAttrValidationAndCapture(t *testing.T) {
 
 func TestProcessRetryParityFreshRunnerConcurrentReportingMethods(t *testing.T) {
 	attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
-		writer := compat.Output(local)
-		var workers compat.WaitGroup
+		writer := local.Output()
+		var workers sync.WaitGroup
 		for i := 0; i < 16; i++ {
-			i := i
 			workers.Go(func() {
 				local.Helper()
 				local.Logf("worker %d", i)
@@ -141,7 +140,7 @@ func TestProcessRetryParityFreshRunnerSerializesConcurrentIndentedWrites(t *test
 	base := commonBaseForTest(attempt.parent, attempt.layout)
 	writer := *fieldPtr[io.Writer](base, attempt.layout.common.w)
 	const workers = 16
-	var writes compat.WaitGroup
+	var writes sync.WaitGroup
 	writeErrors := make(chan error, workers)
 	for i := 0; i < workers; i++ {
 		writes.Go(func() {

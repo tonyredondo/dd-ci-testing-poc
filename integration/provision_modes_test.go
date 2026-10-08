@@ -96,7 +96,7 @@ func TestMiniProvisionsVendorAndPreservesPatchedSources(t *testing.T) {
 			writeBuildFixture(t, helper, map[string]string{"go.mod": "module example.com/vendorhelper\ngo 1.21\n", "helper.go": "package vendorhelper\nconst Value=1\n"})
 			mod := fmt.Sprintf("module example.com/vendorclient\ngo 1.21\nrequire example.com/vendorhelper v0.0.0\nreplace example.com/vendorhelper => %q\n", filepath.ToSlash(helper))
 			if mode == "-modfile=alternate.mod" {
-				mod += "godebug default=go1.26\n"
+				mod += "godebug default=go1.25\n"
 			}
 			writeBuildFixture(t, dir, map[string]string{
 				"go.mod":         mod,

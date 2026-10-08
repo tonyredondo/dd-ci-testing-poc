@@ -16,7 +16,7 @@ func TestMiniConsumerAddsOnlyOwnModule(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := t.TempDir()
-	mod := []byte("module example.com/mini-consumer\n\ngo 1.26.0\n\nrequire github.com/tonyredondo/dd-ci-testing-poc v0.0.0\n\nreplace github.com/tonyredondo/dd-ci-testing-poc => " + strconv.Quote(filepath.ToSlash(root)) + "\n")
+	mod := []byte("module example.com/mini-consumer\n\ngo 1.25.0\n\nrequire github.com/tonyredondo/dd-ci-testing-poc v0.0.0\n\nreplace github.com/tonyredondo/dd-ci-testing-poc => " + strconv.Quote(filepath.ToSlash(root)) + "\n")
 	if err := os.WriteFile(filepath.Join(client, "go.mod"), mod, 0600); err != nil {
 		t.Fatal(err)
 	}

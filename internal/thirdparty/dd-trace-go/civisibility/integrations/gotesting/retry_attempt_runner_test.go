@@ -20,7 +20,6 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 )
 
@@ -35,11 +34,11 @@ func TestProcessRetryParityFreshRunnerNormalLifecycle(t *testing.T) {
 	var events []string
 	attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
 		local.Cleanup(func() {
-			require.ErrorIs(t, compat.Context(local).Err(), context.Canceled)
+			require.ErrorIs(t, local.Context().Err(), context.Canceled)
 			events = append(events, "cleanup-1")
 		})
 		local.Cleanup(func() { events = append(events, "cleanup-2") })
-		compat.Output(local).Write([]byte("partial"))
+		local.Output().Write([]byte("partial"))
 		events = append(events, "body")
 	})
 	require.Empty(t, reason)
@@ -665,7 +664,7 @@ func TestProcessRetryParityFreshRunnerRootParallelPreservesConflicts(t *testing.
 		targetDir := t.TempDir()
 		attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
 			local.Parallel()
-			compat.Chdir(local, targetDir)
+			local.Chdir(targetDir)
 		})
 		require.Empty(t, reason)
 		require.NotNil(t, attempt)
@@ -680,7 +679,7 @@ func TestProcessRetryParityFreshRunnerRootParallelPreservesConflicts(t *testing.
 		require.NoError(t, err)
 		targetDir := t.TempDir()
 		attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
-			compat.Chdir(local, targetDir)
+			local.Chdir(targetDir)
 			local.Parallel()
 		})
 		require.Empty(t, reason)
@@ -925,7 +924,7 @@ func TestProcessRetryParitySkipsOutputObservationWhenLogsAreDisabled(t *testing.
 
 	attempt, result, reason := runFreshRetryAttemptInGroup(group, func(local *testing.T) {
 		local.Log("process child output is captured by the parent pipes")
-		_, _ = compat.Output(local).Write([]byte("partial output"))
+		_, _ = local.Output().Write([]byte("partial output"))
 	})
 	require.Empty(t, reason)
 	require.NotNil(t, attempt)
@@ -1082,7 +1081,7 @@ func TestProcessRetryParityFreshRunnerRetiresLateMethodDestinations(t *testing.T
 	var writer io.Writer
 	attempt, result, reason := runFreshRetryAttemptInGroup(group, func(current *testing.T) {
 		local = current
-		writer = compat.Output(current)
+		writer = current.Output()
 	})
 	require.Empty(t, reason)
 	require.NotNil(t, attempt)

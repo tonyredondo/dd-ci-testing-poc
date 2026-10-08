@@ -10,7 +10,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/locking"
 )
@@ -44,9 +43,9 @@ func TestProcessRetryParityDifferentialNativeAndFreshLifecycle(t *testing.T) {
 				trace.add("body:start")
 				local.Log("log line")
 				local.Logf("formatted %s", "log line")
-				_, err := compat.Output(local).Write([]byte("partial output"))
+				_, err := local.Output().Write([]byte("partial output"))
 				require.NoError(t, err)
-				require.NoError(t, compat.Context(local).Err())
+				require.NoError(t, local.Context().Err())
 				_, deadlinePresent := local.Deadline()
 				trace.add("deadline:" + boolString(deadlinePresent))
 				*tempDir = local.TempDir()
@@ -54,7 +53,7 @@ func TestProcessRetryParityDifferentialNativeAndFreshLifecycle(t *testing.T) {
 				require.NoError(t, err)
 				local.Helper()
 				local.Cleanup(func() {
-					trace.add("cleanup:oldest:context:" + boolString(compat.Context(local).Err() == context.Canceled))
+					trace.add("cleanup:oldest:context:" + boolString(local.Context().Err() == context.Canceled))
 				})
 				local.Cleanup(func() { trace.add("cleanup:newest") })
 				trace.add("body:end")
@@ -65,7 +64,7 @@ func TestProcessRetryParityDifferentialNativeAndFreshLifecycle(t *testing.T) {
 			skipped: true,
 			target: func(local *testing.T, trace *retryParityTrace, _ *string) {
 				local.Cleanup(func() {
-					trace.add("cleanup:context:" + boolString(compat.Context(local).Err() == context.Canceled))
+					trace.add("cleanup:context:" + boolString(local.Context().Err() == context.Canceled))
 				})
 				trace.add("body:skip")
 				local.SkipNow()

@@ -64,13 +64,20 @@ substitutes a different cached version. A development binary with neither
 sources nor a published version needs a client replacement.
 
 Use a Go toolchain installed outside `GOMODCACHE`; Go prohibits overlays within
-that cache, including downloaded toolchains. CI exercises Go 1.26 and 1.27.
-The installed toolchain must be Go 1.26 or newer. A client module declaring
-Go 1.21 keeps that language version, including its loop-variable semantics.
-Mini's ordinary source uses Go 1.21 syntax. Small standard-library equivalents
-live in `internal/compat`; native APIs that require a newer Go release have
-version guards at that boundary. The distributed module has no external
-requirements, including test requirements.
+that cache, including downloaded toolchains. Mini requires Go 1.25 or newer;
+preparation checks the toolchain selected by Go. A client declaring Go 1.21
+keeps that language version, including its loop-variable semantics and timer
+defaults. For older client languages, Mini becomes a separate main module in
+a temporary workspace. The client's module files stay unchanged except for
+updates its own `-mod=mod` imports would require under native Go.
+
+Mini uses native Go 1.25 APIs. `internal/compat` contains only `AsType` and
+`Pointer`, which adapt Go 1.26 helpers used by the incorporated sources. The
+distributed module has no external requirements, including test requirements.
+CI checks Go 1.25, 1.26, 1.27 and a recorded tip revision. The full SDK reference
+requires Go 1.26. Go 1.25 and tip have a native Mini feature suite; tip also
+checks manual SDK span copies. The frozen Orchestrion reference fails on tip,
+so its complete differential comparisons run on Go 1.26/1.27.
 
 The SDK backend provides its pinned version with `go get`. A different selected
 or replaced SDK is rejected. Mini's application-SDK integration has separate

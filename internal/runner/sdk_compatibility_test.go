@@ -31,7 +31,7 @@ func TestUnsupportedSDKMirrorKeepsCIOwnershipGuards(t *testing.T) {
 			t.Fatal("mandatory ownership guard disabled", guard)
 		}
 	}
-	if miniSDKCIOnlyCacheMarker == miniSDKCICacheMarker {
+	if sdkCompilerCacheMarker(sdkCIConfigPackage) == sdkCompilerCacheMarker(sdkTracerPackage) {
 		t.Fatal("mirror modes share a compiler cache contract")
 	}
 	contents, err := os.ReadFile(path)

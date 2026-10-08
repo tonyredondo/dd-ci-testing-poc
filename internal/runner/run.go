@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -47,9 +46,11 @@ type Plan struct {
 	InstrumentedFiles, TestPackages int
 	// Modfile is a temporary go.mod that provides a runtime the module does
 	// not require; the module's own go.mod and go.sum stay untouched.
-	Modfile        string
-	Workfile       string
-	modfileOverlay bool // A vendor workspace reads the explicit modfile through its overlay.
+	Modfile          string
+	Workfile         string
+	modfileOverlay   bool // Temporary workspaces read the explicit modfile through the overlay.
+	moduleWorkspace  bool // The caller used module mode; translate its module flags for the workspace.
+	workspaceGoFlags string
 	// Warnings name optional integrations skipped for unsupported libraries.
 	Warnings          []string
 	coverOverlay      bool
@@ -61,7 +62,7 @@ type Plan struct {
 	sdkMirrorDisabled bool
 	testify           bool
 	goleak            bool
-	goleakCache       string
+	compilerCache     []string
 }
 
 // Prepare creates a complete plan before native Go compilation starts. Callers
@@ -166,6 +167,14 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			_ = os.RemoveAll(temp)
 		}
 	}()
+	opts.environment, e = readGoEnvironment(ctx, dir)
+	if e != nil {
+		return plan, e
+	}
+	if !supportsGoToolchain(opts.environment.GOVERSION) {
+		return plan, fmt.Errorf("ddtest requires Go 1.25 or newer; selected toolchain is %q", opts.environment.GOVERSION)
+	}
+	debug.printf("toolchain=%q", opts.environment.GOVERSION)
 	if runtime == Mini {
 		if work := workspaceFile(dir); work != "" {
 			plan.Workfile, e = provideMiniWorkspace(ctx, dir, work, temp, replacements)
@@ -216,6 +225,11 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 				}
 			}
 		}
+		if plan.Workfile == "" {
+			if e = provideOlderModuleWorkspace(ctx, dir, &opts, &plan, replacements); e != nil {
+				return plan, e
+			}
+		}
 	}
 	if plan.Workfile != "" && len(replacements) != 0 {
 		if e = writeProvisionOverlay(temp, &opts, replacements); e != nil {
@@ -237,6 +251,9 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		cmd.Dir = dir
 		if opts.workfile != "" {
 			cmd.Env = append(cmd.Environ(), "GOWORK="+opts.workfile)
+			if plan.moduleWorkspace {
+				cmd.Env = append(cmd.Env, "GOFLAGS="+plan.workspaceGoFlags)
+			}
 		}
 		return readPackages(ctx, cmd, "resolve packages")
 	}
@@ -251,16 +268,12 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	}
 	patterns := append(append([]string(nil), opts.packages...), "testing", runtimePackage)
 	var packages []goPackage
-	if opts.mod == "mod" {
-		// -mod=mod lets a query add requirements to go.mod and go.sum. Native go
-		// test adds them only for the user's packages, never for the runtime it
-		// does not import. List those packages with the user's flags, then
-		// resolve the runtime read-only: a missing runtime is provided below.
-		packages, e = list(patterns[:len(patterns)-1]...)
-		if e == nil && !slices.ContainsFunc(packages, func(p goPackage) bool { return p.ImportPath == runtimePackage }) {
-			var probe []goPackage
-			probe, e = list("-mod=readonly", runtimePackage)
-			packages = append(packages, probe...)
+	if opts.mod == "mod" && !plan.moduleWorkspace {
+		// Resolve only native client imports, including test-only imports,
+		// before probing our injected runtime. Preserve native module updates.
+		_, e = list(append([]string{"-test", "-json=ImportPath,Error"}, opts.packages...)...)
+		if e == nil {
+			packages, e = list(append([]string{"-mod=readonly"}, patterns...)...)
 		}
 	} else {
 		packages, e = list(patterns...)
@@ -360,9 +373,21 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		if warning := preflightSDKMirror(libraries[sdkTracerPackage], replacements); warning != "" {
 			plan.sdkMirrorDisabled = true
 			plan.Warnings = append(plan.Warnings, warning)
-			hooks += miniSDKCIOnlyCacheMarker
-		} else {
-			hooks += miniSDKCICacheMarker
+		}
+		for _, path := range []string{sdkCIConfigPackage, sdkCIEnvironmentPackage, sdkTracerPackage} {
+			if path == sdkTracerPackage && plan.sdkMirrorDisabled {
+				continue
+			}
+			pkg := libraries[path]
+			if pkg == nil {
+				// Orchestrion can introduce these packages after preparation.
+				pkg = &goPackage{ImportPath: path}
+			}
+			flag, err := packageCompilerCacheFlag(dir, opts, pkg, sdkCompilerCacheMarker(path))
+			if err != nil {
+				return plan, err
+			}
+			plan.compilerCache = append(plan.compilerCache, flag)
 		}
 	}
 	if e = add(filepath.Join(native.Dir, "zz_dd_ci_visibility_hooks.go"), hooks); e != nil {
@@ -428,7 +453,9 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		}
 		if goleak != nil {
 			plan.goleak = true
-			plan.goleakCache, e = goleakCacheFlag(dir, opts, libraries[instrument.GoleakImport], goleak.Fingerprint)
+			var flag string
+			flag, e = goleakCacheFlag(dir, opts, libraries[instrument.GoleakImport], goleak.Fingerprint)
+			plan.compilerCache = append(plan.compilerCache, flag)
 			if e != nil {
 				return plan, e
 			}
@@ -575,6 +602,9 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 	forwarded := goTestArguments(plan, opts, tool)
 	if plan.Workfile != "" {
 		env = append(env, "GOWORK="+plan.Workfile)
+		if plan.moduleWorkspace {
+			env = append(env, "GOFLAGS="+plan.workspaceGoFlags)
+		}
 	}
 	if plan.launcher != nil {
 		ctx = context.WithValue(ctx, goLauncherKey{}, *plan.launcher)
@@ -606,8 +636,8 @@ func prepareInterruptibly(ctx context.Context, dir string, opts options, runtime
 // goTestArguments keeps the user's arguments in order. Our overlay already
 // contains the user's entries and our -toolexec chains the user's, so those
 // flags are replaced wherever they appear before the test binary arguments.
-// Go applies per-package flags in order: the goleak cache marker follows the
-// last user -gcflags, which keeps goleak's other effective compiler flags.
+// Go applies per-package flags in order: our package cache markers follow the
+// last user -gcflags, retaining each package's effective compiler flags.
 func goTestArguments(plan Plan, opts options, tool string) []string {
 	forwarded := []string{"test", "-overlay=" + plan.File}
 	if plan.Modfile != "" {
@@ -617,23 +647,27 @@ func goTestArguments(plan Plan, opts options, tool string) []string {
 		forwarded = append(forwarded, "-toolexec="+tool)
 	}
 	lastGcflags := -1
-	if plan.goleakCache != "" {
+	if len(plan.compilerCache) != 0 {
 		for i, argument := range opts.arguments {
 			if argument.flag == "gcflags" {
 				lastGcflags = i
 			}
 		}
 		if lastGcflags < 0 {
-			forwarded = append(forwarded, plan.goleakCache)
+			forwarded = append(forwarded, plan.compilerCache...)
 		}
 	}
 	for i, argument := range opts.arguments {
 		if argument.flag == "overlay" || argument.flag == "toolexec" && tool != "" || argument.flag == "modfile" && (plan.Modfile != "" || plan.modfileOverlay) {
 			continue
 		}
+		if plan.moduleWorkspace && argument.flag == "mod" {
+			forwarded = append(forwarded, workspaceModuleFlags(argument.raw)...)
+			continue
+		}
 		forwarded = append(forwarded, argument.raw...)
 		if i == lastGcflags {
-			forwarded = append(forwarded, plan.goleakCache)
+			forwarded = append(forwarded, plan.compilerCache...)
 		}
 	}
 	return forwarded

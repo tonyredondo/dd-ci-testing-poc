@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
@@ -132,7 +131,7 @@ func TestLoadSourceFunctionMetadataCachesResolvedFunction(t *testing.T) {
 	// workspace identity. A temporary cwd is not the function's source root.
 	ownersDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(ownersDir, "CODEOWNERS"), []byte("* @ci-fixture\n"), 0o600))
-	compat.Chdir(t, ownersDir)
+	t.Chdir(ownersDir)
 	owners, err := codeownership.Discover(codeownership.Locations{Workspace: ownersDir})
 	require.NoError(t, err)
 	lookup := func() (codeOwnerMatcher, bool) { return owners, true }
@@ -279,7 +278,6 @@ func TestSourceFunctionCodeOwnerCacheConcurrentHitsSkipCompletedLookup(t *testin
 	owners := make([]string, readers)
 	foundResults := make([]bool, readers)
 	for index := 0; index < readers; index++ {
-		index := index
 		go func() {
 			defer wait.Done()
 			owners[index], foundResults[index] = loadSourceFunctionCodeOwnerWithLookup(metadata, lookup)

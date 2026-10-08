@@ -8,9 +8,9 @@ package coverage
 import (
 	"errors"
 	"io"
+	"sync"
 	"testing"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/net"
 )
@@ -75,7 +75,7 @@ func TestCoverageWriterConcurrentAddAndFlush(t *testing.T) {
 		return nil
 	}}
 
-	var wg compat.WaitGroup
+	var wg sync.WaitGroup
 	for i := 0; i < 64; i++ {
 		wg.Go(func() {
 			writer.add(&testCoverage{})

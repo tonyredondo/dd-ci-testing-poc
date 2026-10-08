@@ -3,17 +3,16 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	goversion "go/version"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
-func compareGoVersion(left, right string) int { return compat.CompareGoVersion("go"+left, "go"+right) }
+func compareGoVersion(left, right string) int { return goversion.Compare("go"+left, "go"+right) }
 
 func writeProvisionOverlay(temp string, opts *options, replacements map[string]string) error {
 	data, err := json.Marshal(Overlay{Replace: replacements})
@@ -50,34 +49,54 @@ func moduleRoot(dir string) string {
 	}
 }
 
-func provideMiniVendorWorkspace(ctx context.Context, dir, root, temp string, replacements map[string]string) (string, error) {
-	source := filepath.Join(temp, "vendor-input.work")
+// moduleWorkspaceInput represents one module without changing its language or
+// GODEBUG defaults. The caller may overlay a selected -modfile first.
+func moduleWorkspaceInput(ctx context.Context, dir, root, temp string, replacements map[string]string) (string, error) {
+	source := filepath.Join(temp, "module-input.work")
 	module, err := readModuleFile(filepath.Join(root, "go.mod"), replacements)
 	if err != nil {
 		return "", err
 	}
-	modfile := filepath.Join(temp, "vendor-settings.mod")
+	modfile := filepath.Join(temp, "module-settings.mod")
 	if err := os.WriteFile(modfile, module, 0600); err != nil {
 		return "", err
 	}
-	out, err := goTool(ctx, dir, nil, "mod", "edit", "-json", "-modfile="+modfile)
+	out, err := goTool(ctx, dir, nil, "mod", "edit", "-print", "-modfile="+modfile)
 	if err != nil {
 		return "", err
 	}
-	var settings struct {
-		Go      string
-		GoDebug []struct{ Key, Value string }
-	}
-	if err := json.Unmarshal([]byte(out), &settings); err != nil {
+	settingsGo := moduleDirective([]byte(out), "go")
+	settingsDebug, err := formattedGoDebug(out)
+	if err != nil {
 		return "", err
 	}
 	// Go compares workspace module roots with its native working-directory
 	// spelling. Absolute slash-normalized paths fail that comparison on Windows.
-	data := []byte("go " + settings.Go + "\nuse " + strconv.Quote(root) + "\n")
-	for _, setting := range settings.GoDebug {
+	workspaceGo := settingsGo
+	if compareGoVersion(workspaceGo, "1.25.0") < 0 {
+		workspaceGo = "1.25.0"
+	}
+	data := []byte("go " + workspaceGo + "\nuse " + strconv.Quote(root) + "\n")
+	hasDefault := false
+	for _, setting := range settingsDebug {
+		hasDefault = hasDefault || setting.Key == "default"
 		data = append(data, []byte("godebug "+setting.Key+"="+setting.Value+"\n")...)
 	}
+	if !hasDefault && workspaceGo != settingsGo && settingsGo != "" {
+		parts := strings.Split(settingsGo, ".")
+		if len(parts) >= 2 {
+			data = append(data, []byte("godebug default=go"+strings.Join(parts[:2], ".")+"\n")...)
+		}
+	}
 	if err := os.WriteFile(source, data, 0600); err != nil {
+		return "", err
+	}
+	return source, nil
+}
+
+func provideMiniVendorWorkspace(ctx context.Context, dir, root, temp string, replacements map[string]string) (string, error) {
+	source, err := moduleWorkspaceInput(ctx, dir, root, temp, replacements)
+	if err != nil {
 		return "", err
 	}
 	work, err := provideMiniWorkspace(ctx, dir, source, temp, replacements)

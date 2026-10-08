@@ -35,7 +35,7 @@ jobs:
     # Fuzz lifecycle fixtures run many subprocesses. Race-enabled children also
     # wait for the race detector at exit; retain that wait and allow the complete
     # matrix to finish. Windows needs extra time for cold fixture compilation.
-    timeout-minutes: ${{ matrix.os == 'windows-latest' && 60 || matrix.mode == 'race' && 45 || 35 }}
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 60 || matrix.os == 'macos-latest' && 45 || matrix.mode == 'race' && 45 || 35 }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -66,7 +66,7 @@ jobs:
           PARITY_EXECUTION_ORDER: ${{ matrix.mode == 'race' && 'mini-first' || 'sdk-first' }}
           PARITY_REPORT_NAME: ${{ matrix.mode == 'race' && 'parity-race' || 'parity' }}
           PARITY_TEST_MODE: ${{ matrix.mode }}
-          GO_TEST_TIMEOUT: ${{ matrix.os == 'windows-latest' && '55m' || matrix.mode == 'race' && '40m' || '30m' }}
+          GO_TEST_TIMEOUT: ${{ matrix.os == 'windows-latest' && '55m' || matrix.os == 'macos-latest' && '40m' || matrix.mode == 'race' && '40m' || '30m' }}
         run: |
           mkdir -p artifacts
           set -o pipefail
@@ -84,5 +84,70 @@ jobs:
         if: always()
         with:
           name: compatibility-${{ matrix.os }}-go-${{ matrix.go }}-${{ matrix.mode }}
+          path: artifacts/
+          retention-days: 7
+
+  mini:
+    name: mini (Linux, ${{ matrix.go }}, ${{ matrix.mode }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - go: '1.25.x'
+            mode: normal
+          - go: '1.25.x'
+            mode: race
+          - go: 'tip'
+            mode: normal
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: ${{ matrix.go == 'tip' && '1.27.x' || matrix.go }}
+          cache-dependency-path: testdata/fixture/go.sum
+      - name: Build Go tip
+        if: matrix.go == 'tip'
+        shell: bash
+        run: |
+          bootstrap="$(go env GOROOT)"
+          git clone --depth=1 https://go.googlesource.com/go "$RUNNER_TEMP/go-tip"
+          git -C "$RUNNER_TEMP/go-tip" rev-parse HEAD
+          (cd "$RUNNER_TEMP/go-tip/src" && GOROOT_BOOTSTRAP="$bootstrap" ./make.bash)
+          echo "$RUNNER_TEMP/go-tip/bin" >> "$GITHUB_PATH"
+          echo "GOTOOLCHAIN=local" >> "$GITHUB_ENV"
+      - name: Verify sources and dependency boundary
+        shell: bash
+        run: |
+          python scripts/upstream.py verify
+          python -m unittest discover -s scripts -p "test_*.py"
+          python scripts/dependency_boundary.py
+          go vet ./...
+      - name: Native Mini runtime and integration
+        shell: bash
+        env:
+          GOTOOLCHAIN: local
+          PARITY_TEST_MODE: ${{ matrix.mode }}
+          GO_MATRIX_VERSION: ${{ matrix.go }}
+        run: |
+          mkdir -p artifacts
+          set -o pipefail
+          go version
+          test_flags=()
+          if [[ "$PARITY_TEST_MODE" == "race" ]]; then test_flags+=(-race); fi
+          # The SDK reference needs Go 1.26; frozen Orchestrion cannot serve as
+          # a tip oracle. These jobs run Mini directly, without Orchestrion.
+          mapfile -t packages < <(go list ./... | sed '/\/integration$/d')
+          go test "${test_flags[@]}" -v -count=1 -timeout=10m "${packages[@]}" 2>&1 | tee artifacts/unit.log
+          cases='TestMini(ToolchainFeatures|FuzzExampleLifecycle|PublicFuzzExampleAPI|PreservesConsumerLanguage|PreservesOlderConsumerDependencies|ModModeResolvesClientRequirements|ContinuesAfterPackageSetupFailures|LocalProvisionAvoidsProxy|ConsumerAddsOnlyOwnModule|RuntimeProvisionUsesModuleOverlay|ChdirSymlinkWithUserTool|GoleakAbsoluteTargetRetainsCompilerFlags|ModModeLeavesModuleFiles|ProvisionsWorkspaceWithoutChangingModules|ProvisionsVendorAndPreservesPatchedSources|GoleakIntegration|CoverageIncludesCleanup|StartupOverlapsSettingsAndTelemetry)$|^TestGoleakCacheAndWarmVersionGuard$'
+          if [[ "$GO_MATRIX_VERSION" == "tip" ]]; then
+            cases+='|^TestMini(SDKSpanMirror|SDKMirrorContextMatrix|UnsupportedSDKMirrorRetainsTestReporting|LegacySDKShim)$'
+          fi
+          go test "${test_flags[@]}" -v -count=1 -timeout=20m -run="$cases" ./integration 2>&1 | tee artifacts/mini.log
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: mini-go-${{ matrix.go }}-${{ matrix.mode }}
           path: artifacts/
           retention-days: 7

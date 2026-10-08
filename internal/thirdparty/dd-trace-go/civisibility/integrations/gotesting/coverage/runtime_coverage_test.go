@@ -9,9 +9,8 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 var runtimeCoverageTestMain *testing.M
@@ -53,7 +52,7 @@ func TestRuntimeCoverageConcurrentSnapshots(t *testing.T) {
 	const iterations = 4
 	collectors := make([]*testCoverage, workers)
 	start := make(chan struct{})
-	var wg compat.WaitGroup
+	var wg sync.WaitGroup
 	for i := range collectors {
 		collector := &testCoverage{moduleID: 1, suiteID: 2, testID: uint64(i + 1)}
 		collectors[i] = collector

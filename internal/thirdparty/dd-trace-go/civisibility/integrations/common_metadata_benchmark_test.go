@@ -6,11 +6,11 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	tracer "github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
 )
@@ -29,7 +29,7 @@ func TestCommonMetadataTransportCountsConcurrentSends(t *testing.T) {
 	const sends = 64
 	const payload = "test payload"
 	sink := &commonMetadataTransport{}
-	var workers compat.WaitGroup
+	var workers sync.WaitGroup
 	for i := 0; i < sends; i++ {
 		workers.Go(func() {
 			request, err := http.NewRequest(http.MethodPost, "http://fixture.invalid", strings.NewReader(payload))

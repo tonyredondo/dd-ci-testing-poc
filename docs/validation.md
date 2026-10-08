@@ -150,7 +150,8 @@ The transparency and safety regressions cover these contracts:
 | Reserved span fields | `TestReservedTagsUpdateEventFields`, `TestReservedTagsReachWireFieldsAndEventKind`: names, service, resource and type reach the decoded event fields |
 | Reentrant tag values | `TestTagFormattingCanReadItsSpan`: stringers, formatters, slices and errors can read the span; a callback that finishes it cannot add a late tag |
 | Consumer dependency versions | `TestMiniPreservesOlderConsumerDependencies`, `TestMiniConsumerAddsOnlyOwnModule`: readonly/mod builds keep old Testify, go-spew and YAML; consumer tidy adds only Mini |
-| Consumer language version | `TestMiniPreservesConsumerLanguage`: Go 1.21, 1.22 and 1.26 loop closures and timer compatibility match native Go |
+| Consumer language version | `TestMiniPreservesConsumerLanguage`: Go 1.21, 1.22 and 1.25 loop closures and timer compatibility match native Go |
+| SDK compiler cache | `TestMiniLegacySDKShim`: native SDK builds before and after Mini retain CI reporting, and SDK spans retain their APM transport |
 | Optional SDK mirror compatibility | `TestMiniUnsupportedSDKMirrorRetainsTestReporting`: SDK 2.10.1 builds twice, warns, and retains one test/session per run without duplicate SDK reporting |
 | Package setup failures | `TestMiniContinuesAfterPackageSetupFailures`: valid packages execute beside mixed-package, missing and empty targets with native exit status |
 | Event metadata placement | `TestMiniCIConfigurationWireParity` and common-tag wire tests: shared CI/Git/system defaults and local overrides retain effective values; raw payload assertions check their placement |
@@ -160,16 +161,23 @@ The transparency and safety regressions cover these contracts:
 
 ## Compatibility workflow
 
-The [workflow](../.github/workflows/compatibility.yml) has six native jobs:
+The [workflow](../.github/workflows/compatibility.yml) checks three stable Go families and tip:
 
 | Platform | Go | Suite |
 | --- | --- | --- |
-| Linux | 1.26, 1.27 | Separate normal and `-race` jobs for each version |
+| Linux | 1.25 | Native Mini suite in normal and `-race` modes; `GOTOOLCHAIN=local` prevents an upgrade |
+| Linux | 1.26, 1.27 | Complete SDK differential suite in normal and `-race` modes |
+| Linux | tip | Native Mini suite and manual SDK span-copy cases; source commit recorded before building Go |
 | macOS | 1.27 | Normal suite |
 | Windows | 1.27 | Normal suite |
 
-Every job audits incorporated sources and licenses, verifies module inputs,
-runs `go vet` and executes the complete compatibility suite. The report step
+Every job audits incorporated sources and licenses, checks the dependency boundary
+and runs `go vet`. Go 1.25 and tip execute all local runtime packages, plus native Mini
+fixtures for compiler/coverage hooks, Testify, goleak, fuzz/examples, delivery and
+consumer transparency. Tip also checks the manual SDK mirror, its compatibility
+fallback and native builds before and after Mini. The full SDK reference requires
+Go 1.26. The frozen Orchestrion reference fails on tip, so the complete differential
+suite runs on Go 1.26/1.27. Its report step
 requires the independent Orchestrion reference and exports feature outcomes,
 counts and timings. Logs and JSON reports are uploaded even when a test fails.
 

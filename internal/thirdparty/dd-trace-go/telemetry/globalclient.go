@@ -10,7 +10,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	globalinternal "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/stacktrace"
@@ -120,7 +119,7 @@ func SwapClient(client Client) Client {
 // It returns a function that can be used to swap back the global client
 func MockClient(client Client) func() {
 	globalClientRecorder.Clear()
-	compat.ClearMap(&metricsHandleSwappablePointers)
+	(&metricsHandleSwappablePointers).Clear()
 	metricRegistryGeneration.Add(1)
 
 	oldClient := SwapClient(client)

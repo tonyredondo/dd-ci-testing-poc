@@ -16,7 +16,6 @@ import (
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
 )
 
@@ -89,7 +88,7 @@ func TestDeferredClientKeepsPayloadLimitsAndOrder(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	slices.SortFunc(payloads, func(a, b []string) int { return slices.Index(order, a[0]) - slices.Index(order, b[0]) })
-	if got := compat.Concat(payloads...); !slices.Equal(got, order) {
+	if got := slices.Concat(payloads...); !slices.Equal(got, order) {
 		t.Fatal("changed, lost or duplicated events", payloads)
 	}
 }

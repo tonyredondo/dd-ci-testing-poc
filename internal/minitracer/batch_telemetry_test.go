@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry/telemetrytest"
 )
@@ -61,7 +60,7 @@ func TestPayloadDropCountsTerminalBatches(t *testing.T) {
 	// Neither repeated close/flush nor finishing additional spans may count those
 	// payloads twice or resend an abandoned batch.
 	sent := calls.Load()
-	var wg compat.WaitGroup
+	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		wg.Go(func() { _ = c.Close(context.Background()) })
 	}

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
 	"github.com/tonyredondo/dd-ci-testing-poc/propagation"
 )
@@ -49,7 +48,7 @@ func TestNativeEventsConcurrentFinishAndHierarchy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var wg compat.WaitGroup
+	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		go func() {
@@ -207,7 +206,7 @@ func TestQueueBoundAndConcurrentBackpressure(t *testing.T) {
 	if err := client.Flush(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	var wg compat.WaitGroup
+	var wg sync.WaitGroup
 	for i := 0; i < retained; i++ {
 		wg.Go(finish)
 	}

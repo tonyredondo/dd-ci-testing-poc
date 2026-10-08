@@ -5,8 +5,6 @@ import (
 	"runtime"
 	"testing"
 	"unsafe"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 // F embeds the same common value as T, but its scheduler pointer has a different
@@ -28,7 +26,7 @@ func buildFuzzFieldsLayout(fType reflect.Type, testingLayout *testingInternalsLa
 		return layout
 	}
 	layout.common, layout.commonOK = common, true
-	layout.fuzzCalled, _ = exactField(fType, "fuzzCalled", compat.TypeFor[bool](), false)
+	layout.fuzzCalled, _ = exactField(fType, "fuzzCalled", reflect.TypeFor[bool](), false)
 	if testingLayout.tstate.available {
 		layout.state, _ = exactField(fType, "tstate", testingLayout.tstate.typ, false)
 	}

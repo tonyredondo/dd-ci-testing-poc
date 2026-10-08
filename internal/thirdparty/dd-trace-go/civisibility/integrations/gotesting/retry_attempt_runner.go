@@ -16,8 +16,6 @@ import (
 	"testing"
 	"time"
 	"unsafe"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 type retryAttemptCompletionPhase uint8
@@ -615,7 +613,7 @@ func flushRetryAttemptPartial(base unsafe.Pointer, layout *testingInternalsLayou
 	if outputWriter == nil || len(*fieldPtr[[]byte](outputWriter, layout.outputWriter.partial)) == 0 {
 		return
 	}
-	_, _ = compat.Output((*testing.T)(base)).Write([]byte("\n"))
+	_, _ = (*testing.T)(base).Output().Write([]byte("\n"))
 }
 
 func reportRetryAttempt(base unsafe.Pointer, layout *testingInternalsLayout) {

@@ -83,7 +83,7 @@ func ToolNeedsPlan(mode string, args []string, importPath string) bool {
 		return false
 	}
 	pkg, _, _ := strings.Cut(importPath, " [")
-	return pkg == instrument.TestifySuiteImport && strings.Contains(mode, "testify") || pkg == instrument.GoleakImport && strings.Contains(mode, "goleak")
+	return pkg == instrument.TestifySuiteImport && strings.Contains(mode, "testify") || (pkg == instrument.GoleakImport || pkg == instrument.GoleakImport+"_test" || pkg == instrument.GoleakImport+".test") && strings.Contains(mode, "goleak")
 }
 
 // RunTool handles only a selected transform. CLI bypasses unrelated tools
@@ -103,7 +103,8 @@ func RunTool(ctx context.Context, overlay string, args []string, stdin io.Reader
 				// Orchestrion can introduce a tracer after package resolution.
 				// Original inputs remain intact; CI gates are separate transforms.
 				fmt.Fprintln(stderr, version.BuildLogPrefix+" WARN: SDK span copies disabled:", err)
-				return runChainedTool(ctx, args, stdin, stdout, stderr)
+				forwarded := removeCompilerCacheMarker(append([]string(nil), args...), sdkCompilerCacheMarker(pkg))
+				return runChainedTool(ctx, forwarded, stdin, stdout, stderr)
 			}
 			fmt.Fprintln(stderr, err)
 			return 2
@@ -123,6 +124,16 @@ func RunTool(ctx context.Context, overlay string, args []string, stdin io.Reader
 	}
 	entry := plan.Testify
 	pkg, _, _ := strings.Cut(os.Getenv("TOOLEXEC_IMPORTPATH"), " [")
+	if pkg == instrument.GoleakImport+"_test" || pkg == instrument.GoleakImport+".test" {
+		// Go applies the package's gcflags to its external tests and test main. Both
+		// need only the cache marker removed, without rewriting goleak.Find.
+		if plan.Goleak == nil {
+			fmt.Fprintln(stderr, "missing optional library tool plan")
+			return 2
+		}
+		forwarded := removeGoleakCacheMarker(append([]string(nil), args...), plan.Goleak.Fingerprint)
+		return runChainedTool(ctx, forwarded, stdin, stdout, stderr)
+	}
 	if pkg == instrument.GoleakImport {
 		entry = plan.Goleak
 	}

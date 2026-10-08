@@ -9,8 +9,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 // Locations supplies explicit repository context. No environment is read.
@@ -68,8 +66,7 @@ func (r *Resolver) repositoryPath(value string) (string, bool) {
 	}
 	// Compiler paths are resolved by the caller. Reject traversal before Clean
 	// can hide it, including attempts to leave the workspace but stay in the repo.
-	for iterator := compat.Split(value, "/"); iterator.Next(); {
-		segment := iterator.Value()
+	for segment := range strings.SplitSeq(value, "/") {
 		if segment == ".." {
 			return "", false
 		}

@@ -5,20 +5,19 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry/internal"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry/internal/transport"
 )
 
 func runConcurrent(workers int, f func(int)) {
-	var wg compat.WaitGroup
+	var wg sync.WaitGroup
 	start := make(chan struct{})
 	for i := 0; i < workers; i++ {
-		i := i
 		wg.Go(func() { <-start; f(i) })
 	}
 	close(start)

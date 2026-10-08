@@ -26,7 +26,7 @@ func resolveTestLibraries(ctx context.Context, dir string, opts options, package
 		if p.ImportPath == sdkPackage || p.ImportPath == miniPackage {
 			continue
 		}
-		if p.ImportPath == instrument.GoleakImport || p.ImportPath == instrument.TestifySuiteImport {
+		if p.ImportPath == instrument.GoleakImport || p.ImportPath == instrument.TestifySuiteImport || isSDKCIPackage(p.ImportPath) || p.ImportPath == sdkTracerPackage {
 			copy := p
 			copy.commandLine = true
 			selected[p.ImportPath] = &copy
@@ -58,6 +58,8 @@ func resolveTestLibraries(ctx context.Context, dir string, opts options, package
 	}
 	if sdkCI || isOrchestrionToolexec(opts.toolexec) {
 		requests[sdkTracerPackage] = true
+		requests[sdkCIConfigPackage] = true
+		requests[sdkCIEnvironmentPackage] = true
 	}
 	debug.printf("test-library query pending_imports=%d known_libraries=%d", len(requests), len(selected))
 	if len(requests) == 0 {
@@ -75,6 +77,9 @@ func resolveTestLibraries(ctx context.Context, dir string, opts options, package
 	cmd.Dir = dir
 	if opts.workfile != "" {
 		cmd.Env = append(cmd.Environ(), "GOWORK="+opts.workfile)
+		if opts.workspaceGoFlags != nil {
+			cmd.Env = append(cmd.Env, "GOFLAGS="+*opts.workspaceGoFlags)
+		}
 	}
 	dependencies, err := readPackages(ctx, cmd, "resolve optional test-library dependencies")
 	if err != nil {
@@ -83,7 +88,7 @@ func resolveTestLibraries(ctx context.Context, dir string, opts options, package
 	debug.printf("test-library query resolved=%d", len(dependencies))
 	for _, p := range dependencies {
 		sdkCI = sdkCI || isSDKCIPackage(p.ImportPath)
-		if selected[p.ImportPath] == nil && (p.ImportPath == instrument.GoleakImport || p.ImportPath == instrument.TestifySuiteImport || p.ImportPath == sdkTracerPackage) {
+		if selected[p.ImportPath] == nil && (p.ImportPath == instrument.GoleakImport || p.ImportPath == instrument.TestifySuiteImport || p.ImportPath == sdkTracerPackage || isSDKCIPackage(p.ImportPath)) {
 			copy := p
 			selected[p.ImportPath] = &copy
 		}

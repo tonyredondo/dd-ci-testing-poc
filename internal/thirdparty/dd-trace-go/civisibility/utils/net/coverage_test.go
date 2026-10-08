@@ -16,7 +16,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
@@ -310,7 +309,7 @@ func TestCoverageApiRequestPayloadFilesModeMissingOutputDirMsgpack(t *testing.T)
 	t.Cleanup(bazel.ResetForTesting)
 
 	tempDir := t.TempDir()
-	compat.Chdir(t, tempDir)
+	t.Chdir(tempDir)
 
 	var hits int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -343,7 +342,7 @@ func TestCoverageApiRequestPayloadFilesModeMissingOutputDirJSON(t *testing.T) {
 	t.Cleanup(bazel.ResetForTesting)
 
 	tempDir := t.TempDir()
-	compat.Chdir(t, tempDir)
+	t.Chdir(tempDir)
 
 	var hits int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

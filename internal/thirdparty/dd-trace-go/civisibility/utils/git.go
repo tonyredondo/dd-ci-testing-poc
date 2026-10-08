@@ -739,8 +739,7 @@ func CreatePackFiles(commitsToInclude []string, commitsToExclude []string) []str
 
 	// construct the full path to the pack files
 	var packFiles []string
-	for iterator := compat.Split(out, "\n"); iterator.Next(); {
-		packFile := iterator.Value()
+	for packFile := range strings.SplitSeq(out, "\n") {
 		file := filepath.Join(temporaryPath, fmt.Sprintf("-%s.pack", packFile))
 
 		// check if the pack file exists
@@ -1030,9 +1029,8 @@ func getRemoteBranches(remoteName string) ([]string, error) {
 
 	branches := make([]string, 0)
 	if remoteOut != "" {
-		remoteBranches := compat.Split(strings.TrimSpace(remoteOut), "\n")
-		for remoteBranches.Next() {
-			branch := remoteBranches.Value()
+		remoteBranches := strings.SplitSeq(strings.TrimSpace(remoteOut), "\n")
+		for branch := range remoteBranches {
 			if strings.TrimSpace(branch) != "" {
 				branches = append(branches, strings.TrimSpace(branch))
 			}

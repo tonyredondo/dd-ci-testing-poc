@@ -1,15 +1,62 @@
 package integration
 
 import (
+	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
+// Native -mod=mod can add a missing client requirement. Mini must add exactly
+// that requirement, while its injected import stays out of the client's files.
+func TestMiniModModeResolvesClientRequirements(t *testing.T) {
+	driver := sharedDriver(t, "..")
+	for _, language := range []string{"1.21", "1.25.0"} {
+		for _, fromEnvironment := range []bool{false, true} {
+			t.Run(language+"/env="+fmt.Sprint(fromEnvironment), func(t *testing.T) {
+				var nativeMod []byte
+				for i, tool := range []string{"go", driver} {
+					dir := t.TempDir()
+					if err := os.Mkdir(filepath.Join(dir, "helper"), 0700); err != nil {
+						t.Fatal(err)
+					}
+					writeBuildFixture(t, dir, map[string]string{
+						"go.mod":           "module example.com/client\ngo " + language + "\nreplace example.com/helper => ./helper\n",
+						"helper/go.mod":    "module example.com/helper\ngo 1.21\n",
+						"helper/helper.go": "package helper\nconst Value=42\n",
+						"client_test.go":   "package client\nimport(\"testing\";\"example.com/helper\")\nfunc TestClient(t *testing.T){if helper.Value!=42{t.Fatal(helper.Value)}}\n",
+					})
+					args := []string{"test", "-count=1", "-v", "."}
+					flags := ""
+					if fromEnvironment {
+						flags = "-mod=mod"
+					} else {
+						args = append(args, "-mod=mod")
+					}
+					out, stderr, code := command(t, dir, testEnv("GOFLAGS="+flags, "GOWORK=off", "GOPROXY=off", "DD_CIVISIBILITY_ENABLED=false"), tool, args...)
+					if code != 0 || !strings.Contains(out, "--- PASS: TestClient") {
+						t.Fatalf("%s exit=%d\n%s%s", tool, code, out, stderr)
+					}
+					mod, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if i == 0 {
+						nativeMod = mod
+					} else if !bytes.Equal(nativeMod, mod) {
+						t.Fatalf("module updates differ:\nnative: %s\nMini: %s", nativeMod, mod)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestMiniPreservesConsumerLanguage(t *testing.T) {
-	_, driver := prepareMiniFixture(t)
-	for _, language := range []string{"1.21", "1.22", "1.26.0"} {
+	driver := sharedDriver(t, "..")
+	for _, language := range []string{"1.21", "1.22", "1.25.0"} {
 		t.Run(language, func(t *testing.T) {
 			dir := t.TempDir()
 			want := "0"
@@ -49,7 +96,7 @@ func TestLoopLanguage(t *testing.T) {
 }
 
 func TestMiniPreservesOlderConsumerDependencies(t *testing.T) {
-	_, driver := prepareMiniFixture(t)
+	driver := sharedDriver(t, "..")
 	for _, tc := range []struct{ path, version, source string }{
 		{"github.com/stretchr/testify", "v1.6.1", `import "github.com/stretchr/testify/assert"
 func TestDependency(t *testing.T) { assert.Equal(t,1,1);check(t,"github.com/stretchr/testify","v1.6.1",assert.Equal) }`},
@@ -99,7 +146,7 @@ func check(t *testing.T,path,version string,symbol any) {
 }
 
 func TestMiniContinuesAfterPackageSetupFailures(t *testing.T) {
-	_, driver := prepareMiniFixture(t)
+	driver := sharedDriver(t, "..")
 	for _, target := range []string{"./...", "./good ./missing", "./good ./empty"} {
 		t.Run(target, func(t *testing.T) {
 			dir := t.TempDir()

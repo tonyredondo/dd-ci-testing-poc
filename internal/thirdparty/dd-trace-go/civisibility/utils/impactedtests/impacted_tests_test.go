@@ -7,9 +7,9 @@ package impactedtests
 
 import (
 	"strings"
+	"sync"
 	"testing"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/filebitmap"
@@ -555,7 +555,7 @@ func TestIsImpactedConcurrentAccess(t *testing.T) {
 		},
 	}
 
-	var wg compat.WaitGroup
+	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
 		wg.Go(func() {
 			assert.True(t, analyzer.IsImpacted("test", "/workspace/pkg/source_test.go", 12, 14))

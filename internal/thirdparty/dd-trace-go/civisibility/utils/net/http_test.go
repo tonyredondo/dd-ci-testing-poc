@@ -15,12 +15,12 @@ import (
 	stdnet "net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 )
@@ -238,7 +238,7 @@ func TestSendMultipartFormDataRequest(t *testing.T) {
 func TestRequestConfigDoesNotExposeRawBodyFields(t *testing.T) {
 	t.Parallel()
 
-	requestConfigType := compat.TypeFor[RequestConfig]()
+	requestConfigType := reflect.TypeFor[RequestConfig]()
 
 	_, hasRawBody := requestConfigType.FieldByName("RawBody")
 	assert.False(t, hasRawBody)

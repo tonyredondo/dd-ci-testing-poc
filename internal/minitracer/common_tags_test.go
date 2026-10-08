@@ -8,10 +8,10 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
 )
 
@@ -125,7 +125,7 @@ func TestCommonMetadataConcurrentProjectionAndBounds(t *testing.T) {
 	span, _ := newSpan(nil, context.Background(), "test", common.Option(), Tag("test.name", "name"))
 	span.Finish()
 	event := &ciEvent{Type: "test", Content: span.content, common: common}
-	var wg compat.WaitGroup
+	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		wg.Go(func() {
 			for i := 0; i < 30; i++ {

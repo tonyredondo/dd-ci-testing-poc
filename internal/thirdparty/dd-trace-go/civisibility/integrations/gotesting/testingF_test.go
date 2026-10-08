@@ -8,10 +8,10 @@ package gotesting
 import (
 	"runtime"
 	"testing"
+	"testing/synctest"
 	"time"
 	"unsafe"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 )
 
@@ -43,7 +43,7 @@ func TestCompleteFuzzParallelSeedsOffsetsNativeDurationOnce(t *testing.T) {
 		{name: "multiple seeds", waits: []time.Duration{3 * time.Millisecond, 7 * time.Millisecond}, wait: 7 * time.Millisecond},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			compat.Synctest(t, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
 				f := &testing.F{}
 				fields := getTestPrivateFields((*testing.T)(unsafe.Pointer(f)))
 				*fields.barrier = make(chan bool)

@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -36,6 +38,151 @@ func workspaceFile(dir string) string {
 	}
 }
 
+type goDebugSetting struct{ Key, Value string }
+
+// formattedGoDebug reads only Go's canonical edit -print output: one setting per
+// line, in a single directive or a block. Quoted settings keep their values.
+func formattedGoDebug(text string) ([]goDebugSetting, error) {
+	var settings []goDebugSetting
+	block := false
+	for line := range strings.SplitSeq(text, "\n") {
+		line = strings.TrimSpace(line)
+		if rest, ok := strings.CutPrefix(line, "godebug "); ok {
+			line = strings.TrimSpace(rest)
+			if line == "(" {
+				block = true
+				continue
+			}
+		} else if !block {
+			continue
+		}
+		if line == "" || strings.HasPrefix(line, "//") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if fields[0] == ")" {
+			block = false
+			continue
+		}
+		value := fields[0]
+		if strings.HasPrefix(line, `"`) || strings.HasPrefix(line, "`") {
+			quoted, err := strconv.QuotedPrefix(line)
+			if err != nil {
+				return nil, fmt.Errorf("read formatted GODEBUG setting: %w", err)
+			}
+			value, err = strconv.Unquote(quoted)
+			if err != nil {
+				return nil, err
+			}
+		}
+		key, value, ok := strings.Cut(value, "=")
+		if ok {
+			settings = append(settings, goDebugSetting{key, value})
+		}
+	}
+	return settings, nil
+}
+
+// provideOlderModuleWorkspace keeps an older module's language and runtime
+// defaults while making Mini available as a separate workspace main module.
+func provideOlderModuleWorkspace(ctx context.Context, dir string, opts *options, plan *Plan, replacements map[string]string) error {
+	if opts.environment.GOMOD == "" || opts.environment.GOMOD == os.DevNull {
+		return nil
+	}
+	root := filepath.Dir(opts.environment.GOMOD)
+	source := opts.modfile
+	if source == "" {
+		source = filepath.Join(root, "go.mod")
+	} else if !filepath.IsAbs(source) {
+		source = filepath.Join(dir, source)
+	}
+	data, err := readModuleFile(source, replacements)
+	if err != nil || compareGoVersion(moduleDirective(data, "go"), "1.25.0") >= 0 {
+		return err
+	}
+	if opts.mod == "mod" {
+		// Native -mod=mod may resolve missing client requirements. Do that
+		// before adding Mini, so only the client's imports can change its files.
+		args := append([]string{"list", "-e", "-test", "-json=ImportPath,Error"}, opts.buildFlags...)
+		args = append(args, opts.packages...)
+		cmd := exec.CommandContext(ctx, "go", args...)
+		cmd.Dir = dir
+		if _, err := readPackages(ctx, cmd, "resolve client requirements"); err != nil {
+			return err
+		}
+		data, err = readModuleFile(source, replacements)
+		if err != nil || compareGoVersion(moduleDirective(data, "go"), "1.25.0") >= 0 {
+			return err
+		}
+	}
+	if opts.modfile != "" {
+		backing := filepath.Join(plan.Dir, "client-input.mod")
+		if err := os.WriteFile(backing, data, 0600); err != nil {
+			return err
+		}
+		replacements[filepath.Join(root, "go.mod")] = backing
+		backingSum := filepath.Join(plan.Dir, "client-input.sum")
+		if err := copyModuleFile(strings.TrimSuffix(source, ".mod")+".sum", backingSum, replacements); err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+			replacements[filepath.Join(root, "go.sum")] = ""
+		} else {
+			replacements[filepath.Join(root, "go.sum")] = backingSum
+		}
+		plan.modfileOverlay = true
+	}
+	input, err := moduleWorkspaceInput(ctx, dir, root, plan.Dir, replacements)
+	if err != nil {
+		return err
+	}
+	plan.Workfile, err = provideMiniWorkspace(ctx, dir, input, plan.Dir, replacements)
+	if err != nil {
+		return err
+	}
+	plan.moduleWorkspace = true
+	opts.workfile = plan.Workfile
+	opts.buildFlags = workspaceModuleFlags(opts.buildFlags)
+	flags, err := splitFlags(os.Getenv("GOFLAGS"))
+	if err != nil {
+		return err
+	}
+	plan.workspaceGoFlags, err = quoteToolWords(workspaceModuleFlags(flags))
+	opts.workspaceGoFlags = &plan.workspaceGoFlags
+	return err
+}
+
+// workspaceModuleFlags adapts only flags that Go forbids in workspace mode.
+// The selected modfile is supplied by the overlay, and workspace loading owns
+// its checksum file. Other build flags retain their original order and values.
+func workspaceModuleFlags(flags []string) []string {
+	result := make([]string, 0, len(flags))
+	for i := 0; i < len(flags); i++ {
+		name, value, hasValue := strings.Cut(strings.TrimLeft(flags[i], "-"), "=")
+		if name == "modfile" {
+			if !hasValue && i+1 < len(flags) {
+				i++
+			}
+			continue
+		}
+		if name == "mod" {
+			if !hasValue && i+1 < len(flags) {
+				value = flags[i+1]
+				if value == "mod" {
+					result = append(result, flags[i], "readonly")
+					i++
+					continue
+				}
+			} else if value == "mod" {
+				result = append(result, "-mod=readonly")
+				continue
+			}
+		}
+		result = append(result, flags[i])
+	}
+	return result
+}
+
 // provideMiniWorkspace preserves every use/replace directive and each module's
 // own language version. Mini is a main module in the temporary workspace, so
 // importing it adds no requirements to any client module.
@@ -60,7 +207,7 @@ func provideMiniWorkspace(ctx context.Context, dir, work, temp string, replaceme
 	}
 	var parsed struct {
 		Go      string
-		GoDebug []struct{ Key, Value string }
+		GoDebug []goDebugSetting
 		Use     []struct{ DiskPath string }
 		Replace []struct {
 			Old, New struct{ Path, Version string }
@@ -68,6 +215,18 @@ func provideMiniWorkspace(ctx context.Context, dir, work, temp string, replaceme
 	}
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
 		return "", fmt.Errorf("parse workspace edit JSON (%d bytes): %w", len(out), err)
+	}
+	// Go 1.25 accepts GODEBUG directives but omits them from edit -json.
+	// The formatted output supplies those settings without parsing module syntax.
+	if len(parsed.GoDebug) == 0 && bytes.Contains(data, []byte("godebug")) {
+		printed, err := goTool(ctx, dir, nil, "work", "edit", "-print", target)
+		if err != nil {
+			return "", err
+		}
+		parsed.GoDebug, err = formattedGoDebug(printed)
+		if err != nil {
+			return "", err
+		}
 	}
 	base := filepath.Dir(work)
 	args := []string{"work", "edit"}

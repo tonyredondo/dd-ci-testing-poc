@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	pocversion "github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
@@ -26,7 +25,7 @@ func TestRuntimeDownloadProgress(t *testing.T) {
 	for _, outcome := range []string{"success", "failure", "cancel"} {
 		t.Run(outcome, func(t *testing.T) {
 			const version = "v1.2.3"
-			module := "module " + miniModule + "\n\ngo 1.26.0\n"
+			module := "module " + miniModule + "\n\ngo 1.25.0\n"
 			var archive bytes.Buffer
 			zw := zip.NewWriter(&archive)
 			for name, contents := range map[string]string{"go.mod": module, "testopt/testopt.go": "package testopt\n"} {
@@ -89,10 +88,10 @@ func TestRuntimeDownloadProgress(t *testing.T) {
 			t.Setenv("GOTOOLCHAIN", "local")
 			dir := t.TempDir()
 			modfile := filepath.Join(dir, "go.mod")
-			if err := os.WriteFile(modfile, []byte("module example.com/client\n\ngo 1.26.0\n"), 0600); err != nil {
+			if err := os.WriteFile(modfile, []byte("module example.com/client\n\ngo 1.25.0\n"), 0600); err != nil {
 				t.Fatal(err)
 			}
-			ctx, cancel := context.WithTimeout(compat.Context(t), 15*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 			defer cancel()
 			progress := &downloadProgress{seen: make(chan struct{}, 1)}
 			t.Setenv("DD_TRACE_DEBUG", "true")
