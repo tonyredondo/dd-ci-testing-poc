@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Package minitracer owns native CI events; it has no APM integrations.
 package minitracer
 

@@ -1,4 +1,4 @@
-//go:build windows && go1.26
+//go:build windows
 
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
@@ -11,9 +11,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
-
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 )
 
 func TestResolveSourceFilePathWindows(t *testing.T) {
@@ -55,6 +54,7 @@ func TestResolveSourceFilePathWindows(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			result := resolveSourceFilePath(tt.runtimePath, map[string]string{constants.CIWorkspacePath: tt.workspace}, "")
 

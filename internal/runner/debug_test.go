@@ -1,4 +1,4 @@
-//go:build go1.26
+//go:build go1.25
 
 package runner
 
@@ -8,15 +8,16 @@ import (
 	"errors"
 	"io"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
 func TestCLIDebugActivation(t *testing.T) {
 	for _, value := range []string{"", "false", "0", "invalid", "true", "1", "TRUE"} {
+		value := value
 		t.Run(value, func(t *testing.T) {
 			t.Setenv("DD_TRACE_DEBUG", value)
 			var output bytes.Buffer
@@ -64,10 +65,10 @@ func TestCLIDebugPhasesAndConcurrentStderr(t *testing.T) {
 	t.Setenv("DD_TRACE_DEBUG", "true")
 	var output bytes.Buffer
 	logger := debugFromContext(withCLIDebug(context.Background(), &output))
-	var workers sync.WaitGroup
-	for range 8 {
+	var workers compat.WaitGroup
+	for i, limit := 0, 8; i < limit; i++ {
 		workers.Go(func() {
-			for range 100 {
+			for i, limit := 0, 100; i < limit; i++ {
 				phase := logger.start("fixture")
 				_, _ = io.WriteString(logger.writer, "native stderr\n")
 				phase.finish(errors.New("private diagnostic must stay out of phase summaries"))
@@ -109,7 +110,7 @@ func (failingDebugWriter) Write([]byte) (int, error) { return 0, errors.New("log
 
 func TestCLIDebugWriteFailure(t *testing.T) {
 	t.Setenv("DD_TRACE_DEBUG", "true")
-	if code := RunRuntime(t.Context(), []string{"-p"}, Mini, nil, io.Discard, failingDebugWriter{}); code != 2 {
+	if code := RunRuntime(compat.Context(t), []string{"-p"}, Mini, nil, io.Discard, failingDebugWriter{}); code != 2 {
 		t.Fatalf("broken debug writer changed parse-error exit=%d", code)
 	}
 }

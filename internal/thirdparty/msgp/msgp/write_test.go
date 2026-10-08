@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package msgp
 
 import (
@@ -73,7 +71,7 @@ func BenchmarkWriteMapHeader(b *testing.B) {
 	N := b.N / 4
 	b.ReportAllocs()
 	b.ResetTimer()
-	for range N {
+	for i, limit := 0, N; i < limit; i++ {
 		wr.WriteMapHeader(0)
 		wr.WriteMapHeader(8)
 		wr.WriteMapHeader(tuint16)
@@ -168,7 +166,7 @@ func BenchmarkWriteArrayHeader(b *testing.B) {
 	N := b.N / 4
 	b.ReportAllocs()
 	b.ResetTimer()
-	for range N {
+	for i, limit := 0, N; i < limit; i++ {
 		wr.WriteArrayHeader(0)
 		wr.WriteArrayHeader(16)
 		wr.WriteArrayHeader(tuint16)
@@ -199,7 +197,7 @@ func TestWriteFloat64(t *testing.T) {
 	var buf bytes.Buffer
 	wr := NewWriter(&buf)
 
-	for range 10000 {
+	for i, limit := 0, 10000; i < limit; i++ {
 		buf.Reset()
 		flt := (rand.Float64() - 0.5) * math.MaxFloat64
 		err := wr.WriteFloat64(flt)
@@ -223,7 +221,7 @@ func TestReadWriterDuration(t *testing.T) {
 	var buf bytes.Buffer
 	wr := NewWriter(&buf)
 
-	for range 10000 {
+	for i, limit := 0, 10000; i < limit; i++ {
 		buf.Reset()
 		dur := time.Duration(rand.Int63())
 		err := wr.WriteDuration(dur)
@@ -267,7 +265,7 @@ func TestWriteFloat32(t *testing.T) {
 	var buf bytes.Buffer
 	wr := NewWriter(&buf)
 
-	for range 10000 {
+	for i, limit := 0, 10000; i < limit; i++ {
 		buf.Reset()
 		flt := (rand.Float32() - 0.5) * math.MaxFloat32
 		err := wr.WriteFloat32(flt)
@@ -302,7 +300,7 @@ func TestWriteInt64(t *testing.T) {
 	var buf bytes.Buffer
 	wr := NewWriter(&buf)
 
-	for range 10000 {
+	for i, limit := 0, 10000; i < limit; i++ {
 		buf.Reset()
 
 		num := (rand.Int63n(math.MaxInt64)) - (math.MaxInt64 / 2)
@@ -336,7 +334,7 @@ func TestWriteUint64(t *testing.T) {
 	var buf bytes.Buffer
 	wr := NewWriter(&buf)
 
-	for range 10000 {
+	for i, limit := 0, 10000; i < limit; i++ {
 		buf.Reset()
 
 		num := uint64(rand.Int63n(math.MaxInt64))

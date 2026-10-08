@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Package require provides fatal versions of the SDK test assertions.
 package require
 

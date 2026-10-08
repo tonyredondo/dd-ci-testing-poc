@@ -1,4 +1,4 @@
-//go:build unix && go1.26
+//go:build unix
 
 package integration
 

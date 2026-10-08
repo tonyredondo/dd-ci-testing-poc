@@ -239,12 +239,23 @@ SDK assertions use [`internal/testassert`](../internal/testassert/assert.go) and
 its fatal `require` wrappers. Preserve the assertion inputs and results when
 updating SDK tests; extend the helpers with standard-library code when needed.
 
-The module declares Go 1.21. Source files that need Mini's Go 1.26 language use
-`//go:build go1.26`, combined with their platform constraints. This keeps the
-consumer's own `go` directive and loop semantics intact. Use `gofmt` after editing
-constraints so legacy `+build` lines stay consistent. The setof generator emits
-the same language constraint for its generated sources. Run both supported Go
-toolchains after changing these constraints.
+The module declares Go 1.21 so importing Mini does not change the consumer's
+language version or loop-variable behavior. Ordinary source uses that syntax:
+numeric loops use indexed loops, and captured loop variables have local copies.
+`internal/compat` supplies allocation-free string scanning and small equivalents
+for newer standard-library helpers. Keep native test lifetimes, map clearing and
+error matching intact when updating these helpers. Version guards belong at
+native API boundaries and in tests that exercise a specific Go feature; do not
+add a newer language constraint to every source file. Benchmarks keep the exact
+`for b.Loop()` form: Go's compiler protection against dead-code elimination
+requires that syntax, so those test files carry a Go 1.25 constraint.
+
+Root `godebug default=go1.26` sets the CLI and test harness runtime defaults
+independently of their language version. Go ignores dependency-module `godebug`
+directives, so client binaries keep their own defaults. Temporary workspaces
+must preserve the caller's effective defaults too. See
+[Go's GODEBUG contract](https://go.dev/doc/godebug). Check both toolchains in the
+current compatibility matrix after changing language or runtime defaults.
 
 Run `python scripts/dependency_boundary.py` before publication. The compatibility
 workflow runs it too. It fails on any external requirement or nonstandard runtime

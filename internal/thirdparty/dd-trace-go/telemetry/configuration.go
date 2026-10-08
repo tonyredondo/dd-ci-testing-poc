@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -176,7 +174,7 @@ func SanitizeConfigValue(value any) any {
 	valueOf := reflect.ValueOf(value)
 
 	// Unwrap pointers and interfaces up to 10 levels deep.
-	for range 10 {
+	for i, limit := 0, 10; i < limit; i++ {
 		if valueOf.Kind() == reflect.Pointer || valueOf.Kind() == reflect.Interface {
 			valueOf = valueOf.Elem()
 		} else {

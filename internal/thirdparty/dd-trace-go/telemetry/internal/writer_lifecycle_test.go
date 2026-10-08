@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package internal
 
 import (
@@ -23,6 +21,7 @@ func (f tracedRoundTrip) RoundTrip(r *http.Request) (*http.Response, error) { re
 // unread body can otherwise leave Go's response draining in a background worker.
 func TestWriterFlushWaitsForResponseCompletion(t *testing.T) {
 	for _, status := range []int{http.StatusOK, http.StatusServiceUnavailable} {
+		status := status
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				_, _ = io.Copy(io.Discard, r.Body)

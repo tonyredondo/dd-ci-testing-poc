@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Package testopt provides a native CI Visibility runtime and testing context.
 // It imports neither dd-trace-go nor the instrumentator CLI.
 package testopt

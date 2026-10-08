@@ -1,4 +1,4 @@
-//go:build tinygo && go1.26
+//go:build tinygo
 
 package msgp
 

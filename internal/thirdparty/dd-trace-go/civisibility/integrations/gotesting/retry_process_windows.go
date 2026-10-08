@@ -3,7 +3,7 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
 // Copyright 2026 Datadog, Inc.
 
-//go:build windows && go1.26
+//go:build windows
 
 package gotesting
 
@@ -14,9 +14,8 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/xsys/windows"
-
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/locking"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/xsys/windows"
 )
 
 // ProcessRetryContainmentSupported reports whether this platform can contain

@@ -1,4 +1,4 @@
-//go:build go1.26
+//go:build go1.25
 
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
@@ -177,7 +177,7 @@ func allocsPerRun(runs int, f func()) float64 {
 	f()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	for range runs {
+	for i, limit := 0, runs; i < limit; i++ {
 		f()
 	}
 	runtime.ReadMemStats(&after)

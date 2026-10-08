@@ -1,4 +1,4 @@
-//go:build go1.26
+//go:build go1.25
 
 package coverage
 
@@ -30,7 +30,7 @@ func TestCoveragePayloadConcurrentLocalChange(t *testing.T) {
 		go func() {
 			defer workers.Done()
 			<-start
-			for range 1000 {
+			for i, limit := 0, 1000; i < limit; i++ {
 				payload := newCoveragePayload()
 				if err := payload.push(&ciTestCoverageData{SpanID: 1}); err != nil {
 					t.Error(err)
@@ -44,7 +44,8 @@ func TestCoveragePayloadConcurrentLocalChange(t *testing.T) {
 			}
 		}()
 		close(start)
-		for i := range 20000 {
+		for i, limit := 0, 20000; i < limit; i++ {
+			i := i
 			time.Local = zones[i%len(zones)]
 			if i%16 == 0 {
 				runtime.Gosched()

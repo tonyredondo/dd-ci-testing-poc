@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package integrations
 
 import (
@@ -16,6 +14,7 @@ import (
 
 func TestCommonTagOptionsKeepUpdatesTruncationAndBazelFiltering(t *testing.T) {
 	for _, files := range []bool{false, true} {
+		files := files
 		t.Run(map[bool]string{false: "http", true: "bazel"}[files], func(t *testing.T) {
 			t.Setenv(bazel.PayloadsInFilesEnv, map[bool]string{false: "false", true: "true"}[files])
 			t.Setenv(bazel.UndeclaredOutputsDirEnv, t.TempDir())

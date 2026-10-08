@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package telemetry
 
 import (
@@ -7,19 +5,20 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry/internal"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry/internal/transport"
 )
 
 func runConcurrent(workers int, f func(int)) {
-	var wg sync.WaitGroup
+	var wg compat.WaitGroup
 	start := make(chan struct{})
-	for i := range workers {
+	for i, limit := 0, workers; i < limit; i++ {
+		i := i
 		wg.Go(func() { <-start; f(i) })
 	}
 	close(start)
@@ -29,7 +28,8 @@ func runConcurrent(workers int, f func(int)) {
 func TestMetricStartupReplayIncludesConcurrentSubmissions(t *testing.T) {
 	// Stay below the recorder's bound. This tests the handover, not overflow.
 	const workers = 64
-	for round := range 256 {
+	for round, limit := 0, 256; round < limit; round++ {
+		round := round
 		handle := &swappableMetricHandle{recorder: internal.NewRecorder[MetricHandle]()}
 		target := &count{}
 		runConcurrent(workers+1, func(i int) {
@@ -47,6 +47,7 @@ func TestMetricStartupReplayIncludesConcurrentSubmissions(t *testing.T) {
 
 func TestMetricRegistrationIsCanonical(t *testing.T) {
 	for _, kind := range []transport.MetricType{transport.CountMetric, transport.GaugeMetric, transport.RateMetric} {
+		kind := kind
 		t.Run(string(kind), func(t *testing.T) {
 			m := metrics{skipAllowlist: true}
 			handles := make([]MetricHandle, 64)
@@ -109,7 +110,8 @@ func TestConcurrentMetricCollectionPreservesValues(t *testing.T) {
 	runConcurrent(workers, func(worker int) {
 		c := m.LoadOrStore(NamespaceCIVisibility, transport.CountMetric, "fixture", nil)
 		handles[worker] = d.LoadOrStore(NamespaceCIVisibility, "fixture", nil)
-		for i := range iterations {
+		for i, limit := 0, iterations; i < limit; i++ {
+			i := i
 			c.Submit(1)
 			handles[worker].Submit(float64(worker*iterations + i))
 		}
@@ -287,7 +289,7 @@ func TestConcurrentLogCollectionPreservesCounts(t *testing.T) {
 		}
 	}()
 	runConcurrent(workers, func(int) {
-		for range iterations {
+		for i, limit := 0, iterations; i < limit; i++ {
 			logger.Add(NewRecord(LogWarn, "fixture"), WithTags([]string{"ci:true"}))
 		}
 	})
@@ -310,7 +312,7 @@ func TestLogLimitAndStacktracePreserved(t *testing.T) {
 	logger.Add(NewRecord(LogWarn, "first"), WithTags([]string{"ci:true"}), WithStacktrace())
 	logger.Add(NewRecord(LogWarn, "first"), WithTags([]string{"ci:true"}), WithStacktrace())
 	logger.Add(NewRecord(LogError, "second"))
-	for range 4 {
+	for i, limit := 0, 4; i < limit; i++ {
 		logger.Add(NewRecord(LogError, "dropped"))
 	}
 	logs := logger.Payload().(transport.Logs).Logs
@@ -351,7 +353,8 @@ func TestGlobalClientStartupReplaysEveryCall(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer client.Close()
-	for round := range 256 {
+	for round, limit := 0, 256; round < limit; round++ {
+		round := round
 		globalClient.Store(nil)
 		globalClientRecorder.Clear()
 		var calls atomic.Int32

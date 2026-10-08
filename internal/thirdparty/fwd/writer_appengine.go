@@ -1,5 +1,4 @@
-//go:build appengine && go1.26
-// +build appengine,go1.26
+//go:build appengine
 
 package fwd
 

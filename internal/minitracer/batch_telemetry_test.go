@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package minitracer
 
 import (
@@ -13,6 +11,7 @@ import (
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry/telemetrytest"
 )
@@ -46,7 +45,7 @@ func TestPayloadDropCountsTerminalBatches(t *testing.T) {
 	}
 	// The bounded queue retains later batches; beyond it, events are rejected
 	// one by one without being counted as payloads.
-	for range 2*maxPendingBatches + 1 {
+	for i, limit := 0, 2*maxPendingBatches+1; i < limit; i++ {
 		finish()
 	}
 	if c.DroppedEvents() != 1 || drops() != 0 {
@@ -62,8 +61,8 @@ func TestPayloadDropCountsTerminalBatches(t *testing.T) {
 	// Neither repeated close/flush nor finishing additional spans may count those
 	// payloads twice or resend an abandoned batch.
 	sent := calls.Load()
-	var wg sync.WaitGroup
-	for range 8 {
+	var wg compat.WaitGroup
+	for i, limit := 0, 8; i < limit; i++ {
 		wg.Go(func() { _ = c.Close(context.Background()) })
 	}
 	wg.Wait()
@@ -88,7 +87,7 @@ func TestRetainedBatchRecoveryDoesNotCountPayloadDrop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for range 3 {
+	for i, limit := 0, 3; i < limit; i++ {
 		s, _ := c.StartSpan(context.Background(), "test", SpanType("test"))
 		s.Finish()
 	}
@@ -116,7 +115,7 @@ func TestCanceledCloseCountsInflightPayloadOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for range 3 {
+	for i, limit := 0, 3; i < limit; i++ {
 		s, _ := c.StartSpan(context.Background(), "test", SpanType("test"))
 		s.Finish()
 	}
@@ -165,7 +164,7 @@ func TestCanceledCloseAbandonsBufferedPayloadOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for range 3 {
+	for i, limit := 0, 3; i < limit; i++ {
 		s, _ := c.StartSpan(context.Background(), "test", SpanType("test"))
 		s.Finish()
 	}

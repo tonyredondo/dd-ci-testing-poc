@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package integration
 
 import (
@@ -30,7 +28,7 @@ func TestSDKCompatibility(t *testing.T){span,_:=tracer.StartSpanFromContext(t.Co
 	server := httptest.NewServer(http.HandlerFunc(capture.handler))
 	defer server.Close()
 	env := testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_API_KEY=fixture", "GOWORK=off")
-	for range 2 {
+	for i, limit := 0, 2; i < limit; i++ {
 		out, stderr, code := command(t, dir, env, driver, "test", "-count=1", ".")
 		if code != 0 || !strings.Contains(stderr, "SDK span copies disabled") {
 			t.Fatalf("exit=%d\n%s%s", code, out, stderr)

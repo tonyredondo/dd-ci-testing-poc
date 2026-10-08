@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -17,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/net"
 )
@@ -59,7 +58,7 @@ func TestLogsWriterConcurrentFlush(t *testing.T) {
 	writer.client = &MockClient{SendLogsFunc: drainLogsPayload}
 	entry := &logEntry{}
 
-	for range concurrentConnectionLimit + 1 {
+	for i, limit := 0, concurrentConnectionLimit+1; i < limit; i++ {
 		writer.add(entry)
 	}
 	writer.flush()
@@ -84,7 +83,8 @@ func TestLogsWriterStopFlushesAcceptedLogs(t *testing.T) {
 	writer.client = &MockClient{SendLogsFunc: recorder.send}
 
 	expected := map[string]int{}
-	for i := range 32 {
+	for i, limit := 0, 32; i < limit; i++ {
+		i := i
 		message := fmt.Sprintf("message-%d", i)
 		if writer.add(&logEntry{Message: message}) {
 			expected[message]++
@@ -104,8 +104,9 @@ func TestLogsWriterConcurrentAddFlushStopRace(t *testing.T) {
 
 	acceptedMu := sync.Mutex{}
 	accepted := map[string]int{}
-	var wg sync.WaitGroup
-	for i := range 128 {
+	var wg compat.WaitGroup
+	for i, limit := 0, 128; i < limit; i++ {
+		i := i
 		message := fmt.Sprintf("concurrent-%d", i)
 		wg.Go(func() {
 			if writer.add(&logEntry{Message: message}) {
@@ -155,7 +156,8 @@ func TestLogsWriterDoesNotBlockOnConnectionLimitWhileSchedulingFlush(t *testing.
 	errCh := make(chan string, 1)
 	go func() {
 		defer close(done)
-		for i := range concurrentConnectionLimit + 1 {
+		for i, limit := 0, concurrentConnectionLimit+1; i < limit; i++ {
+			i := i
 			if !writer.add(&logEntry{Message: fmt.Sprintf("blocked-%d", i)}) {
 				errCh <- "writer rejected a log entry before stop"
 				return
@@ -177,7 +179,7 @@ func TestLogsWriterDoesNotBlockOnConnectionLimitWhileSchedulingFlush(t *testing.
 		t.Fatal("flush scheduling blocked while uploads were waiting")
 	}
 
-	for range concurrentConnectionLimit {
+	for i, limit := 0, concurrentConnectionLimit; i < limit; i++ {
 		select {
 		case <-started:
 		case <-time.After(time.Second):

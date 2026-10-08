@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -11,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"math/rand/v2"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -19,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
@@ -218,7 +216,7 @@ func newClientWithServiceNameAndSubdomain(serviceName, subdomain string) (Client
 	}
 
 	// create random id (the backend associate all transactions with the client request)
-	id := strconv.FormatUint(rand.Uint64()&math.MaxInt64, 10)
+	id := strconv.FormatUint(compat.RandomUint64()&math.MaxInt64, 10)
 	defaultHeaders["trace_id"] = id
 	defaultHeaders["parent_id"] = id
 

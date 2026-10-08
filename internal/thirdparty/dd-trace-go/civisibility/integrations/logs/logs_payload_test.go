@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -30,10 +28,12 @@ func newLogEntry(i int) *logEntry {
 // be decoded by the codec.
 func TestLogsPayloadDecode(t *testing.T) {
 	for _, n := range []int{10, 1 << 10} {
+		n := n
 		t.Run(strconv.Itoa(n), func(t *testing.T) {
 			assert := assert.New(t)
 			p := newLogsPayload()
-			for i := range n {
+			for i, limit := 0, n; i < limit; i++ {
+				i := i
 				p.push(newLogEntry(i%5 + 1))
 			}
 			var got logsEntriesPayload

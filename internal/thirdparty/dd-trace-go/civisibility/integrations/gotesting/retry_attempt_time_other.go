@@ -1,4 +1,4 @@
-//go:build !windows && go1.26
+//go:build !windows
 
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
@@ -11,6 +11,8 @@ import (
 	"reflect"
 	"time"
 	"unsafe"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 func initializeRetryAttemptStart(base unsafe.Pointer, field unsafeField) {
@@ -19,7 +21,7 @@ func initializeRetryAttemptStart(base unsafe.Pointer, field unsafeField) {
 	}
 	value := reflect.NewAt(field.typ, fieldRawPtr(base, field)).Elem()
 	now := value.FieldByName("now")
-	if now.IsValid() && now.CanAddr() && now.Type() == reflect.TypeFor[time.Time]() {
+	if now.IsValid() && now.CanAddr() && now.Type() == compat.TypeFor[time.Time]() {
 		reflect.NewAt(now.Type(), unsafe.Pointer(now.UnsafeAddr())).Elem().Set(reflect.ValueOf(time.Now()))
 	}
 }
@@ -31,7 +33,7 @@ func addRetryAttemptElapsed(base unsafe.Pointer, layout *testingInternalsLayout)
 	}
 	value := reflect.NewAt(field.typ, fieldRawPtr(base, field)).Elem()
 	now := value.FieldByName("now")
-	if !now.IsValid() || !now.CanAddr() || now.Type() != reflect.TypeFor[time.Time]() {
+	if !now.IsValid() || !now.CanAddr() || now.Type() != compat.TypeFor[time.Time]() {
 		return
 	}
 	started := reflect.NewAt(now.Type(), unsafe.Pointer(now.UnsafeAddr())).Elem().Interface().(time.Time)

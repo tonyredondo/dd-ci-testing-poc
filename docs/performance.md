@@ -72,7 +72,8 @@ persistent cache of instrumented binaries or prepared overlays.
 When a runtime must be provided, one `go env -json GOMOD GOWORK GOMODCACHE` call
 supplies the module, workspace and cache paths. Local Mini provisioning reads
 the selected runtime's Go requirement without changing the client's language
-version. Mini's files retain their own Go 1.26 language constraints. The temporary module
+version. Small compatibility helpers keep Mini's source valid with Go 1.21
+language rules. The temporary module
 files read the user's effective overlay contents, including replacements or
 deletion of the sum file.
 This also applies to an explicit `-modfile`. Child commands derive `PWD` from
@@ -265,12 +266,11 @@ contracts. Preserve them when changing synchronization or pooling.
 Common CI/Git/OS/runtime strings live in an immutable snapshot shared by spans.
 Each span stores only its own tags, metrics and overrides. Getters check local
 values before the snapshot. A numeric metric masks a shared string with the same
-key; later text can replace that metric. Delivery projects the effective strings
-onto each event, matching the SDK wire format. Envelope metadata keeps the existing language/runtime ID/library/env and
-session defaults. See the [metadata contract](delivery.md#payload-level-common-metadata)
-for ownership and byte accounting. Per-event projection adds wire bytes and
-delivery allocations; the in-memory snapshot still avoids rebuilding common
-tags at span creation.
+key; later text can replace that metric. Delivery puts compatible defaults in
+payload metadata. Mixed snapshots and overridden keys use local values without
+changing the effective CI attributes. See the
+[metadata contract](delivery.md#payload-level-common-metadata) for fallback and
+byte-accounting rules.
 
 The pooled test-cycle compressor uses `gzip.BestSpeed`. It produces standard
 gzip with less compression work and potentially more wire bytes. Coverage and

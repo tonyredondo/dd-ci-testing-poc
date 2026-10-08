@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Copyright 2017 Datadog, Inc. Licensed under the Apache License, Version 2.0.
 // Go adaptation Copyright 2026 Datadog, Inc.
 package codeownership
@@ -11,6 +9,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 // Locations supplies explicit repository context. No environment is read.
@@ -68,7 +68,8 @@ func (r *Resolver) repositoryPath(value string) (string, bool) {
 	}
 	// Compiler paths are resolved by the caller. Reject traversal before Clean
 	// can hide it, including attempts to leave the workspace but stay in the repo.
-	for segment := range strings.SplitSeq(value, "/") {
+	for iterator := compat.Split(value, "/"); iterator.Next(); {
+		segment := iterator.Value()
 		if segment == ".." {
 			return "", false
 		}

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -9,13 +7,13 @@ package gotesting
 
 import (
 	"fmt"
-	"reflect"
 	"runtime"
 	"sync"
 	"testing"
 	"time"
 	"unsafe"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations"
@@ -160,7 +158,7 @@ func (e *fuzzTestEvent) nativeResult(nativeFinished bool) (failed, skipped bool,
 	}
 	fields.mu.RUnlock()
 	if nativeFinished {
-		durationPtr, err := getFieldPointerFromWithType(e.native, "duration", reflect.TypeFor[time.Duration]())
+		durationPtr, err := getFieldPointerFromWithType(e.native, "duration", compat.TypeFor[time.Duration]())
 		if err != nil {
 			log.Debug("civisibility: native fuzz duration field unavailable; retaining captured finish time")
 			return

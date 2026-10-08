@@ -1,9 +1,6 @@
-//go:build go1.26
-
 package msgp
 
 import (
-	"encoding"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -13,6 +10,8 @@ import (
 	"reflect"
 	"sync"
 	"time"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 const (
@@ -831,7 +830,8 @@ func (mw *Writer) writeSlice(v reflect.Value) (err error) {
 	if err != nil {
 		return
 	}
-	for i := range sz {
+	for i, limit := uint32(0), sz; i < limit; i++ {
+		i := i
 		err = mw.WriteIntf(v.Index(int(i)).Interface())
 		if err != nil {
 			return
@@ -903,8 +903,8 @@ func GuessSize(i any) int {
 var bytesPool = sync.Pool{New: func() any { return make([]byte, 0, 1024) }}
 
 // WriteBinaryAppender will write the bytes from the given
-// encoding.BinaryAppender as a bin array.
-func (mw *Writer) WriteBinaryAppender(b encoding.BinaryAppender) (err error) {
+// compat.BinaryAppender as a bin array.
+func (mw *Writer) WriteBinaryAppender(b compat.BinaryAppender) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("msgp: panic during AppendBinary: %v", r)
@@ -920,8 +920,8 @@ func (mw *Writer) WriteBinaryAppender(b encoding.BinaryAppender) (err error) {
 }
 
 // WriteTextAppender will write the bytes from the given
-// encoding.TextAppender as a bin array.
-func (mw *Writer) WriteTextAppender(b encoding.TextAppender) (err error) {
+// compat.TextAppender as a bin array.
+func (mw *Writer) WriteTextAppender(b compat.TextAppender) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("msgp: panic during AppendText: %v", r)
@@ -937,8 +937,8 @@ func (mw *Writer) WriteTextAppender(b encoding.TextAppender) (err error) {
 }
 
 // WriteTextAppenderString will write the bytes from the given
-// encoding.TextAppender as a string.
-func (mw *Writer) WriteTextAppenderString(b encoding.TextAppender) (err error) {
+// compat.TextAppender as a string.
+func (mw *Writer) WriteTextAppenderString(b compat.TextAppender) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("msgp: panic during AppendText: %v", r)

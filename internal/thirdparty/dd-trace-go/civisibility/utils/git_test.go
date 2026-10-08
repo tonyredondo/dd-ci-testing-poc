@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -15,6 +13,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/telemetry"
@@ -310,7 +309,7 @@ func countFakeGitFetches(t *testing.T, fetchesFile string) int {
 	}
 	assert.NoError(t, err)
 	fetches := 0
-	for field := range strings.FieldsSeq(string(data)) {
+	for _, field := range strings.Fields(string(data)) {
 		if field == "fetch" {
 			fetches++
 		}
@@ -867,7 +866,7 @@ func acceptableError(err error) bool {
 func useLocalGitFixture(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
-	t.Chdir(dir)
+	compat.Chdir(t, dir)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 	for _, args := range [][]string{{"-c", "init.templateDir=", "init"}, {"-c", "user.name=CI Fixture", "-c", "user.email=ci-fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "fixture"}} {

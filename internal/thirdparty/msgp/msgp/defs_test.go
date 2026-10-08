@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package msgp_test
 
 //go:generate go run ../../../../scripts/msgpackgen -file=defs_test.go -o=defgen_test.go -tests=false

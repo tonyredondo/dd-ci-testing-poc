@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -11,6 +9,8 @@ import (
 	"errors"
 	"reflect"
 	"unsafe"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 // testDepsCoverage is an interface to support runtime coverage initialization from the original testDeps testing interface
@@ -71,6 +71,6 @@ func getTestDepsCoverage(m any) (testDepsCoverage, error) {
 		return nil, errors.New("testDepsCoverage not found")
 	}
 
-	tDepValue := reflect.NewAt(reflect.TypeFor[testDepsCoverage](), ptr)
+	tDepValue := reflect.NewAt(compat.TypeFor[testDepsCoverage](), ptr)
 	return tDepValue.Elem().Interface().(testDepsCoverage), nil
 }

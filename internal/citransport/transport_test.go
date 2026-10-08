@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package citransport
 
 import (
@@ -8,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,6 +13,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 func TestDeferredTransportOwnsItsConnections(t *testing.T) {
@@ -62,10 +61,11 @@ func (t *customConnectionTransport) CloseIdleConnections() { t.closed.Add(1) }
 
 func TestAgentlessGzipRoundTripsPayloadShapes(t *testing.T) {
 	random := make([]byte, 64<<10)
-	if _, err := rand.NewChaCha8([32]byte{1}).Read(random); err != nil {
+	if _, err := compat.NewChaCha8([32]byte{1}).Read(random); err != nil {
 		t.Fatal(err)
 	}
 	for _, data := range [][]byte{nil, []byte("small payload"), bytes.Repeat([]byte("test.name:subtest,error.type:fixture;"), 8000), random, bytes.Repeat([]byte("x"), TestCycleMaxPayloadBytes)} {
+		data := data
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Header.Get("Content-Encoding") != "gzip" {
 				t.Error("lost standard gzip encoding")
@@ -96,6 +96,7 @@ func TestAgentlessGzipRoundTripsPayloadShapes(t *testing.T) {
 
 func TestDeliveryModesAndRetries(t *testing.T) {
 	for _, agentless := range []bool{false, true} {
+		agentless := agentless
 		t.Run(map[bool]string{false: "agent", true: "agentless"}[agentless], func(t *testing.T) {
 			var calls atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -143,6 +144,7 @@ func TestDeliveryModesAndRetries(t *testing.T) {
 }
 func TestPermanentFailureRedirectAndCancellation(t *testing.T) {
 	for _, status := range []int{401, 302} {
+		status := status
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			var calls atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

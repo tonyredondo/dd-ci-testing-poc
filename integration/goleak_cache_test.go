@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package integration
 
 import (
@@ -33,7 +31,8 @@ func TestGoleakCacheAndWarmVersionGuard(t *testing.T) {
 		}
 	}
 	args := []string{"test", "--runtime=mini", "-mod=vendor", "-x", "-c", "-o", filepath.Join(dir, executableName("fixture.test")), "."}
-	for i := range 2 {
+	for i, limit := 0, 2; i < limit; i++ {
+		i := i
 		out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false"), driver, args...)
 		if code != 0 || i == 1 && len(compilerTraceLines(stderr)) != 0 {
 			t.Fatalf("warm build %d: exit=%d\n%s\n%s", i, code, out, stderr)

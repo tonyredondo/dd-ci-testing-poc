@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package minitracer
 
 import (
@@ -16,6 +14,7 @@ import (
 
 func TestCommonMetadataOverridesKeepByteBudget(t *testing.T) {
 	for _, override := range []any{float64(42), "replacement"} {
+		override := override
 		t.Run(map[bool]string{true: "metric", false: "text"}[override == float64(42)], func(t *testing.T) {
 			var requests atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

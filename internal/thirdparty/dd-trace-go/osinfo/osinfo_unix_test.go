@@ -1,11 +1,12 @@
-//go:build unix && go1.26
+//go:build unix
 
 package osinfo
 
 import (
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/xsys/unix"
 	"strings"
 	"testing"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/xsys/unix"
 )
 
 func TestKernelMetadata(t *testing.T) {

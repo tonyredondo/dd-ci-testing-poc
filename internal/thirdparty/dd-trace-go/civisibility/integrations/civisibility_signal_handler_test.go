@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -8,14 +6,13 @@
 package integrations
 
 import (
-	"sync"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility"
-
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility"
 )
 
 func TestExitCiVisibilityStopsSignalHandler(t *testing.T) {
@@ -42,8 +39,8 @@ func TestStopCIVisibilitySignalHandlerIsIdempotent(t *testing.T) {
 	handler := currentCIVisibilitySignalHandlerForTesting()
 	require.NotNil(t, handler)
 
-	var wg sync.WaitGroup
-	for range 16 {
+	var wg compat.WaitGroup
+	for i, limit := 0, 16; i < limit; i++ {
 		wg.Go(func() {
 			stopCIVisibilitySignalHandler()
 		})
@@ -234,7 +231,7 @@ func assertSignalHandlerDone(t *testing.T, handler *ciVisibilitySignalHandler) {
 }
 
 // waitForSignalHandlerStopCalls waits for concurrent stop calls to finish.
-func waitForSignalHandlerStopCalls(t *testing.T, wg *sync.WaitGroup) {
+func waitForSignalHandlerStopCalls(t *testing.T, wg *compat.WaitGroup) {
 	t.Helper()
 	done := make(chan struct{})
 	go func() {

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -20,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/telemetry"
@@ -164,7 +163,7 @@ func execGit(commandType telemetry.CommandType, args ...string) (val []byte, err
 		telemetry.GitCommand(commandType)
 		defer func() {
 			telemetry.GitCommandMs(commandType, float64(time.Since(startTime).Milliseconds()))
-			if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+			if exitErr, ok := compat.AsType[*exec.ExitError](err); ok {
 				switch exitErr.ExitCode() {
 				case -1:
 					telemetry.GitCommandErrors(commandType, telemetry.ECMinus1CommandExitCode)
@@ -230,7 +229,7 @@ func execGitStringWithInput(commandType telemetry.CommandType, input string, arg
 		telemetry.GitCommand(commandType)
 		defer func() {
 			telemetry.GitCommandMs(commandType, float64(time.Since(startTime).Milliseconds()))
-			if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+			if exitErr, ok := compat.AsType[*exec.ExitError](err); ok {
 				switch exitErr.ExitCode() {
 				case -1:
 					telemetry.GitCommandErrors(commandType, telemetry.ECMinus1CommandExitCode)
@@ -740,7 +739,8 @@ func CreatePackFiles(commitsToInclude []string, commitsToExclude []string) []str
 
 	// construct the full path to the pack files
 	var packFiles []string
-	for packFile := range strings.SplitSeq(out, "\n") {
+	for iterator := compat.Split(out, "\n"); iterator.Next(); {
+		packFile := iterator.Value()
 		file := filepath.Join(temporaryPath, fmt.Sprintf("-%s.pack", packFile))
 
 		// check if the pack file exists
@@ -1030,8 +1030,9 @@ func getRemoteBranches(remoteName string) ([]string, error) {
 
 	branches := make([]string, 0)
 	if remoteOut != "" {
-		remoteBranches := strings.SplitSeq(strings.TrimSpace(remoteOut), "\n")
-		for branch := range remoteBranches {
+		remoteBranches := compat.Split(strings.TrimSpace(remoteOut), "\n")
+		for remoteBranches.Next() {
+			branch := remoteBranches.Value()
 			if strings.TrimSpace(branch) != "" {
 				branches = append(branches, strings.TrimSpace(branch))
 			}

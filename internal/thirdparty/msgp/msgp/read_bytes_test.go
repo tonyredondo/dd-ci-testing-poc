@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package msgp
 
 import (
@@ -440,6 +438,7 @@ func TestReadIntBytesOverflows(t *testing.T) {
 	}
 
 	for i, v := range vs {
+		v := v
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			buf.Reset()
 			switch num := v.v.(type) {

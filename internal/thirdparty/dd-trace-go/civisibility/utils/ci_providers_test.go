@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -78,6 +76,7 @@ func TestTags(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, path := range paths {
+		path := path
 		providerName := strings.TrimSuffix(filepath.Base(path), ".json")
 
 		t.Run(providerName, func(t *testing.T) {
@@ -213,6 +212,7 @@ func TestIsNumericJobID(t *testing.T) {
 		{" ", false},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(fmt.Sprintf("input=%q", tt.input), func(t *testing.T) {
 			if got := isNumericJobID(tt.input); got != tt.expected {
 				t.Errorf("isNumericJobID(%q) = %v, want %v", tt.input, got, tt.expected)

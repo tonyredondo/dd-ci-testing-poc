@@ -1,20 +1,19 @@
-//go:build go1.26
-
 package runner
 
 import (
 	"context"
 	"encoding/json"
-	"go/version"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
-func compareGoVersion(left, right string) int { return version.Compare("go"+left, "go"+right) }
+func compareGoVersion(left, right string) int { return compat.CompareGoVersion("go"+left, "go"+right) }
 
 func writeProvisionOverlay(temp string, opts *options, replacements map[string]string) error {
 	data, err := json.Marshal(Overlay{Replace: replacements})
@@ -53,7 +52,31 @@ func moduleRoot(dir string) string {
 
 func provideMiniVendorWorkspace(ctx context.Context, dir, root, temp string, replacements map[string]string) (string, error) {
 	source := filepath.Join(temp, "vendor-input.work")
-	data := []byte("go 1.26.0\nuse " + strconv.Quote(filepath.ToSlash(root)) + "\n")
+	module, err := readModuleFile(filepath.Join(root, "go.mod"), replacements)
+	if err != nil {
+		return "", err
+	}
+	modfile := filepath.Join(temp, "vendor-settings.mod")
+	if err := os.WriteFile(modfile, module, 0600); err != nil {
+		return "", err
+	}
+	out, err := goTool(ctx, dir, nil, "mod", "edit", "-json", "-modfile="+modfile)
+	if err != nil {
+		return "", err
+	}
+	var settings struct {
+		Go      string
+		GoDebug []struct{ Key, Value string }
+	}
+	if err := json.Unmarshal([]byte(out), &settings); err != nil {
+		return "", err
+	}
+	// Go compares workspace module roots with its native working-directory
+	// spelling. Absolute slash-normalized paths fail that comparison on Windows.
+	data := []byte("go " + settings.Go + "\nuse " + strconv.Quote(root) + "\n")
+	for _, setting := range settings.GoDebug {
+		data = append(data, []byte("godebug "+setting.Key+"="+setting.Value+"\n")...)
+	}
 	if err := os.WriteFile(source, data, 0600); err != nil {
 		return "", err
 	}

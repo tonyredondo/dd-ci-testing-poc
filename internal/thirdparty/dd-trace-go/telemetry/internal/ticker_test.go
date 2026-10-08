@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package internal
 
 import (
@@ -16,7 +14,7 @@ func TestDeferredTickerWaitsForItsInterval(t *testing.T) {
 	ticks := 0
 	ticker := NewTicker(func() { ticks++ }, Range[time.Duration]{Min: time.Millisecond, Max: 50 * time.Millisecond})
 	defer ticker.Stop()
-	for range 10 {
+	for i, limit := 0, 10; i < limit; i++ {
 		ticker.tickIfDue()
 	}
 	if ticks != 0 {

@@ -1,4 +1,4 @@
-//go:build (linux || aix) && go1.26
+//go:build linux || aix
 
 package unix
 

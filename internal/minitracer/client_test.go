@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package minitracer
 
 import (
@@ -14,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
 	"github.com/tonyredondo/dd-ci-testing-poc/propagation"
 )
@@ -50,7 +49,7 @@ func TestNativeEventsConcurrentFinishAndHierarchy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var wg sync.WaitGroup
+	var wg compat.WaitGroup
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		go func() {
@@ -128,6 +127,7 @@ func TestFailedFlushRetainsBatch(t *testing.T) {
 
 func TestFlushCancellationWhileAnotherFlushRuns(t *testing.T) {
 	for _, deferred := range []bool{false, true} {
+		deferred := deferred
 		t.Run(map[bool]string{false: "ordinary", true: "deferred"}[deferred], func(t *testing.T) {
 			entered, release := make(chan struct{}), make(chan struct{})
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { close(entered); <-release; w.WriteHeader(202) }))
@@ -190,7 +190,7 @@ func TestQueueBoundAndConcurrentBackpressure(t *testing.T) {
 	// open batch. Once a delivery has failed, further events are rejected
 	// instead of waiting for a sender.
 	retained := 2 * (maxPendingBatches + 1)
-	for range retained + 3 {
+	for i, limit := 0, retained+3; i < limit; i++ {
 		finish()
 	}
 	if client.DroppedEvents() != 3 || client.LastError() == nil {
@@ -208,8 +208,8 @@ func TestQueueBoundAndConcurrentBackpressure(t *testing.T) {
 	if err := client.Flush(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	var wg sync.WaitGroup
-	for range retained {
+	var wg compat.WaitGroup
+	for i, limit := 0, retained; i < limit; i++ {
 		wg.Go(finish)
 	}
 	wg.Wait()
@@ -252,7 +252,7 @@ func TestFinishNeverWaitsForIntake(t *testing.T) {
 		t.Fatal(err)
 	}
 	start := time.Now()
-	for range 35 {
+	for i, limit := 0, 35; i < limit; i++ {
 		span, _ := client.StartSpan(context.Background(), "test", SpanType("test"))
 		span.Finish()
 	}

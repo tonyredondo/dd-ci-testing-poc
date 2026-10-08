@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Copyright 2015 The Go Authors. All rights reserved.
 // Adapted from golang.org/x/sys v0.47.0; BSD license in ../../LICENSE.
 

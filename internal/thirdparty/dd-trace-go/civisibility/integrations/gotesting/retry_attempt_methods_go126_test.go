@@ -12,15 +12,15 @@ import (
 	"path/filepath"
 	"testing"
 	"testing/cryptotest"
-	"testing/synctest"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 )
 
 func TestProcessRetryParitySynctestUsesOneNativeExecution(t *testing.T) {
 	var bodyCalls, retryCallbacks int
-	synctest.Test(t, func(bubble *testing.T) {
+	compat.Synctest(t, func(bubble *testing.T) {
 		runTestWithRetry(&runTestWithRetryOptions{
 			t: bubble,
 			targetFunc: func(local *testing.T) {

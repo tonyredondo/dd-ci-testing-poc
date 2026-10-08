@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package integration
 
 import (
@@ -71,6 +69,7 @@ func TestSDKFeaturePolicies(t *testing.T) {
 		bins = append(bins, bin)
 	}
 	for _, profile := range []string{"disabled", "quarantined", "attempt_to_fix", "efd", "itr"} {
+		profile := profile
 		t.Run(profile, func(t *testing.T) {
 			args := []string{"-test.run=^TestManaged$", "-mode=managed"}
 			wantStatus := "skip"

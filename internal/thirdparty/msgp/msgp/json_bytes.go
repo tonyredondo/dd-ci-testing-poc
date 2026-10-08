@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package msgp
 
 import (
@@ -93,7 +91,8 @@ func rwArrayBytes(w jsWriter, msg []byte, scratch []byte, depth int) ([]byte, []
 	if err != nil {
 		return msg, scratch, err
 	}
-	for i := range sz {
+	for i, limit := uint32(0), sz; i < limit; i++ {
+		i := i
 		if i != 0 {
 			err = w.WriteByte(',')
 			if err != nil {
@@ -121,7 +120,8 @@ func rwMapBytes(w jsWriter, msg []byte, scratch []byte, depth int) ([]byte, []by
 	if err != nil {
 		return msg, scratch, err
 	}
-	for i := range sz {
+	for i, limit := uint32(0), sz; i < limit; i++ {
+		i := i
 		if i != 0 {
 			err = w.WriteByte(',')
 			if err != nil {

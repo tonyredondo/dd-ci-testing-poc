@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -12,9 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 )
 
@@ -30,7 +28,7 @@ func TestProcessRetryParityFreshRunnerStablePublicState(t *testing.T) {
 		deadline, ok := local.Deadline()
 		observedDeadlineOK = ok
 		observedDeadlineEqual = deadline == originalDeadline
-		observedContextDistinct = t.Context() != local.Context()
+		observedContextDistinct = compat.Context(t) != compat.Context(local)
 		observedInitiallyPassed = !local.Failed() && !local.Skipped()
 	})
 	require.Empty(t, reason)
@@ -56,7 +54,7 @@ func TestProcessRetryParityFreshRunnerRestoresSetenvAndChdir(t *testing.T) {
 	attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
 		local.Setenv(key, "attempt-value")
 		setenvObserved = os.Getenv(key) == "attempt-value"
-		local.Chdir(targetDir)
+		compat.Chdir(local, targetDir)
 		chdirObserved, err = os.Getwd()
 		if err != nil {
 			local.Error(err)
@@ -92,9 +90,10 @@ func TestProcessRetryParityFreshRunnerAttrValidationAndCapture(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
-				local.Attr(tc.key, tc.value)
+				compat.Attr(local, tc.key, tc.value)
 			})
 			require.Empty(t, reason)
 			require.NotNil(t, attempt)
@@ -112,9 +111,10 @@ func TestProcessRetryParityFreshRunnerAttrValidationAndCapture(t *testing.T) {
 
 func TestProcessRetryParityFreshRunnerConcurrentReportingMethods(t *testing.T) {
 	attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
-		writer := local.Output()
-		var workers sync.WaitGroup
-		for i := range 16 {
+		writer := compat.Output(local)
+		var workers compat.WaitGroup
+		for i, limit := 0, 16; i < limit; i++ {
+			i := i
 			workers.Go(func() {
 				local.Helper()
 				local.Logf("worker %d", i)
@@ -142,9 +142,9 @@ func TestProcessRetryParityFreshRunnerSerializesConcurrentIndentedWrites(t *test
 	base := commonBaseForTest(attempt.parent, attempt.layout)
 	writer := *fieldPtr[io.Writer](base, attempt.layout.common.w)
 	const workers = 16
-	var writes sync.WaitGroup
+	var writes compat.WaitGroup
 	writeErrors := make(chan error, workers)
-	for range workers {
+	for i, limit := 0, workers; i < limit; i++ {
 		writes.Go(func() {
 			_, err := writer.Write([]byte("concurrent output\n"))
 			writeErrors <- err

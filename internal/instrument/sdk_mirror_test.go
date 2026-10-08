@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package instrument
 
 import (
@@ -39,6 +37,8 @@ func TestSDKMirrorCosmeticChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, source := range variants {
+		name := name
+		source := source
 		t.Run(name, func(t *testing.T) {
 			got, hooks, err := TransformSDKMirror("sdk.go", []byte(source))
 			if err != nil || hooks != 15 {
@@ -125,6 +125,7 @@ func TestSDKMirrorAPIDrift(t *testing.T) {
 		"span_ignored":        {"span: s", "span: nil"},
 		"reserved_identifier": {"type SpanContext struct{", "type SpanContext struct{ __ddtestCollision any;"},
 	} {
+		mutation := mutation
 		t.Run(name, func(t *testing.T) {
 			source := strings.Replace(sdkMirrorSource, mutation[0], mutation[1], 1)
 			if source == sdkMirrorSource {

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -156,6 +154,7 @@ func TestSkippableApiRequestFromManifestModeIgnoresCache(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
+		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			var hits int
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -259,6 +258,7 @@ func TestSkippableApiRequestCoverageMetadataPresenceStates(t *testing.T) {
 		{name: "null", coverageJSON: "null", wantPresent: false, wantSafe: false, wantReason: coverageBackfillReasonMissing},
 		{name: "empty", coverageJSON: "{}", wantPresent: true, wantSafe: false, wantReason: coverageBackfillReasonEmpty},
 	} {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set(HeaderContentType, ContentTypeJSON)
@@ -347,6 +347,7 @@ func TestSkippableApiRequestRejectsNonRepositoryRelativeCoveragePaths(t *testing
 		{name: "windows-drive", path: "C:\\repo\\pkg\\file.go"},
 		{name: "traversal", path: "pkg/../..//file.go"},
 	} {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			coverage := base64.StdEncoding.EncodeToString([]byte{0b10000000})
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -396,6 +397,7 @@ func TestNormalizeSkippableCoveragePath(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := normalizeSkippableCoveragePath(tt.rawPath)
 			if tt.expectErr {

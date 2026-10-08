@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -562,7 +560,8 @@ func (s *efdFaultySessionFilesystemStore) releaseLock(lock *os.File) error {
 	lockPath := filepath.Join(s.directory, efdFaultySessionLockFile)
 	backoff := efdFaultySessionInitialBackoff
 	var lastErr error
-	for attempt := range efdFaultySessionReleaseAttempts {
+	for attempt, limit := 0, efdFaultySessionReleaseAttempts; attempt < limit; attempt++ {
+		attempt := attempt
 		current, err := s.lstatLock(lockPath)
 		if err != nil {
 			lastErr = fmt.Errorf("inspect lock path: %w", err)

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Copyright 2017 Datadog, Inc. Licensed under the Apache License, Version 2.0.
 // Go adaptation Copyright 2026 Datadog, Inc.
 package codeownership
@@ -26,6 +24,7 @@ func TestOfficialLocationPriority(t *testing.T) {
 	}{
 		{"github", []string{".github", "", "docs"}}, {"gitlab", []string{"", "docs", ".gitlab"}},
 	} {
+		tc := tc
 		t.Run(tc.provider, func(t *testing.T) {
 			workspace := t.TempDir()
 			// Discovery returns physical paths. TempDir may retain /var's symlink on
@@ -69,6 +68,7 @@ func TestDetectDialect(t *testing.T) {
 		{"https://code.gitlab.example/org/repo", "github", GitLab}, {"ssh://git@GITHUB.COM/org/repo", "gitlab", GitHub},
 		{"https://unknown.example/org/repo", "gitlab", GitLab}, {"https://unknown.example/org/repo", "github", GitHub},
 	} {
+		tc := tc
 		t.Run(tc.repository, func(t *testing.T) {
 			if got := detectDialect(t.TempDir(), tc.repository, tc.provider); got != tc.dialect {
 				t.Fatalf("got=%v want=%v", got, tc.dialect)
@@ -97,6 +97,7 @@ func TestOtherDialectLocationIsIgnored(t *testing.T) {
 }
 func TestRepositoryRootAndWorkspaceRebasing(t *testing.T) {
 	for _, gitFile := range []bool{false, true} {
+		gitFile := gitFile
 		t.Run(map[bool]string{false: "directory", true: "worktree-file"}[gitFile], func(t *testing.T) {
 			workspaceRoot := t.TempDir()
 			root, err := filepath.EvalSymlinks(workspaceRoot)

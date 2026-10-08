@@ -1,8 +1,8 @@
-//go:build go1.26
-
 // Copyright 2017 Datadog, Inc. Licensed under the Apache License, Version 2.0.
 // Go adaptation Copyright 2026 Datadog, Inc.
 package codeownership
+
+import "github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 
 import "strings"
 
@@ -23,7 +23,8 @@ func (c *CodeOwners) parseGitHub(raw string) {
 		return
 	}
 	var owners []string
-	for owner := range strings.FieldsFuncSeq(text, ownerSeparator) {
+	for iterator := compat.FieldsFunc(text, ownerSeparator); iterator.Next(); {
+		owner := iterator.Value()
 		if !validGitHubOwner(owner) {
 			c.diagnostics++
 			return
@@ -68,7 +69,8 @@ func unsupportedGitHubPattern(pattern string) bool {
 func validGitHubOwner(owner string) bool {
 	if len(owner) > 1 && owner[0] == '@' && owner[1] != '@' {
 		count := 0
-		for part := range strings.SplitSeq(owner[1:], "/") {
+		for iterator := compat.Split(owner[1:], "/"); iterator.Next(); {
+			part := iterator.Value()
 			count++
 			if count > 2 {
 				return false

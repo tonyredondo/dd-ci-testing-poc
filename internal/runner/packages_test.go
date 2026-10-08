@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package runner
 
 import (
@@ -65,6 +63,7 @@ func TestPackageListHelperProcess(t *testing.T) {
 
 func TestReadPackages(t *testing.T) {
 	for _, mode := range []string{"success", "partial", "invalid", "invalid-exit", "cancel"} {
+		mode := mode
 		t.Run(mode, func(t *testing.T) {
 			timeout := 5 * time.Second
 			if mode == "cancel" {
@@ -151,6 +150,7 @@ func TestTestifyDependencyImports(t *testing.T) {
 		{"runtime closure is unrelated", []goPackage{{ImportPath: miniPackage, Deps: []string{"example.com/testkit", "github.com/stretchr/testify/suite"}}, {ImportPath: sdkPackage, Deps: []string{"example.com/other"}}, {ImportPath: "example.com/client", TestImports: []string{"example.com/testkit", "example.com/other"}}}, []string{"example.com/other", "example.com/testkit"}, false},
 		{"assert-only", []goPackage{{ImportPath: "example.com/client", TestImports: []string{"github.com/stretchr/testify/assert"}}}, []string{"github.com/stretchr/testify/assert"}, false},
 	} {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			paths, suite := testifyDependencyImports(tc.packages)
 			if !slices.Equal(paths, tc.want) || suite != tc.suite {

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -16,6 +14,7 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 )
 
@@ -163,8 +162,8 @@ func TestProcessRetryParityFreshAttemptHasNoMutableAliases(t *testing.T) {
 
 	require.Equal(t, t.Name(), first.test.Name())
 	require.Equal(t, t.Name(), second.test.Name())
-	require.NotSame(t, t.Context(), first.test.Context())
-	require.NotSame(t, first.test.Context(), second.test.Context())
+	require.NotSame(t, compat.Context(t), compat.Context(first.test))
+	require.NotSame(t, compat.Context(first.test), compat.Context(second.test))
 	require.Equal(t, getTestState(t), getTestState(first.test))
 	require.Equal(t, getTestState(t), getTestState(second.test))
 
@@ -222,7 +221,7 @@ func TestProcessRetryParityFreshAttemptHasNoMutableAliases(t *testing.T) {
 func TestProcessRetryParityFreshAttemptSnapshotsHelpersUnderNativeLock(t *testing.T) {
 	started := make(chan struct{})
 	stop := make(chan struct{})
-	var worker sync.WaitGroup
+	var worker compat.WaitGroup
 	var stopWorker sync.Once
 	cleanupWorker := func() {
 		stopWorker.Do(func() { close(stop) })
@@ -242,7 +241,7 @@ func TestProcessRetryParityFreshAttemptSnapshotsHelpersUnderNativeLock(t *testin
 	t.Cleanup(cleanupWorker)
 	<-started
 
-	for range 100 {
+	for i, limit := 0, 100; i < limit; i++ {
 		attempt, reason := newRetryAttemptRoot(t)
 		require.Empty(t, reason)
 		require.NotNil(t, attempt)
@@ -256,8 +255,8 @@ func TestProcessRetryParityFreshAttemptContextCancellationIsLocal(t *testing.T) 
 	require.Empty(t, reason)
 	require.NotNil(t, attempt)
 
-	originalContext := t.Context()
-	attemptContext := attempt.test.Context()
+	originalContext := compat.Context(t)
+	attemptContext := compat.Context(attempt.test)
 	require.NoError(t, originalContext.Err())
 	require.NoError(t, attemptContext.Err())
 
@@ -348,7 +347,7 @@ func BenchmarkProcessRetryParityFreshAttemptStateInitialization(b *testing.B) {
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
-	for range b.N {
+	for i, limit := 0, b.N; i < limit; i++ {
 		root := createNewTestFastWithoutContext(layout)
 		parent := createNewTestFastWithoutContext(layout)
 		rootBase := commonBaseForTest(root, layout)

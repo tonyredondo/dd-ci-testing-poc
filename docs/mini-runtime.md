@@ -67,8 +67,10 @@ Use a Go toolchain installed outside `GOMODCACHE`; Go prohibits overlays within
 that cache, including downloaded toolchains. CI exercises Go 1.26 and 1.27.
 The installed toolchain must be Go 1.26 or newer. A client module declaring
 Go 1.21 keeps that language version, including its loop-variable semantics.
-Mini's source files select Go 1.26 semantics through file build constraints;
-the distributed module has no external requirements, including test requirements.
+Mini's ordinary source uses Go 1.21 syntax. Small standard-library equivalents
+live in `internal/compat`; native APIs that require a newer Go release have
+version guards at that boundary. The distributed module has no external
+requirements, including test requirements.
 
 The SDK backend provides its pinned version with `go get`. A different selected
 or replaced SDK is rejected. Mini's application-SDK integration has separate

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package globalconfig
 
 import (
@@ -13,7 +11,7 @@ import (
 func TestRuntimeIDFormat(t *testing.T) {
 	pattern := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 	seen := make(map[string]bool)
-	for range 32 {
+	for i, limit := 0, 32; i < limit; i++ {
 		id := newRuntimeID()
 		if !pattern.MatchString(id) {
 			t.Fatalf("runtime ID is not a lowercase UUIDv4: %q", id)
@@ -30,6 +28,7 @@ func TestRuntimeIDFormat(t *testing.T) {
 
 func TestRootSessionIDInheritance(t *testing.T) {
 	for _, inherited := range []string{"", "parent-session-id"} {
+		inherited := inherited
 		t.Run(inherited, func(t *testing.T) {
 			t.Setenv(rootSessionIDEnvVar, inherited)
 			t.Setenv("MINI_RUNTIME_ID_CHILD", "1")

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Copyright 2017 Datadog, Inc. Licensed under the Apache License, Version 2.0.
 // Go adaptation Copyright 2026 Datadog, Inc.
 package codeownership
@@ -10,6 +8,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 type gitLabParser struct {
@@ -186,7 +186,8 @@ func gitLabOwners(text string) ([]string, bool) {
 			owners = append(owners, owner)
 		}
 	}
-	for token := range strings.FieldsFuncSeq(text, ownerSeparator) {
+	for iterator := compat.FieldsFunc(text, ownerSeparator); iterator.Next(); {
+		token := iterator.Value()
 		var storage [128]rune
 		chars := storage[:0]
 		for _, char := range token {

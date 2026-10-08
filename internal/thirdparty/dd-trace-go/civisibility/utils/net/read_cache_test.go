@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -309,6 +307,7 @@ func TestReadThroughShortLivedCacheRejectsMismatchedAndFutureEntries(t *testing.
 	}
 
 	for _, testCase := range testCases {
+		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			beforeCalls := liveCalls
 			testCase.write(t)
@@ -336,7 +335,7 @@ func TestReadThroughShortLivedCacheDoesNotStoreNonCacheableResponses(t *testing.
 		return readCacheLiveResult[string]{Value: "non-cacheable", Cacheable: false}, nil
 	}
 
-	for range 2 {
+	for i, limit := 0, 2; i < limit; i++ {
 		value, err := readThroughShortLivedCache(c, "unit", map[string]string{"request": "same"}, live, nil)
 		require.NoError(t, err)
 		require.Equal(t, "non-cacheable", value)

@@ -150,11 +150,11 @@ The transparency and safety regressions cover these contracts:
 | Reserved span fields | `TestReservedTagsUpdateEventFields`, `TestReservedTagsReachWireFieldsAndEventKind`: names, service, resource and type reach the decoded event fields |
 | Reentrant tag values | `TestTagFormattingCanReadItsSpan`: stringers, formatters, slices and errors can read the span; a callback that finishes it cannot add a late tag |
 | Consumer dependency versions | `TestMiniPreservesOlderConsumerDependencies`, `TestMiniConsumerAddsOnlyOwnModule`: readonly/mod builds keep old Testify, go-spew and YAML; consumer tidy adds only Mini |
-| Consumer language version | `TestMiniPreservesConsumerLanguage`: Go 1.21, 1.22 and 1.26 loop closures match native Go |
+| Consumer language version | `TestMiniPreservesConsumerLanguage`: Go 1.21, 1.22 and 1.26 loop closures and timer compatibility match native Go |
 | Optional SDK mirror compatibility | `TestMiniUnsupportedSDKMirrorRetainsTestReporting`: SDK 2.10.1 builds twice, warns, and retains one test/session per run without duplicate SDK reporting |
 | Package setup failures | `TestMiniContinuesAfterPackageSetupFailures`: valid packages execute beside mixed-package, missing and empty targets with native exit status |
-| Event metadata placement | `TestMiniCIConfigurationWireParity` and common-tag wire tests: CI/Git/system attributes stay on event fields, without normalization hiding their location |
-| Workspace and vendor provisioning | `TestMiniProvisionsWorkspaceWithoutChangingModules`, `TestMiniProvisionsVendorAndPreservesPatchedSources`: preserve caller files, loop semantics, local patches and explicit modfiles; runner tests cover selected versions, forks, source overlays and symlink files |
+| Event metadata placement | `TestMiniCIConfigurationWireParity` and common-tag wire tests: shared CI/Git/system defaults and local overrides retain effective values; raw payload assertions check their placement |
+| Workspace and vendor provisioning | `TestMiniProvisionsWorkspaceWithoutChangingModules`, `TestMiniProvisionsVendorAndPreservesPatchedSources`: preserve caller files, loop semantics, local patches, program defaults and explicit modfiles; runner tests cover selected versions, forks, source overlays and symlink files |
 | Enforced dependency boundary | `scripts/test_dependency_boundary.py`: reject unused external requirements and nonstandard packages outside this module |
 
 

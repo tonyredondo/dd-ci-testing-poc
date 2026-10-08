@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package msgp
 
 import (
@@ -60,7 +58,7 @@ func HasKey(key string, raw []byte) bool {
 		return false
 	}
 	var field []byte
-	for range sz {
+	for i, limit := uint32(0), sz; i < limit; i++ {
 		field, bts, err = ReadStringZC(bts)
 		if err != nil {
 			return false

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Package citransport sends native CI Visibility payloads without an APM SDK.
 package citransport
 

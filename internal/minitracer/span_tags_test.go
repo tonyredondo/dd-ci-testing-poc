@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package minitracer
 
 import (
@@ -72,6 +70,7 @@ func TestErrorTagsFollowSDK(t *testing.T) {
 		{name: "false", key: ext.Error, value: false},
 		{name: "nil", key: ext.Error, value: nil},
 	} {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			span, _ := newSpan(nil, context.Background(), "test")
 			span.content.Error = 1 - tc.flag // Every case must set the flag explicitly.

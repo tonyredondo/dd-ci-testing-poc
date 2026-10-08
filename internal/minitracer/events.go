@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // CI test-cycle wire schema derived from dd-trace-go; source base and adaptations
 // are recorded in ../thirdparty/dd-trace-go/README.md (Apache-2.0).
 //

@@ -1,4 +1,4 @@
-//go:build unix && go1.26
+//go:build unix
 
 package unix
 
@@ -42,6 +42,7 @@ func TestKernelInfoNative(t *testing.T) {
 
 func TestSysctlUnameFormattingAndFailures(t *testing.T) {
 	for _, goos := range []string{"darwin", "freebsd", "netbsd", "openbsd", "dragonfly"} {
+		goos := goos
 		t.Run(goos, func(t *testing.T) {
 			queried := []string{}
 			info, err := sysctlTestInfo(func(key string) (string, error) {
@@ -61,6 +62,7 @@ func TestSysctlUnameFormattingAndFailures(t *testing.T) {
 				t.Fatalf("sysctl metadata: %+v/%v, queries=%v", info, err, queried)
 			}
 			for _, bad := range []string{"kern.ostype", "kern.hostname", "kern.osrelease", "kern.version", "hw.machine"} {
+				bad := bad
 				sentinel := errors.New("native failure")
 				_, err := sysctlTestInfo(func(key string) (string, error) {
 					if key == bad {

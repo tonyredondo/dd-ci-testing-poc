@@ -1,11 +1,10 @@
-//go:build go1.26
-
 package utils
 
 import (
 	"fmt"
-	"sync"
 	"testing"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 func TestCITagsSnapshotUpdatesAndRetainsOldValues(t *testing.T) {
@@ -66,10 +65,10 @@ func TestCITagsSnapshotsConcurrentReadersAndUpdates(t *testing.T) {
 	ResetCITags()
 	t.Cleanup(ResetCITags)
 	originalCiTags = map[string]string{"fixture": "zero"}
-	var wg sync.WaitGroup
-	for range 8 {
+	var wg compat.WaitGroup
+	for i, limit := 0, 8; i < limit; i++ {
 		wg.Go(func() {
-			for range 100 {
+			for i, limit := 0, 100; i < limit; i++ {
 				snapshot := GetCITagsReadOnly()
 				value := snapshot["fixture"]
 				if snapshot["fixture"] != value {
@@ -78,7 +77,8 @@ func TestCITagsSnapshotsConcurrentReadersAndUpdates(t *testing.T) {
 			}
 		})
 	}
-	for i := range 100 {
+	for i, limit := 0, 100; i < limit; i++ {
+		i := i
 		AddCITags("fixture", fmt.Sprint(i))
 	}
 	wg.Wait()
@@ -86,11 +86,13 @@ func TestCITagsSnapshotsConcurrentReadersAndUpdates(t *testing.T) {
 
 func BenchmarkCITagsSnapshot(b *testing.B) {
 	for _, escaped := range []bool{false, true} {
+		escaped := escaped
 		b.Run(fmt.Sprintf("mutable=%t", escaped), func(b *testing.B) {
 			ResetCITags()
 			b.Cleanup(ResetCITags)
 			originalCiTags = make(map[string]string, 64)
-			for i := range 64 {
+			for i, limit := 0, 64; i < limit; i++ {
+				i := i
 				originalCiTags[fmt.Sprint(i)] = "fixture-value"
 			}
 			if escaped {
@@ -99,7 +101,7 @@ func BenchmarkCITagsSnapshot(b *testing.B) {
 			GetCITagsSnapshot()
 			b.ReportAllocs()
 			b.ResetTimer()
-			for range b.N {
+			for i, limit := 0, b.N; i < limit; i++ {
 				GetCITagsSnapshot()
 			}
 		})

@@ -1,13 +1,12 @@
-//go:build go1.26
-
 // Copyright 2026 Datadog, Inc. Licensed under the Apache License, Version 2.0.
 package utils
 
 import (
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 )
 
 func resetCodeOwnersTestState(t *testing.T, workspace string) {

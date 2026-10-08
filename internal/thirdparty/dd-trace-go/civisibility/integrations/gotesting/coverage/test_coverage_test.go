@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -194,6 +192,7 @@ func TestParseOrderedCoverProfileRejectsInvalidProfiles(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			profilePath := filepath.Join(t.TempDir(), "coverage.out")
 			if err := os.WriteFile(profilePath, []byte(tt.content), 0o644); err != nil {
@@ -522,6 +521,7 @@ func TestFinalizeBackfillMatchesNestedSemanticImportModulePaths(t *testing.T) {
 	t.Cleanup(ResetForTesting)
 
 	for _, version := range []string{"v2", "v10"} {
+		version := version
 		t.Run(version, func(t *testing.T) {
 			ResetForTesting()
 			profilePath := filepath.Join(t.TempDir(), "coverage.out")

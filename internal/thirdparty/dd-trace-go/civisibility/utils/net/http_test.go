@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -17,12 +15,12 @@ import (
 	stdnet "net"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 )
@@ -240,7 +238,7 @@ func TestSendMultipartFormDataRequest(t *testing.T) {
 func TestRequestConfigDoesNotExposeRawBodyFields(t *testing.T) {
 	t.Parallel()
 
-	requestConfigType := reflect.TypeFor[RequestConfig]()
+	requestConfigType := compat.TypeFor[RequestConfig]()
 
 	_, hasRawBody := requestConfigType.FieldByName("RawBody")
 	assert.False(t, hasRawBody)
@@ -559,7 +557,8 @@ func TestExponentialBackoffDelays(t *testing.T) {
 
 	// Simulate exponential backoff with 3 retries and 1-second initial delay
 	var duration time.Duration
-	for i := range 3 {
+	for i, limit := 0, 3; i < limit; i++ {
+		i := i
 		duration = duration + getExponentialBackoffDuration(i, 1*time.Second)
 	}
 

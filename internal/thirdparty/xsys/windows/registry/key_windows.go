@@ -1,7 +1,7 @@
 // Copyright 2015 The Go Authors. All rights reserved.
 // Adapted from golang.org/x/sys v0.47.0; BSD license in ../../LICENSE.
 
-//go:build windows && go1.26
+//go:build windows
 
 package registry
 

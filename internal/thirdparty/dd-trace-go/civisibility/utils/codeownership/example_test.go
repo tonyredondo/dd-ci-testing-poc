@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Copyright 2026 Datadog, Inc. Licensed under the Apache License, Version 2.0.
 package codeownership
 
@@ -46,6 +44,7 @@ func TestRepositoryExamples(t *testing.T) {
 			{"README.md", []string{"@platform"}},
 		}},
 	} {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			rules, err := Load(filepath.Join("testdata", tc.name+".CODEOWNERS"), tc.dialect)
 			if err != nil {

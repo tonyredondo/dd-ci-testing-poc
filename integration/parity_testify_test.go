@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package integration
 
 import (
@@ -152,6 +150,7 @@ func runCIVisibilityTestifyParity(t *testing.T, deferred bool) {
 		cases = kept
 	}
 	for _, tc := range cases {
+		tc := tc
 		tc.Features = []string{"testify", tc.Name}
 		t.Run(tc.Name, func(t *testing.T) {
 			want, sdk := runParityCase(t, dir, oracle, tc)
@@ -290,6 +289,7 @@ func TestTestifySupportedVersionsAndNativeSemantics(t *testing.T) {
 		{"v1.12.1", "github.com/stretchr/testify@v1.12.1"},
 		{"DataDog-fork", "github.com/DataDog/testify@v1.1.5-0.20250616071259-629a0cde43ec"},
 	} {
+		selected := selected
 		t.Run(selected.name, func(t *testing.T) {
 			dir, driver := prepareTestifyFixture(t, false)
 			// Keep the upstream requirement used by dd-go. Upstream replacements
@@ -351,7 +351,9 @@ func checkDataDogTestifyParity(t *testing.T, dir string, bins []string) {
 		{Name: "atr", Args: []string{"-test.run=^TestParitySuite$/^TestFlaky$"}, Env: []string{"DD_CIVISIBILITY_FLAKY_RETRY_ENABLED=true", "DD_CIVISIBILITY_FLAKY_RETRY_COUNT=2", "DD_CIVISIBILITY_RETRY_EXECUTION_MODE=in_process"}, Policy: policySettings{Retry: true}, MinTests: 3},
 	}
 	for _, deferred := range []bool{false, true} {
+		deferred := deferred
 		for _, tc := range cases {
+			tc := tc
 			t.Run(fmt.Sprintf("%s/deferred=%t", tc.Name, deferred), func(t *testing.T) {
 				tc.Env = append(tc.Env, fmt.Sprintf("DD_CIVISIBILITY_DEFERRED_DELIVERY=%t", deferred))
 				want, sdk := runParityCase(t, dir, bins[0], tc)

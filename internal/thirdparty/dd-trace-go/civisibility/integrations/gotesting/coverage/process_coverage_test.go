@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -17,9 +15,8 @@ import (
 	"testing"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
-
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/filebitmap"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
 )
 
 func TestMergeProcessCoverageProfilesAddsIsolatedCounts(t *testing.T) {
@@ -204,6 +201,7 @@ func TestSubtractProcessCoverageProfilesUsesModeSemantics(t *testing.T) {
 		{mode: "set", beforeCount: 1, afterCount: 1, want: 0},
 		{mode: "set", beforeCount: 0, afterCount: 1, want: 1},
 	} {
+		tt := tt
 		t.Run(fmt.Sprintf("%s/%d-%d", tt.mode, tt.beforeCount, tt.afterCount), func(t *testing.T) {
 			before := processCoverageProfileForTest(t, tt.mode, tt.beforeCount)
 			after := processCoverageProfileForTest(t, tt.mode, tt.afterCount)

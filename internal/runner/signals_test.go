@@ -1,4 +1,4 @@
-//go:build go1.26 && !windows
+//go:build !windows
 
 package runner
 
@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 // fakeGo installs a shell script named go first in PATH.
@@ -85,7 +87,7 @@ func TestSignalDuringPreparationStopsAndCleansUp(t *testing.T) {
 func TestCLIDebugCanceledPreparation(t *testing.T) {
 	fakeGo(t, "exec sleep 30\n")
 	t.Setenv("DD_TRACE_DEBUG", "true")
-	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(compat.Context(t), 50*time.Millisecond)
 	defer cancel()
 	var stderr bytes.Buffer
 	if code := RunRuntime(ctx, []string{"."}, Mini, nil, io.Discard, &stderr); code != 2 {

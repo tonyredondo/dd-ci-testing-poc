@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -16,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 )
@@ -128,8 +127,9 @@ func TestInitializeWriteLogStopConcurrentRace(t *testing.T) {
 	}()
 	<-sendEntered
 
-	var writeWG sync.WaitGroup
-	for i := range 128 {
+	var writeWG compat.WaitGroup
+	for i, limit := 0, 128; i < limit; i++ {
+		i := i
 		writeWG.Go(func() {
 			WriteLog(uint64(i+1), "module", "suite", "test", fmt.Sprintf("message-%d", i), "")
 		})
@@ -156,7 +156,8 @@ func TestInitializeWriteLogStopConcurrentRace(t *testing.T) {
 
 func TestLogsPayloadResetAndRead(t *testing.T) {
 	p := newLogsPayload()
-	for i := range 5 {
+	for i, limit := 0, 5; i < limit; i++ {
+		i := i
 		p.push(&logEntry{Message: "msg" + strconv.Itoa(i)})
 	}
 

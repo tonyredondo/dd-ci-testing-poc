@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -10,9 +8,9 @@ package coverage
 import (
 	"errors"
 	"io"
-	"sync"
 	"testing"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/net"
 )
@@ -52,7 +50,7 @@ func TestCoverageWriterConcurrentFlush(t *testing.T) {
 	writer := newCoverageWriter()
 	coverage := &testCoverage{}
 
-	for range concurrentConnectionLimit + 1 {
+	for i, limit := 0, concurrentConnectionLimit+1; i < limit; i++ {
 		writer.add(coverage)
 	}
 	writer.flush()
@@ -77,8 +75,8 @@ func TestCoverageWriterConcurrentAddAndFlush(t *testing.T) {
 		return nil
 	}}
 
-	var wg sync.WaitGroup
-	for range 64 {
+	var wg compat.WaitGroup
+	for i, limit := 0, 64; i < limit; i++ {
 		wg.Go(func() {
 			writer.add(&testCoverage{})
 		})

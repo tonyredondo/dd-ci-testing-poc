@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package telemetry
 
 import (
@@ -22,6 +20,7 @@ func (benchmarkHTTP) RoundTrip(request *http.Request) (*http.Response, error) {
 // delivery. Periodic flushes keep distributions bounded in both variants.
 func BenchmarkCITelemetry(b *testing.B) {
 	for _, parallel := range []bool{false, true} {
+		parallel := parallel
 		name := "serial"
 		if parallel {
 			name = "parallel"
@@ -52,7 +51,7 @@ func BenchmarkCITelemetry(b *testing.B) {
 					}
 				})
 			} else {
-				for range b.N {
+				for i, limit := 0, b.N; i < limit; i++ {
 					operation()
 				}
 			}
@@ -63,7 +62,7 @@ func BenchmarkCITelemetry(b *testing.B) {
 }
 func BenchmarkCITelemetryStartup(b *testing.B) {
 	b.ReportAllocs()
-	for range b.N {
+	for i, limit := 0, b.N; i < limit; i++ {
 		c, err := NewClient("fixture", "benchmark", "1.0", ClientConfig{AgentURL: "http://fixture.invalid", HTTPClient: &http.Client{Transport: benchmarkHTTP{}}})
 		if err != nil {
 			b.Fatal(err)

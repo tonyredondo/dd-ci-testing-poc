@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -32,6 +30,7 @@ func TestExampleOutputMismatchMatchesTestingSemantics(t *testing.T) {
 		{name: "unordered preserves duplicates", got: "first\nfirst\n", want: "first\n", unordered: true, mismatch: true},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			message := exampleOutputMismatch(tt.got, tt.want, tt.unordered)
 			require.Equal(t, tt.mismatch, message != "")
@@ -63,6 +62,7 @@ func TestExampleOutputMismatchPreservesRawMessage(t *testing.T) {
 		{name: "matching whitespace", got: " expected \n\n", want: "expected"},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			require.Equal(t, tt.message, exampleOutputMismatch(tt.got, tt.want, tt.unordered))
 		})

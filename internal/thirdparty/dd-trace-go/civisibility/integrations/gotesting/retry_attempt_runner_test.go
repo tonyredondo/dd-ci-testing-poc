@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -22,6 +20,7 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 )
 
@@ -36,11 +35,11 @@ func TestProcessRetryParityFreshRunnerNormalLifecycle(t *testing.T) {
 	var events []string
 	attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
 		local.Cleanup(func() {
-			require.ErrorIs(t, local.Context().Err(), context.Canceled)
+			require.ErrorIs(t, compat.Context(local).Err(), context.Canceled)
 			events = append(events, "cleanup-1")
 		})
 		local.Cleanup(func() { events = append(events, "cleanup-2") })
-		local.Output().Write([]byte("partial"))
+		compat.Output(local).Write([]byte("partial"))
 		events = append(events, "body")
 	})
 	require.Empty(t, reason)
@@ -87,6 +86,7 @@ func TestProcessRetryParityGotestingFormattedMethodsEvaluateArgumentsOnce(t *tes
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			value := &retryAttemptCountingStringer{}
 			attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
@@ -117,6 +117,7 @@ func TestProcessRetryParityGotestingBenchmarkFormattedMethodsEvaluateArgumentsOn
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			value := &retryAttemptCountingStringer{}
 			testing.Benchmark(func(local *testing.B) {
@@ -317,6 +318,7 @@ func TestProcessRetryParityFreshRunnerTerminalSemantics(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			attempt, result, reason := runFreshRetryAttempt(t, tc.target)
 			require.Empty(t, reason)
@@ -376,6 +378,7 @@ func TestProcessRetryParityFreshRunnerPreservesMultiTerminalTrace(t *testing.T) 
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
 				local.Cleanup(tc.cleanup)
@@ -415,6 +418,7 @@ func TestProcessRetryParityMultiTerminalReplayPreservesNativeOutput(t *testing.T
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := exec.Command(os.Args[0], "-test.run=^TestProcessRetryParityMultiTerminalReplayFixture$", "-test.count=1", "-test.timeout=10s")
 			cmd.Env = append(os.Environ(),
@@ -510,6 +514,7 @@ func TestProcessRetryParityFreshRunnerBodyAndCleanupTerminalMatrix(t *testing.T)
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
 				local.Cleanup(func() { tc.cleanup(local) })
@@ -603,6 +608,7 @@ func TestProcessRetryParityFreshRunnerQueuedParallelSubtestCleanupTerminals(t *t
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
 				local.Run("parallel", func(child *testing.T) {
@@ -666,7 +672,7 @@ func TestProcessRetryParityFreshRunnerRootParallelPreservesConflicts(t *testing.
 		targetDir := t.TempDir()
 		attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
 			local.Parallel()
-			local.Chdir(targetDir)
+			compat.Chdir(local, targetDir)
 		})
 		require.Empty(t, reason)
 		require.NotNil(t, attempt)
@@ -681,7 +687,7 @@ func TestProcessRetryParityFreshRunnerRootParallelPreservesConflicts(t *testing.
 		require.NoError(t, err)
 		targetDir := t.TempDir()
 		attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
-			local.Chdir(targetDir)
+			compat.Chdir(local, targetDir)
 			local.Parallel()
 		})
 		require.Empty(t, reason)
@@ -753,6 +759,7 @@ func TestProcessRetryParityFreshRunnerBalancesSchedulerLease(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(container *testing.T) {
 			container.Run("attempt", func(t *testing.T) {
 				before := snapshotRetryAttemptTestState(t)
@@ -926,7 +933,7 @@ func TestProcessRetryParitySkipsOutputObservationWhenLogsAreDisabled(t *testing.
 
 	attempt, result, reason := runFreshRetryAttemptInGroup(group, func(local *testing.T) {
 		local.Log("process child output is captured by the parent pipes")
-		_, _ = local.Output().Write([]byte("partial output"))
+		_, _ = compat.Output(local).Write([]byte("partial output"))
 	})
 	require.Empty(t, reason)
 	require.NotNil(t, attempt)
@@ -1015,6 +1022,7 @@ func TestProcessRetryParityCapturesEachTerminalStackOnce(t *testing.T) {
 		}, wantStacks: 1},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			group, reason := newRetryAttemptGroupWithOutputObservation(t, false)
 			require.Empty(t, reason)
@@ -1083,7 +1091,7 @@ func TestProcessRetryParityFreshRunnerRetiresLateMethodDestinations(t *testing.T
 	var writer io.Writer
 	attempt, result, reason := runFreshRetryAttemptInGroup(group, func(current *testing.T) {
 		local = current
-		writer = current.Output()
+		writer = compat.Output(current)
 	})
 	require.Empty(t, reason)
 	require.NotNil(t, attempt)

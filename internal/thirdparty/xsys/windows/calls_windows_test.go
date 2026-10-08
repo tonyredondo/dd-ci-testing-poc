@@ -1,4 +1,4 @@
-//go:build windows && go1.26
+//go:build windows
 
 package windows
 
@@ -8,19 +8,20 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
 	"unsafe"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 func TestSystemDLLAndPerformanceCounter(t *testing.T) {
 	dll := NewLazySystemDLL("kernel32.dll")
 	counter := dll.NewProc("QueryPerformanceCounter")
 	frequency := dll.NewProc("QueryPerformanceFrequency")
-	var wg sync.WaitGroup
-	for range 16 {
+	var wg compat.WaitGroup
+	for i, limit := 0, 16; i < limit; i++ {
 		wg.Go(func() {
 			if err := counter.Find(); err != nil {
 				t.Error(err)

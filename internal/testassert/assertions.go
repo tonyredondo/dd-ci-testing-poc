@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package testassert
 
 // Assertions binds the SDK test assertions to a test reporter.

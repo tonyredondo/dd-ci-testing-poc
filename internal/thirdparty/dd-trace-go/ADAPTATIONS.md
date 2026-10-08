@@ -645,11 +645,17 @@ make a consumer's `go mod tidy` resolve Testify even without runtime imports.
 When synchronizing tests, relocate assert/require imports and add any missing
 helper behavior with its own regression tests.
 
-Source files keep Go 1.26 language semantics through file-specific build
-constraints, combined with existing OS and build tags. The root module declares
-Go 1.21 so adding Mini does not change a Go 1.21 client's loop-variable semantics.
-Run gofmt to synchronize legacy `+build` lines. The source manifests retain the
-original upstream hashes and record these files as local adaptations.
+The root module declares Go 1.21 so adding Mini preserves a Go 1.21 client's
+loop-variable semantics. Ordinary sources use that syntax: numeric loops have
+explicit bounds, and captured loop values get their own copies. Small standard
+library equivalents live in `internal/compat`. Go-version constraints remain
+only at native API boundaries, including synctest and MessagePack iterators.
+The source manifests retain upstream hashes and record each local adaptation.
+
+Root `godebug default=go1.26` selects modern timers for the CLI and its tests.
+Go ignores a dependency's directive in client programs. Temporary workspaces
+preserve the client's defaults when adding a runtime with a newer Go directive;
+regressions compare timer behavior as well as loop closures against native Go.
 
 Checks: `TestAssertionResults`, `TestFatalAssertionStopsExecution`,
 `TestMiniConsumerAddsOnlyOwnModule`, `TestMiniPreservesConsumerLanguage` and

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package runner
 
 import (
@@ -12,11 +10,14 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 func TestCopyModuleFileUsesOverlayContentsAndDeletion(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{"go.mod", "go.sum", "alternate.mod", "alternate.sum"} {
+		name := name
 		t.Run(name, func(t *testing.T) {
 			logical, backing, output := filepath.Join(dir, name), filepath.Join(dir, name+".backing"), filepath.Join(dir, name+".copy")
 			for path, contents := range map[string]string{logical: "physical", backing: "overlaid"} {
@@ -74,6 +75,7 @@ func TestMiniSourceRoot(t *testing.T) {
 		{"other-version", "internal/runner/provide.go", "v1.0.0", ""},
 		{"development-trimpath", "internal/runner/provide.go", "(devel)", ""},
 	} {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			if got := miniSourceRoot(tc.source, cache, tc.version); got != tc.want {
 				t.Fatalf("got %q, want %q", got, tc.want)
@@ -98,6 +100,7 @@ func TestRequireMiniPrefersLocalSourcesAndClientReplacement(t *testing.T) {
 	t.Setenv("GOWORK", "off")
 	t.Setenv("GOPROXY", "off")
 	for _, replacement := range []bool{false, true} {
+		replacement := replacement
 		t.Run(fmt.Sprintf("client-replace=%t", replacement), func(t *testing.T) {
 			dir := t.TempDir()
 			modfile := filepath.Join(dir, "go.mod")
@@ -120,13 +123,13 @@ func TestRequireMiniPrefersLocalSourcesAndClientReplacement(t *testing.T) {
 			var progress bytes.Buffer
 			// A published version must not cause a lookup before a usable local
 			// source. GOPROXY=off makes that regression fail without networking.
-			if err := requireMini(t.Context(), dir, modfile, root, "v999.0.0", &progress); err != nil {
+			if err := requireMini(compat.Context(t), dir, modfile, root, "v999.0.0", &progress); err != nil {
 				t.Fatal(err)
 			}
 			if progress.Len() != 0 {
 				t.Fatalf("unexpected go get: %s", &progress)
 			}
-			out, err := goTool(t.Context(), dir, nil, "mod", "edit", "-json", "-modfile="+modfile)
+			out, err := goTool(compat.Context(t), dir, nil, "mod", "edit", "-json", "-modfile="+modfile)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -158,6 +161,7 @@ func TestRequireLocalMiniGoVersion(t *testing.T) {
 		{"1.21.0", "1.26.0", "1.21.0"},
 		{"", "1.26.0", ""},
 	} {
+		tc := tc
 		t.Run(tc.client+"-"+tc.runtime, func(t *testing.T) {
 			dir := t.TempDir()
 			root := filepath.Join(dir, "runtime")
@@ -178,7 +182,7 @@ func TestRequireLocalMiniGoVersion(t *testing.T) {
 			if err := os.WriteFile(modfile, []byte(contents), 0600); err != nil {
 				t.Fatal(err)
 			}
-			err := requireLocalMini(t.Context(), dir, modfile, "./runtime", "v0.0.0", tc.client, true)
+			err := requireLocalMini(compat.Context(t), dir, modfile, "./runtime", "v0.0.0", tc.client, true)
 			needsNewer := compareGoVersion(tc.client, tc.runtime) < 0
 			if (err != nil) != needsNewer {
 				t.Fatalf("newer=%t, error=%v", needsNewer, err)
@@ -212,7 +216,7 @@ func TestProvideMiniRelativeReplacementFromSubdirectory(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	modfile, err := provideRuntime(t.Context(), filepath.Join(dir, "sub"), options{}, Mini, t.TempDir(), nil, nil)
+	modfile, err := provideRuntime(compat.Context(t), filepath.Join(dir, "sub"), options{}, Mini, t.TempDir(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,6 +233,7 @@ func TestPreprovideMiniRespectsEffectiveModuleAndWorkspace(t *testing.T) {
 	t.Setenv("GOPROXY", "off")
 	t.Setenv("GOWORK", "off")
 	for _, scenario := range []string{"absent", "required", "modfile", "overlay", "workspace", "escaped"} {
+		scenario := scenario
 		t.Run(scenario, func(t *testing.T) {
 			dir := t.TempDir()
 			bare := "module example.com/preprovide\n\ngo 1.26.0\n"
@@ -272,7 +277,7 @@ func TestPreprovideMiniRespectsEffectiveModuleAndWorkspace(t *testing.T) {
 				}
 				t.Setenv("GOWORK", work)
 			}
-			modfile, err := preprovideMini(t.Context(), dir, opts, t.TempDir(), replacements, nil)
+			modfile, err := preprovideMini(compat.Context(t), dir, opts, t.TempDir(), replacements, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -318,7 +323,7 @@ func TestPreprovideMiniPreservesTransitiveSelectionAndChecksums(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	modfile, err := preprovideMini(t.Context(), dir, options{}, t.TempDir(), nil, nil)
+	modfile, err := preprovideMini(compat.Context(t), dir, options{}, t.TempDir(), nil, nil)
 	if err != nil || modfile != "" {
 		t.Fatalf("replaced a transitive runtime: %s %v", modfile, err)
 	}

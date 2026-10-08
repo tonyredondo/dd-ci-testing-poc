@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package citransport
 
 import (
@@ -71,6 +69,7 @@ func (transport *delayedBodyTransport) RoundTrip(request *http.Request) (*http.R
 }
 func TestSendSealsLateRequestReaders(t *testing.T) {
 	for _, agentless := range []bool{false, true} {
+		agentless := agentless
 		t.Run(map[bool]string{false: "agent", true: "gzip"}[agentless], func(t *testing.T) {
 			rt := &delayedBodyTransport{}
 			transport, err := New(Config{Endpoint: "http://fixture.invalid", Agentless: agentless, APIKey: "fixture", Attempts: 1, HTTPClient: &http.Client{Transport: rt}})

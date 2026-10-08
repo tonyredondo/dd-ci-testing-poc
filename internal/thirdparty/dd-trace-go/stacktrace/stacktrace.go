@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -204,7 +202,8 @@ func parseSymbol(name string) symbol {
 // indexSymbolDot returns the first dot outside generic type arguments.
 func indexSymbolDot(name string) int {
 	bracketDepth := 0
-	for i := range len(name) {
+	for i, limit := 0, len(name); i < limit; i++ {
+		i := i
 		switch name[i] {
 		case '[':
 			bracketDepth++

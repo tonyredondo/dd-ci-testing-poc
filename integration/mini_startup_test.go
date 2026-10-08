@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package integration
 
 import (
@@ -18,6 +16,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 // Exercise the real startup path: neither settings nor telemetry may hold up
@@ -33,7 +33,9 @@ func TestStarted(t *testing.T) { if err := os.WriteFile(os.Getenv("DDTEST_STARTE
 		t.Fatal(out, stderr)
 	}
 	for _, deferred := range []bool{false, true} {
+		deferred := deferred
 		for _, scenario := range []string{"settings-first", "telemetry-first", "settings-error", "telemetry-error"} {
+			scenario := scenario
 			t.Run(fmt.Sprintf("deferred=%t/%s", deferred, scenario), func(t *testing.T) {
 				settingsSeen, telemetrySeen := make(chan struct{}), make(chan struct{})
 				settingsRelease, telemetryRelease := make(chan struct{}), make(chan struct{})
@@ -88,7 +90,7 @@ func TestStarted(t *testing.T) { if err := os.WriteFile(os.Getenv("DDTEST_STARTE
 				defer server.Close()
 				defer releaseSettings()
 				defer releaseTelemetry()
-				ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+				ctx, cancel := context.WithTimeout(compat.Context(t), 30*time.Second)
 				defer cancel()
 				marker := filepath.Join(t.TempDir(), "started")
 				cmd := exec.CommandContext(ctx, binary, "-test.run=^TestStarted$", "-test.count=1")

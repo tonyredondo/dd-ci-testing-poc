@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Package testassert provides the assertions used by the ported SDK tests.
 // It imports only the standard library so dependency tests cannot change a
 // consumer's module graph when that consumer runs go mod tidy.

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package integration
 
 import (
@@ -38,6 +36,7 @@ func testCLIActivation(t *testing.T, mini bool) {
 		{name: "empty", defined: true},
 		{name: "custom", value: "invalid", defined: true, wantEnvironment: "invalid"},
 	} {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			receiver := &capture{}
 			server := httptest.NewServer(http.HandlerFunc(receiver.handler))

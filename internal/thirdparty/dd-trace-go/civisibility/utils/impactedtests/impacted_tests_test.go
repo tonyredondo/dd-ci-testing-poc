@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -9,9 +7,9 @@ package impactedtests
 
 import (
 	"strings"
-	"sync"
 	"testing"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/filebitmap"
@@ -248,6 +246,7 @@ func TestIsImpactedDecisionCases(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			analyzer := &ImpactedTestAnalyzer{modifiedFiles: tt.modifiedFiles}
 			got := analyzer.IsImpacted("test", tt.sourceFile, tt.startLine, tt.endLine)
@@ -478,6 +477,7 @@ func TestBitmapIntersectsLineRange(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			got := bitmapIntersectsLineRange(tt.bitmap, tt.startLine, tt.endLine)
 			assert.Equal(t, tt.want, got)
@@ -508,6 +508,7 @@ func TestBitmapIntersectsLineRangeMatchesFileBitmapIntersection(t *testing.T) {
 	}
 
 	for _, modifiedBitmap := range modifiedBitmaps {
+		modifiedBitmap := modifiedBitmap
 		t.Run(modifiedBitmap.name, func(t *testing.T) {
 			for _, testRange := range testRanges {
 				testBitmap := filebitmap.FromActiveRange(testRange.start, testRange.end)
@@ -532,6 +533,7 @@ func TestBitmapIntersectsLineRangeInvalidRangesPanic(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			assert.PanicsWithValue(t, "Invalid range", func() {
 				_ = bitmapIntersectsLineRange([]byte{0xff}, tt.startLine, tt.endLine)
@@ -557,8 +559,8 @@ func TestIsImpactedConcurrentAccess(t *testing.T) {
 		},
 	}
 
-	var wg sync.WaitGroup
-	for range 100 {
+	var wg compat.WaitGroup
+	for i, limit := 0, 100; i < limit; i++ {
 		wg.Go(func() {
 			assert.True(t, analyzer.IsImpacted("test", "/workspace/pkg/source_test.go", 12, 14))
 			assert.False(t, analyzer.IsImpacted("test", "/workspace/pkg/source_test.go", 1, 2))

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package runner
 
 import (
@@ -62,6 +60,7 @@ func provideMiniWorkspace(ctx context.Context, dir, work, temp string, replaceme
 	}
 	var parsed struct {
 		Go      string
+		GoDebug []struct{ Key, Value string }
 		Use     []struct{ DiskPath string }
 		Replace []struct {
 			Old, New struct{ Path, Version string }
@@ -72,8 +71,8 @@ func provideMiniWorkspace(ctx context.Context, dir, work, temp string, replaceme
 	}
 	base := filepath.Dir(work)
 	args := []string{"work", "edit"}
-	if parsed.Go == "" || compareGoVersion(parsed.Go, "1.26.0") < 0 {
-		args = append(args, "-go=1.26.0")
+	if parsed.Go == "" {
+		args = append(args, "-go=1.21")
 	}
 	for _, use := range parsed.Use {
 		if !filepath.IsAbs(use.DiskPath) {
@@ -190,6 +189,25 @@ func provideMiniWorkspace(ctx context.Context, dir, work, temp string, replaceme
 	}
 	if !validMiniSource(miniRoot) {
 		return "", fmt.Errorf("Mini sources unavailable for workspace provisioning")
+	}
+	miniData, err := readModuleFile(filepath.Join(miniRoot, "go.mod"), replacements)
+	if err != nil {
+		return "", err
+	}
+	if required := moduleDirective(miniData, "go"); compareGoVersion(required, parsed.Go) > 0 {
+		args = append(args, "-go="+required)
+		// A workspace's go directive also controls program compatibility defaults.
+		// Preserve those defaults if a selected runtime needs a newer workspace.
+		hasDefault := false
+		for _, setting := range parsed.GoDebug {
+			hasDefault = hasDefault || setting.Key == "default"
+		}
+		if !hasDefault && parsed.Go != "" {
+			parts := strings.Split(parsed.Go, ".")
+			if len(parts) >= 2 {
+				args = append(args, "-godebug=default=go"+strings.Join(parts[:2], "."))
+			}
+		}
 	}
 	args = append(args, "-use="+miniRoot, target)
 	_, err = goTool(ctx, dir, nil, args...)

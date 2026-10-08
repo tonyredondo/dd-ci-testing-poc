@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -10,10 +8,10 @@ package gotesting
 import (
 	"runtime"
 	"testing"
-	"testing/synctest"
 	"time"
 	"unsafe"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 )
 
@@ -44,12 +42,14 @@ func TestCompleteFuzzParallelSeedsOffsetsNativeDurationOnce(t *testing.T) {
 		{name: "one seed", waits: []time.Duration{5 * time.Millisecond}, wait: 5 * time.Millisecond},
 		{name: "multiple seeds", waits: []time.Duration{3 * time.Millisecond, 7 * time.Millisecond}, wait: 7 * time.Millisecond},
 	} {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			synctest.Test(t, func(t *testing.T) {
+			compat.Synctest(t, func(t *testing.T) {
 				f := &testing.F{}
 				fields := getTestPrivateFields((*testing.T)(unsafe.Pointer(f)))
 				*fields.barrier = make(chan bool)
 				for _, wait := range tc.waits {
+					wait := wait
 					seed := &testing.T{}
 					seedFields := getTestPrivateFields(seed)
 					*seedFields.signal = make(chan bool)
@@ -145,6 +145,7 @@ func TestCompleteFuzzTargetLifecycleHandlesGoexit(t *testing.T) {
 		{name: "unfinished body", fuzzCalled: true, wantTerminal: true, wantFailure: true},
 		{name: "missing F.Fuzz", bodyReturned: true, wantFailure: true},
 	} {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			f := &testing.F{}
 			setFuzzNativeField(t, f, "fuzzCalled", tc.fuzzCalled)
@@ -184,6 +185,7 @@ func TestTestingFuzzWorkerRequested(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			require.Equal(t, tt.want, testingFuzzWorkerRequested(tt.args))
 		})

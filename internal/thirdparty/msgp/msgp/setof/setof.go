@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Package setof allows serializing sets map[T]struct{} as arrays.
 //
 // Nil maps are preserved as a nil value on stream.

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -34,6 +32,7 @@ func TestQuarantinedRaceCoverageCoordinatorDiscardsOnlySiblingOverlap(t *testing
 func TestQuarantinedRaceParallelContinuationDisablesCoverage(t *testing.T) {
 	const root, owner = "TestCheckout/root", "TestCheckout/root/owner"
 	for _, parallel := range []bool{false, true} {
+		parallel := parallel
 		t.Run(fmt.Sprintf("parallel=%t", parallel), func(t *testing.T) {
 			cfg := &processRetrySubtreeConfig{
 				Version: processRetrySubtreeVersion, SelectedRoot: root, AttemptToFixRetries: 2, CollectPerTest: true, CollectAggregate: true,

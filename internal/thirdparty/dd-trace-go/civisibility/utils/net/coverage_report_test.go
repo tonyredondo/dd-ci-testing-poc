@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -19,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
@@ -140,6 +139,7 @@ func TestParseCoverageReportFlags(t *testing.T) {
 
 	defer log.UseLogger(log.DiscardLogger{})()
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			require.Equal(t, test.want, parseCoverageReportFlags(test.raw))
 		})
@@ -165,12 +165,13 @@ func TestCoverageReportApiRequestOmitsInvalidFlags(t *testing.T) {
 		value *string
 	}{
 		{name: "unset"},
-		{name: "empty", value: new(" , , ")},
-		{name: "over maximum", value: new(makeCoverageReportFlags(maxCoverageReportFlags + 1))},
+		{name: "empty", value: compat.Pointer(" , , ")},
+		{name: "over maximum", value: compat.Pointer(makeCoverageReportFlags(maxCoverageReportFlags + 1))},
 	}
 
 	defer log.UseLogger(log.DiscardLogger{})()
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			var requestReceived bool
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -412,5 +413,5 @@ func makeCoverageReportFlagSlice(count int) []string {
 
 //go:fix inline
 func stringPointer(value string) *string {
-	return new(value)
+	return compat.Pointer(value)
 }

@@ -1,5 +1,4 @@
-//go:build tinygo && go1.26
-// +build tinygo,go1.26
+//go:build tinygo
 
 package fwd
 

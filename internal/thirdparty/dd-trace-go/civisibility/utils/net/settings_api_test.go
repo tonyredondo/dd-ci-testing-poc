@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -93,6 +91,7 @@ func TestSettingsFaultySessionThresholdPresence(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			var settings SettingsResponseData
 			assert.NoError(t, json.Unmarshal([]byte(tt.payload), &settings))

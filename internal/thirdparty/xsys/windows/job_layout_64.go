@@ -1,7 +1,7 @@
 // Copyright 2011 The Go Authors. All rights reserved.
 // Adapted from golang.org/x/sys v0.47.0; BSD license in ../LICENSE.
 
-//go:build windows && (amd64 || arm64) && go1.26
+//go:build windows && (amd64 || arm64)
 
 package windows
 

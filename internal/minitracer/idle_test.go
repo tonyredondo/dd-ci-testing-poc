@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package minitracer
 
 import (
@@ -18,6 +16,7 @@ import (
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
 )
 
@@ -90,7 +89,7 @@ func TestDeferredClientKeepsPayloadLimitsAndOrder(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	slices.SortFunc(payloads, func(a, b []string) int { return slices.Index(order, a[0]) - slices.Index(order, b[0]) })
-	if got := slices.Concat(payloads...); !slices.Equal(got, order) {
+	if got := compat.Concat(payloads...); !slices.Equal(got, order) {
 		t.Fatal("changed, lost or duplicated events", payloads)
 	}
 }
@@ -123,7 +122,7 @@ func TestDeferredFailureRetainsUnsentChunks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for range 5 {
+	for i, limit := 0, 5; i < limit; i++ {
 		s, _ := client.StartSpan(context.Background(), "test")
 		s.Finish()
 	}
@@ -167,7 +166,7 @@ func TestDeferredCheckpointsDeliverOnlyFullBatches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for range 10 {
+	for i, limit := 0, 10; i < limit; i++ {
 		release := cidelivery.Begin()
 		span, _ := client.StartSpan(context.Background(), "test", SpanType("test"))
 		span.Finish()
@@ -222,7 +221,7 @@ func TestDeferredCheckpointSendsConcurrently(t *testing.T) {
 	}
 	defer client.Close(context.Background())
 	const total = 4 * maxConcurrentSends
-	for range total {
+	for i, limit := 0, total; i < limit; i++ {
 		span, _ := client.StartSpan(context.Background(), "test", SpanType("test"))
 		span.Finish()
 	}
@@ -253,7 +252,7 @@ func TestDeferredCheckpointStopsAfterFailure(t *testing.T) {
 	}
 	defer func() { _ = client.Close(context.Background()) }()
 	const total = 4 * maxConcurrentSends
-	for range total {
+	for i, limit := 0, total; i < limit; i++ {
 		span, _ := client.StartSpan(context.Background(), "test", SpanType("test"))
 		span.Finish()
 	}

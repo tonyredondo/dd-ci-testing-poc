@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -506,7 +504,7 @@ func (c *processRetryCoordinator) drainScheduledBatch(
 	results := make(chan deferredProcessRetryScheduledResult, workerCount)
 	var workers sync.WaitGroup
 	workers.Add(workerCount)
-	for range workerCount {
+	for i, limit := 0, workerCount; i < limit; i++ {
 		go func() {
 			defer workers.Done()
 			for task := range tasks {

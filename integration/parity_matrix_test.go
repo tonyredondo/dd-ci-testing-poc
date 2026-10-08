@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package integration
 
 import (
@@ -576,6 +574,7 @@ func runCIVisibilityParityMatrix(t *testing.T, deferred bool) {
 		return
 	}
 	for _, tc := range cases {
+		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 			row := parityResult{Scenario: tc.Name, Features: tc.Features, Status: "failed"}
 			defer func() { results = append(results, row) }()
@@ -684,6 +683,8 @@ func runGroupedParityCases(t *testing.T, dir, sdkBin, miniBin string, cases []pa
 		start := time.Now()
 		ok := t.Run("execute-"+backend, func(t *testing.T) {
 			for i, tc := range cases {
+				i := i
+				tc := tc
 				t.Run(tc.Name, func(t *testing.T) {
 					observations[i].receiver, observations[i].result = runParityCase(t, dir, bin, tc)
 				})
@@ -701,6 +702,8 @@ func runGroupedParityCases(t *testing.T, dir, sdkBin, miniBin string, cases []pa
 	}
 	var results []parityResult
 	for i, tc := range cases {
+		i := i
+		tc := tc
 		t.Run("compare-"+tc.Name, func(t *testing.T) {
 			row := parityResult{Scenario: tc.Name, Features: tc.Features, Status: "failed"}
 			defer func() { results = append(results, row) }()

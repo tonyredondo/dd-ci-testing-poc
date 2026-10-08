@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package msgp
 
 import "testing"
@@ -51,7 +49,8 @@ func TestBytespec(t *testing.T) {
 	// set up fixed fields
 
 	// fixint
-	for i := range uint8(0x80) {
+	for i, limit := uint8(0), uint8(0x80); i < limit; i++ {
+		i := i
 		sizes[i] = bytespec{size: 1, extra: constsize, typ: IntType}
 	}
 
@@ -77,7 +76,8 @@ func TestBytespec(t *testing.T) {
 	}
 
 	// compare all values to calcBytespec
-	for i := range 256 {
+	for i, limit := 0, 256; i < limit; i++ {
+		i := i
 		sizeb := sizes[byte(i)]
 		cb := calcBytespec(byte(i))
 		if sizeb != cb {

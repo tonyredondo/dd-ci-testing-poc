@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -17,6 +15,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
@@ -154,7 +153,7 @@ func instrumentTestingFuzzFunc(ff any) any {
 
 	fn := reflect.ValueOf(ff)
 	fnType := fn.Type()
-	testingTPtr := reflect.TypeFor[*testing.T]()
+	testingTPtr := compat.TypeFor[*testing.T]()
 	if fn.Kind() != reflect.Func || fnType.NumIn() == 0 || fnType.In(0) != testingTPtr || fnType.NumOut() != 0 {
 		// Let testing.F.Fuzz produce its native validation error unchanged.
 		return ff
@@ -861,9 +860,9 @@ func testingParallelWillSuspend(t *testing.T) bool {
 		return false
 	}
 	switch layout.denyParallel.typ {
-	case reflect.TypeFor[bool]():
+	case compat.TypeFor[bool]():
 		return !*fieldPtr[bool](unsafe.Pointer(t), layout.denyParallel)
-	case reflect.TypeFor[string]():
+	case compat.TypeFor[string]():
 		return *fieldPtr[string](unsafe.Pointer(t), layout.denyParallel) == ""
 	default:
 		return false

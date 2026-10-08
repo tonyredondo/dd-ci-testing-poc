@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -15,6 +13,7 @@ import (
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
@@ -413,7 +412,7 @@ func ensureAdditionalFeaturesInitialization(_ string) {
 		}
 
 		// wait group to wait for all the additional features to be loaded
-		var wg sync.WaitGroup
+		var wg compat.WaitGroup
 
 		// if early flake detection is enabled then we run the known tests request
 		if currentSettings.KnownTestsEnabled {

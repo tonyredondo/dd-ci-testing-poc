@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package runner
 
 import (
@@ -11,8 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 func TestWorkspaceProvisionResolvesExistingMainModules(t *testing.T) {
@@ -32,7 +33,7 @@ func TestWorkspaceProvisionResolvesExistingMainModules(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	work, err := provideMiniWorkspace(t.Context(), filepath.Join(root, "client"), filepath.Join(root, "go.work"), t.TempDir(), nil)
+	work, err := provideMiniWorkspace(compat.Context(t), filepath.Join(root, "client"), filepath.Join(root, "go.work"), t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,6 +58,7 @@ func TestWorkspaceProvisionResolvesExistingMainModules(t *testing.T) {
 // A module proxy fixture checks actual Go selection without external requests.
 func TestWorkspaceProvisionKeepsSelectedRuntime(t *testing.T) {
 	for _, replacement := range []string{"none", "workspace", "client"} {
+		replacement := replacement
 		t.Run(replacement, func(t *testing.T) {
 			root := t.TempDir()
 			client := filepath.Join(root, "client")
@@ -132,7 +134,7 @@ func TestWorkspaceProvisionKeepsSelectedRuntime(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			target, err := provideMiniWorkspace(t.Context(), client, original, t.TempDir(), nil)
+			target, err := provideMiniWorkspace(compat.Context(t), client, original, t.TempDir(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -191,4 +193,87 @@ func TestVendorSnapshotPreservesSourceOverlaysAndSymlinkFiles(t *testing.T) {
 	if _, err := os.ReadFile(filepath.Join(target, "linked.go")); err != nil {
 		t.Fatalf("snapshot still relies on symlink target: %v", err)
 	}
+}
+
+func TestWorkspaceNewerRuntimePreservesProgramDefaults(t *testing.T) {
+	t.Setenv("GOPROXY", "off")
+	root := t.TempDir()
+	client := filepath.Join(root, "client")
+	runtimeRoot := filepath.Join(root, "mini")
+	for _, dir := range []string{client, filepath.Join(runtimeRoot, "testopt")} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	work := filepath.Join(root, "go.work")
+	for path, data := range map[string]string{
+		work:                                 "go 1.21\nuse ./client\nreplace " + miniModule + " => ./mini\n",
+		filepath.Join(client, "go.mod"):      "module example.com/client\ngo 1.21\n",
+		filepath.Join(client, "main.go"):     "package main\nimport(\"fmt\";\"time\")\nfunc main(){timer:=time.NewTimer(time.Hour);defer timer.Stop();fmt.Println(cap(timer.C))}\n",
+		filepath.Join(runtimeRoot, "go.mod"): "module " + miniModule + "\ngo 1.26.0\n",
+		filepath.Join(runtimeRoot, "testopt", "testopt.go"): "package testopt\n",
+	} {
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run := func(work string) string {
+		cmd := exec.Command("go", "run", ".")
+		cmd.Dir = client
+		cmd.Env = append(cmd.Environ(), "GOWORK="+work)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatal(err, string(out))
+		}
+		return string(out)
+	}
+	native := run(work)
+	supplied, err := provideMiniWorkspace(compat.Context(t), client, work, t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := run(supplied); got != native {
+		t.Fatalf("program defaults changed: native=%s supplied=%s", native, got)
+	}
+	data, err := os.ReadFile(supplied)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "go 1.26.0") || !strings.Contains(string(data), "default=go1.21") {
+		t.Fatalf("workspace does not preserve defaults: %s", data)
+	}
+}
+
+func TestVendorWorkspaceKeepsNativeModuleRoot(t *testing.T) {
+	t.Setenv("GOPROXY", "off")
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "vendor"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for path, data := range map[string]string{
+		filepath.Join(root, "go.mod"):              "module example.com/nativevendor\ngo 1.21\n",
+		filepath.Join(root, "vendor", "modules.txt"): "",
+	} {
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	work, err := provideMiniVendorWorkspace(compat.Context(t), root, root, t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := goTool(compat.Context(t), root, nil, "work", "edit", "-json", work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed struct{ Use []struct{ DiskPath string } }
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	for _, use := range parsed.Use {
+		if use.DiskPath == root {
+			return
+		}
+	}
+	t.Fatalf("native module root %s missing from workspace: %s", strconv.Quote(root), out)
 }

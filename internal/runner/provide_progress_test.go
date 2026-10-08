@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package runner
 
 import (
@@ -18,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	pocversion "github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
@@ -25,6 +24,7 @@ import (
 // This catches buffering that a check of the final command output would miss.
 func TestRuntimeDownloadProgress(t *testing.T) {
 	for _, outcome := range []string{"success", "failure", "cancel"} {
+		outcome := outcome
 		t.Run(outcome, func(t *testing.T) {
 			const version = "v1.2.3"
 			module := "module " + miniModule + "\n\ngo 1.26.0\n"
@@ -93,7 +93,7 @@ func TestRuntimeDownloadProgress(t *testing.T) {
 			if err := os.WriteFile(modfile, []byte("module example.com/client\n\ngo 1.26.0\n"), 0600); err != nil {
 				t.Fatal(err)
 			}
-			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+			ctx, cancel := context.WithTimeout(compat.Context(t), 15*time.Second)
 			defer cancel()
 			progress := &downloadProgress{seen: make(chan struct{}, 1)}
 			t.Setenv("DD_TRACE_DEBUG", "true")

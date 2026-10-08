@@ -18,7 +18,8 @@ when changing sources or generation pins.
 
 Follow the [shared audit and update procedure](../README.md#audit-and-update).
 
-Go source files retain Go 1.26 language semantics with file-specific build
-constraints. The root module's Go 1.21 directive preserves the consumer's
-language version. Keep the constraints and legacy build lines synchronized with
-`gofmt` during source updates.
+The root module keeps Go 1.21 language rules without changing the consumer.
+Adapt newer syntax with ordinary loops and the small standard-library helpers
+in `internal/compat`. Keep captured loop values local. Native API and feature
+test version guards stay at their boundaries; avoid adding a version constraint
+to every source file. Record adaptations and local hashes when updating sources.

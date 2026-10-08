@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -19,13 +17,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
+	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/codeownership"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
-
-	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 )
 
 // namedSourceFixtureFunc provides a stable top-level declaration for cache tests.
@@ -134,7 +132,7 @@ func TestLoadSourceFunctionMetadataCachesResolvedFunction(t *testing.T) {
 	// workspace identity. A temporary cwd is not the function's source root.
 	ownersDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(ownersDir, "CODEOWNERS"), []byte("* @ci-fixture\n"), 0o600))
-	t.Chdir(ownersDir)
+	compat.Chdir(t, ownersDir)
 	owners, err := codeownership.Discover(codeownership.Locations{Workspace: ownersDir})
 	require.NoError(t, err)
 	lookup := func() (codeOwnerMatcher, bool) { return owners, true }
@@ -280,7 +278,8 @@ func TestSourceFunctionCodeOwnerCacheConcurrentHitsSkipCompletedLookup(t *testin
 	wait.Add(readers)
 	owners := make([]string, readers)
 	foundResults := make([]bool, readers)
-	for index := range readers {
+	for index, limit := 0, readers; index < limit; index++ {
+		index := index
 		go func() {
 			defer wait.Done()
 			owners[index], foundResults[index] = loadSourceFunctionCodeOwnerWithLookup(metadata, lookup)
@@ -288,7 +287,8 @@ func TestSourceFunctionCodeOwnerCacheConcurrentHitsSkipCompletedLookup(t *testin
 	}
 	wait.Wait()
 
-	for index := range readers {
+	for index, limit := 0, readers; index < limit; index++ {
+		index := index
 		require.True(t, foundResults[index])
 		require.Equal(t, owner, owners[index])
 	}
@@ -299,7 +299,7 @@ func BenchmarkSourceFileCodeOwnerSharedMiss(b *testing.B) {
 	matcher := &recordingCodeOwnerMatcher{entry: testCodeOwner(b, "@shared-owner")}
 	b.ReportAllocs()
 	b.ResetTimer()
-	for range b.N {
+	for i, limit := 0, b.N; i < limit; i++ {
 		slot := &sourceFileCacheSlot{}
 		loadSourceFileCodeOwner(slot, matcher, true, "source.go")
 		loadSourceFileCodeOwner(slot, matcher, true, "source.go")
@@ -316,7 +316,7 @@ func BenchmarkSourceFileCodeOwnerCachedResult(b *testing.B) {
 	loadSourceFileCodeOwner(slot, matcher, true, "source.go")
 	b.ReportAllocs()
 	b.ResetTimer()
-	for range b.N {
+	for i, limit := 0, b.N; i < limit; i++ {
 		loadSourceFileCodeOwner(slot, matcher, true, "source.go")
 	}
 	b.StopTimer()
@@ -340,7 +340,7 @@ func BenchmarkSourceFunctionCodeOwnerCachedResult(b *testing.B) {
 	loadSourceFunctionCodeOwnerWithLookup(metadata, lookup)
 	b.ReportAllocs()
 	b.ResetTimer()
-	for range b.N {
+	for i, limit := 0, b.N; i < limit; i++ {
 		loadSourceFunctionCodeOwnerWithLookup(metadata, lookup)
 	}
 	b.StopTimer()

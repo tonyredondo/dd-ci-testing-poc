@@ -1,4 +1,4 @@
-//go:build !tinygo && go1.26
+//go:build !tinygo
 
 package msgp
 
@@ -9,7 +9,8 @@ package msgp
 var sizes [256]bytespec
 
 func init() {
-	for i := range 256 {
+	for i, limit := 0, 256; i < limit; i++ {
+		i := i
 		sizes[i] = calcBytespec(byte(i))
 	}
 }

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package integration
 
 import (
@@ -25,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/runner"
 )
 
@@ -152,7 +151,9 @@ func runCommand(dir string, env []string, name string, args ...string) (string, 
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
-	cmd.Env = env
+	// An explicit Env disables os/exec's automatic PWD update. Keep the
+	// logical directory so workspaces under macOS /var aliases resolve alike.
+	cmd.Env = append(env, "PWD="+dir)
 	var out, errout bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errout
@@ -214,8 +215,9 @@ func buildConcurrently(t *testing.T, builds ...fixtureBuild) {
 		}
 		return
 	}
-	var wg sync.WaitGroup
+	var wg compat.WaitGroup
 	for i := range builds {
+		i := i
 		wg.Go(func() { run(i) })
 	}
 	wg.Wait()
@@ -415,6 +417,7 @@ func TestTestingCompatibility(t *testing.T) {
 		{"helper", []string{"-test.v", "-test.run=^TestHelper$", "-mode=fail"}, 1},
 	}
 	for _, tc := range cases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			native := execute(t, dir, bins[0], tc.args, false, false)
 			if native.code != tc.code {

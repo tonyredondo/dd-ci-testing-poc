@@ -1,14 +1,12 @@
-//go:build go1.26
-
 package integrations
 
 import (
 	"fmt"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 )
 
@@ -24,6 +22,7 @@ func TestCloseActionsKeepLIFOAndRunBarriersFirst(t *testing.T) {
 	initializeCIVisibilityLifecycleForTesting()
 	var order []string
 	for _, name := range []string{"first", "second"} {
+		name := name
 		PushCiVisibilityCloseAction(func() { order = append(order, name) })
 		if !TryPushCiVisibilityPreCloseAction(func() {
 			order = append(order, "barrier-"+name)
@@ -55,13 +54,14 @@ func TestConcurrentCloseActionsRunOnce(t *testing.T) {
 	t.Cleanup(restoreCIVisibilityBootstrapForTesting)
 	initializeCIVisibilityLifecycleForTesting()
 	seen := make([]int, 128)
-	var registrations sync.WaitGroup
+	var registrations compat.WaitGroup
 	for i := range seen {
+		i := i
 		registrations.Go(func() { PushCiVisibilityCloseAction(func() { seen[i]++ }) })
 	}
 	registrations.Wait()
-	var exits sync.WaitGroup
-	for range 4 {
+	var exits compat.WaitGroup
+	for i, limit := 0, 4; i < limit; i++ {
 		exits.Go(ExitCiVisibility)
 	}
 	exits.Wait()
@@ -76,11 +76,12 @@ func BenchmarkCloseActionRegistration(b *testing.B) {
 	saved := closeActions
 	b.Cleanup(func() { closeActions = saved })
 	for _, size := range []int{1000, 4000, 16000} {
+		size := size
 		b.Run(fmt.Sprint(size), func(b *testing.B) {
 			b.ReportAllocs()
-			for range b.N {
+			for i, limit := 0, b.N; i < limit; i++ {
 				closeActions = nil
-				for range size {
+				for i, limit := 0, size; i < limit; i++ {
 					PushCiVisibilityCloseAction(func() {})
 				}
 			}

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package integration
 
 import (
@@ -74,6 +72,7 @@ func TestMiniOrchestrionComposition(t *testing.T) {
 	}
 	unchangedFixtureFiles(t, dir, "go.mod", "go.sum", "orchestrion.tool.go", "orchestrion.yml", "sample_test.go", "composed_test.go")
 	for _, variant := range variants {
+		variant := variant
 		t.Run(variant.name, func(t *testing.T) {
 			bin := filepath.Join(t.TempDir(), executableName("fixture.test"))
 			args := append(append([]string(nil), variant.args...), "-c", "-o", bin, ".")
@@ -155,6 +154,7 @@ func TestComposedRealLeak(t *testing.T) {
 		{Name: "auto-retry-process", Args: []string{"-test.run=^TestParitySuite$/^TestFlaky$"}, Env: []string{"DD_CIVISIBILITY_FLAKY_RETRY_ENABLED=true", "DD_CIVISIBILITY_RETRY_EXECUTION_MODE=process"}, Policy: policySettings{Retry: true}, MinTests: 3},
 	}
 	for _, variant := range variants {
+		variant := variant
 		t.Run(variant.name, func(t *testing.T) {
 			binaries := make([]string, 2)
 			for i := range binaries {
@@ -174,8 +174,10 @@ func TestComposedRealLeak(t *testing.T) {
 				variantCases = append(variantCases, parityCase{Name: "per-test-coverage", Args: []string{"-test.run=^TestParitySuite$/^Test(Pass|Nested)$"}, Policy: policySettings{Coverage: true}, Coverage: true, MinTests: 4})
 			}
 			for _, deferred := range []bool{false, true} {
+				deferred := deferred
 				t.Run(fmt.Sprintf("deferred=%t", deferred), func(t *testing.T) {
 					for _, tc := range variantCases {
+						tc := tc
 						t.Run(tc.Name, func(t *testing.T) {
 							tc.Env = append(tc.Env, fmt.Sprintf("DD_CIVISIBILITY_DEFERRED_DELIVERY=%t", deferred))
 							want, native := runParityCase(t, dir, binaries[0], tc)
@@ -222,6 +224,7 @@ func TestPass(t *testing.T) {}
 		t.Fatal(err)
 	}
 	for _, sdk := range []string{sdkVersion, "v2.11.0-rc.2"} {
+		sdk := sdk
 		t.Run(sdk, func(t *testing.T) {
 			if sdk != sdkVersion {
 				out, stderr, code := command(t, dir, testEnv(), "go", "mod", "edit", "-replace=github.com/DataDog/dd-trace-go/v2=github.com/DataDog/dd-trace-go/v2@"+sdk)
@@ -257,7 +260,9 @@ func TestPass(t *testing.T) {}
 func assertComposedAPMDelivery(t *testing.T, dir, bin string) {
 	t.Helper()
 	for _, agentless := range []bool{true, false} {
+		agentless := agentless
 		for _, deferred := range []bool{false, true} {
+			deferred := deferred
 			t.Run(fmt.Sprintf("APM-HTTP-agentless=%t-deferred=%t", agentless, deferred), func(t *testing.T) { assertComposedAPMDeliveryMode(t, dir, bin, agentless, deferred) })
 		}
 	}

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package integration
 
 import (
@@ -19,10 +17,12 @@ func TestPass(t *testing.T){}
 func TestFail(t *testing.T){t.Error("fixture failure")}
 `})
 	for _, deferred := range []bool{false, true} {
+		deferred := deferred
 		for _, tc := range []struct {
 			name string
 			code int
 		}{{"Pass", 0}, {"Fail", 1}} {
+			tc := tc
 			t.Run(fmt.Sprintf("%s/deferred=%t", tc.name, deferred), func(t *testing.T) {
 				var rejected atomic.Int32
 				receiver := &capture{}

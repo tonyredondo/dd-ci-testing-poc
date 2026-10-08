@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -10,6 +8,7 @@ package telemetry
 import (
 	"strings"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/stacktrace"
 )
 
@@ -43,7 +42,8 @@ func WithTags(tags []string) LogOption {
 		builder.Grow(len(key.tags) + len(compiled) + 1)
 
 		// Add existing tags
-		for tag := range strings.SplitSeq(key.tags, ",") {
+		for iterator := compat.Split(key.tags, ","); iterator.Next(); {
+			tag := iterator.Value()
 			if builder.Len() > 0 {
 				builder.WriteByte(',')
 			}
@@ -52,7 +52,8 @@ func WithTags(tags []string) LogOption {
 		}
 
 		// Add new tags, skipping duplicates
-		for tag := range strings.SplitSeq(compiled, ",") {
+		for iterator := compat.Split(compiled, ","); iterator.Next(); {
+			tag := iterator.Value()
 			if _, exists := seen[tag]; !exists {
 				if builder.Len() > 0 {
 					builder.WriteByte(',')

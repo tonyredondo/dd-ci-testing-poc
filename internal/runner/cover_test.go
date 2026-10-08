@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package runner
 
 import (
@@ -40,6 +38,7 @@ func TestCoverageSelection(t *testing.T) {
 		{"custom args", []string{"-args", "-coverpkg=./..."}, "", []goPackage{helper}, false},
 		{"false", []string{"-cover=false"}, "", []goPackage{client}, false},
 	} {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			opts, err := parseOptions(tc.args, tc.env)
 			if err != nil {

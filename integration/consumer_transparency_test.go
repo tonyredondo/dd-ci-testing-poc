@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package integration
 
 import (
@@ -12,6 +10,7 @@ import (
 func TestMiniPreservesConsumerLanguage(t *testing.T) {
 	_, driver := prepareMiniFixture(t)
 	for _, language := range []string{"1.21", "1.22", "1.26.0"} {
+		language := language
 		t.Run(language, func(t *testing.T) {
 			dir := t.TempDir()
 			want := "0"
@@ -22,18 +21,25 @@ func TestMiniPreservesConsumerLanguage(t *testing.T) {
 			writeBuildFixture(t, dir, map[string]string{
 				"go.mod": mod,
 				"loop_test.go": `package looplanguage
-import "testing"
+import("testing";"fmt";"time")
 func TestLoopLanguage(t *testing.T) {
  var fs []func() int
  for i:=0;i<3;i++ { fs=append(fs,func()int{return i}) }
  if got:=fs[0]();got!=` + want + ` { t.Fatalf("loop semantics changed: %d",got) }
+ timer:=time.NewTimer(time.Hour);defer timer.Stop();fmt.Printf("TIMER_CAP=%d\n",cap(timer.C))
 }
 `,
 			})
-			for _, prefix := range [][]string{{"go", "test"}, {driver, "test"}} {
-				out, stderr, code := command(t, dir, testEnv("GOWORK=off", "GOPROXY=off", "DD_CIVISIBILITY_ENABLED=false"), prefix[0], append(prefix[1:], "-mod=readonly", "-count=1", ".")...)
+			var nativeOutput string
+			for i, prefix := range [][]string{{"go", "test"}, {driver, "test"}} {
+				out, stderr, code := command(t, dir, testEnv("GOWORK=off", "GOPROXY=off", "DD_CIVISIBILITY_ENABLED=false"), prefix[0], append(prefix[1:], "-v", "-mod=readonly", "-count=1", ".")...)
 				if code != 0 {
 					t.Fatalf("%v: exit=%d\n%s%s", prefix, code, out, stderr)
+				}
+				if i == 0 {
+					nativeOutput = out
+				} else {
+					assertNativeTimerCapacity(t, nativeOutput, out)
 				}
 			}
 			if data, err := os.ReadFile(filepath.Join(dir, "go.mod")); err != nil || string(data) != mod {
@@ -53,6 +59,7 @@ func TestDependency(t *testing.T) { _=spew.Sdump(1);check(t,"github.com/davecgh/
 		{"gopkg.in/yaml.v3", "v3.0.0-20200313102051-9f266ea9e77c", `import "gopkg.in/yaml.v3"
 func TestDependency(t *testing.T) { var value any;if err:=yaml.Unmarshal([]byte("a: 1"),&value);err!=nil{t.Fatal(err)};check(t,"gopkg.in/yaml.v3","v3.0.0-20200313102051-9f266ea9e77c",yaml.Unmarshal) }`},
 	} {
+		tc := tc
 		t.Run(tc.path, func(t *testing.T) {
 			dir := t.TempDir()
 			writeBuildFixture(t, dir, map[string]string{
@@ -96,6 +103,7 @@ func check(t *testing.T,path,version string,symbol any) {
 func TestMiniContinuesAfterPackageSetupFailures(t *testing.T) {
 	_, driver := prepareMiniFixture(t)
 	for _, target := range []string{"./...", "./good ./missing", "./good ./empty"} {
+		target := target
 		t.Run(target, func(t *testing.T) {
 			dir := t.TempDir()
 			for _, sub := range []string{"good", "bad", "empty"} {
@@ -117,5 +125,21 @@ func TestMiniContinuesAfterPackageSetupFailures(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func assertNativeTimerCapacity(t *testing.T, native, instrumented string) {
+	t.Helper()
+	capacity := func(out string) string {
+		for _, line := range strings.Split(out, "\n") {
+			if strings.HasPrefix(line, "TIMER_CAP=") {
+				return strings.TrimSpace(line)
+			}
+		}
+		return ""
+	}
+	want, got := capacity(native), capacity(instrumented)
+	if want == "" || got != want {
+		t.Fatalf("timer compatibility changed: native=%q instrumented=%q", want, got)
 	}
 }

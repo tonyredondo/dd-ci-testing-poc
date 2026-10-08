@@ -1,15 +1,17 @@
-//go:build go1.26
+//go:build go1.25
 
 package gotesting
+
+import "github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 
 import "testing"
 
 func TestNativeContextWithoutSDK(t *testing.T) {
-	ctx := t.Context()
+	ctx := compat.Context(t)
 	if allocs := testing.AllocsPerRun(100, func() { bindNativeTestContext(t, nil) }); allocs != 0 {
 		t.Fatalf("SDK-free binding allocated %g objects", allocs)
 	}
-	if t.Context() != ctx {
+	if compat.Context(t) != ctx {
 		t.Fatal("SDK-free binding replaced the native context")
 	}
 }

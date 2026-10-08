@@ -1,10 +1,9 @@
-//go:build go1.26
-
 package stacktrace
 
 import (
-	"sync"
 	"testing"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 func TestConcurrentStackClassification(t *testing.T) {
@@ -25,8 +24,8 @@ func TestConcurrentStackClassification(t *testing.T) {
 		{"main", frameTypeCustomer},
 	}
 	start := make(chan struct{})
-	var wg sync.WaitGroup
-	for range 32 {
+	var wg compat.WaitGroup
+	for i, limit := 0, 32; i < limit; i++ {
 		wg.Go(func() {
 			<-start
 			if len(CaptureRaw(0).PCs) == 0 {

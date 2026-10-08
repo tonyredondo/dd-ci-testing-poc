@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package msgp
 
 import (
@@ -23,7 +21,7 @@ func TestReadWriteExtension(t *testing.T) {
 	dc := NewReader(&buf)
 
 	t.Run("interface", func(t *testing.T) {
-		for range 25 {
+		for i, limit := 0, 25; i < limit; i++ {
 			buf.Reset()
 			e := randomExt()
 			en.WriteExtension(&e)
@@ -36,7 +34,7 @@ func TestReadWriteExtension(t *testing.T) {
 	})
 
 	t.Run("raw", func(t *testing.T) {
-		for range 25 {
+		for i, limit := 0, 25; i < limit; i++ {
 			buf.Reset()
 			e := randomExt()
 			en.WriteExtensionRaw(e.Type, e.Data)
@@ -121,7 +119,7 @@ func TestExtensionRawStackBuffer(t *testing.T) {
 func TestReadWriteExtensionBytes(t *testing.T) {
 	var bts []byte
 
-	for range 24 {
+	for i, limit := 0, 24; i < limit; i++ {
 		e := randomExt()
 		bts, _ = AppendExtension(bts[0:0], &e)
 		_, err := ReadExtensionBytes(bts, &e)
@@ -136,7 +134,7 @@ func TestAppendAndWriteCompatibility(t *testing.T) {
 	var buf bytes.Buffer
 	en := NewWriter(&buf)
 
-	for range 24 {
+	for i, limit := 0, 24; i < limit; i++ {
 		buf.Reset()
 		e := randomExt()
 		bts, _ = AppendExtension(bts[0:0], &e)

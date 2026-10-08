@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -11,8 +9,9 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 var runtimeCoverageTestMain *testing.M
@@ -54,13 +53,13 @@ func TestRuntimeCoverageConcurrentSnapshots(t *testing.T) {
 	const iterations = 4
 	collectors := make([]*testCoverage, workers)
 	start := make(chan struct{})
-	var wg sync.WaitGroup
+	var wg compat.WaitGroup
 	for i := range collectors {
 		collector := &testCoverage{moduleID: 1, suiteID: 2, testID: uint64(i + 1)}
 		collectors[i] = collector
 		wg.Go(func() {
 			<-start
-			for range iterations {
+			for i, limit := 0, iterations; i < limit; i++ {
 				collector.CollectCoverageBeforeTestExecution()
 				if err := collector.getCoverageData(); err != nil {
 					t.Errorf("collect coverage after test: %v", err)
@@ -77,7 +76,7 @@ func TestRuntimeCoverageConcurrentSnapshots(t *testing.T) {
 	})
 	wg.Go(func() {
 		<-start
-		for range iterations {
+		for i, limit := 0, iterations; i < limit; i++ {
 			profile, err := snapshotProcessCoverageProfile()
 			if err != nil {
 				t.Errorf("collect process coverage: %v", err)

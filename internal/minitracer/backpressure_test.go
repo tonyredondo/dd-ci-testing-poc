@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package minitracer
 
 import (
@@ -79,7 +77,7 @@ func TestSlowIntakeDeliversEveryEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	const total = 10 * 5 * maxPendingBatches
-	for range total {
+	for i, limit := 0, total; i < limit; i++ {
 		span, _ := client.StartSpan(context.Background(), "test", SpanType("test"))
 		span.Finish()
 	}
@@ -107,7 +105,7 @@ func TestFailingIntakeDoesNotStallFinishers(t *testing.T) {
 		t.Fatal(err)
 	}
 	start := time.Now()
-	for range 10 * maxPendingBatches {
+	for i, limit := 0, 10*maxPendingBatches; i < limit; i++ {
 		span, _ := client.StartSpan(context.Background(), "test", SpanType("test"))
 		span.Finish()
 	}
@@ -138,7 +136,7 @@ func TestCloseReleasesWaitingFinisher(t *testing.T) {
 	}
 	finish := func() { span, _ := client.StartSpan(context.Background(), "test", SpanType("test")); span.Finish() }
 	// Reach the pending bound and fill the open batch; deliveries stay in flight.
-	for range maxPendingBatches + 1 {
+	for i, limit := 0, maxPendingBatches+1; i < limit; i++ {
 		finish()
 	}
 	waiting := make(chan struct{})
@@ -181,7 +179,7 @@ func TestDeferredDeliveryNeverWaitsForSpace(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for range total {
+		for i, limit := 0, total; i < limit; i++ {
 			span, _ := client.StartSpan(context.Background(), "test", SpanType("test"))
 			span.Finish()
 		}

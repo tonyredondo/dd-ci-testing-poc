@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package integration
 
 import (
@@ -57,6 +55,7 @@ func TestMiniLocalProvisionAvoidsProxy(t *testing.T) {
 	}))
 	defer proxy.Close()
 	for _, goVersion := range []string{"1.21.0", "1.25.0", "1.26.0"} {
+		goVersion := goVersion
 		t.Run(goVersion, func(t *testing.T) {
 			dir := t.TempDir()
 			original := "module example.com/localmini\n\ngo " + goVersion + "\n"

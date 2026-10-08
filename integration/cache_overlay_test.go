@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package integration
 
 import (
@@ -14,6 +12,7 @@ func TestResultCache(t *testing.T) {
 	dir, driver := prepareFixture(t, false)
 	env := testEnv("DD_CIVISIBILITY_ENABLED=false")
 	for _, tool := range []string{"go", driver} {
+		tool := tool
 		t.Run(filepath.Base(tool), func(t *testing.T) {
 			for i := 0; i < 2; i++ {
 				out, stderr, code := command(t, dir, env, tool, "test", "-run=^TestPass$", ".")
@@ -47,6 +46,7 @@ func TestExistingOverlay(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, fromEnvironment := range []bool{false, true} {
+		fromEnvironment := fromEnvironment
 		t.Run(map[bool]string{false: "flag", true: "GOFLAGS"}[fromEnvironment], func(t *testing.T) {
 			env := testEnv("DD_CIVISIBILITY_ENABLED=false")
 			args := []string{"test", "-count=1", "-run=^TestPass$", "."}

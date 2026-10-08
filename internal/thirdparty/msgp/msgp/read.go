@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package msgp
 
 import (
@@ -215,7 +213,7 @@ func (m *Reader) CopyNext(w io.Writer) (int64, error) {
 		defer done()
 	}
 	// for maps and slices, read elements
-	for range o {
+	for i, limit := uintptr(0), o; i < limit; i++ {
 		var n2 int64
 		n2, err = m.CopyNext(w)
 		if err != nil {

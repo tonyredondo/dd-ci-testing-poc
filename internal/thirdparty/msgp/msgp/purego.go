@@ -1,4 +1,4 @@
-//go:build ((purego && !unsafe) || appengine) && go1.26
+//go:build (purego && !unsafe) || appengine
 
 package msgp
 

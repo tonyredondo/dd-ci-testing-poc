@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package gotesting
 
 import (
@@ -8,6 +6,7 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations"
 	"github.com/tonyredondo/dd-ci-testing-poc/propagation"
@@ -44,7 +43,7 @@ func bindNativeTestContext(tb testing.TB, test integrations.Test) {
 // Process retry children follow the original SDK contract and have no local
 // event identity: their CI events are reconstructed by the controlling parent.
 func Context(tb testing.TB) context.Context {
-	native := tb.Context()
+	native := compat.Context(tb)
 	if identity, ok := propagation.FromContext(getTestOptimizationContext(tb)); ok {
 		return propagation.WithContext(native, identity)
 	}

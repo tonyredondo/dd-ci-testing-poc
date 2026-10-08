@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -18,6 +16,8 @@ import (
 	"testing"
 	"time"
 	"unsafe"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 )
 
 type retryAttemptCompletionPhase uint8
@@ -491,7 +491,8 @@ func (r *retryAttemptRoot) lastTerminalStack(kinds ...retryAttemptTerminalKind) 
 	}
 	r.terminalMu.Lock()
 	defer r.terminalMu.Unlock()
-	for _, terminal := range slices.Backward(r.terminalTrace) {
+	for i := len(r.terminalTrace) - 1; i >= 0; i-- {
+		terminal := r.terminalTrace[i]
 		if slices.Contains(kinds, terminal.kind) {
 			return append([]byte(nil), terminal.stack...)
 		}
@@ -614,7 +615,7 @@ func flushRetryAttemptPartial(base unsafe.Pointer, layout *testingInternalsLayou
 	if outputWriter == nil || len(*fieldPtr[[]byte](outputWriter, layout.outputWriter.partial)) == 0 {
 		return
 	}
-	_, _ = (*testing.T)(base).Output().Write([]byte("\n"))
+	_, _ = compat.Output((*testing.T)(base)).Write([]byte("\n"))
 }
 
 func reportRetryAttempt(base unsafe.Pointer, layout *testingInternalsLayout) {

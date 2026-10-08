@@ -1,4 +1,4 @@
-//go:build go1.26
+//go:build go1.25
 
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
@@ -10,13 +10,12 @@ package gotesting
 import (
 	"fmt"
 	"reflect"
-	"sync"
 	"sync/atomic"
 	"testing"
-	"testing/synctest"
 	"time"
 	"unsafe"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations"
@@ -36,6 +35,7 @@ func TestFuzzEventsReconcileNativeOutcome(t *testing.T) {
 		{name: "raw skip", rawSkipped: true, want: processRetryStatusSkip, final: constants.TestStatusSkip},
 		{name: "pass", want: processRetryStatusPass, final: constants.TestStatusPass},
 	} {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			native := &testing.T{}
 			fields := getTestPrivateFields(native)
@@ -57,9 +57,11 @@ func TestFuzzEventsReconcileNativeOutcome(t *testing.T) {
 
 func TestFuzzEventsPreserveExecutionDuration(t *testing.T) {
 	for _, kind := range []string{"root", "seed"} {
+		kind := kind
 		for _, nativeFinished := range []bool{false, true} {
+			nativeFinished := nativeFinished
 			t.Run(fmt.Sprintf("%s/native_finished=%t", kind, nativeFinished), func(t *testing.T) {
-				synctest.Test(t, func(t *testing.T) {
+				compat.Synctest(t, func(t *testing.T) {
 					var native testing.TB = &testing.T{}
 					if kind == "root" {
 						native = &testing.F{}
@@ -96,6 +98,7 @@ func TestFuzzEventsSkipHooksWaitForCleanup(t *testing.T) {
 	atomic.StoreInt32(&ciVisibilityEnabledValue, 1)
 	t.Cleanup(func() { atomic.StoreInt32(&ciVisibilityEnabledValue, oldEnabled) })
 	for _, kind := range []string{"root", "seed"} {
+		kind := kind
 		for _, hook := range []struct {
 			name   string
 			skip   func(testing.TB)
@@ -105,9 +108,11 @@ func TestFuzzEventsSkipHooksWaitForCleanup(t *testing.T) {
 			{name: "Skipf", skip: func(tb testing.TB) { instrumentCloseAndSkip(tb, "formatted sentinel") }, reason: "formatted sentinel"},
 			{name: "SkipNow", skip: instrumentSkipNow},
 		} {
+			hook := hook
 			for _, cleanupFails := range []bool{false, true} {
+				cleanupFails := cleanupFails
 				t.Run(fmt.Sprintf("%s/%s/cleanup_fails=%t", kind, hook.name, cleanupFails), func(t *testing.T) {
-					synctest.Test(t, func(t *testing.T) {
+					compat.Synctest(t, func(t *testing.T) {
 						nativeT := &testing.T{}
 						var native testing.TB = nativeT
 						if kind == "root" {
@@ -146,7 +151,7 @@ func TestFuzzEventsSkipHooksWaitForCleanup(t *testing.T) {
 							close(done)
 						}()
 						<-entered
-						synctest.Wait()
+						compat.SynctestWait()
 						require.Zero(t, event.closeCount, "skip must not close while cleanup is blocked")
 						close(release)
 						<-done
@@ -168,7 +173,9 @@ func TestFuzzEventsSkipHooksWaitForCleanup(t *testing.T) {
 
 func TestFuzzEventsPreserveCleanupPanicDetails(t *testing.T) {
 	for _, bodyPanic := range []bool{false, true} {
+		bodyPanic := bodyPanic
 		for _, quarantined := range []bool{false, true} {
+			quarantined := quarantined
 			t.Run(fmt.Sprintf("body_panic=%t/quarantined=%t", bodyPanic, quarantined), func(t *testing.T) {
 				native := &testing.T{}
 				remainingCleanupRan := false
@@ -205,9 +212,9 @@ func TestFuzzEventsPreserveCleanupPanicDetails(t *testing.T) {
 
 func TestFuzzEventsFatalDrainDoesNotReadUnprotectedDuration(t *testing.T) {
 	native := &testing.F{}
-	ptr, err := getFieldPointerFromWithType(native, "duration", reflect.TypeFor[time.Duration]())
+	ptr, err := getFieldPointerFromWithType(native, "duration", compat.TypeFor[time.Duration]())
 	require.NoError(t, err)
-	done, err := getFieldPointerFromWithType(native, "done", reflect.TypeFor[bool]())
+	done, err := getFieldPointerFromWithType(native, "done", compat.TypeFor[bool]())
 	require.NoError(t, err)
 	started, stop, stopped := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	go func() {
@@ -225,7 +232,7 @@ func TestFuzzEventsFatalDrainDoesNotReadUnprotectedDuration(t *testing.T) {
 	}()
 	<-started
 	defer func() { close(stop); <-stopped }()
-	for range 100 {
+	for i, limit := 0, 100; i < limit; i++ {
 		event := newProcessRetryRecordingTestForTesting("active root")
 		queue := &fuzzEventQueue{}
 		queue.add(fuzzTestEvent{native: native, metadata: &testExecutionMetadata{}, test: event, suite: event.suite, module: event.suite.module, finishTime: time.Now()})
@@ -247,7 +254,7 @@ func (e *fuzzTimedRecordingTest) Close(status integrations.TestResultStatus, opt
 		fn := reflect.ValueOf(option)
 		value := reflect.New(fn.Type().In(0).Elem())
 		fn.Call([]reflect.Value{value})
-		ptr, err := getFieldPointerFromWithType(value.Interface(), "finishTime", reflect.TypeFor[time.Time]())
+		ptr, err := getFieldPointerFromWithType(value.Interface(), "finishTime", compat.TypeFor[time.Time]())
 		if err == nil && !(*time.Time)(ptr).IsZero() {
 			e.finish = *(*time.Time)(ptr)
 		}
@@ -258,8 +265,9 @@ func TestFuzzEventsConcurrentAdmissionAndRepeatedFinish(t *testing.T) {
 	queue := &fuzzEventQueue{}
 	const count = 1000
 	events := make([]*processRetryRecordingTest, count)
-	var workers sync.WaitGroup
-	for i := range count {
+	var workers compat.WaitGroup
+	for i, limit := 0, count; i < limit; i++ {
+		i := i
 		events[i] = newProcessRetryRecordingTestForTesting("seed")
 		workers.Go(func() {
 			event := events[i]
@@ -286,8 +294,9 @@ func TestFuzzEventsAdmissionOverlapsFatalDrain(t *testing.T) {
 	queue := &fuzzEventQueue{}
 	const count = 1000
 	events := make([]*processRetryRecordingTest, count)
-	var workers sync.WaitGroup
-	for i := range count {
+	var workers compat.WaitGroup
+	for i, limit := 0, count; i < limit; i++ {
+		i := i
 		events[i] = newProcessRetryRecordingTestForTesting("seed")
 		workers.Go(func() {
 			event := events[i]
@@ -314,7 +323,7 @@ func requireFuzzQueueDrained(t *testing.T, queue *fuzzEventQueue) {
 
 func setFuzzNativeField[V any](t *testing.T, native any, name string, value V) {
 	t.Helper()
-	ptr, err := getFieldPointerFromWithType(native, name, reflect.TypeFor[V]())
+	ptr, err := getFieldPointerFromWithType(native, name, compat.TypeFor[V]())
 	require.NoError(t, err)
 	*(*V)(ptr) = value
 }
@@ -322,7 +331,7 @@ func setFuzzNativeField[V any](t *testing.T, native any, name string, value V) {
 func BenchmarkFuzzEventsRetention(b *testing.B) {
 	for b.Loop() {
 		queue := &fuzzEventQueue{}
-		for range 10000 {
+		for i, limit := 0, 10000; i < limit; i++ {
 			queue.add(fuzzTestEvent{})
 		}
 		// Measure only queue storage; native testing objects and tracer events

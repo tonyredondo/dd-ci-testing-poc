@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -18,11 +16,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
-
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/bazel"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
 )
 
 func TestCoverageApiRequest(t *testing.T) {
@@ -312,7 +310,7 @@ func TestCoverageApiRequestPayloadFilesModeMissingOutputDirMsgpack(t *testing.T)
 	t.Cleanup(bazel.ResetForTesting)
 
 	tempDir := t.TempDir()
-	t.Chdir(tempDir)
+	compat.Chdir(t, tempDir)
 
 	var hits int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -345,7 +343,7 @@ func TestCoverageApiRequestPayloadFilesModeMissingOutputDirJSON(t *testing.T) {
 	t.Cleanup(bazel.ResetForTesting)
 
 	tempDir := t.TempDir()
-	t.Chdir(tempDir)
+	compat.Chdir(t, tempDir)
 
 	var hits int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

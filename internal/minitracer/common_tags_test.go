@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package minitracer
 
 import (
@@ -10,10 +8,10 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
 )
 
@@ -27,6 +25,7 @@ func effectiveCommonMeta(payload *testCycleBatch, event *ciEvent) map[string]str
 
 func TestCommonTagsWireOverridesAndGetters(t *testing.T) {
 	for _, deferred := range []bool{false, true} {
+		deferred := deferred
 		t.Run(map[bool]string{false: "ordinary", true: "deferred"}[deferred], func(t *testing.T) {
 			var payload testCycleBatch
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -59,8 +58,8 @@ func TestCommonTagsWireOverridesAndGetters(t *testing.T) {
 			if err := client.Close(context.Background()); err != nil {
 				t.Fatal(err)
 			}
-			if len(payload.Events) != 5 || payload.Metadata["test"]["ci.job.name"] != "older-default" {
-				t.Fatalf("configured metadata changed: %+v", payload.Metadata)
+			if len(payload.Events) != 5 || payload.Metadata["test"]["ci.job.name"] != "older-default" || payload.Metadata["test"]["git.commit.sha"] != "commit" {
+				t.Fatalf("common metadata not lifted: %+v", payload.Metadata)
 			}
 			if _, exists := payload.Metadata["test"]["os.platform"]; exists {
 				t.Fatal("numeric event inherited a string default")
@@ -75,8 +74,8 @@ func TestCommonTagsWireOverridesAndGetters(t *testing.T) {
 				if !exists || got != want || effectiveCommonMeta(&payload, payload.Events[i])["ci.job.name"] != want {
 					t.Fatalf("getter/wire override %d: %q %t", i, got, exists)
 				}
-				if payload.Events[i].Content.Meta["git.commit.sha"] != "commit" {
-					t.Fatal("event missing its Git value")
+				if _, repeated := payload.Events[i].Content.Meta["git.commit.sha"]; repeated {
+					t.Fatal("common Git value repeated on event")
 				}
 			}
 			if _, text := spans[2].Meta("os.platform"); text || spans[2].content.Metrics["os.platform"] != 42 {
@@ -106,7 +105,7 @@ func TestCommonMetadataMixedSnapshotsAndSealedMaps(t *testing.T) {
 	}
 	base := map[string]map[string]string{"*": {"language": "go"}}
 	metadata, wire := prepareCommonMetadata(base, events)
-	if _, lifted := metadata["test"]; lifted || metadata["test_module_end"]["git.commit.sha"] != "" {
+	if _, lifted := metadata["test"]; lifted || metadata["test_module_end"]["git.commit.sha"] != "two" {
 		t.Fatalf("mixed kind defaults: %v", metadata)
 	}
 	for i, want := range []string{"one", "two", "", "two"} {
@@ -127,10 +126,10 @@ func TestCommonMetadataConcurrentProjectionAndBounds(t *testing.T) {
 	span, _ := newSpan(nil, context.Background(), "test", common.Option(), Tag("test.name", "name"))
 	span.Finish()
 	event := &ciEvent{Type: "test", Content: span.content, common: common}
-	var wg sync.WaitGroup
-	for range 8 {
+	var wg compat.WaitGroup
+	for i, limit := 0, 8; i < limit; i++ {
 		wg.Go(func() {
-			for range 30 {
+			for i, limit := 0, 30; i < limit; i++ {
 				metadata, events := prepareCommonMetadata(nil, ciEvents{event})
 				var raw bytes.Buffer
 				payload := testCycleBatch{Version: 1, Metadata: metadata, Events: events}

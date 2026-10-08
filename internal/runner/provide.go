@@ -1,5 +1,3 @@
-//go:build go1.26
-
 package runner
 
 import (
@@ -8,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go/version"
 	"io"
 	"os"
 	"os/exec"
@@ -17,6 +14,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
 	pocversion "github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
@@ -196,7 +194,7 @@ func requireLocalMini(ctx context.Context, dir, modfile, root, selectedVersion, 
 		return fmt.Errorf("read local Mini module: %w", err)
 	}
 	args := []string{"mod", "edit", "-modfile=" + modfile, "-require=" + miniModule + "@" + selectedVersion}
-	if required := moduleDirective(data, "go"); required != "" && version.Compare("go"+goVersion, "go"+required) < 0 {
+	if required := moduleDirective(data, "go"); required != "" && compat.CompareGoVersion("go"+goVersion, "go"+required) < 0 {
 		return fmt.Errorf("selected Mini requires module Go %s; ddtest will not change consumer language Go %s: use a workspace with the selected runtime", required, goVersion)
 	}
 	if addReplace {

@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // The hook advice follows dd-trace-go main@96aedb31048c07e29e7a20a4333dc3b8d289c52d, Apache-2.0.
 package instrument
 
@@ -48,6 +46,7 @@ func transform(files map[string][]byte, fuzz bool) (TestingSources, error) {
 	output := map[string][]byte{}
 	parallelStop := false
 	for _, name := range names {
+		name := name
 		src := files[name]
 		if bytes.Contains(src, []byte("__dd_civisibility_")) {
 			return TestingSources{}, fmt.Errorf("%s: already instrumented", name)

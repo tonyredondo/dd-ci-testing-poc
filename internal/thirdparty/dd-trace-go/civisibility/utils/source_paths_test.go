@@ -1,4 +1,4 @@
-//go:build go1.26 && !windows
+//go:build !windows
 
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
@@ -12,10 +12,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
-
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 )
 
 func TestResolveSourceFilePath(t *testing.T) {
@@ -304,6 +303,7 @@ func TestResolveSourceFilePath(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			result := resolveSourceFilePath(tt.runtimePath, tt.tags, tt.mainModulePath)
 
@@ -340,6 +340,8 @@ func TestRepositoryPathFromURL(t *testing.T) {
 	}
 
 	for repositoryURL, expectedPath := range tests {
+		repositoryURL := repositoryURL
+		expectedPath := expectedPath
 		t.Run(repositoryURL, func(t *testing.T) {
 			assert.Equal(t, expectedPath, repositoryPathFromURL(repositoryURL))
 		})

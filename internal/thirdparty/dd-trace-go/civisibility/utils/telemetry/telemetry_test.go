@@ -1,5 +1,3 @@
-//go:build go1.26
-
 // Unless explicitly stated otherwise all files in this repository are licensed
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
@@ -69,6 +67,7 @@ func TestRemoveEmptyStrings(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := removeEmptyStrings(tc.input)
 			if !reflect.DeepEqual(got, tc.want) {
@@ -102,6 +101,7 @@ func TestGetProviderTestSessionTypeFromProviderString(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := getProviderTestSessionTypeFromProviderString(tc.provider)
 			if !reflect.DeepEqual(got, tc.want) {
@@ -126,10 +126,11 @@ func TestEventCountersKeepCanonicalAndFeatureTagsAcrossClients(t *testing.T) {
 		{"empty tag", "golang.org/pkg/testing", "event_type:test,test_framework:testing", TestingEventType{"", "event_type:test"}},
 		{"custom event", "golang.org/pkg/testing", "event_type:custom,test_framework:testing", TestingEventType{"event_type:custom"}},
 	} {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			// Repeat with new registries: retained handles must not target an
 			// earlier test client after MockClient clears the global cache.
-			for range 2 {
+			for i, limit := 0, 2; i < limit; i++ {
 				client := &telemetrytest.RecordClient{}
 				restore := globaltelemetry.MockClient(client)
 				EventCreated(tc.framework, tc.eventType)
