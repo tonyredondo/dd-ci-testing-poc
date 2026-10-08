@@ -373,7 +373,9 @@ func TestMiniOrchestrionInlineAndFailures(t *testing.T) {
 	}
 	missing := filepath.Join(t.TempDir(), executableName("orchestrion"))
 	out, stderr, code := command(t, dir, testEnv(), driver, "test", "-toolexec="+quoteToolArgument(t, missing)+" toolexec", "-c", "-o", filepath.Join(t.TempDir(), "fixture.test"), ".")
-	if code != 2 || !strings.Contains(stderr, missing) {
+	// exec errors quote Windows paths with escaped backslashes. Accept the
+	// same filename in either native diagnostic representation.
+	if code != 2 || !(strings.Contains(stderr, missing) || strings.Contains(stderr, fmt.Sprintf("%q", missing))) {
 		t.Fatal(code, out, stderr)
 	}
 }
