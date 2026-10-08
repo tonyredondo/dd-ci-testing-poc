@@ -171,8 +171,8 @@ The [workflow](../.github/workflows/compatibility.yml) checks three stable Go fa
 | macOS | 1.27 | Normal suite |
 | Windows | 1.27 | Normal suite |
 
-Every job audits incorporated sources and licenses, checks the dependency boundary
-and runs `go vet`. Go 1.25 and tip execute all local runtime packages, plus native Mini
+The unit group for each configuration audits incorporated sources and licenses,
+checks the dependency boundary and runs `go vet`. Go 1.25 and tip execute all local runtime packages, plus native Mini
 fixtures for compiler/coverage hooks, Testify, goleak, fuzz/examples, delivery and
 consumer transparency. Tip also checks the manual SDK mirror, its compatibility
 fallback and native builds before and after Mini. The full SDK reference requires
@@ -180,6 +180,60 @@ Go 1.26. The frozen Orchestrion reference fails on tip, so the complete differen
 suite runs on Go 1.26/1.27. Its report step
 requires the independent Orchestrion reference and exports feature outcomes,
 counts and timings. Logs and JSON reports are uploaded even when a test fails.
+
+### Parallel test groups
+
+Each differential configuration runs six jobs: local unit/runtime packages, CLI,
+CI parity and Testify, fuzz/examples, Orchestrion composition/cache, and SDK span
+copies. Go 1.25 and tip each run three groups: local packages, native integration,
+and native fuzz/examples. The workflow has 45 test jobs. Three support jobs
+prepare their matrices, build one shared tip toolchain, and collect the evidence.
+
+```mermaid
+flowchart LR
+    Plan[Group matrix] --> Differential[36 differential groups]
+    Plan --> Mini[6 Go 1.25 groups]
+    Plan --> Tip[3 tip groups]
+    Toolchain[Build shared Go tip] --> Tip
+    Differential --> Evidence[Complete compatibility evidence]
+    Mini --> Evidence
+    Tip --> Evidence
+```
+
+[`ci_shards.json`](../scripts/ci_shards.json) assigns integration tests to groups,
+including the Unix socket and Windows file-lock cases. Add a new test there when
+adding it to the suite. The runner compares these assignments with the tests
+listed by the selected Go toolchain; missing, duplicate and unknown assignments
+fail CI. It also checks that each selected test produces a terminal result.
+Only the two existing Windows symlink cases may skip if symlinks are unavailable.
+Go's package skips for directories without test files remain valid.
+
+Normal and deferred cases stay together so they can share fixtures. Tests run
+sequentially within their group; jobs have independent workspaces and run in
+parallel. Tip is built once from a recorded source SHA. All three tip groups
+download that toolchain, check its revision, and disable automatic upgrades.
+
+Every group uploads `tests.log`, `tests.jsonl`, a manifest recording its checkout,
+toolchain, selection and command, and any parity JSON it produced. The final job
+requires all 45 manifests from the same checkout, rejects conflicting report
+files and invokes the existing complete parity validator for every differential
+configuration. Its `compatibility-evidence` artifact contains the six rendered
+reports, their JSON and the group manifests. `summary.md` records each group's
+test-command duration, including compilation during that invocation. It excludes
+setup, the inventory query and artifact transfer; GitHub records full job times.
+
+To reproduce one group on Linux with Go 1.27 and the pinned Orchestrion installed:
+
+```sh
+ORCHESTRION_BIN="$(go env GOPATH)/bin/orchestrion" \
+  python scripts/ci_shards.py run --suite differential --os ubuntu-latest \
+  --go 1.27.x --mode normal --shard sdk --output artifacts/sdk
+```
+
+Choose a fresh output directory for each run. Replace `sdk` with another group,
+or select `--suite mini --go 1.25.x --shard native` for the minimum toolchain's
+native integration. `--mode race` enables the race detector in the group and its
+fixtures. These are correctness checks; their durations are not benchmark results.
 
 For a PR, inspect the jobs for its current head and merge revision. The workflow
 configuration describes what runs; successful execution must be checked on that
