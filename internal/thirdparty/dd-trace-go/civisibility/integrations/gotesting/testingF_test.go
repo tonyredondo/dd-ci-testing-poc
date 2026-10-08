@@ -42,14 +42,13 @@ func TestCompleteFuzzParallelSeedsOffsetsNativeDurationOnce(t *testing.T) {
 		{name: "one seed", waits: []time.Duration{5 * time.Millisecond}, wait: 5 * time.Millisecond},
 		{name: "multiple seeds", waits: []time.Duration{3 * time.Millisecond, 7 * time.Millisecond}, wait: 7 * time.Millisecond},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			compat.Synctest(t, func(t *testing.T) {
 				f := &testing.F{}
 				fields := getTestPrivateFields((*testing.T)(unsafe.Pointer(f)))
 				*fields.barrier = make(chan bool)
 				for _, wait := range tc.waits {
-					wait := wait
+					wait := wait // Each seed reads its delay after the barrier opens.
 					seed := &testing.T{}
 					seedFields := getTestPrivateFields(seed)
 					*seedFields.signal = make(chan bool)
@@ -145,7 +144,6 @@ func TestCompleteFuzzTargetLifecycleHandlesGoexit(t *testing.T) {
 		{name: "unfinished body", fuzzCalled: true, wantTerminal: true, wantFailure: true},
 		{name: "missing F.Fuzz", bodyReturned: true, wantFailure: true},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			f := &testing.F{}
 			setFuzzNativeField(t, f, "fuzzCalled", tc.fuzzCalled)
@@ -185,7 +183,6 @@ func TestTestingFuzzWorkerRequested(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			require.Equal(t, tt.want, testingFuzzWorkerRequested(tt.args))
 		})

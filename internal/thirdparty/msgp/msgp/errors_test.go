@@ -66,7 +66,6 @@ func TestCause(t *testing.T) {
 		ArrayError{},
 		&ErrUnsupportedType{},
 	} {
-		err := err
 		t.Run(fmt.Sprintf("%d", idx), func(t *testing.T) {
 			cerr := WrapError(err, "test")
 			if cerr == err {
@@ -96,7 +95,6 @@ func TestUnwrap(t *testing.T) {
 		errors.New("test"),
 		io.EOF,
 	} {
-		err := err
 		t.Run(fmt.Sprintf("wrapped_%d", idx), func(t *testing.T) {
 			cerr := WrapError(err, "test")
 			if cerr == err {
@@ -117,7 +115,6 @@ func TestUnwrap(t *testing.T) {
 		ArrayError{},
 		&ErrUnsupportedType{},
 	} {
-		err := err
 		t.Run(fmt.Sprintf("ctx_only_%d", idx), func(t *testing.T) {
 			cerr := WrapError(err, "test")
 			if cerr == err {
@@ -172,7 +169,6 @@ func TestSimpleQuoteStr(t *testing.T) {
 	}
 
 	for i, tc := range tcaseList {
-		tc := tc
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			out := simpleQuoteStr(tc.in)
 			if out != tc.out {

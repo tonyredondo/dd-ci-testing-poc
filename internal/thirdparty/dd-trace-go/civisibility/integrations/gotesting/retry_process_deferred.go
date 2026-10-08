@@ -504,7 +504,7 @@ func (c *processRetryCoordinator) drainScheduledBatch(
 	results := make(chan deferredProcessRetryScheduledResult, workerCount)
 	var workers sync.WaitGroup
 	workers.Add(workerCount)
-	for i, limit := 0, workerCount; i < limit; i++ {
+	for i := 0; i < workerCount; i++ {
 		go func() {
 			defer workers.Done()
 			for task := range tasks {

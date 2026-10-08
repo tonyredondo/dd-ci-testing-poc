@@ -303,7 +303,6 @@ func TestResolveSourceFilePath(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			result := resolveSourceFilePath(tt.runtimePath, tt.tags, tt.mainModulePath)
 
@@ -340,8 +339,6 @@ func TestRepositoryPathFromURL(t *testing.T) {
 	}
 
 	for repositoryURL, expectedPath := range tests {
-		repositoryURL := repositoryURL
-		expectedPath := expectedPath
 		t.Run(repositoryURL, func(t *testing.T) {
 			assert.Equal(t, expectedPath, repositoryPathFromURL(repositoryURL))
 		})

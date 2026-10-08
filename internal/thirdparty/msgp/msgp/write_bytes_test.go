@@ -57,7 +57,7 @@ func BenchmarkAppendMapHeader(b *testing.B) {
 	N := b.N / 4
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i, limit := 0, N; i < limit; i++ {
+	for i := 0; i < N; i++ {
 		AppendMapHeader(buf[:0], 0)
 		AppendMapHeader(buf[:0], uint32(tint8))
 		AppendMapHeader(buf[:0], tuint16)
@@ -88,7 +88,7 @@ func BenchmarkAppendArrayHeader(b *testing.B) {
 	N := b.N / 4
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i, limit := 0, N; i < limit; i++ {
+	for i := 0; i < N; i++ {
 		AppendArrayHeader(buf[:0], 0)
 		AppendArrayHeader(buf[:0], uint32(tint8))
 		AppendArrayHeader(buf[:0], tuint16)
@@ -119,7 +119,7 @@ func BenchmarkAppendBytesHeader(b *testing.B) {
 	N := b.N / 4
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i, limit := 0, N; i < limit; i++ {
+	for i := 0; i < N; i++ {
 		AppendBytesHeader(buf[:0], 0)
 		AppendBytesHeader(buf[:0], uint32(tint8))
 		AppendBytesHeader(buf[:0], tuint16)
@@ -531,7 +531,6 @@ func TestEncodeDecode(t *testing.T) {
 			encodeError: "msgp: type \"struct {}\" not supported",
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			// If no output is given, use the input as output
 			if tc.output == nil {

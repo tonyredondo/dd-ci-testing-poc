@@ -17,7 +17,6 @@ import (
 
 func TestCLIDebugActivation(t *testing.T) {
 	for _, value := range []string{"", "false", "0", "invalid", "true", "1", "TRUE"} {
-		value := value
 		t.Run(value, func(t *testing.T) {
 			t.Setenv("DD_TRACE_DEBUG", value)
 			var output bytes.Buffer
@@ -66,9 +65,9 @@ func TestCLIDebugPhasesAndConcurrentStderr(t *testing.T) {
 	var output bytes.Buffer
 	logger := debugFromContext(withCLIDebug(context.Background(), &output))
 	var workers compat.WaitGroup
-	for i, limit := 0, 8; i < limit; i++ {
+	for i := 0; i < 8; i++ {
 		workers.Go(func() {
-			for i, limit := 0, 100; i < limit; i++ {
+			for i := 0; i < 100; i++ {
 				phase := logger.start("fixture")
 				_, _ = io.WriteString(logger.writer, "native stderr\n")
 				phase.finish(errors.New("private diagnostic must stay out of phase summaries"))

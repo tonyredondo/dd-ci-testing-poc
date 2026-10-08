@@ -400,7 +400,6 @@ func BenchmarkString_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(String)
 			for i := 0; i < size; i++ {
@@ -426,7 +425,6 @@ func BenchmarkString_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(String)
 			for i := 0; i < size; i++ {
@@ -454,7 +452,6 @@ func BenchmarkString_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(String)
 			for i := 0; i < size; i++ {
@@ -477,7 +474,6 @@ func BenchmarkString_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(String)
 			for i := 0; i < size; i++ {
@@ -503,7 +499,6 @@ func BenchmarkString_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(String)
 			for i := 0; i < size; i++ {
@@ -523,7 +518,6 @@ func BenchmarkString_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]string, size)
 			for i := 0; i < size; i++ {
@@ -543,7 +537,6 @@ func BenchmarkStringSorted_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(StringSorted)
 			for i := 0; i < size; i++ {
@@ -569,7 +562,6 @@ func BenchmarkStringSorted_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(StringSorted)
 			for i := 0; i < size; i++ {
@@ -597,7 +589,6 @@ func BenchmarkStringSorted_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(StringSorted)
 			for i := 0; i < size; i++ {
@@ -620,7 +611,6 @@ func BenchmarkStringSorted_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(StringSorted)
 			for i := 0; i < size; i++ {
@@ -646,7 +636,6 @@ func BenchmarkStringSorted_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(StringSorted)
 			for i := 0; i < size; i++ {
@@ -666,7 +655,6 @@ func BenchmarkStringSorted_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]string, size)
 			for i := 0; i < size; i++ {
@@ -1072,7 +1060,6 @@ func BenchmarkInt_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int)
 			for i := 0; i < size; i++ {
@@ -1098,7 +1085,6 @@ func BenchmarkInt_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int)
 			for i := 0; i < size; i++ {
@@ -1126,7 +1112,6 @@ func BenchmarkInt_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int)
 			for i := 0; i < size; i++ {
@@ -1149,7 +1134,6 @@ func BenchmarkInt_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int)
 			for i := 0; i < size; i++ {
@@ -1175,7 +1159,6 @@ func BenchmarkInt_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int)
 			for i := 0; i < size; i++ {
@@ -1195,7 +1178,6 @@ func BenchmarkInt_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]int, size)
 			for i := 0; i < size; i++ {
@@ -1215,7 +1197,6 @@ func BenchmarkIntSorted_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(IntSorted)
 			for i := 0; i < size; i++ {
@@ -1241,7 +1222,6 @@ func BenchmarkIntSorted_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(IntSorted)
 			for i := 0; i < size; i++ {
@@ -1269,7 +1249,6 @@ func BenchmarkIntSorted_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(IntSorted)
 			for i := 0; i < size; i++ {
@@ -1292,7 +1271,6 @@ func BenchmarkIntSorted_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(IntSorted)
 			for i := 0; i < size; i++ {
@@ -1318,7 +1296,6 @@ func BenchmarkIntSorted_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(IntSorted)
 			for i := 0; i < size; i++ {
@@ -1338,7 +1315,6 @@ func BenchmarkIntSorted_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]int, size)
 			for i := 0; i < size; i++ {
@@ -1744,7 +1720,6 @@ func BenchmarkUint_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint)
 			for i := 0; i < size; i++ {
@@ -1770,7 +1745,6 @@ func BenchmarkUint_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint)
 			for i := 0; i < size; i++ {
@@ -1798,7 +1772,6 @@ func BenchmarkUint_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint)
 			for i := 0; i < size; i++ {
@@ -1821,7 +1794,6 @@ func BenchmarkUint_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint)
 			for i := 0; i < size; i++ {
@@ -1847,7 +1819,6 @@ func BenchmarkUint_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint)
 			for i := 0; i < size; i++ {
@@ -1867,7 +1838,6 @@ func BenchmarkUint_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]uint, size)
 			for i := 0; i < size; i++ {
@@ -1887,7 +1857,6 @@ func BenchmarkUintSorted_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(UintSorted)
 			for i := 0; i < size; i++ {
@@ -1913,7 +1882,6 @@ func BenchmarkUintSorted_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(UintSorted)
 			for i := 0; i < size; i++ {
@@ -1941,7 +1909,6 @@ func BenchmarkUintSorted_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(UintSorted)
 			for i := 0; i < size; i++ {
@@ -1964,7 +1931,6 @@ func BenchmarkUintSorted_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(UintSorted)
 			for i := 0; i < size; i++ {
@@ -1990,7 +1956,6 @@ func BenchmarkUintSorted_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(UintSorted)
 			for i := 0; i < size; i++ {
@@ -2010,7 +1975,6 @@ func BenchmarkUintSorted_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]uint, size)
 			for i := 0; i < size; i++ {
@@ -2416,7 +2380,6 @@ func BenchmarkByte_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Byte)
 			for i := 0; i < size; i++ {
@@ -2442,7 +2405,6 @@ func BenchmarkByte_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Byte)
 			for i := 0; i < size; i++ {
@@ -2470,7 +2432,6 @@ func BenchmarkByte_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Byte)
 			for i := 0; i < size; i++ {
@@ -2493,7 +2454,6 @@ func BenchmarkByte_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Byte)
 			for i := 0; i < size; i++ {
@@ -2519,7 +2479,6 @@ func BenchmarkByte_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Byte)
 			for i := 0; i < size; i++ {
@@ -2539,7 +2498,6 @@ func BenchmarkByte_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]byte, size)
 			for i := 0; i < size; i++ {
@@ -2559,7 +2517,6 @@ func BenchmarkByteSorted_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(ByteSorted)
 			for i := 0; i < size; i++ {
@@ -2585,7 +2542,6 @@ func BenchmarkByteSorted_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(ByteSorted)
 			for i := 0; i < size; i++ {
@@ -2613,7 +2569,6 @@ func BenchmarkByteSorted_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(ByteSorted)
 			for i := 0; i < size; i++ {
@@ -2636,7 +2591,6 @@ func BenchmarkByteSorted_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(ByteSorted)
 			for i := 0; i < size; i++ {
@@ -2662,7 +2616,6 @@ func BenchmarkByteSorted_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(ByteSorted)
 			for i := 0; i < size; i++ {
@@ -2682,7 +2635,6 @@ func BenchmarkByteSorted_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]byte, size)
 			for i := 0; i < size; i++ {
@@ -3088,7 +3040,6 @@ func BenchmarkInt8_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int8)
 			for i := 0; i < size; i++ {
@@ -3114,7 +3065,6 @@ func BenchmarkInt8_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int8)
 			for i := 0; i < size; i++ {
@@ -3142,7 +3092,6 @@ func BenchmarkInt8_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int8)
 			for i := 0; i < size; i++ {
@@ -3165,7 +3114,6 @@ func BenchmarkInt8_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int8)
 			for i := 0; i < size; i++ {
@@ -3191,7 +3139,6 @@ func BenchmarkInt8_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int8)
 			for i := 0; i < size; i++ {
@@ -3211,7 +3158,6 @@ func BenchmarkInt8_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]int8, size)
 			for i := 0; i < size; i++ {
@@ -3231,7 +3177,6 @@ func BenchmarkInt8Sorted_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int8Sorted)
 			for i := 0; i < size; i++ {
@@ -3257,7 +3202,6 @@ func BenchmarkInt8Sorted_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int8Sorted)
 			for i := 0; i < size; i++ {
@@ -3285,7 +3229,6 @@ func BenchmarkInt8Sorted_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int8Sorted)
 			for i := 0; i < size; i++ {
@@ -3308,7 +3251,6 @@ func BenchmarkInt8Sorted_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int8Sorted)
 			for i := 0; i < size; i++ {
@@ -3334,7 +3276,6 @@ func BenchmarkInt8Sorted_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int8Sorted)
 			for i := 0; i < size; i++ {
@@ -3354,7 +3295,6 @@ func BenchmarkInt8Sorted_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]int8, size)
 			for i := 0; i < size; i++ {
@@ -3760,7 +3700,6 @@ func BenchmarkUint8_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint8)
 			for i := 0; i < size; i++ {
@@ -3786,7 +3725,6 @@ func BenchmarkUint8_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint8)
 			for i := 0; i < size; i++ {
@@ -3814,7 +3752,6 @@ func BenchmarkUint8_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint8)
 			for i := 0; i < size; i++ {
@@ -3837,7 +3774,6 @@ func BenchmarkUint8_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint8)
 			for i := 0; i < size; i++ {
@@ -3863,7 +3799,6 @@ func BenchmarkUint8_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint8)
 			for i := 0; i < size; i++ {
@@ -3883,7 +3818,6 @@ func BenchmarkUint8_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]uint8, size)
 			for i := 0; i < size; i++ {
@@ -3903,7 +3837,6 @@ func BenchmarkUint8Sorted_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint8Sorted)
 			for i := 0; i < size; i++ {
@@ -3929,7 +3862,6 @@ func BenchmarkUint8Sorted_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint8Sorted)
 			for i := 0; i < size; i++ {
@@ -3957,7 +3889,6 @@ func BenchmarkUint8Sorted_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint8Sorted)
 			for i := 0; i < size; i++ {
@@ -3980,7 +3911,6 @@ func BenchmarkUint8Sorted_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint8Sorted)
 			for i := 0; i < size; i++ {
@@ -4006,7 +3936,6 @@ func BenchmarkUint8Sorted_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint8Sorted)
 			for i := 0; i < size; i++ {
@@ -4026,7 +3955,6 @@ func BenchmarkUint8Sorted_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]uint8, size)
 			for i := 0; i < size; i++ {
@@ -4432,7 +4360,6 @@ func BenchmarkInt16_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int16)
 			for i := 0; i < size; i++ {
@@ -4458,7 +4385,6 @@ func BenchmarkInt16_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int16)
 			for i := 0; i < size; i++ {
@@ -4486,7 +4412,6 @@ func BenchmarkInt16_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int16)
 			for i := 0; i < size; i++ {
@@ -4509,7 +4434,6 @@ func BenchmarkInt16_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int16)
 			for i := 0; i < size; i++ {
@@ -4535,7 +4459,6 @@ func BenchmarkInt16_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int16)
 			for i := 0; i < size; i++ {
@@ -4555,7 +4478,6 @@ func BenchmarkInt16_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]int16, size)
 			for i := 0; i < size; i++ {
@@ -4575,7 +4497,6 @@ func BenchmarkInt16Sorted_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int16Sorted)
 			for i := 0; i < size; i++ {
@@ -4601,7 +4522,6 @@ func BenchmarkInt16Sorted_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int16Sorted)
 			for i := 0; i < size; i++ {
@@ -4629,7 +4549,6 @@ func BenchmarkInt16Sorted_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int16Sorted)
 			for i := 0; i < size; i++ {
@@ -4652,7 +4571,6 @@ func BenchmarkInt16Sorted_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int16Sorted)
 			for i := 0; i < size; i++ {
@@ -4678,7 +4596,6 @@ func BenchmarkInt16Sorted_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int16Sorted)
 			for i := 0; i < size; i++ {
@@ -4698,7 +4615,6 @@ func BenchmarkInt16Sorted_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]int16, size)
 			for i := 0; i < size; i++ {
@@ -5104,7 +5020,6 @@ func BenchmarkUint16_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint16)
 			for i := 0; i < size; i++ {
@@ -5130,7 +5045,6 @@ func BenchmarkUint16_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint16)
 			for i := 0; i < size; i++ {
@@ -5158,7 +5072,6 @@ func BenchmarkUint16_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint16)
 			for i := 0; i < size; i++ {
@@ -5181,7 +5094,6 @@ func BenchmarkUint16_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint16)
 			for i := 0; i < size; i++ {
@@ -5207,7 +5119,6 @@ func BenchmarkUint16_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint16)
 			for i := 0; i < size; i++ {
@@ -5227,7 +5138,6 @@ func BenchmarkUint16_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]uint16, size)
 			for i := 0; i < size; i++ {
@@ -5247,7 +5157,6 @@ func BenchmarkUint16Sorted_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint16Sorted)
 			for i := 0; i < size; i++ {
@@ -5273,7 +5182,6 @@ func BenchmarkUint16Sorted_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint16Sorted)
 			for i := 0; i < size; i++ {
@@ -5301,7 +5209,6 @@ func BenchmarkUint16Sorted_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint16Sorted)
 			for i := 0; i < size; i++ {
@@ -5324,7 +5231,6 @@ func BenchmarkUint16Sorted_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint16Sorted)
 			for i := 0; i < size; i++ {
@@ -5350,7 +5256,6 @@ func BenchmarkUint16Sorted_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint16Sorted)
 			for i := 0; i < size; i++ {
@@ -5370,7 +5275,6 @@ func BenchmarkUint16Sorted_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]uint16, size)
 			for i := 0; i < size; i++ {
@@ -5776,7 +5680,6 @@ func BenchmarkInt32_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int32)
 			for i := 0; i < size; i++ {
@@ -5802,7 +5705,6 @@ func BenchmarkInt32_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int32)
 			for i := 0; i < size; i++ {
@@ -5830,7 +5732,6 @@ func BenchmarkInt32_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int32)
 			for i := 0; i < size; i++ {
@@ -5853,7 +5754,6 @@ func BenchmarkInt32_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int32)
 			for i := 0; i < size; i++ {
@@ -5879,7 +5779,6 @@ func BenchmarkInt32_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int32)
 			for i := 0; i < size; i++ {
@@ -5899,7 +5798,6 @@ func BenchmarkInt32_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]int32, size)
 			for i := 0; i < size; i++ {
@@ -5919,7 +5817,6 @@ func BenchmarkInt32Sorted_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int32Sorted)
 			for i := 0; i < size; i++ {
@@ -5945,7 +5842,6 @@ func BenchmarkInt32Sorted_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int32Sorted)
 			for i := 0; i < size; i++ {
@@ -5973,7 +5869,6 @@ func BenchmarkInt32Sorted_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int32Sorted)
 			for i := 0; i < size; i++ {
@@ -5996,7 +5891,6 @@ func BenchmarkInt32Sorted_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int32Sorted)
 			for i := 0; i < size; i++ {
@@ -6022,7 +5916,6 @@ func BenchmarkInt32Sorted_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int32Sorted)
 			for i := 0; i < size; i++ {
@@ -6042,7 +5935,6 @@ func BenchmarkInt32Sorted_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]int32, size)
 			for i := 0; i < size; i++ {
@@ -6448,7 +6340,6 @@ func BenchmarkUint32_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint32)
 			for i := 0; i < size; i++ {
@@ -6474,7 +6365,6 @@ func BenchmarkUint32_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint32)
 			for i := 0; i < size; i++ {
@@ -6502,7 +6392,6 @@ func BenchmarkUint32_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint32)
 			for i := 0; i < size; i++ {
@@ -6525,7 +6414,6 @@ func BenchmarkUint32_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint32)
 			for i := 0; i < size; i++ {
@@ -6551,7 +6439,6 @@ func BenchmarkUint32_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint32)
 			for i := 0; i < size; i++ {
@@ -6571,7 +6458,6 @@ func BenchmarkUint32_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]uint32, size)
 			for i := 0; i < size; i++ {
@@ -6591,7 +6477,6 @@ func BenchmarkUint32Sorted_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint32Sorted)
 			for i := 0; i < size; i++ {
@@ -6617,7 +6502,6 @@ func BenchmarkUint32Sorted_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint32Sorted)
 			for i := 0; i < size; i++ {
@@ -6645,7 +6529,6 @@ func BenchmarkUint32Sorted_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint32Sorted)
 			for i := 0; i < size; i++ {
@@ -6668,7 +6551,6 @@ func BenchmarkUint32Sorted_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint32Sorted)
 			for i := 0; i < size; i++ {
@@ -6694,7 +6576,6 @@ func BenchmarkUint32Sorted_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint32Sorted)
 			for i := 0; i < size; i++ {
@@ -6714,7 +6595,6 @@ func BenchmarkUint32Sorted_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]uint32, size)
 			for i := 0; i < size; i++ {
@@ -7120,7 +7000,6 @@ func BenchmarkInt64_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int64)
 			for i := 0; i < size; i++ {
@@ -7146,7 +7025,6 @@ func BenchmarkInt64_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int64)
 			for i := 0; i < size; i++ {
@@ -7174,7 +7052,6 @@ func BenchmarkInt64_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int64)
 			for i := 0; i < size; i++ {
@@ -7197,7 +7074,6 @@ func BenchmarkInt64_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int64)
 			for i := 0; i < size; i++ {
@@ -7223,7 +7099,6 @@ func BenchmarkInt64_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int64)
 			for i := 0; i < size; i++ {
@@ -7243,7 +7118,6 @@ func BenchmarkInt64_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]int64, size)
 			for i := 0; i < size; i++ {
@@ -7263,7 +7137,6 @@ func BenchmarkInt64Sorted_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int64Sorted)
 			for i := 0; i < size; i++ {
@@ -7289,7 +7162,6 @@ func BenchmarkInt64Sorted_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int64Sorted)
 			for i := 0; i < size; i++ {
@@ -7317,7 +7189,6 @@ func BenchmarkInt64Sorted_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int64Sorted)
 			for i := 0; i < size; i++ {
@@ -7340,7 +7211,6 @@ func BenchmarkInt64Sorted_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int64Sorted)
 			for i := 0; i < size; i++ {
@@ -7366,7 +7236,6 @@ func BenchmarkInt64Sorted_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Int64Sorted)
 			for i := 0; i < size; i++ {
@@ -7386,7 +7255,6 @@ func BenchmarkInt64Sorted_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]int64, size)
 			for i := 0; i < size; i++ {
@@ -7792,7 +7660,6 @@ func BenchmarkUint64_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint64)
 			for i := 0; i < size; i++ {
@@ -7818,7 +7685,6 @@ func BenchmarkUint64_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint64)
 			for i := 0; i < size; i++ {
@@ -7846,7 +7712,6 @@ func BenchmarkUint64_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint64)
 			for i := 0; i < size; i++ {
@@ -7869,7 +7734,6 @@ func BenchmarkUint64_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint64)
 			for i := 0; i < size; i++ {
@@ -7895,7 +7759,6 @@ func BenchmarkUint64_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint64)
 			for i := 0; i < size; i++ {
@@ -7915,7 +7778,6 @@ func BenchmarkUint64_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]uint64, size)
 			for i := 0; i < size; i++ {
@@ -7935,7 +7797,6 @@ func BenchmarkUint64Sorted_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint64Sorted)
 			for i := 0; i < size; i++ {
@@ -7961,7 +7822,6 @@ func BenchmarkUint64Sorted_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint64Sorted)
 			for i := 0; i < size; i++ {
@@ -7989,7 +7849,6 @@ func BenchmarkUint64Sorted_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint64Sorted)
 			for i := 0; i < size; i++ {
@@ -8012,7 +7871,6 @@ func BenchmarkUint64Sorted_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint64Sorted)
 			for i := 0; i < size; i++ {
@@ -8038,7 +7896,6 @@ func BenchmarkUint64Sorted_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Uint64Sorted)
 			for i := 0; i < size; i++ {
@@ -8058,7 +7915,6 @@ func BenchmarkUint64Sorted_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]uint64, size)
 			for i := 0; i < size; i++ {
@@ -8464,7 +8320,6 @@ func BenchmarkFloat64_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float64)
 			for i := 0; i < size; i++ {
@@ -8490,7 +8345,6 @@ func BenchmarkFloat64_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float64)
 			for i := 0; i < size; i++ {
@@ -8518,7 +8372,6 @@ func BenchmarkFloat64_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float64)
 			for i := 0; i < size; i++ {
@@ -8541,7 +8394,6 @@ func BenchmarkFloat64_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float64)
 			for i := 0; i < size; i++ {
@@ -8567,7 +8419,6 @@ func BenchmarkFloat64_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float64)
 			for i := 0; i < size; i++ {
@@ -8587,7 +8438,6 @@ func BenchmarkFloat64_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]float64, size)
 			for i := 0; i < size; i++ {
@@ -8607,7 +8457,6 @@ func BenchmarkFloat64Sorted_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float64Sorted)
 			for i := 0; i < size; i++ {
@@ -8633,7 +8482,6 @@ func BenchmarkFloat64Sorted_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float64Sorted)
 			for i := 0; i < size; i++ {
@@ -8661,7 +8509,6 @@ func BenchmarkFloat64Sorted_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float64Sorted)
 			for i := 0; i < size; i++ {
@@ -8684,7 +8531,6 @@ func BenchmarkFloat64Sorted_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float64Sorted)
 			for i := 0; i < size; i++ {
@@ -8710,7 +8556,6 @@ func BenchmarkFloat64Sorted_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float64Sorted)
 			for i := 0; i < size; i++ {
@@ -8730,7 +8575,6 @@ func BenchmarkFloat64Sorted_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]float64, size)
 			for i := 0; i < size; i++ {
@@ -9136,7 +8980,6 @@ func BenchmarkFloat32_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float32)
 			for i := 0; i < size; i++ {
@@ -9162,7 +9005,6 @@ func BenchmarkFloat32_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float32)
 			for i := 0; i < size; i++ {
@@ -9190,7 +9032,6 @@ func BenchmarkFloat32_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float32)
 			for i := 0; i < size; i++ {
@@ -9213,7 +9054,6 @@ func BenchmarkFloat32_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float32)
 			for i := 0; i < size; i++ {
@@ -9239,7 +9079,6 @@ func BenchmarkFloat32_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float32)
 			for i := 0; i < size; i++ {
@@ -9259,7 +9098,6 @@ func BenchmarkFloat32_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]float32, size)
 			for i := 0; i < size; i++ {
@@ -9279,7 +9117,6 @@ func BenchmarkFloat32Sorted_EncodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float32Sorted)
 			for i := 0; i < size; i++ {
@@ -9305,7 +9142,6 @@ func BenchmarkFloat32Sorted_DecodeMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float32Sorted)
 			for i := 0; i < size; i++ {
@@ -9333,7 +9169,6 @@ func BenchmarkFloat32Sorted_MarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float32Sorted)
 			for i := 0; i < size; i++ {
@@ -9356,7 +9191,6 @@ func BenchmarkFloat32Sorted_UnmarshalMsg(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float32Sorted)
 			for i := 0; i < size; i++ {
@@ -9382,7 +9216,6 @@ func BenchmarkFloat32Sorted_AsSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			set := make(Float32Sorted)
 			for i := 0; i < size; i++ {
@@ -9402,7 +9235,6 @@ func BenchmarkFloat32Sorted_FromSlice(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 
 	for _, size := range sizes {
-		size := size
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			slice := make([]float32, size)
 			for i := 0; i < size; i++ {

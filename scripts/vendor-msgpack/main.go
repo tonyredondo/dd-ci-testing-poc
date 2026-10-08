@@ -24,7 +24,6 @@ func main() {
 	root := strings.TrimSpace(string(cache))
 	var entries []entry
 	for _, p := range []struct{ module, version, subdir, dest, license string }{{"github.com/tinylib/msgp", messagepack.Version, "msgp", "internal/thirdparty/msgp/msgp", "LICENSE"}, {"github.com/philhofer/fwd", messagepack.FwdVersion, "", "internal/thirdparty/fwd", "LICENSE.md"}} {
-		p := p
 		src := filepath.Join(root, filepath.FromSlash(p.module+"@"+p.version))
 		base := filepath.Join(src, p.subdir)
 		must(filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {

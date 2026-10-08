@@ -42,7 +42,6 @@ func TestStringIteratorsMatchStandardLibrary(t *testing.T) {
 
 func TestStringIteratorsDoNotAllocate(t *testing.T) {
 	for _, iterator := range []StringIterator{Split("a,,b,é", ","), FieldsFunc("a \u2003b\t é", unicode.IsSpace)} {
-		iterator := iterator
 		if got := testing.AllocsPerRun(100, func() {
 			copy := iterator
 			for copy.Next() {

@@ -58,7 +58,6 @@ func TestWorkspaceProvisionResolvesExistingMainModules(t *testing.T) {
 // A module proxy fixture checks actual Go selection without external requests.
 func TestWorkspaceProvisionKeepsSelectedRuntime(t *testing.T) {
 	for _, replacement := range []string{"none", "workspace", "client"} {
-		replacement := replacement
 		t.Run(replacement, func(t *testing.T) {
 			root := t.TempDir()
 			client := filepath.Join(root, "client")
@@ -251,7 +250,7 @@ func TestVendorWorkspaceKeepsNativeModuleRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	for path, data := range map[string]string{
-		filepath.Join(root, "go.mod"):              "module example.com/nativevendor\ngo 1.21\n",
+		filepath.Join(root, "go.mod"):                "module example.com/nativevendor\ngo 1.21\n",
 		filepath.Join(root, "vendor", "modules.txt"): "",
 	} {
 		if err := os.WriteFile(path, []byte(data), 0600); err != nil {

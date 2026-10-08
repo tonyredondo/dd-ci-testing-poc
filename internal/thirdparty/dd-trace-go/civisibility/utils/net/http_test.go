@@ -557,8 +557,7 @@ func TestExponentialBackoffDelays(t *testing.T) {
 
 	// Simulate exponential backoff with 3 retries and 1-second initial delay
 	var duration time.Duration
-	for i, limit := 0, 3; i < limit; i++ {
-		i := i
+	for i := 0; i < 3; i++ {
 		duration = duration + getExponentialBackoffDuration(i, 1*time.Second)
 	}
 

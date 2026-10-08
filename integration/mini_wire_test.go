@@ -209,7 +209,6 @@ func TestMiniWireHierarchyAgentAndCoverage(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
 	bins := compileMiniPair(t, dir, driver, "-cover", "-covermode=atomic", "-coverpkg=./...")
 	for _, agentless := range []bool{false, true} {
-		agentless := agentless
 		t.Run(fmt.Sprintf("agentless=%t", agentless), func(t *testing.T) {
 			want := runMiniWire(t, dir, bins[0], agentless, true)
 			got := runMiniWire(t, dir, bins[1], agentless, true)

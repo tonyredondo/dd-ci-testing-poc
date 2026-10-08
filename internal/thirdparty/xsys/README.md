@@ -18,8 +18,6 @@ and its source hash. ABI, registry and metadata tests stay beside the code.
 
 Follow the [shared audit and update procedure](../README.md#audit-and-update).
 
-The root module keeps Go 1.21 language rules without changing the consumer.
-Adapt newer syntax with ordinary loops and the small standard-library helpers
-in `internal/compat`. Keep captured loop values local. Native API and feature
-test version guards stay at their boundaries; avoid adding a version constraint
-to every source file. Record adaptations and local hashes when updating sources.
+Language adaptations use the shared `internal/compat` helpers. Follow the
+[source-language rules](../../../docs/maintenance.md#verification-before-publication)
+when updating this copy, then record its local hashes.

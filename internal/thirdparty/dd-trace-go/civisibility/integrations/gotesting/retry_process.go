@@ -705,10 +705,9 @@ type processRetryOutputWaiter interface {
 func finishProcessRetryOutputCapturesAfterWait(timeout time.Duration, captures ...processRetryOutputWaiter) error {
 	errCh := make(chan error, len(captures))
 	for _, capture := range captures {
-		capture := capture
-		go func() {
+		go func(capture processRetryOutputWaiter) {
 			errCh <- capture.FinishAfterWait(timeout)
-		}()
+		}(capture)
 	}
 	var err error
 	for range captures {

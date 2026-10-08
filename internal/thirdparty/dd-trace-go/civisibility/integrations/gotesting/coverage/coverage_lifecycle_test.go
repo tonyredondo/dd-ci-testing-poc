@@ -30,7 +30,7 @@ func TestCoveragePayloadConcurrentLocalChange(t *testing.T) {
 		go func() {
 			defer workers.Done()
 			<-start
-			for i, limit := 0, 1000; i < limit; i++ {
+			for i := 0; i < 1000; i++ {
 				payload := newCoveragePayload()
 				if err := payload.push(&ciTestCoverageData{SpanID: 1}); err != nil {
 					t.Error(err)
@@ -44,8 +44,7 @@ func TestCoveragePayloadConcurrentLocalChange(t *testing.T) {
 			}
 		}()
 		close(start)
-		for i, limit := 0, 20000; i < limit; i++ {
-			i := i
+		for i := 0; i < 20000; i++ {
 			time.Local = zones[i%len(zones)]
 			if i%16 == 0 {
 				runtime.Gosched()

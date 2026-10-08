@@ -33,9 +33,7 @@ func TestStarted(t *testing.T) { if err := os.WriteFile(os.Getenv("DDTEST_STARTE
 		t.Fatal(out, stderr)
 	}
 	for _, deferred := range []bool{false, true} {
-		deferred := deferred
 		for _, scenario := range []string{"settings-first", "telemetry-first", "settings-error", "telemetry-error"} {
-			scenario := scenario
 			t.Run(fmt.Sprintf("deferred=%t/%s", deferred, scenario), func(t *testing.T) {
 				settingsSeen, telemetrySeen := make(chan struct{}), make(chan struct{})
 				settingsRelease, telemetryRelease := make(chan struct{}), make(chan struct{})

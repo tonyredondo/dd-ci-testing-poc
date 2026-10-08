@@ -22,7 +22,7 @@ func TestCloseActionsKeepLIFOAndRunBarriersFirst(t *testing.T) {
 	initializeCIVisibilityLifecycleForTesting()
 	var order []string
 	for _, name := range []string{"first", "second"} {
-		name := name
+		name := name // Close callbacks run after the registration loop.
 		PushCiVisibilityCloseAction(func() { order = append(order, name) })
 		if !TryPushCiVisibilityPreCloseAction(func() {
 			order = append(order, "barrier-"+name)
@@ -56,12 +56,12 @@ func TestConcurrentCloseActionsRunOnce(t *testing.T) {
 	seen := make([]int, 128)
 	var registrations compat.WaitGroup
 	for i := range seen {
-		i := i
+		i := i // Both the worker and its queued close callback retain this index.
 		registrations.Go(func() { PushCiVisibilityCloseAction(func() { seen[i]++ }) })
 	}
 	registrations.Wait()
 	var exits compat.WaitGroup
-	for i, limit := 0, 4; i < limit; i++ {
+	for i := 0; i < 4; i++ {
 		exits.Go(ExitCiVisibility)
 	}
 	exits.Wait()
@@ -76,12 +76,11 @@ func BenchmarkCloseActionRegistration(b *testing.B) {
 	saved := closeActions
 	b.Cleanup(func() { closeActions = saved })
 	for _, size := range []int{1000, 4000, 16000} {
-		size := size
 		b.Run(fmt.Sprint(size), func(b *testing.B) {
 			b.ReportAllocs()
-			for i, limit := 0, b.N; i < limit; i++ {
+			for i := 0; i < b.N; i++ {
 				closeActions = nil
-				for i, limit := 0, size; i < limit; i++ {
+				for i := 0; i < size; i++ {
 					PushCiVisibilityCloseAction(func() {})
 				}
 			}

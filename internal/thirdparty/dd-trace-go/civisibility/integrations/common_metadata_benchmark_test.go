@@ -30,7 +30,7 @@ func TestCommonMetadataTransportCountsConcurrentSends(t *testing.T) {
 	const payload = "test payload"
 	sink := &commonMetadataTransport{}
 	var workers compat.WaitGroup
-	for i, limit := 0, sends; i < limit; i++ {
+	for i := 0; i < sends; i++ {
 		workers.Go(func() {
 			request, err := http.NewRequest(http.MethodPost, "http://fixture.invalid", strings.NewReader(payload))
 			if err != nil {
@@ -62,14 +62,12 @@ func BenchmarkCommonMetadataLifecycle(b *testing.B) {
 	b.Cleanup(utils.ResetCITags)
 	b.Cleanup(utils.ResetCIMetrics)
 	tags := make(map[string]string, 24)
-	for i, limit := 0, 24; i < limit; i++ {
-		i := i
+	for i := 0; i < 24; i++ {
 		tags[fmt.Sprintf("ci.fixture.%d", i)] = "representative-common-ci-value"
 	}
 	utils.AddCITagsMap(tags)
 	_ = utils.GetCITags()
 	for _, gzip := range []bool{false, true} {
-		gzip := gzip
 		b.Run(fmt.Sprintf("gzip=%t", gzip), func(b *testing.B) {
 			sink := &commonMetadataTransport{}
 			client, err := tracer.New(tracer.Config{Service: "fixture", Transport: citransport.Config{Endpoint: "http://diagnostic.invalid", Agentless: gzip, APIKey: "fixture", HTTPClient: &http.Client{Transport: sink}}})
@@ -78,7 +76,7 @@ func BenchmarkCommonMetadataLifecycle(b *testing.B) {
 			}
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i, limit := 0, b.N; i < limit; i++ {
+			for i := 0; i < b.N; i++ {
 				opts := fillCommonTags([]tracer.StartSpanOption{tracer.SpanType("test"), tracer.Tag("test.name", "name"), tracer.Tag("test.status", "pass")})
 				span, _ := client.StartSpan(context.Background(), "testing.test", opts...)
 				span.Finish()

@@ -21,7 +21,6 @@ type ruleTest struct {
 func checkRules(t *testing.T, dialect Dialect, cases []ruleTest) {
 	t.Helper()
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			c, err := Parse(strings.NewReader(tc.rules), dialect)
 			if err != nil {

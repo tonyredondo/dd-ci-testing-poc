@@ -85,7 +85,7 @@ func TestReadIntfRecursion(t *testing.T) {
 	dec := NewReader(&buf)
 	enc := NewWriter(&buf)
 	// Test array recursion...
-	for i, limit := 0, recursionLimit*2; i < limit; i++ {
+	for i := 0; i < recursionLimit*2; i++ {
 		enc.WriteArrayHeader(1)
 	}
 	enc.Flush()
@@ -115,7 +115,7 @@ func TestReadIntfRecursion(t *testing.T) {
 
 	// Test map recursion...
 	buf.Reset()
-	for i, limit := 0, recursionLimit*2; i < limit; i++ {
+	for i := 0; i < recursionLimit*2; i++ {
 		enc.WriteMapHeader(1)
 		// Write a key...
 		enc.WriteString("a")
@@ -171,7 +171,7 @@ func TestSkipRecursion(t *testing.T) {
 	dec := NewReader(&buf)
 	enc := NewWriter(&buf)
 	// Test array recursion...
-	for i, limit := 0, recursionLimit*2; i < limit; i++ {
+	for i := 0; i < recursionLimit*2; i++ {
 		enc.WriteArrayHeader(1)
 	}
 	enc.Flush()
@@ -187,7 +187,7 @@ func TestSkipRecursion(t *testing.T) {
 	buf.Reset()
 
 	// Test map recursion...
-	for i, limit := 0, recursionLimit*2; i < limit; i++ {
+	for i := 0; i < recursionLimit*2; i++ {
 		enc.WriteMapHeader(1)
 		// Write a key...
 		enc.WriteString("a")
@@ -336,7 +336,7 @@ func TestReadFloat64(t *testing.T) {
 	wr := NewWriter(&buf)
 	rd := NewReader(&buf)
 
-	for i, limit := 0, 100; i < limit; i++ {
+	for i := 0; i < 100; i++ {
 		buf.Reset()
 
 		flt := (rand.Float64() - 0.5) * math.MaxFloat64
@@ -383,7 +383,7 @@ func TestReadFloat32(t *testing.T) {
 	wr := NewWriter(&buf)
 	rd := NewReader(&buf)
 
-	for i, limit := 0, 10000; i < limit; i++ {
+	for i := 0; i < 10000; i++ {
 		buf.Reset()
 
 		flt := (rand.Float32() - 0.5) * math.MaxFloat32
@@ -541,7 +541,6 @@ func TestReadIntOverflows(t *testing.T) {
 	}
 
 	for i, v := range vs {
-		v := v
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			switch num := v.v.(type) {
 			case int:
@@ -834,7 +833,7 @@ func TestReadComplex64(t *testing.T) {
 	wr := NewWriter(&buf)
 	rd := NewReader(&buf)
 
-	for i, limit := 0, 100; i < limit; i++ {
+	for i := 0; i < 100; i++ {
 		buf.Reset()
 		f := complex(rand.Float32()*math.MaxFloat32, rand.Float32()*math.MaxFloat32)
 
@@ -877,7 +876,7 @@ func TestReadComplex128(t *testing.T) {
 	wr := NewWriter(&buf)
 	rd := NewReader(&buf)
 
-	for i, limit := 0, 10; i < limit; i++ {
+	for i := 0; i < 10; i++ {
 		buf.Reset()
 		f := complex(rand.Float64()*math.MaxFloat64, rand.Float64()*math.MaxFloat64)
 

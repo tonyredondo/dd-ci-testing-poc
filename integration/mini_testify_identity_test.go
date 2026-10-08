@@ -28,7 +28,6 @@ func TestRepeatedSuites(t *testing.T){
 		t.Fatal(out, stderr)
 	}
 	for _, deferred := range []bool{false, true} {
-		deferred := deferred
 		t.Run(fmt.Sprintf("deferred=%t", deferred), func(t *testing.T) {
 			got, exec := runParityCase(t, dir, bin, parityCase{Args: []string{"-test.run=^TestRepeatedSuites$", "-test.count=2"}, Env: []string{fmt.Sprintf("DD_CIVISIBILITY_DEFERRED_DELIVERY=%t", deferred)}})
 			if exec.code != 0 {

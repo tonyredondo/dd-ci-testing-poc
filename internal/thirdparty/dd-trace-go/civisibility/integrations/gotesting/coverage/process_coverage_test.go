@@ -201,7 +201,6 @@ func TestSubtractProcessCoverageProfilesUsesModeSemantics(t *testing.T) {
 		{mode: "set", beforeCount: 1, afterCount: 1, want: 0},
 		{mode: "set", beforeCount: 0, afterCount: 1, want: 1},
 	} {
-		tt := tt
 		t.Run(fmt.Sprintf("%s/%d-%d", tt.mode, tt.beforeCount, tt.afterCount), func(t *testing.T) {
 			before := processCoverageProfileForTest(t, tt.mode, tt.beforeCount)
 			after := processCoverageProfileForTest(t, tt.mode, tt.afterCount)

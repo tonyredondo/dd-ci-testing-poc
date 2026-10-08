@@ -60,7 +60,6 @@ func TestTestingFReflectionLayout(t *testing.T) {
 // Measure result collection separately from event serialization/network work.
 func BenchmarkFuzzNativeResult(b *testing.B) {
 	for _, kind := range []string{"root", "seed"} {
-		kind := kind
 		b.Run(kind, func(b *testing.B) {
 			var native testing.TB = &testing.T{}
 			if kind == "root" {
@@ -103,7 +102,6 @@ func TestFuzzOffsetsRejectLayoutDrift(t *testing.T) {
 		{"wrong-state", []reflect.StructField{common, {Name: "tstate", PkgPath: "gotesting", Type: compat.TypeFor[*int]()}, called}, true, false, true},
 		{"wrong-called", []reflect.StructField{common, state, {Name: "fuzzCalled", PkgPath: "gotesting", Type: compat.TypeFor[int]()}}, true, true, false},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := buildFuzzFieldsLayout(reflect.StructOf(tc.fields), layout)
 			if got.commonOK != tc.commonOK || got.state.available != tc.stateOK || got.fuzzCalled.available != tc.calledOK {
@@ -132,13 +130,12 @@ func TestFuzzFatalResultDoesNotReadActiveDuration(t *testing.T) {
 	mu.Unlock()
 	var wg compat.WaitGroup
 	wg.Go(func() {
-		for i, limit := 0, 10000; i < limit; i++ {
-			i := i
+		for i := 0; i < 10000; i++ {
 			*duration = time.Duration(i)
 		}
 	})
 	event := fuzzTestEvent{native: native}
-	for i, limit := 0, 10000; i < limit; i++ {
+	for i := 0; i < 10000; i++ {
 		failed, skipped, got := event.nativeResult(false)
 		if !failed || skipped || got != 0 {
 			t.Fatalf("fatal result=%t/%t/%s", failed, skipped, got)

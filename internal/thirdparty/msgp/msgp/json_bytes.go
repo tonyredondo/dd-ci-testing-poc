@@ -91,8 +91,7 @@ func rwArrayBytes(w jsWriter, msg []byte, scratch []byte, depth int) ([]byte, []
 	if err != nil {
 		return msg, scratch, err
 	}
-	for i, limit := uint32(0), sz; i < limit; i++ {
-		i := i
+	for i := uint32(0); i < sz; i++ {
 		if i != 0 {
 			err = w.WriteByte(',')
 			if err != nil {
@@ -120,8 +119,7 @@ func rwMapBytes(w jsWriter, msg []byte, scratch []byte, depth int) ([]byte, []by
 	if err != nil {
 		return msg, scratch, err
 	}
-	for i, limit := uint32(0), sz; i < limit; i++ {
-		i := i
+	for i := uint32(0); i < sz; i++ {
 		if i != 0 {
 			err = w.WriteByte(',')
 			if err != nil {

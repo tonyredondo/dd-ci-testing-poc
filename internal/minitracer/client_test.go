@@ -127,7 +127,6 @@ func TestFailedFlushRetainsBatch(t *testing.T) {
 
 func TestFlushCancellationWhileAnotherFlushRuns(t *testing.T) {
 	for _, deferred := range []bool{false, true} {
-		deferred := deferred
 		t.Run(map[bool]string{false: "ordinary", true: "deferred"}[deferred], func(t *testing.T) {
 			entered, release := make(chan struct{}), make(chan struct{})
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { close(entered); <-release; w.WriteHeader(202) }))
@@ -190,7 +189,7 @@ func TestQueueBoundAndConcurrentBackpressure(t *testing.T) {
 	// open batch. Once a delivery has failed, further events are rejected
 	// instead of waiting for a sender.
 	retained := 2 * (maxPendingBatches + 1)
-	for i, limit := 0, retained+3; i < limit; i++ {
+	for i := 0; i < retained+3; i++ {
 		finish()
 	}
 	if client.DroppedEvents() != 3 || client.LastError() == nil {
@@ -209,7 +208,7 @@ func TestQueueBoundAndConcurrentBackpressure(t *testing.T) {
 		t.Fatal(err)
 	}
 	var wg compat.WaitGroup
-	for i, limit := 0, retained; i < limit; i++ {
+	for i := 0; i < retained; i++ {
 		wg.Go(finish)
 	}
 	wg.Wait()
@@ -252,7 +251,7 @@ func TestFinishNeverWaitsForIntake(t *testing.T) {
 		t.Fatal(err)
 	}
 	start := time.Now()
-	for i, limit := 0, 35; i < limit; i++ {
+	for i := 0; i < 35; i++ {
 		span, _ := client.StartSpan(context.Background(), "test", SpanType("test"))
 		span.Finish()
 	}

@@ -307,7 +307,6 @@ func TestReadThroughShortLivedCacheRejectsMismatchedAndFutureEntries(t *testing.
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			beforeCalls := liveCalls
 			testCase.write(t)
@@ -335,7 +334,7 @@ func TestReadThroughShortLivedCacheDoesNotStoreNonCacheableResponses(t *testing.
 		return readCacheLiveResult[string]{Value: "non-cacheable", Cacheable: false}, nil
 	}
 
-	for i, limit := 0, 2; i < limit; i++ {
+	for i := 0; i < 2; i++ {
 		value, err := readThroughShortLivedCache(c, "unit", map[string]string{"request": "same"}, live, nil)
 		require.NoError(t, err)
 		require.Equal(t, "non-cacheable", value)

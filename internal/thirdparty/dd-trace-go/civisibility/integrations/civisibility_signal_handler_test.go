@@ -40,7 +40,7 @@ func TestStopCIVisibilitySignalHandlerIsIdempotent(t *testing.T) {
 	require.NotNil(t, handler)
 
 	var wg compat.WaitGroup
-	for i, limit := 0, 16; i < limit; i++ {
+	for i := 0; i < 16; i++ {
 		wg.Go(func() {
 			stopCIVisibilitySignalHandler()
 		})

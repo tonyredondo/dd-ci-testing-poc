@@ -25,7 +25,6 @@ func cliDebugLines(stderr string) string {
 func TestCLIDebugBuildTransparency(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
 	for _, runtime := range []string{"mini", "sdk"} {
-		runtime := runtime
 		t.Run(runtime, func(t *testing.T) {
 			bin := filepath.Join(t.TempDir(), executableName("fixture.test"))
 			var hash [32]byte
@@ -102,7 +101,6 @@ func TestCLIDebugFailuresAndNativeBypass(t *testing.T) {
 		{"overlay-failure", []string{"test", "-overlay=" + invalidOverlay, "."}, 2, "read user overlay finished duration="},
 		{"help", []string{"test", "-help"}, 2, "instrumentation bypass help=true"},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			_, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false", "DD_TRACE_DEBUG=true"), driver, tc.args...)
 			logs := cliDebugLines(stderr)

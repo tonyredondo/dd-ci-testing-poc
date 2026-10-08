@@ -25,7 +25,6 @@ func effectiveCommonMeta(payload *testCycleBatch, event *ciEvent) map[string]str
 
 func TestCommonTagsWireOverridesAndGetters(t *testing.T) {
 	for _, deferred := range []bool{false, true} {
-		deferred := deferred
 		t.Run(map[bool]string{false: "ordinary", true: "deferred"}[deferred], func(t *testing.T) {
 			var payload testCycleBatch
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -127,9 +126,9 @@ func TestCommonMetadataConcurrentProjectionAndBounds(t *testing.T) {
 	span.Finish()
 	event := &ciEvent{Type: "test", Content: span.content, common: common}
 	var wg compat.WaitGroup
-	for i, limit := 0, 8; i < limit; i++ {
+	for i := 0; i < 8; i++ {
 		wg.Go(func() {
-			for i, limit := 0, 30; i < limit; i++ {
+			for i := 0; i < 30; i++ {
 				metadata, events := prepareCommonMetadata(nil, ciEvents{event})
 				var raw bytes.Buffer
 				payload := testCycleBatch{Version: 1, Metadata: metadata, Events: events}

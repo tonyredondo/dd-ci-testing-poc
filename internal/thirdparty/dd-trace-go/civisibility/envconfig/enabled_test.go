@@ -38,7 +38,6 @@ func TestParseEnabledMode(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			gotMode, gotOK := ParseEnabledMode(tt.value)
 			assert.Equal(t, tt.wantMode, gotMode)

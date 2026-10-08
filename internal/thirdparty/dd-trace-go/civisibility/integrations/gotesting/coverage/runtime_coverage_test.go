@@ -59,7 +59,7 @@ func TestRuntimeCoverageConcurrentSnapshots(t *testing.T) {
 		collectors[i] = collector
 		wg.Go(func() {
 			<-start
-			for i, limit := 0, iterations; i < limit; i++ {
+			for i := 0; i < iterations; i++ {
 				collector.CollectCoverageBeforeTestExecution()
 				if err := collector.getCoverageData(); err != nil {
 					t.Errorf("collect coverage after test: %v", err)
@@ -76,7 +76,7 @@ func TestRuntimeCoverageConcurrentSnapshots(t *testing.T) {
 	})
 	wg.Go(func() {
 		<-start
-		for i, limit := 0, iterations; i < limit; i++ {
+		for i := 0; i < iterations; i++ {
 			profile, err := snapshotProcessCoverageProfile()
 			if err != nil {
 				t.Errorf("collect process coverage: %v", err)

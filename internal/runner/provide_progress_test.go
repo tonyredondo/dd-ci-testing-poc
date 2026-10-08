@@ -24,7 +24,6 @@ import (
 // This catches buffering that a check of the final command output would miss.
 func TestRuntimeDownloadProgress(t *testing.T) {
 	for _, outcome := range []string{"success", "failure", "cancel"} {
-		outcome := outcome
 		t.Run(outcome, func(t *testing.T) {
 			const version = "v1.2.3"
 			module := "module " + miniModule + "\n\ngo 1.26.0\n"

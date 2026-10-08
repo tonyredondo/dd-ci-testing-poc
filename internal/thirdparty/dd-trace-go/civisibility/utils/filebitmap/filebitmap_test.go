@@ -21,8 +21,7 @@ func TestConstructorWithSizeCreatesEmptyBitmap(t *testing.T) {
 	}
 
 	// Check each bit (1-indexed) is false.
-	for i, limit := 0, lines; i < limit; i++ {
-		i := i
+	for i := 0; i < lines; i++ {
 		if bitmap.Get(i + 1) {
 			t.Errorf("expected bit %d to be false", i+1)
 		}
@@ -117,8 +116,7 @@ func TestLargeBitmapBitwiseOperationsHandleCorrectly(t *testing.T) {
 func TestBitwiseNotComplexPatternInvertsCorrectly(t *testing.T) {
 	size := 256 // 256 bytes
 	pattern := make([]byte, size)
-	for i, limit := 0, size; i < limit; i++ {
-		i := i
+	for i := 0; i < size; i++ {
 		if i%2 == 0 {
 			pattern[i] = 0xAA
 		} else {
@@ -130,8 +128,7 @@ func TestBitwiseNotComplexPatternInvertsCorrectly(t *testing.T) {
 	invertedBitmap := Not(bitmap, false)
 	totalBits := size * 8
 
-	for i, limit := 0, totalBits; i < limit; i++ {
-		i := i
+	for i := 0; i < totalBits; i++ {
 		originalBit := bitmap.Get(i + 1)
 		invertedBit := invertedBitmap.Get(i + 1)
 		if originalBit == invertedBit {
@@ -197,10 +194,9 @@ func TestEnumeratorCorrectlyIteratesOverBits(t *testing.T) {
 		bitmap := NewFileBitmapFromBytes(tt.bitmapBytes)
 		var iterated []bool
 		for _, b := range bitmap.data {
-			for bitPos, limit := 0, 8; bitPos <
+			for bitPos := 0; bitPos <
 				// Extract bit from most significant to least significant.
-				limit; bitPos++ {
-				bitPos := bitPos
+				8; bitPos++ {
 
 				bit := (b & (1 << (7 - bitPos))) != 0
 				iterated = append(iterated, bit)
@@ -233,7 +229,6 @@ func TestGivenARangeWhenCreatingFileBitmapProperBitsAreSet(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		if tt.shouldPanic {
 			didPanic := false
 			func() {
@@ -310,7 +305,6 @@ func TestIntersectsLineRange(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.bitmap.IntersectsLineRange(tt.fromLine, tt.toLine); got != tt.expected {
 				t.Fatalf("IntersectsLineRange(%d, %d) = %v, expected %v", tt.fromLine, tt.toLine, got, tt.expected)

@@ -90,7 +90,6 @@ func TestProcessRetryParityFreshRunnerAttrValidationAndCapture(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
 				compat.Attr(local, tc.key, tc.value)
@@ -113,7 +112,7 @@ func TestProcessRetryParityFreshRunnerConcurrentReportingMethods(t *testing.T) {
 	attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
 		writer := compat.Output(local)
 		var workers compat.WaitGroup
-		for i, limit := 0, 16; i < limit; i++ {
+		for i := 0; i < 16; i++ {
 			i := i
 			workers.Go(func() {
 				local.Helper()
@@ -144,7 +143,7 @@ func TestProcessRetryParityFreshRunnerSerializesConcurrentIndentedWrites(t *test
 	const workers = 16
 	var writes compat.WaitGroup
 	writeErrors := make(chan error, workers)
-	for i, limit := 0, workers; i < limit; i++ {
+	for i := 0; i < workers; i++ {
 		writes.Go(func() {
 			_, err := writer.Write([]byte("concurrent output\n"))
 			writeErrors <- err

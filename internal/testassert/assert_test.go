@@ -49,7 +49,6 @@ func TestAssertionResults(t *testing.T) {
 		{"unexpected panic", false, func(r *reporter) bool { return assert.NotPanics(r, func() { panic("boom") }) }},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			r := new(reporter)
 			if got := tc.run(r); got != tc.want || (r.failures == 0) != tc.want {

@@ -44,7 +44,6 @@ func TestRepositoryExamples(t *testing.T) {
 			{"README.md", []string{"@platform"}},
 		}},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			rules, err := Load(filepath.Join("testdata", tc.name+".CODEOWNERS"), tc.dialect)
 			if err != nil {

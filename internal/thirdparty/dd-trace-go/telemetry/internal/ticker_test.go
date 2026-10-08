@@ -14,7 +14,7 @@ func TestDeferredTickerWaitsForItsInterval(t *testing.T) {
 	ticks := 0
 	ticker := NewTicker(func() { ticks++ }, Range[time.Duration]{Min: time.Millisecond, Max: 50 * time.Millisecond})
 	defer ticker.Stop()
-	for i, limit := 0, 10; i < limit; i++ {
+	for i := 0; i < 10; i++ {
 		ticker.tickIfDue()
 	}
 	if ticks != 0 {

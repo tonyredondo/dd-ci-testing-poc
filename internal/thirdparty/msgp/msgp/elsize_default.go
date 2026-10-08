@@ -9,8 +9,7 @@ package msgp
 var sizes [256]bytespec
 
 func init() {
-	for i, limit := 0, 256; i < limit; i++ {
-		i := i
+	for i := 0; i < 256; i++ {
 		sizes[i] = calcBytespec(byte(i))
 	}
 }

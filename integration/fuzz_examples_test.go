@@ -465,15 +465,12 @@ func TestFuzzExampleParity(t *testing.T) {
 	}
 	var results []fuzzExampleResult
 	for _, mode := range []string{"manual", "orchestrion"} {
-		mode := mode
 		sdk := prepareFuzzExampleFixture(t, "sdk", mode)
 		mini := prepareFuzzExampleFixture(t, "mini", mode)
 		for _, scenario := range fuzzExampleScenarios {
-			scenario := scenario
 			t.Run(mode+"/"+scenario, func(t *testing.T) {
 				expected, sdkWall := runFuzzExampleScenario(t, sdk, scenario, false)
 				for _, deferred := range []bool{false, true} {
-					deferred := deferred
 					t.Run(fmt.Sprintf("deferred=%t", deferred), func(t *testing.T) {
 						actual, miniWall := runFuzzExampleScenario(t, mini, scenario, deferred)
 						a, b := normalizeFuzzExampleEvents(expected, sdk), normalizeFuzzExampleEvents(actual, mini)
@@ -565,7 +562,6 @@ func TestFuzzExampleFixtureProvenance(t *testing.T) {
 
 func TestFuzzExamplePrintedDuration(t *testing.T) {
 	for _, backend := range []string{"sdk", "mini"} {
-		backend := backend
 		t.Run(backend, func(t *testing.T) {
 			fixture := prepareFuzzExampleFixture(t, backend, "manual")
 			out, stderr, code := command(t, fixture.dir, testEnv("GOFLAGS=", "GOWORK=off", "DD_CIVISIBILITY_ENABLED=false"), "go", "test", "-count=1", "-run=^TestPrintedDuration", "./internal/fuzzfixture")
@@ -586,11 +582,9 @@ func TestFuzzExampleCoverageParity(t *testing.T) {
 	mini := prepareFuzzExampleVariant(t, "mini", "orchestrion", true)
 	var results []fuzzExampleResult
 	for _, scenario := range fuzzCoverageScenarios {
-		scenario := scenario
 		t.Run(scenario, func(t *testing.T) {
 			expected, sdkCoverage, sdkWall := runFuzzExampleWithCoverage(t, sdk, scenario, false, true)
 			for _, deferred := range []bool{false, true} {
-				deferred := deferred
 				t.Run(fmt.Sprint(deferred), func(t *testing.T) {
 					actual, miniCoverage, miniWall := runFuzzExampleWithCoverage(t, mini, scenario, deferred, true)
 					a, b := normalizeFuzzExampleEvents(expected, sdk), normalizeFuzzExampleEvents(actual, mini)
@@ -652,7 +646,6 @@ func TestFuzzRootStackAliasIsLimitedToThePort(t *testing.T) {
 
 func TestFuzzFixtureCacheIsolation(t *testing.T) {
 	for _, backend := range []string{"sdk", "mini"} {
-		backend := backend
 		t.Run(backend, func(t *testing.T) {
 			fixture := prepareFuzzExampleFixture(t, backend, "manual")
 			args := []string{"test", "-mod=readonly", "-count=1", "./internal/mockci"}

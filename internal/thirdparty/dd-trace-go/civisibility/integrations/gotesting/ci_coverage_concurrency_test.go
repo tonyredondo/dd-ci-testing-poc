@@ -32,7 +32,6 @@ func TestQuarantinedRaceCoverageCoordinatorDiscardsOnlySiblingOverlap(t *testing
 func TestQuarantinedRaceParallelContinuationDisablesCoverage(t *testing.T) {
 	const root, owner = "TestCheckout/root", "TestCheckout/root/owner"
 	for _, parallel := range []bool{false, true} {
-		parallel := parallel
 		t.Run(fmt.Sprintf("parallel=%t", parallel), func(t *testing.T) {
 			cfg := &processRetrySubtreeConfig{
 				Version: processRetrySubtreeVersion, SelectedRoot: root, AttemptToFixRetries: 2, CollectPerTest: true, CollectAggregate: true,

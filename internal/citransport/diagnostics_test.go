@@ -35,9 +35,7 @@ func recordTransportDebug(t *testing.T, enabled bool) *log.RecordLogger {
 
 func TestSendDebugDiagnostics(t *testing.T) {
 	for _, debug := range []bool{false, true} {
-		debug := debug
 		for _, agentless := range []bool{false, true} {
-			agentless := agentless
 			for _, tc := range []struct {
 				name   string
 				codes  []int
@@ -50,7 +48,6 @@ func TestSendDebugDiagnostics(t *testing.T) {
 				{"permanent", []int{401}, "error"},
 				{"network", []int{0, 0}, "error"},
 			} {
-				tc := tc
 				t.Run(fmt.Sprintf("debug=%t/agentless=%t/%s", debug, agentless, tc.name), func(t *testing.T) {
 					recorder := recordTransportDebug(t, debug)
 					calls := 0

@@ -560,8 +560,7 @@ func (s *efdFaultySessionFilesystemStore) releaseLock(lock *os.File) error {
 	lockPath := filepath.Join(s.directory, efdFaultySessionLockFile)
 	backoff := efdFaultySessionInitialBackoff
 	var lastErr error
-	for attempt, limit := 0, efdFaultySessionReleaseAttempts; attempt < limit; attempt++ {
-		attempt := attempt
+	for attempt := 0; attempt < efdFaultySessionReleaseAttempts; attempt++ {
 		current, err := s.lstatLock(lockPath)
 		if err != nil {
 			lastErr = fmt.Errorf("inspect lock path: %w", err)

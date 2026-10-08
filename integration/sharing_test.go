@@ -118,7 +118,6 @@ func TestSharedBackingCompatibility(t *testing.T) {
 		{"race", []string{"-race"}},
 		{"coverage", []string{"-cover", "-covermode=atomic"}},
 	} {
-		variant := variant
 		t.Run(variant.name, func(t *testing.T) {
 			args := append([]string{"test", "-count=1", "-run=^TestShared$"}, variant.flags...)
 			args = append(args, "./alpha", "./beta")
@@ -177,7 +176,6 @@ func TestSharedBackingCollisions(t *testing.T) {
 		}
 	})
 	for _, fromEnvironment := range []bool{false, true} {
-		fromEnvironment := fromEnvironment
 		t.Run(map[bool]string{false: "overlay-flag", true: "overlay-GOFLAGS"}[fromEnvironment], func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "replacement.go")
 			if err := os.WriteFile(path, []byte("package same_test\n"), 0644); err != nil {

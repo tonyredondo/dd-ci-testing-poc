@@ -10,7 +10,6 @@ import (
 func TestMiniPreservesConsumerLanguage(t *testing.T) {
 	_, driver := prepareMiniFixture(t)
 	for _, language := range []string{"1.21", "1.22", "1.26.0"} {
-		language := language
 		t.Run(language, func(t *testing.T) {
 			dir := t.TempDir()
 			want := "0"
@@ -59,7 +58,6 @@ func TestDependency(t *testing.T) { _=spew.Sdump(1);check(t,"github.com/davecgh/
 		{"gopkg.in/yaml.v3", "v3.0.0-20200313102051-9f266ea9e77c", `import "gopkg.in/yaml.v3"
 func TestDependency(t *testing.T) { var value any;if err:=yaml.Unmarshal([]byte("a: 1"),&value);err!=nil{t.Fatal(err)};check(t,"gopkg.in/yaml.v3","v3.0.0-20200313102051-9f266ea9e77c",yaml.Unmarshal) }`},
 	} {
-		tc := tc
 		t.Run(tc.path, func(t *testing.T) {
 			dir := t.TempDir()
 			writeBuildFixture(t, dir, map[string]string{
@@ -103,7 +101,6 @@ func check(t *testing.T,path,version string,symbol any) {
 func TestMiniContinuesAfterPackageSetupFailures(t *testing.T) {
 	_, driver := prepareMiniFixture(t)
 	for _, target := range []string{"./...", "./good ./missing", "./good ./empty"} {
-		target := target
 		t.Run(target, func(t *testing.T) {
 			dir := t.TempDir()
 			for _, sub := range []string{"good", "bad", "empty"} {

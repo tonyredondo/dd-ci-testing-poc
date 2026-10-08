@@ -66,9 +66,9 @@ func TestCITagsSnapshotsConcurrentReadersAndUpdates(t *testing.T) {
 	t.Cleanup(ResetCITags)
 	originalCiTags = map[string]string{"fixture": "zero"}
 	var wg compat.WaitGroup
-	for i, limit := 0, 8; i < limit; i++ {
+	for i := 0; i < 8; i++ {
 		wg.Go(func() {
-			for i, limit := 0, 100; i < limit; i++ {
+			for i := 0; i < 100; i++ {
 				snapshot := GetCITagsReadOnly()
 				value := snapshot["fixture"]
 				if snapshot["fixture"] != value {
@@ -77,8 +77,7 @@ func TestCITagsSnapshotsConcurrentReadersAndUpdates(t *testing.T) {
 			}
 		})
 	}
-	for i, limit := 0, 100; i < limit; i++ {
-		i := i
+	for i := 0; i < 100; i++ {
 		AddCITags("fixture", fmt.Sprint(i))
 	}
 	wg.Wait()
@@ -86,13 +85,11 @@ func TestCITagsSnapshotsConcurrentReadersAndUpdates(t *testing.T) {
 
 func BenchmarkCITagsSnapshot(b *testing.B) {
 	for _, escaped := range []bool{false, true} {
-		escaped := escaped
 		b.Run(fmt.Sprintf("mutable=%t", escaped), func(b *testing.B) {
 			ResetCITags()
 			b.Cleanup(ResetCITags)
 			originalCiTags = make(map[string]string, 64)
-			for i, limit := 0, 64; i < limit; i++ {
-				i := i
+			for i := 0; i < 64; i++ {
 				originalCiTags[fmt.Sprint(i)] = "fixture-value"
 			}
 			if escaped {
@@ -101,7 +98,7 @@ func BenchmarkCITagsSnapshot(b *testing.B) {
 			GetCITagsSnapshot()
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i, limit := 0, b.N; i < limit; i++ {
+			for i := 0; i < b.N; i++ {
 				GetCITagsSnapshot()
 			}
 		})

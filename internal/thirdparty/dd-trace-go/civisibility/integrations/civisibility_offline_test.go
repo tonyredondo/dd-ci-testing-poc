@@ -289,7 +289,6 @@ func TestCapEarlyFlakeDetectionRetries(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, capEarlyFlakeDetectionRetries(tt.retries, tt.maxRetries))
 		})
@@ -327,7 +326,6 @@ func TestApplyEarlyFlakeDetectionEnabledEnvironmentOverride(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.overrideSet {
 				t.Setenv(key, tt.override)
@@ -371,7 +369,6 @@ func TestApplyFlakyRetryEnabledEnvironmentOverride(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.overrideSet {
 				t.Setenv(key, tt.override)

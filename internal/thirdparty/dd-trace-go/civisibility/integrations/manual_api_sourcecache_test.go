@@ -278,7 +278,7 @@ func TestSourceFunctionCodeOwnerCacheConcurrentHitsSkipCompletedLookup(t *testin
 	wait.Add(readers)
 	owners := make([]string, readers)
 	foundResults := make([]bool, readers)
-	for index, limit := 0, readers; index < limit; index++ {
+	for index := 0; index < readers; index++ {
 		index := index
 		go func() {
 			defer wait.Done()
@@ -287,8 +287,7 @@ func TestSourceFunctionCodeOwnerCacheConcurrentHitsSkipCompletedLookup(t *testin
 	}
 	wait.Wait()
 
-	for index, limit := 0, readers; index < limit; index++ {
-		index := index
+	for index := 0; index < readers; index++ {
 		require.True(t, foundResults[index])
 		require.Equal(t, owner, owners[index])
 	}
@@ -299,7 +298,7 @@ func BenchmarkSourceFileCodeOwnerSharedMiss(b *testing.B) {
 	matcher := &recordingCodeOwnerMatcher{entry: testCodeOwner(b, "@shared-owner")}
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i, limit := 0, b.N; i < limit; i++ {
+	for i := 0; i < b.N; i++ {
 		slot := &sourceFileCacheSlot{}
 		loadSourceFileCodeOwner(slot, matcher, true, "source.go")
 		loadSourceFileCodeOwner(slot, matcher, true, "source.go")
@@ -316,7 +315,7 @@ func BenchmarkSourceFileCodeOwnerCachedResult(b *testing.B) {
 	loadSourceFileCodeOwner(slot, matcher, true, "source.go")
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i, limit := 0, b.N; i < limit; i++ {
+	for i := 0; i < b.N; i++ {
 		loadSourceFileCodeOwner(slot, matcher, true, "source.go")
 	}
 	b.StopTimer()
@@ -340,7 +339,7 @@ func BenchmarkSourceFunctionCodeOwnerCachedResult(b *testing.B) {
 	loadSourceFunctionCodeOwnerWithLookup(metadata, lookup)
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i, limit := 0, b.N; i < limit; i++ {
+	for i := 0; i < b.N; i++ {
 		loadSourceFunctionCodeOwnerWithLookup(metadata, lookup)
 	}
 	b.StopTimer()

@@ -261,7 +261,6 @@ func TestMiniTestingCompatibility(t *testing.T) {
 		{"helper", []string{"-test.run=^TestHelper$", "-mode=fail"}},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			for _, enabled := range []bool{false, true} {
 				want := execute(t, dir, bins[0], tc.args, enabled, false)
@@ -317,7 +316,6 @@ func TestMiniTestingCompatibility(t *testing.T) {
 		}
 	})
 	for _, profile := range []string{"disabled", "quarantined", "attempt_to_fix", "efd", "itr"} {
-		profile := profile
 		t.Run(profile, func(t *testing.T) {
 			args := []string{"-test.run=^TestManaged$", "-mode=managed"}
 			if profile == "attempt_to_fix" {
@@ -339,7 +337,6 @@ func TestMiniTestingCompatibility(t *testing.T) {
 func TestMiniRaceAndCoverage(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
 	for _, flag := range []string{"-race", "-cover"} {
-		flag := flag
 		t.Run(flag, func(t *testing.T) {
 			flags := []string{flag}
 			if flag == "-cover" {

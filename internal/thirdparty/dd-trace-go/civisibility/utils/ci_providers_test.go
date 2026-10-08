@@ -76,7 +76,6 @@ func TestTags(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, path := range paths {
-		path := path
 		providerName := strings.TrimSuffix(filepath.Base(path), ".json")
 
 		t.Run(providerName, func(t *testing.T) {
@@ -212,7 +211,6 @@ func TestIsNumericJobID(t *testing.T) {
 		{" ", false},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(fmt.Sprintf("input=%q", tt.input), func(t *testing.T) {
 			if got := isNumericJobID(tt.input); got != tt.expected {
 				t.Errorf("isNumericJobID(%q) = %v, want %v", tt.input, got, tt.expected)

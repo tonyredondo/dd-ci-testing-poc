@@ -134,7 +134,6 @@ func TestGoleakReplacementVersionPolicy(t *testing.T) {
 		{"local replacement", "v1.3.0", "../goleak", "", true},
 		{"local old original", "v1.2.1", "../goleak", "", false},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			pkg := goleakPackage(t, tc.required, goleakFindSource)
 			pkg.Module.Replace = &struct{ Path, Dir, Version string }{Path: tc.path, Version: tc.version}
@@ -157,7 +156,6 @@ func TestGoleakForkReplacementGuards(t *testing.T) {
 		{"overlay changes API", incompatible, true},
 		{"overlay removes entry", "package goleak\n", true},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			source := tc.source
 			if tc.overlay {

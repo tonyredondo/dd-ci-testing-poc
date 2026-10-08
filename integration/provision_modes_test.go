@@ -34,7 +34,6 @@ func TestWorkspaceCommandPreservesLogicalWorkingDirectory(t *testing.T) {
 func TestMiniProvisionsWorkspaceWithoutChangingModules(t *testing.T) {
 	_, driver := prepareMiniFixture(t)
 	for _, workspaceReplacement := range []bool{false, true} {
-		workspaceReplacement := workspaceReplacement
 		t.Run(fmt.Sprint(workspaceReplacement), func(t *testing.T) {
 			root := t.TempDir()
 			client := filepath.Join(root, "client")
@@ -91,7 +90,6 @@ func TestWorkspace(t *testing.T){if workhelper.Value!=7{t.Fatal("workspace helpe
 func TestMiniProvisionsVendorAndPreservesPatchedSources(t *testing.T) {
 	_, driver := prepareMiniFixture(t)
 	for _, mode := range []string{"", "-mod=vendor", "-modfile=alternate.mod"} {
-		mode := mode
 		t.Run(mode, func(t *testing.T) {
 			dir := t.TempDir()
 			helper := t.TempDir()

@@ -29,9 +29,7 @@ func TestStopFlushesAggregatedErrorLogs(t *testing.T) {
 
 func TestRuntimeDeliveryDiagnostics(t *testing.T) {
 	for _, code := range []int{http.StatusAccepted, http.StatusUnauthorized} {
-		code := code
 		for _, debug := range []bool{false, true} {
-			debug := debug
 			t.Run(fmt.Sprintf("http=%d/debug=%t", code, debug), func(t *testing.T) {
 				recorder := &log.RecordLogger{}
 				t.Cleanup(log.UseLogger(recorder))

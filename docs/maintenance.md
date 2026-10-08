@@ -241,7 +241,11 @@ updating SDK tests; extend the helpers with standard-library code when needed.
 
 The module declares Go 1.21 so importing Mini does not change the consumer's
 language version or loop-variable behavior. Ordinary source uses that syntax:
-numeric loops use indexed loops, and captured loop variables have local copies.
+numeric loops use indexed loops. Copy a loop variable only when a callback
+outlives its iteration, such as a goroutine, a queued close action or a parallel
+subtest. Sequential `t.Run`, `b.Run` and `filepath.WalkDir` calls finish before
+the loop continues and need no copy. Prefer goroutine arguments when possible;
+callback APIs such as `WaitGroup.Go` need a local binding for captured values.
 `internal/compat` supplies allocation-free string scanning and small equivalents
 for newer standard-library helpers. Keep native test lifetimes, map clearing and
 error matching intact when updating these helpers. Version guards belong at

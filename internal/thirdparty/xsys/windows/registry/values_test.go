@@ -79,7 +79,6 @@ func TestReadValueGrowthAndConcurrentResize(t *testing.T) {
 		t.Fatalf("growth: %d bytes/%d/%v in %d calls", len(data), typ, err, calls)
 	}
 	for _, returned := range []uint32{0, 8} {
-		returned := returned
 		calls = 0
 		_, typ, err := readValue(make([]byte, 8), func([]byte) (uint32, uint32, error) { calls++; return returned, SZ, errorMoreData })
 		if err != errorMoreData || typ != 0 || calls != 1 {

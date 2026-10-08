@@ -23,7 +23,6 @@ import (
 
 func TestCIByteBatchingAndCompression(t *testing.T) {
 	for _, agentless := range []bool{false, true} {
-		agentless := agentless
 		t.Run(map[bool]string{false: "agent", true: "agentless"}[agentless], func(t *testing.T) {
 			var count, requests atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +69,7 @@ func TestCIByteBatchingAndCompression(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for i, limit := 0, 8; i < limit; i++ {
+			for i := 0; i < 8; i++ {
 				s, _ := c.StartSpan(context.Background(), "test", SpanType("test"), Tag("large", strings.Repeat("a", 1<<20)))
 				s.Finish()
 			}

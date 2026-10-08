@@ -28,12 +28,10 @@ func newLogEntry(i int) *logEntry {
 // be decoded by the codec.
 func TestLogsPayloadDecode(t *testing.T) {
 	for _, n := range []int{10, 1 << 10} {
-		n := n
 		t.Run(strconv.Itoa(n), func(t *testing.T) {
 			assert := assert.New(t)
 			p := newLogsPayload()
-			for i, limit := 0, n; i < limit; i++ {
-				i := i
+			for i := 0; i < n; i++ {
 				p.push(newLogEntry(i%5 + 1))
 			}
 			var got logsEntriesPayload

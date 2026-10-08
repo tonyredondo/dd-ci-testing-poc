@@ -241,7 +241,7 @@ func TestProcessRetryParityFreshAttemptSnapshotsHelpersUnderNativeLock(t *testin
 	t.Cleanup(cleanupWorker)
 	<-started
 
-	for i, limit := 0, 100; i < limit; i++ {
+	for i := 0; i < 100; i++ {
 		attempt, reason := newRetryAttemptRoot(t)
 		require.Empty(t, reason)
 		require.NotNil(t, attempt)
@@ -347,7 +347,7 @@ func BenchmarkProcessRetryParityFreshAttemptStateInitialization(b *testing.B) {
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i, limit := 0, b.N; i < limit; i++ {
+	for i := 0; i < b.N; i++ {
 		root := createNewTestFastWithoutContext(layout)
 		parent := createNewTestFastWithoutContext(layout)
 		rootBase := commonBaseForTest(root, layout)

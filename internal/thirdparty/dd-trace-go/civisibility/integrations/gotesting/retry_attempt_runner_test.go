@@ -86,7 +86,6 @@ func TestProcessRetryParityGotestingFormattedMethodsEvaluateArgumentsOnce(t *tes
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			value := &retryAttemptCountingStringer{}
 			attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
@@ -117,7 +116,6 @@ func TestProcessRetryParityGotestingBenchmarkFormattedMethodsEvaluateArgumentsOn
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			value := &retryAttemptCountingStringer{}
 			testing.Benchmark(func(local *testing.B) {
@@ -318,7 +316,6 @@ func TestProcessRetryParityFreshRunnerTerminalSemantics(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			attempt, result, reason := runFreshRetryAttempt(t, tc.target)
 			require.Empty(t, reason)
@@ -378,7 +375,6 @@ func TestProcessRetryParityFreshRunnerPreservesMultiTerminalTrace(t *testing.T) 
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
 				local.Cleanup(tc.cleanup)
@@ -418,7 +414,6 @@ func TestProcessRetryParityMultiTerminalReplayPreservesNativeOutput(t *testing.T
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := exec.Command(os.Args[0], "-test.run=^TestProcessRetryParityMultiTerminalReplayFixture$", "-test.count=1", "-test.timeout=10s")
 			cmd.Env = append(os.Environ(),
@@ -514,7 +509,6 @@ func TestProcessRetryParityFreshRunnerBodyAndCleanupTerminalMatrix(t *testing.T)
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
 				local.Cleanup(func() { tc.cleanup(local) })
@@ -608,7 +602,6 @@ func TestProcessRetryParityFreshRunnerQueuedParallelSubtestCleanupTerminals(t *t
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			attempt, result, reason := runFreshRetryAttempt(t, func(local *testing.T) {
 				local.Run("parallel", func(child *testing.T) {
@@ -759,7 +752,6 @@ func TestProcessRetryParityFreshRunnerBalancesSchedulerLease(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(container *testing.T) {
 			container.Run("attempt", func(t *testing.T) {
 				before := snapshotRetryAttemptTestState(t)
@@ -1022,7 +1014,6 @@ func TestProcessRetryParityCapturesEachTerminalStackOnce(t *testing.T) {
 		}, wantStacks: 1},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			group, reason := newRetryAttemptGroupWithOutputObservation(t, false)
 			require.Empty(t, reason)

@@ -647,7 +647,8 @@ helper behavior with its own regression tests.
 
 The root module declares Go 1.21 so adding Mini preserves a Go 1.21 client's
 loop-variable semantics. Ordinary sources use that syntax: numeric loops have
-explicit bounds, and captured loop values get their own copies. Small standard
+explicit bounds. Captures that outlive the iteration keep their own values;
+sequential subtests and parser visitors need no copies. Small standard
 library equivalents live in `internal/compat`. Go-version constraints remain
 only at native API boundaries, including synctest and MessagePack iterators.
 The source manifests retain upstream hashes and record each local adaptation.

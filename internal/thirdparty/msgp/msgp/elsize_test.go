@@ -49,8 +49,7 @@ func TestBytespec(t *testing.T) {
 	// set up fixed fields
 
 	// fixint
-	for i, limit := uint8(0), uint8(0x80); i < limit; i++ {
-		i := i
+	for i := uint8(0); i < uint8(0x80); i++ {
 		sizes[i] = bytespec{size: 1, extra: constsize, typ: IntType}
 	}
 
@@ -76,8 +75,7 @@ func TestBytespec(t *testing.T) {
 	}
 
 	// compare all values to calcBytespec
-	for i, limit := 0, 256; i < limit; i++ {
-		i := i
+	for i := 0; i < 256; i++ {
 		sizeb := sizes[byte(i)]
 		cb := calcBytespec(byte(i))
 		if sizeb != cb {

@@ -42,7 +42,6 @@ func TestCodeOwnersPackageService(t *testing.T) {
 		{name: "repeated placeholder", enabled: "true", format: "$(owner)-$(owner)", rules: "* @org/team", directory: "pkg", want: "team-team"},
 		{name: "literal format", enabled: "true", format: "literal-service", rules: "* @org/team", directory: "pkg", want: "literal-service"},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
 			resetCodeOwnersTestState(t, root)
@@ -83,7 +82,6 @@ func TestCodeOwnersServiceMissingInputs(t *testing.T) {
 		{name: "outside workspace", content: "* @org/team\n", outside: true},
 		{name: "missing workspace", content: "* @org/team\n", workspaceMissing: true},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
 			resetCodeOwnersTestState(t, root)
@@ -120,7 +118,7 @@ func TestCodeOwnersServiceCacheConcurrentReaders(t *testing.T) {
 	writeCodeOwnersFile(t, filepath.Join(root, "CODEOWNERS"), "/pkg/ @org/team\n")
 	registerCodeOwnersTestPackage(t, filepath.Join(root, "pkg", "virtual_test.go"))
 	var workers compat.WaitGroup
-	for i, limit := 0, 32; i < limit; i++ {
+	for i := 0; i < 32; i++ {
 		workers.Go(func() {
 			if got := ServiceFromCodeOwners(); got != "dd-go-team" {
 				t.Errorf("service=%q", got)
@@ -151,7 +149,6 @@ func TestCodeOwnersPackageDirectoryPaths(t *testing.T) {
 		{source: "example.com/repo/nested/pkg/virtual_test.go", workingDirectory: filepath.Join(root, "different")},
 		{source: "alias/module/pkg/virtual_test.go", workingDirectory: packageDir},
 	} {
-		location := location
 		got, ok := codeOwnersPackageDirectory(root, tags, &location)
 		if !ok || got != "nested/pkg" {
 			t.Fatalf("%+v: %q %t", location, got, ok)

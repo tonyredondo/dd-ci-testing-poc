@@ -27,7 +27,6 @@ func TestParseRuntimeArgs(t *testing.T) {
 		{"terminator", []string{"--", "--runtime=sdk"}, []string{"--", "--runtime=sdk"}, Mini},
 		{"custom-value", []string{"-custom", "--runtime=sdk"}, []string{"-custom", "--runtime=sdk"}, Mini},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			before := append([]string(nil), tc.args...)
 			gotRuntime, got, err := ParseRuntimeArgs(tc.args)

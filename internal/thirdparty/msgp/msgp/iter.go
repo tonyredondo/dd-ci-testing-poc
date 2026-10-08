@@ -31,7 +31,7 @@ func ReadArray[T any](m *Reader, readFn func() (T, error)) iter.Seq2[T, error] {
 			yield(empty, fmt.Errorf("cannot read array header: %w", err))
 			return
 		}
-		for i, limit := uint32(0), length; i < limit; i++ {
+		for i := uint32(0); i < length; i++ {
 			var v T
 			v, err = readFn()
 			if !yield(v, err) || err != nil {
@@ -87,7 +87,7 @@ func ReadMap[K, V any](m *Reader, readKey func() (K, error), readVal func() (V, 
 			return
 		}
 
-		for i, limit := uint32(0), sz; i < limit; i++ {
+		for i := uint32(0); i < sz; i++ {
 			var k K
 			k, err = readKey()
 			if err != nil {
@@ -184,7 +184,7 @@ func ReadArrayBytes[T any](b []byte, readFn func([]byte) (T, []byte, error)) (it
 		return func(yield func(T) bool) {}, func() ([]byte, error) { return b, err }
 	}
 	return func(yield func(T) bool) {
-			for i, limit := uint32(0), sz; i < limit; i++ {
+			for i := uint32(0); i < sz; i++ {
 				var v T
 				v, b, err = readFn(b)
 				if err != nil || !yield(v) {
@@ -233,7 +233,7 @@ func ReadMapBytes[K any, V any](b []byte,
 	}
 
 	return func(yield func(K, V) bool) {
-		for i, limit := uint32(0), sz; i < limit; i++ {
+		for i := uint32(0); i < sz; i++ {
 			var k K
 			k, b, err = readK(b)
 			if err != nil {

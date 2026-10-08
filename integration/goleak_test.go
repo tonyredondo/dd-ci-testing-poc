@@ -137,8 +137,7 @@ func TestParallelB(t *testing.T) {t.Parallel()}
 	flags := []string{"-mod=mod", "-race", "-cover", "-covermode=atomic", "-coverpkg=./...,go.uber.org/goleak"}
 	args := append([]string{"test", "--runtime=mini", "-x", "-c", "-o", bin}, flags...)
 	args = append(args, ".")
-	for i, limit := 0, 2; i < limit; i++ {
-		i := i
+	for i := 0; i < 2; i++ {
 		out, stderr, code := command(t, dir, envForGoleak("DD_CIVISIBILITY_ENABLED=false"), driver, args...)
 		if code != 0 {
 			t.Fatalf("compile %d: %s %s", i, out, stderr)
@@ -151,7 +150,6 @@ func TestParallelB(t *testing.T) {t.Parallel()}
 		}
 	}
 	for _, deferred := range []string{"false", "true"} {
-		deferred := deferred
 		t.Run("deferred="+deferred, func(t *testing.T) {
 			for _, tc := range []struct {
 				run, marker string

@@ -50,7 +50,7 @@ func TestCoverageWriterConcurrentFlush(t *testing.T) {
 	writer := newCoverageWriter()
 	coverage := &testCoverage{}
 
-	for i, limit := 0, concurrentConnectionLimit+1; i < limit; i++ {
+	for i := 0; i < concurrentConnectionLimit+1; i++ {
 		writer.add(coverage)
 	}
 	writer.flush()
@@ -76,7 +76,7 @@ func TestCoverageWriterConcurrentAddAndFlush(t *testing.T) {
 	}}
 
 	var wg compat.WaitGroup
-	for i, limit := 0, 64; i < limit; i++ {
+	for i := 0; i < 64; i++ {
 		wg.Go(func() {
 			writer.add(&testCoverage{})
 		})

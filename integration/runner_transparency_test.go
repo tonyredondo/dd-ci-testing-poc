@@ -27,7 +27,6 @@ func TestMiniRuntimeProvisionUsesModuleOverlay(t *testing.T) {
 		"helper.go": "package overlayhelper\nconst Value = 7\n",
 	})
 	for _, modfile := range []string{"go.mod", "custom.mod"} {
-		modfile := modfile
 		t.Run(modfile, func(t *testing.T) {
 			// Go resolves its working directory physically. macOS temp paths may
 			// contain /var -> /private/var; overlay keys must use that same path.
@@ -148,7 +147,6 @@ func TestMiniModModeLeavesModuleFiles(t *testing.T) {
 		{"flag", []string{"-mod=mod"}, nil},
 		{"GOFLAGS", nil, []string{"GOFLAGS=-buildvcs=false -mod=mod"}},
 	} {
-		mode := mode
 		t.Run(mode.name, func(t *testing.T) {
 			dir := t.TempDir()
 			writeBuildFixture(t, dir, map[string]string{

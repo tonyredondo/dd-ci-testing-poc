@@ -22,7 +22,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "2601238cf1fde6810257fe5b565a880a8c9cf5c8f78dae1bbde8268e71f9a638",
+      "sha256": "925db1cf4148976b762b50f0b94f8fe62af1c035f28b44e23467c3af06b776ce",
       "role": "local"
     },
     {
@@ -57,7 +57,7 @@
     },
     {
       "path": "unix/uname_test.go",
-      "sha256": "f4ef2da7067f6a09abc14bd172289ebb5f4b1a538179eeac662b58205e717209",
+      "sha256": "3795f1e32fe4bf49b2fb859b88af4261858053add59e1c3cdfad1f1b3f82174e",
       "role": "local"
     },
     {
@@ -67,7 +67,7 @@
     },
     {
       "path": "windows/calls_windows_test.go",
-      "sha256": "8f08a10af619e6b7f4480ffbccb5245592072b3c100c7c022ef0c463abc34934",
+      "sha256": "ccbec5e7f3c9888da6a9fd057ff57c20bf995807789cf18ce4b4979b07d5cbfd",
       "role": "local"
     },
     {
@@ -102,7 +102,7 @@
     },
     {
       "path": "windows/registry/values_test.go",
-      "sha256": "935055f7055e29a226f8ad35181604e11203aab9983bb006e3d3ceea46b6e84b",
+      "sha256": "2a4a725915aa6b1756a8d5e5154b4ceba4772e958fdb64c8761716f3971700e9",
       "role": "local"
     }
   ],

@@ -199,7 +199,6 @@ func TestMiniCodeOwnersCompiledServices(t *testing.T) {
 		{"normal", nil},
 		{"race-trimpath-coverage", []string{"-race", "-trimpath", "-cover", "-covermode=atomic", "-coverpkg=./..."}},
 	} {
-		build := build
 		t.Run(build.name, func(t *testing.T) {
 			output := t.TempDir()
 			args := append([]string{"test", "--runtime=mini", "-mod=mod", "-c", "-o", output + string(filepath.Separator)}, build.flags...)
@@ -227,7 +226,6 @@ func TestMiniCodeOwnersCompiledServices(t *testing.T) {
 				{name: "deferred-goleak", pkg: "alpha", service: "service-alpha-team", env: []string{"DD_CIVISIBILITY_DEFERRED_DELIVERY=true"}},
 				{name: "telemetry-logs", pkg: "alpha", service: "service-alpha-team", env: []string{"DD_INSTRUMENTATION_TELEMETRY_ENABLED=true", "DD_CIVISIBILITY_LOGS_ENABLED=true"}},
 			} {
-				tc := tc
 				t.Run(tc.name, func(t *testing.T) {
 					c := newCodeOwnersReceiver()
 					server := httptest.NewServer(http.HandlerFunc(c.handler))
@@ -270,7 +268,6 @@ func TestMiniCodeOwnersCompiledServices(t *testing.T) {
 // parser. Verify ownership and service on actual events received over HTTP.
 func TestMiniCodeOwnersSpecificationOnWire(t *testing.T) {
 	for _, dialect := range []string{"github", "gitlab"} {
-		dialect := dialect
 		t.Run(dialect, func(t *testing.T) {
 			dir, driver := prepareCodeOwnersFixture(t)
 			if dialect == "github" {
@@ -288,7 +285,6 @@ func TestMiniCodeOwnersSpecificationOnWire(t *testing.T) {
 				}
 			}
 			for _, deferred := range []string{"false", "true"} {
-				deferred := deferred
 				t.Run("deferred="+deferred, func(t *testing.T) {
 					c := newCodeOwnersReceiver()
 					server := httptest.NewServer(http.HandlerFunc(c.handler))

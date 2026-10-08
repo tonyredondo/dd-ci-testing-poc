@@ -56,7 +56,6 @@ import _ "github.com/DataDog/dd-trace-go/v2/ddtrace/tracer"
 		{"SDK", []string{"-tags=selective_sdk"}, false, true, true},
 		{"SDK and suite", []string{"-tags=selective_sdk,selective_suite"}, true, true, true},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			flags := append([]string{"-mod=mod"}, tc.flags...)
 			plan, err := runner.PrepareRuntime(context.Background(), dir, flags, runner.Mini)

@@ -17,7 +17,6 @@ import (
 func TestCopyModuleFileUsesOverlayContentsAndDeletion(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{"go.mod", "go.sum", "alternate.mod", "alternate.sum"} {
-		name := name
 		t.Run(name, func(t *testing.T) {
 			logical, backing, output := filepath.Join(dir, name), filepath.Join(dir, name+".backing"), filepath.Join(dir, name+".copy")
 			for path, contents := range map[string]string{logical: "physical", backing: "overlaid"} {
@@ -75,7 +74,6 @@ func TestMiniSourceRoot(t *testing.T) {
 		{"other-version", "internal/runner/provide.go", "v1.0.0", ""},
 		{"development-trimpath", "internal/runner/provide.go", "(devel)", ""},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			if got := miniSourceRoot(tc.source, cache, tc.version); got != tc.want {
 				t.Fatalf("got %q, want %q", got, tc.want)
@@ -100,7 +98,6 @@ func TestRequireMiniPrefersLocalSourcesAndClientReplacement(t *testing.T) {
 	t.Setenv("GOWORK", "off")
 	t.Setenv("GOPROXY", "off")
 	for _, replacement := range []bool{false, true} {
-		replacement := replacement
 		t.Run(fmt.Sprintf("client-replace=%t", replacement), func(t *testing.T) {
 			dir := t.TempDir()
 			modfile := filepath.Join(dir, "go.mod")
@@ -161,7 +158,6 @@ func TestRequireLocalMiniGoVersion(t *testing.T) {
 		{"1.21.0", "1.26.0", "1.21.0"},
 		{"", "1.26.0", ""},
 	} {
-		tc := tc
 		t.Run(tc.client+"-"+tc.runtime, func(t *testing.T) {
 			dir := t.TempDir()
 			root := filepath.Join(dir, "runtime")
@@ -233,7 +229,6 @@ func TestPreprovideMiniRespectsEffectiveModuleAndWorkspace(t *testing.T) {
 	t.Setenv("GOPROXY", "off")
 	t.Setenv("GOWORK", "off")
 	for _, scenario := range []string{"absent", "required", "modfile", "overlay", "workspace", "escaped"} {
-		scenario := scenario
 		t.Run(scenario, func(t *testing.T) {
 			dir := t.TempDir()
 			bare := "module example.com/preprovide\n\ngo 1.26.0\n"

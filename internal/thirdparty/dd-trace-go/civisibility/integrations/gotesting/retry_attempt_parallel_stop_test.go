@@ -56,7 +56,7 @@ func TestSequentialAttemptsRecordNoParallelEnd(t *testing.T) {
 			group, reason := newRetryAttemptGroup(original)
 			require.Empty(original, reason)
 			defer group.retire()
-			for i, limit := 0, 2; i < limit; i++ {
+			for i := 0; i < 2; i++ {
 				root, result, reason := runFreshRetryAttemptInGroup(group, func(*testing.T) {})
 				require.Empty(original, reason)
 				require.NotNil(original, root)

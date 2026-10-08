@@ -65,7 +65,6 @@ func TestComposedAPMHTTP(t *testing.T) {
 		}
 	}
 	for _, sdk := range []string{sdkVersion, "v2.11.0-rc.2"} {
-		sdk := sdk
 		t.Run(sdk, func(t *testing.T) {
 			if sdk != sdkVersion {
 				out, stderr, code := command(t, dir, testEnv(), "go", "mod", "edit", "-replace=github.com/DataDog/dd-trace-go/v2=github.com/DataDog/dd-trace-go/v2@"+sdk)
@@ -101,11 +100,8 @@ func TestComposedAPMHTTP(t *testing.T) {
 				t.Fatal(out, stderr)
 			}
 			for _, enabled := range []string{"parent", "true"} {
-				enabled := enabled
 				for _, deferred := range []bool{false, true} {
-					deferred := deferred
 					for _, failure := range []bool{false, true} {
-						failure := failure
 						t.Run(fmt.Sprintf("enabled=%s/deferred=%t/failure=%t", enabled, deferred, failure), func(t *testing.T) {
 							name, wantTests, wantExit := "TestPass", 2, 0
 							if failure {

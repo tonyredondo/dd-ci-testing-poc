@@ -46,7 +46,6 @@ func TestW3CAndDatadogExchange(t *testing.T) {
 }
 func TestMalformedRemoteContexts(t *testing.T) {
 	for _, header := range []string{"", "00-00000000000000000000000000000000-00f067aa0ba902b7-01", "00-4bf92f3577b34da6a3ce929d0e0e4736-0000000000000000-01", "ff-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", "00-4BF92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-extra"} {
-		header := header
 		t.Run(header, func(t *testing.T) {
 			if _, err := Extract(MapCarrier{"traceparent": header}, W3C); err == nil {
 				t.Fatal("accepted invalid parent")

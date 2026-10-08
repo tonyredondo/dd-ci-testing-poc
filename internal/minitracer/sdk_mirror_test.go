@@ -76,7 +76,7 @@ func TestSDKMirrorConcurrentCapture(t *testing.T) {
 	var wg compat.WaitGroup
 	var mu sync.Mutex
 	deliveries := 0
-	for i, limit := 0, 32; i < limit; i++ {
+	for i := 0; i < 32; i++ {
 		wg.Go(func() {
 			if sdkMirrorCapture(mirror, "root", "", "", "", 10, -1, 0, compat.MapSequence(map[string]string{}), nil, [16]byte{}, 101) != nil {
 				mu.Lock()

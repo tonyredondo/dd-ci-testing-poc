@@ -65,7 +65,6 @@ func TestAgentlessGzipRoundTripsPayloadShapes(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, data := range [][]byte{nil, []byte("small payload"), bytes.Repeat([]byte("test.name:subtest,error.type:fixture;"), 8000), random, bytes.Repeat([]byte("x"), TestCycleMaxPayloadBytes)} {
-		data := data
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Header.Get("Content-Encoding") != "gzip" {
 				t.Error("lost standard gzip encoding")
@@ -96,7 +95,6 @@ func TestAgentlessGzipRoundTripsPayloadShapes(t *testing.T) {
 
 func TestDeliveryModesAndRetries(t *testing.T) {
 	for _, agentless := range []bool{false, true} {
-		agentless := agentless
 		t.Run(map[bool]string{false: "agent", true: "agentless"}[agentless], func(t *testing.T) {
 			var calls atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +142,6 @@ func TestDeliveryModesAndRetries(t *testing.T) {
 }
 func TestPermanentFailureRedirectAndCancellation(t *testing.T) {
 	for _, status := range []int{401, 302} {
-		status := status
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			var calls atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

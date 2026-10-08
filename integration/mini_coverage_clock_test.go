@@ -70,11 +70,8 @@ func TestMiniCoverageWithGlobalTimeChanges(t *testing.T) {
 		t.Fatal("SDK reference did not upload coverage")
 	}
 	for _, cpus := range []int{4, 32} {
-		cpus := cpus
 		for _, deferred := range []bool{false, true} {
-			deferred := deferred
 			for _, telemetry := range []bool{false, true} {
-				telemetry := telemetry
 				t.Run(fmt.Sprintf("cpus=%d/deferred=%t/telemetry=%t", cpus, deferred, telemetry), func(t *testing.T) {
 					got, mini := runParityCase(t, dir, bins[1], parityCase{
 						Args: args, Policy: policySettings{Coverage: true}, Coverage: true,

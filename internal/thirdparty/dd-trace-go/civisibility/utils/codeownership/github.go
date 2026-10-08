@@ -2,9 +2,11 @@
 // Go adaptation Copyright 2026 Datadog, Inc.
 package codeownership
 
-import "github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
+import (
+	"strings"
 
-import "strings"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/compat"
+)
 
 func (c *CodeOwners) parseGitHub(raw string) {
 	if raw[0] == '#' {

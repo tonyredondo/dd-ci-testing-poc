@@ -41,7 +41,6 @@ func TestGoTestFlagsAndVariants(t *testing.T) {
 		}
 	})
 	for _, flag := range []string{"-race", "-cover"} {
-		flag := flag
 		t.Run(flag, func(t *testing.T) {
 			var bins []string
 			compilers := []struct {

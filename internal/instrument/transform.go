@@ -46,7 +46,6 @@ func transform(files map[string][]byte, fuzz bool) (TestingSources, error) {
 	output := map[string][]byte{}
 	parallelStop := false
 	for _, name := range names {
-		name := name
 		src := files[name]
 		if bytes.Contains(src, []byte("__dd_civisibility_")) {
 			return TestingSources{}, fmt.Errorf("%s: already instrumented", name)

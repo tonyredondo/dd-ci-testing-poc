@@ -442,7 +442,6 @@ func TestMiniCIConfigurationWireParity(t *testing.T) {
 		{"automatic-job", []string{"GITHUB_ACTIONS=true", "GITHUB_JOB=unit-tests", "GITHUB_REPOSITORY=tonyredondo/dd-ci-testing-poc", "GITHUB_RUN_ID=123"}, true},
 		{"explicit-empty", []string{"DD_TEST_SESSION_NAME="}, false},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			want := runCIWireCase(t, dir, bins[0], []string{"-test.run=^TestPass$"}, tc.extra, tc.unset, false)
 			got := runCIWireCase(t, dir, bins[1], []string{"-test.run=^TestPass$"}, tc.extra, tc.unset, false)
@@ -574,7 +573,6 @@ func TestMiniParallelAndRetryCoverageAttribution(t *testing.T) {
 		{"parallel", []string{"-test.run=^TestCoverageParallel", "-test.shuffle=42", "-test.parallel=8", "-test.count=2"}, false},
 		{"retry", []string{"-test.run=^TestCoverageRetry$"}, true},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			want := runCIWireCase(t, dir, bins[0], tc.args, nil, false, tc.retry)
 			got := runCIWireCase(t, dir, bins[1], tc.args, nil, false, tc.retry)

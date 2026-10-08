@@ -34,7 +34,6 @@ func TestUnsupportedTestifyWarnsInsteadOfFailing(t *testing.T) {
 		{"unknown version", "", testifyRunSource, "(unknown version)"},
 		{"changed entry", "v1.11.1", "package suite\n\nimport \"testing\"\n\ntype TestingSuite interface{}\n\nfunc Run(t *testing.T, suite TestingSuite, options ...int) {}\n", "unsupported library API"},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			entry, warning, err := prepareTestifyPackage(testifySuitePackage(t, tc.version, tc.source), map[string]string{}, Mini, t.TempDir())
 			if err != nil || entry != nil || !strings.Contains(warning, tc.warning) || !strings.Contains(warning, "ordinary tests") {
@@ -82,7 +81,6 @@ func TestUnsupportedGoleakWarnsInsteadOfFailing(t *testing.T) {
 // metadata through JSON, just as go list does, so its module path participates.
 func TestTestifyDataDogReplacement(t *testing.T) {
 	for _, selected := range []Runtime{Mini, SDK} {
-		selected := selected
 		t.Run(string(selected), func(t *testing.T) {
 			pkg := testifySuitePackage(t, "v1.12.1", testifyRunSource)
 			metadata := `{"Path":"github.com/stretchr/testify","Version":"v1.12.1","Replace":{"Path":"github.com/DataDog/testify","Version":"v1.1.5-0.20250616071259-629a0cde43ec"}}`
@@ -101,7 +99,6 @@ func TestTestifyForkReplacementGuards(t *testing.T) {
 	const forkVersion = "v1.1.5-0.20250616071259-629a0cde43ec"
 	const incompatible = "package suite\nimport \"testing\"\ntype TestingSuite interface{}\nfunc Run(t *testing.T, s TestingSuite, extra bool) {}\n"
 	for _, selected := range []Runtime{Mini, SDK} {
-		selected := selected
 		for _, tc := range []struct {
 			name, source string
 			overlay      bool
@@ -111,7 +108,6 @@ func TestTestifyForkReplacementGuards(t *testing.T) {
 			{"overlay changes API", incompatible, true},
 			{"overlay removes entry", "package suite\n", true},
 		} {
-			tc := tc
 			t.Run(string(selected)+"/"+tc.name, func(t *testing.T) {
 				source := tc.source
 				if tc.overlay {
@@ -155,7 +151,6 @@ func TestTestifyReplacementVersionPolicy(t *testing.T) {
 		{"local replacement", "v1.12.1", "../testify", "", true},
 		{"local old original", "v1.3.0", "../testify", "", false},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			pkg := testifySuitePackage(t, tc.required, testifyRunSource)
 			pkg.Module.Replace = &struct{ Path, Dir, Version string }{Path: tc.path, Version: tc.version}

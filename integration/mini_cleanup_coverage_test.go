@@ -37,9 +37,7 @@ func TestCleanupOnly(t *testing.T) {
 		t.Fatal(out, stderr)
 	}
 	for _, deferred := range []bool{false, true} {
-		deferred := deferred
 		for _, mode := range []string{"pass", "parallel", "retry", "retry-process", "efd", "efd-process", "panic", "child-panic", "failnow", "skip", "cleanup-fail", "cleanup-goexit"} {
-			mode := mode
 			t.Run(fmt.Sprintf("%s/deferred=%t", mode, deferred), func(t *testing.T) {
 				retry, efd := strings.HasPrefix(mode, "retry"), strings.HasPrefix(mode, "efd")
 				policy := policySettings{Coverage: true, Retry: retry, EFD: efd, Known: efd}

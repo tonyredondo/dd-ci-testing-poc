@@ -67,7 +67,6 @@ func TestSDKMirror(t *testing.T) {
 		t.Fatal(out, stderr)
 	}
 	for _, deferred := range []bool{false, true} {
-		deferred := deferred
 		t.Run(fmt.Sprintf("deferred=%t", deferred), func(t *testing.T) {
 			events, apm := runSDKMirror(t, dir, bin, "TestSDKMirror", deferred, true)
 			if len(apm) != 3 {
@@ -273,7 +272,6 @@ func TestMiniSDKMirrorContextMatrix(t *testing.T) {
 		t.Fatal(out, stderr)
 	}
 	for _, sdk := range []string{sdkVersion, "v2.11.0-rc.2"} {
-		sdk := sdk
 		t.Run(sdk, func(t *testing.T) {
 			if sdk != sdkVersion {
 				out, stderr, code = command(t, dir, testEnv(), "go", "mod", "edit", "-replace=github.com/DataDog/dd-trace-go/v2=github.com/DataDog/dd-trace-go/v2@"+sdk)
@@ -299,7 +297,6 @@ func TestMiniSDKMirrorContextMatrix(t *testing.T) {
 				}
 			}
 			for _, build := range builds {
-				build := build
 				t.Run(build.name, func(t *testing.T) {
 					bin := filepath.Join(t.TempDir(), executableName("context.test"))
 					args := append([]string{"test", "-mod=mod", "-c", "-o", bin}, build.flags...)
@@ -308,9 +305,7 @@ func TestMiniSDKMirrorContextMatrix(t *testing.T) {
 						t.Fatal(out, stderr)
 					}
 					for _, deferred := range []bool{false, true} {
-						deferred := deferred
 						for _, agentless := range []bool{false, true} {
-							agentless := agentless
 							t.Run(fmt.Sprintf("deferred=%t/agentless=%t", deferred, agentless), func(t *testing.T) {
 								events, apm := runSDKMirror(t, dir, bin, "TestSDKMirrorScopes", deferred, agentless)
 								assertSDKMirrorScopes(t, events, apm)

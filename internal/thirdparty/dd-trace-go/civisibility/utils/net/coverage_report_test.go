@@ -139,7 +139,6 @@ func TestParseCoverageReportFlags(t *testing.T) {
 
 	defer log.UseLogger(log.DiscardLogger{})()
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			require.Equal(t, test.want, parseCoverageReportFlags(test.raw))
 		})
@@ -171,7 +170,6 @@ func TestCoverageReportApiRequestOmitsInvalidFlags(t *testing.T) {
 
 	defer log.UseLogger(log.DiscardLogger{})()
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			var requestReceived bool
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

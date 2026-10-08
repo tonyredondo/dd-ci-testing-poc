@@ -20,7 +20,6 @@ func TestReservedTagsUpdateEventFields(t *testing.T) {
 		{"resource.name", func(s *Span) string { return s.content.Resource }},
 		{"span.type", func(s *Span) string { return s.content.Type }},
 	} {
-		tc := tc
 		t.Run(tc.key, func(t *testing.T) {
 			span, _ := newSpan(nil, context.Background(), "original", SpanType("test"))
 			span.SetTag(tc.key, 1)
@@ -73,7 +72,6 @@ func (v spanReaderFormatter) Format(state fmt.State, _ rune) {
 
 func TestTagFormattingCanReadItsSpan(t *testing.T) {
 	for _, name := range []string{"stringer", "formatter", "slice", "error", "error-no-stack", "finish"} {
-		name := name
 		t.Run(name, func(t *testing.T) {
 			span, _ := newSpan(nil, context.Background(), "test", Tag("initial", "read safely"))
 			key, value := "formatted", any(spanReaderStringer{span: span})

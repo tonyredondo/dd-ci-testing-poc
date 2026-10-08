@@ -42,7 +42,6 @@ func TestMiniCLIRuntimeSelectionAndSourceRange(t *testing.T) {
 		{"no-optimization", []string{"test", "-count=1", "-gcflags=-N -l"}},
 		{"race", []string{"test", "-count=1", "-race"}},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			receiver := &parityReceiver{side: map[string][][]byte{}, requests: map[string]int{}}
 			server := httptest.NewServer(http.HandlerFunc(receiver.handler))

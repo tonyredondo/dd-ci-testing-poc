@@ -59,7 +59,6 @@ func ExamplePublic(){fmt.Println("public")
 		}
 	}
 	for _, deferred := range []bool{false, true} {
-		deferred := deferred
 		t.Run(fmt.Sprint(deferred), func(t *testing.T) {
 			receiver := &parityReceiver{side: map[string][][]byte{}, requests: map[string]int{}}
 			server := httptest.NewServer(http.HandlerFunc(receiver.handler))

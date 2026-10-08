@@ -25,10 +25,8 @@ func (benchmarkTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 func BenchmarkSpanMetadata(b *testing.B) {
 	common := NewCommonTags(map[string]string{"ci.provider.name": "fixture", "git.branch": "main"})
 	for _, shape := range []string{"ci", "text-only"} {
-		shape := shape
 		b.Run(shape, func(b *testing.B) {
 			for _, tags := range []int{0, 4, 12, 32, 128} {
-				tags := tags
 				b.Run(fmt.Sprintf("tags=%d", tags), func(b *testing.B) {
 					options := []StartSpanOption{SpanType("test"), ResourceName("fixture.test"), StartTime(time.Now()),
 						Tag("test_session_id", "1"), Tag("test_module_id", "2"), Tag("test_suite_id", "3"),
@@ -36,13 +34,12 @@ func BenchmarkSpanMetadata(b *testing.B) {
 					if shape == "text-only" {
 						options = nil
 					}
-					for i, limit := 0, tags; i < limit; i++ {
-						i := i
+					for i := 0; i < tags; i++ {
 						options = append(options, Tag(fmt.Sprintf("custom.%d", i), "value"))
 					}
 					b.ReportAllocs()
 					b.ResetTimer()
-					for i, limit := 0, b.N; i < limit; i++ {
+					for i := 0; i < b.N; i++ {
 						span, _ := newSpan(nil, context.Background(), "testing.test", options...)
 						span.Finish()
 					}
@@ -54,11 +51,9 @@ func BenchmarkSpanMetadata(b *testing.B) {
 
 func BenchmarkEventLifecycle(b *testing.B) {
 	for _, gzip := range []bool{false, true} {
-		gzip := gzip
 		b.Run(fmt.Sprintf("gzip=%t", gzip), func(b *testing.B) {
 			tags := make(map[string]string, 12)
-			for i, limit := 0, 12; i < limit; i++ {
-				i := i
+			for i := 0; i < 12; i++ {
 				tags[fmt.Sprintf("ci.tag.%d", i)] = "representative-static-ci-value"
 			}
 			c, err := New(Config{Service: "fixture", Tags: tags, Transport: citransport.Config{Endpoint: "http://diagnostic.invalid", Agentless: gzip, APIKey: "fake-key", HTTPClient: &http.Client{Transport: benchmarkTransport{}}}})
@@ -67,7 +62,7 @@ func BenchmarkEventLifecycle(b *testing.B) {
 			}
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i, limit := 0, b.N; i < limit; i++ {
+			for i := 0; i < b.N; i++ {
 				s, _ := c.StartSpan(context.Background(), "test", SpanType("test"), Tag("test_session_id", "1"), Tag("test_module_id", "2"), Tag("test_suite_id", "3"), Tag("test.name", "name"), Tag("test.status", "pass"))
 				s.Finish()
 			}

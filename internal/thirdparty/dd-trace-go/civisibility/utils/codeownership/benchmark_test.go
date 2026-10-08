@@ -24,9 +24,7 @@ func benchmarkRules(dialect Dialect, count int) string {
 
 func BenchmarkParse(b *testing.B) {
 	for _, dialect := range []Dialect{GitHub, GitLab} {
-		dialect := dialect
 		for _, count := range []int{50, 2000} {
-			count := count
 			b.Run(fmt.Sprintf("%d/%d", dialect, count), func(b *testing.B) {
 				text := benchmarkRules(dialect, count)
 				b.ReportAllocs()
@@ -48,7 +46,6 @@ func BenchmarkLookup(b *testing.B) {
 			b.Fatal(err)
 		}
 		for _, name := range []string{"/pkg/service1999/test.go", "/pkg/service0/test.go", "/other/test.go"} {
-			name := name
 			b.Run(fmt.Sprintf("%d%s", dialect, name), func(b *testing.B) {
 				b.ReportAllocs()
 				for b.Loop() {

@@ -417,7 +417,6 @@ func TestTestingCompatibility(t *testing.T) {
 		{"helper", []string{"-test.v", "-test.run=^TestHelper$", "-mode=fail"}, 1},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			native := execute(t, dir, bins[0], tc.args, false, false)
 			if native.code != tc.code {

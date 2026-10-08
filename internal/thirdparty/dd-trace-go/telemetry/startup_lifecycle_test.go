@@ -30,9 +30,7 @@ func TestStartupTelemetrySendsBeforeTests(t *testing.T) {
 	const helperEnv = "DDTEST_TELEMETRY_STARTUP_HELPER"
 	if os.Getenv(helperEnv) == "" {
 		for _, mode := range []string{"false", "true"} {
-			mode := mode
 			for _, scenario := range []string{"startup", "retry", "concurrent-close", "panic"} {
-				scenario := scenario
 				t.Run("deferred="+mode+"/"+scenario, func(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 					defer cancel()
@@ -172,7 +170,6 @@ func TestStartupTelemetrySendsBeforeTests(t *testing.T) {
 // Initial metrics must retain their values and timestamps across later submissions.
 func TestStartupFlushRetainsMetricsUntilNextFlush(t *testing.T) {
 	for _, outcome := range []string{"success", "retry", "oversized"} {
-		outcome := outcome
 		t.Run(outcome, func(t *testing.T) {
 			var mu sync.Mutex
 			var requests []startupEnvelope
