@@ -15,7 +15,6 @@
       "TestDecodeWirePayload",
       "TestDynamicToolSelection",
       "TestExistingOverlay",
-      "TestGoTestFlagsAndVariants",
       "TestGoleakCacheAndWarmVersionGuard",
       "TestInvalidRuntimeFailsBeforeGo",
       "TestMiniBazelOfflineAndPayloadFiles",
@@ -28,8 +27,6 @@
       "TestMiniCodeOwnersSpecificationOnWire",
       "TestMiniConsumerAddsOnlyOwnModule",
       "TestMiniContinuesAfterPackageSetupFailures",
-      "TestMiniCoverageIncludesCleanup",
-      "TestMiniCoverageWithGlobalTimeChanges",
       "TestMiniDeliveryFailurePreservesGoExit",
       "TestMiniExecWrapperSeesCallerEnvironment",
       "TestMiniFixtureRuntimeImportLineEndings",
@@ -46,7 +43,6 @@
       "TestMiniProvisionsVendorAndPreservesPatchedSources",
       "TestMiniProvisionsWorkspaceWithoutChangingModules",
       "TestMiniPublicTestingContext",
-      "TestMiniRaceAndCoverage",
       "TestMiniRuntimeProvisionUsesModuleOverlay",
       "TestMiniRuntimeWithoutRequirementLeavesModuleUntouched",
       "TestMiniStartupOverlapsSettingsAndTelemetry",
@@ -66,13 +62,19 @@
       "TestSharedParityFixtureFailedBuild",
       "TestSharedParityFixtureLifetime",
       "TestTestifyContractInvalidatesOnlyTestingDependents",
-      "TestTestifyCoveredLibraryAndWorkspace",
       "TestTestifyMovedCallSitesInFormattedDiagnostics",
       "TestTestifyVersionGuardWithWarmVendoredSources",
-      "TestTestingCompatibility",
       "TestToolBypassHasNativeIdentityAndExit",
       "TestToolBypassProcessReplacement",
       "TestWorkspaceCommandPreservesLogicalWorkingDirectory"
+    ],
+    "transparency": [
+      "TestGoTestFlagsAndVariants",
+      "TestMiniCoverageIncludesCleanup",
+      "TestMiniCoverageWithGlobalTimeChanges",
+      "TestMiniRaceAndCoverage",
+      "TestTestifyCoveredLibraryAndWorkspace",
+      "TestTestingCompatibility"
     ],
     "parity": [
       "TestCIComparatorRetainsProductAttributes",
@@ -85,16 +87,18 @@
       "TestCIVisibilityMultiplePackages",
       "TestCIVisibilityParityMatrix",
       "TestCIVisibilityTelemetryInventory",
-      "TestCIVisibilityTestifyParity",
       "TestDeferredDeliveryParityMatrix",
-      "TestDeferredDeliveryTestifyParity",
       "TestMiniCIConfigurationWireParity",
       "TestMiniParallelAndRetryCoverageAttribution",
       "TestMiniWireHierarchyAgentAndCoverage",
       "TestOracleStackComparisonRetainsApplication",
       "TestOtherSourceComparisonRetainsRangeChecks",
       "TestParityGraphRejectsLostEvents",
-      "TestSDKFeaturePolicies",
+      "TestSDKFeaturePolicies"
+    ],
+    "testify": [
+      "TestCIVisibilityTestifyParity",
+      "TestDeferredDeliveryTestifyParity",
       "TestTestifyCoverageCacheAndGOFLAGS",
       "TestTestifyDiagnosticNormalizationRetainsApplicationErrors",
       "TestTestifyRegularCallerDefaultCoverage",
@@ -123,11 +127,13 @@
     ],
     "sdk": [
       "TestMiniLegacySDKShim",
-      "TestMiniOrchestrionLegacySDKShim",
-      "TestMiniOrchestrionLibrariesAndDelivery",
       "TestMiniSDKMirrorContextMatrix",
       "TestMiniSDKSpanMirror",
       "TestMiniUnsupportedSDKMirrorRetainsTestReporting"
+    ],
+    "sdk-orchestrion": [
+      "TestMiniOrchestrionLegacySDKShim",
+      "TestMiniOrchestrionLibrariesAndDelivery"
     ]
   },
   "mini": {
@@ -187,5 +193,107 @@
         "TestSharedParityWorkspaceWaitsForOpenFile"
       ]
     }
+  },
+  "jobs": {
+    "differential/ubuntu-latest/normal": [
+      [
+        "cli",
+        "parity"
+      ],
+      [
+        "transparency",
+        "sdk",
+        "units"
+      ],
+      [
+        "testify",
+        "fuzz"
+      ],
+      [
+        "orchestrion",
+        "sdk-orchestrion"
+      ]
+    ],
+    "differential/ubuntu-latest/race": [
+      [
+        "cli",
+        "parity"
+      ],
+      [
+        "transparency",
+        "sdk"
+      ],
+      [
+        "testify",
+        "units"
+      ],
+      [
+        "orchestrion"
+      ],
+      [
+        "sdk-orchestrion",
+        "fuzz"
+      ]
+    ],
+    "differential/macos-latest/normal": [
+      [
+        "transparency",
+        "units"
+      ],
+      [
+        "sdk-orchestrion"
+      ],
+      [
+        "cli",
+        "parity"
+      ],
+      [
+        "testify",
+        "sdk"
+      ],
+      [
+        "orchestrion",
+        "fuzz"
+      ]
+    ],
+    "differential/windows-latest/normal": [
+      [
+        "cli"
+      ],
+      [
+        "sdk-orchestrion",
+        "units"
+      ],
+      [
+        "orchestrion"
+      ],
+      [
+        "transparency"
+      ],
+      [
+        "testify"
+      ],
+      [
+        "parity",
+        "sdk"
+      ],
+      [
+        "fuzz"
+      ]
+    ],
+    "mini/ubuntu-latest/normal": [
+      [
+        "units",
+        "native",
+        "fuzz"
+      ]
+    ],
+    "mini/ubuntu-latest/race": [
+      [
+        "units",
+        "native",
+        "fuzz"
+      ]
+    ]
   }
 }
