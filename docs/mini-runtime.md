@@ -78,10 +78,24 @@ The temporary `go.work`, and the `GOFLAGS` adapted for it, apply only to the
 chains, such as a user's `-toolexec`. In the test process, Mini's
 `internal/goenv/restore` package restores the caller's `GOWORK` and `GOFLAGS`.
 It imports only `syscall` through `goenv`, and its path sorts before `os`, so Go
-initializes it before any package that can start a command, including
-dependencies that do not import `testing`. Commands started by tests, or by
+initializes it before `os`, and therefore before any package that starts
+commands through `os/exec`, including dependencies that do not import `testing`. Commands started by tests, or by
 those dependencies, see the same module, workspace and flags as under native
 `go test`.
+
+A `go test -exec` program, or the `go_$GOOS_$GOARCH_exec` helper that Go uses
+when cross-compiling, starts before the test binary. `ddtest` runs it through
+`ddtest test-exec`, which restores the caller's values first; Go already
+disables result caching for such runs. Go keys cached test results on its own
+environment, which holds the temporary workspace. Each test binary therefore
+records a fingerprint of the caller's values, so a cached result is reused only
+for the same caller environment.
+
+Known limitation: a dependency that imports `syscall` but not `os` can
+initialize before the restore package when its import path sorts first. If it
+reads `GOWORK` or `GOFLAGS` through `syscall` during initialization, it sees
+`ddtest`'s values. Ordinary code reads them through `os`, and starts commands
+through `os/exec`, after the restore.
 
 Mini uses native Go 1.25 APIs. `internal/compat` contains only `AsType` and
 `Pointer`, which adapt Go 1.26 helpers used by the incorporated sources. The
@@ -122,25 +136,31 @@ affect other versions of that module. Go splits manifest lines on whitespace, so
 a moved path that would contain the spaces of the project's directory is replaced
 by a link inside the workspace, such as `./replacements/0`. The temporary
 `go.work` declares that link as the module's replacement.
-Every other top-level vendor entry is a symbolic link to the client's tree, so
-nothing else is copied and local patches stay live. Alternate modfiles keep
-working in any spelling, including `GOFLAGS`.
+
+The client's vendor directories are recreated, and every other entry is a
+symbolic link to the client's file, so no file contents are copied and local
+patches stay live. Real directories keep vendored packages visible to wildcard
+patterns such as `example.com/helper/...`; Go ignores linked directories there.
+Alternate modfiles keep working in any spelling, including `GOFLAGS`.
 
 The workspace lives in the user cache, under `ddtest/vendor-workspaces`, at a
-path derived from its `go.work`, manifest and linked entries. Go's build cache
-keys include each package directory, so this stable path lets unchanged vendored
+path derived from its `go.work`, manifest and the names of the vendored paths,
+which each run lists without reading file contents. Go's build cache keys
+include each package directory, so this stable path lets unchanged vendored
 packages reuse compiled archives between runs. A changed manifest or workspace
-selects a new path. A run holds a shared lock on its workspace until `go test`
-exits; waiting for that lock stops when preparation is canceled or interrupted. When a new workspace is created, entries unused for 14 days are removed,
-but only while their lock can be taken exclusively without waiting; a workspace
-in use is never removed. A run that waited while another removed its workspace
-rebuilds it. Removal never follows the links, and deleting the directory by hand
-is safe when no `ddtest` run is active.
-Without a usable user cache, the links live in the run's temporary directory.
-Without symbolic links, as on Windows without the required privilege, files are
-hard-linked or copied there instead. The original vendor tree is never edited. Native Go still
-reports inconsistent vendor metadata rather than silently selecting other
-versions. An already vendored Mini can continue using its existing sources.
+selects a new path, as does adding or removing a vendored file. A run holds a
+shared lock on its workspace until `go test` exits; waiting for that lock stops
+when preparation is canceled or interrupted. When a new workspace is created,
+entries unused for 14 days are removed, but only while their lock can be taken
+exclusively without waiting; a workspace in use is never removed. A run that
+waited while another removed its workspace rebuilds it. Removal never follows
+the links, and deleting the directory by hand is safe when no `ddtest` run is
+active. Without a usable user cache, the links live in the run's temporary
+directory. Without symbolic links, as on Windows without the required privilege,
+files are hard-linked or copied there instead. The original vendor tree is never
+edited. Native Go still reports inconsistent vendor metadata rather than
+silently selecting other versions. An already vendored Mini can continue using
+its existing sources.
 
 Mini's runtime, CLI and ported SDK test helpers use only the standard library
 and this module. [Consumer checks](maintenance.md#verification-before-publication)

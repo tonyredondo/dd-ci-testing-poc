@@ -244,7 +244,7 @@ func TestMiniVendorWorkspaceLinksAndReusesBuildCache(t *testing.T) {
 	if len(workspaces) != 1 {
 		t.Fatalf("expected one reusable vendor workspace: %q", workspaces)
 	}
-	if info, err := os.Lstat(filepath.Join(workspaces[0], "vendor", "example.com")); err != nil || info.Mode()&os.ModeSymlink == 0 {
+	if info, err := os.Lstat(filepath.Join(workspaces[0], "vendor", "example.com", "linkedhelper", "helper.go")); err != nil || info.Mode()&os.ModeSymlink == 0 {
 		t.Fatalf("vendor workspace copied sources instead of linking them: %v %v", info, err)
 	}
 }
@@ -365,5 +365,138 @@ func TestMiniVendorSelectionMatchesGo(t *testing.T) {
 				t.Fatalf("selected sources differ: native=%q ddtest=%q", want, got)
 			}
 		})
+	}
+}
+
+// Wildcard patterns over vendored packages must select the same packages as
+// go test: cmd/go ignores linked directories when it expands patterns, so a
+// failing vendored test would otherwise disappear from the run.
+func TestMiniVendorPatternsMatchGo(t *testing.T) {
+	driver := sharedDriver(t, "..")
+	root := t.TempDir()
+	client, helper := filepath.Join(root, "client"), filepath.Join(root, "helper")
+	for _, dir := range []string{client, helper} {
+		if err := os.Mkdir(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeBuildFixture(t, helper, map[string]string{"go.mod": "module example.com/patternhelper\ngo 1.21\n", "helper.go": "package patternhelper\nconst Value=1\n"})
+	writeBuildFixture(t, client, map[string]string{
+		"go.mod":         "module example.com/patternclient\ngo 1.21\nrequire example.com/patternhelper v0.0.0\nreplace example.com/patternhelper => ../helper\n",
+		"client_test.go": "package patternclient\nimport(\"testing\";\"example.com/patternhelper\")\nfunc TestClient(t *testing.T){_ = patternhelper.Value}\n",
+	})
+	env := append(testEnv("GOWORK=off", "GOPROXY=off", "DD_CIVISIBILITY_ENABLED=false"), userCacheEnv(t, t.TempDir())...)
+	if out, stderr, code := command(t, client, env, "go", "mod", "vendor"); code != 0 {
+		t.Fatal(out, stderr)
+	}
+	vendored := filepath.Join(client, "vendor", "example.com", "patternhelper", "helper_test.go")
+	if err := os.WriteFile(vendored, []byte("package patternhelper\nimport \"testing\"\nfunc TestVendored(t *testing.T){t.Fatal(\"vendored test ran\")}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	results := func(out string) []string {
+		var lines []string
+		for _, line := range strings.Split(out, "\n") {
+			if fields := strings.Fields(line); len(fields) >= 2 && (fields[0] == "ok" || fields[0] == "FAIL" || fields[0] == "?") {
+				lines = append(lines, fields[0]+" "+fields[1])
+			}
+		}
+		slices.Sort(lines)
+		return lines
+	}
+	args := []string{"test", "-count=1", ".", "example.com/patternhelper/..."}
+	native, nativeErr, nativeCode := command(t, client, env, "go", args...)
+	out, stderr, code := command(t, client, env, driver, args...)
+	if want, got := results(native), results(out); code != nativeCode || !slices.Equal(got, want) || !slices.Contains(want, "FAIL example.com/patternhelper") {
+		t.Fatalf("native exit=%d %q\n%s%s\nddtest exit=%d %q\n%s%s", nativeCode, want, native, nativeErr, code, got, out, stderr)
+	}
+}
+
+// Go keys cached results on its own environment, which holds ddtest's stable
+// vendor workspace, while tests see the caller's values. A result cached under
+// GOWORK=off must not pass for a caller without GOWORK; an unchanged caller
+// still reuses its cached result.
+func TestMiniTestCacheFollowsCallerEnvironment(t *testing.T) {
+	driver := sharedDriver(t, "..")
+	root := t.TempDir()
+	client, helper := filepath.Join(root, "client"), filepath.Join(root, "helper")
+	for _, dir := range []string{client, helper} {
+		if err := os.Mkdir(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeBuildFixture(t, helper, map[string]string{"go.mod": "module example.com/cachehelper\ngo 1.21\n", "helper.go": "package cachehelper\nconst Value=1\n"})
+	writeBuildFixture(t, client, map[string]string{
+		"go.mod":         "module example.com/cacheclient\ngo 1.21\nrequire example.com/cachehelper v0.0.0\nreplace example.com/cachehelper => ../helper\n",
+		"client_test.go": "package cacheclient\nimport(\"os\";\"testing\";\"example.com/cachehelper\")\nfunc TestCaller(t *testing.T){_ = cachehelper.Value;if v:=os.Getenv(\"GOWORK\");v!=\"off\"{t.Fatalf(\"caller GOWORK=%q\",v)}}\n",
+	})
+	env := append(testEnv("GOPROXY=off", "DD_CIVISIBILITY_ENABLED=false"), userCacheEnv(t, t.TempDir())...)
+	if out, stderr, code := command(t, client, append(env, "GOWORK=off"), "go", "mod", "vendor"); code != 0 {
+		t.Fatal(out, stderr)
+	}
+	for i, run := range []struct {
+		env    []string
+		fails  bool
+		cached bool
+	}{
+		{env: []string{"GOWORK=off"}},
+		{fails: true}, // GOWORK unset, as testEnv leaves it.
+		{env: []string{"GOWORK=off"}, cached: true},
+	} {
+		out, stderr, code := command(t, client, append(append([]string(nil), env...), run.env...), driver, "test", ".")
+		if (code != 0) != run.fails || run.fails && !strings.Contains(out, `caller GOWORK=""`) || run.cached && !strings.Contains(out, "(cached)") {
+			t.Fatalf("run %d exit=%d\n%s%s", i, code, out, stderr)
+		}
+	}
+}
+
+// A go test -exec program starts before the test binary can restore anything.
+// ddtest wraps it so the program sees the caller's Go settings, as natively.
+func TestMiniExecWrapperSeesCallerEnvironment(t *testing.T) {
+	driver := sharedDriver(t, "..")
+	root := t.TempDir()
+	wrapper, client := filepath.Join(root, "wrapper"), filepath.Join(root, "client")
+	for _, dir := range []string{wrapper, client} {
+		if err := os.Mkdir(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeBuildFixture(t, wrapper, map[string]string{
+		"go.mod": "module example.com/execwrapper\ngo 1.21\n",
+		"main.go": `package main
+import ("fmt";"os";"os/exec")
+func main() {
+ for _, name := range []string{"GOWORK", "GOFLAGS", "DDTEST_ORIGINAL_GOWORK", "DDTEST_ORIGINAL_GOFLAGS"} {
+  value, ok := os.LookupEnv(name)
+  fmt.Printf("WRAPPER %s=%t:%q\n", name, ok, value)
+ }
+ cmd := exec.Command(os.Args[1], os.Args[2:]...)
+ cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+ if err := cmd.Run(); err != nil { os.Exit(1) }
+}
+`,
+	})
+	writeBuildFixture(t, client, map[string]string{
+		"go.mod":         "module example.com/execclient\ngo 1.21\n",
+		"client_test.go": "package execclient\nimport \"testing\"\nfunc TestExec(t *testing.T){}\n",
+	})
+	env := testEnv("GOPROXY=off", "DD_CIVISIBILITY_ENABLED=false")
+	binary := filepath.Join(root, executableName("execwrapper"))
+	if out, stderr, code := command(t, wrapper, append(env, "GOWORK=off"), "go", "build", "-o", binary, "."); code != 0 {
+		t.Fatal(out, stderr)
+	}
+	lines := func(out string) []string {
+		var selected []string
+		for _, line := range strings.Split(out, "\n") {
+			if strings.HasPrefix(line, "WRAPPER ") {
+				selected = append(selected, strings.TrimSpace(line))
+			}
+		}
+		return selected
+	}
+	args := []string{"test", "-v", "-count=1", "-exec=" + quoteToolArgument(t, binary), "."}
+	native, nativeErr, nativeCode := command(t, client, env, "go", args...)
+	out, stderr, code := command(t, client, env, driver, args...)
+	if want, got := lines(native), lines(out); nativeCode != 0 || code != 0 || len(want) != 4 || !slices.Equal(got, want) {
+		t.Fatalf("native exit=%d %q\n%s%s\nddtest exit=%d %q\n%s%s", nativeCode, want, native, nativeErr, code, got, out, stderr)
 	}
 }

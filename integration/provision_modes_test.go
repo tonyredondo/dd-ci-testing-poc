@@ -107,15 +107,14 @@ func TestMiniProvisionsVendorAndPreservesPatchedSources(t *testing.T) {
 			helper := t.TempDir()
 			writeBuildFixture(t, helper, map[string]string{"go.mod": "module example.com/vendorhelper\ngo 1.21\n", "helper.go": "package vendorhelper\nconst Value=1\n"})
 			mod := fmt.Sprintf("module example.com/vendorclient\ngo 1.21\nrequire example.com/vendorhelper v0.0.0\nreplace example.com/vendorhelper => %q\n", filepath.ToSlash(helper))
-			if mode.modfile {
-				mod += "godebug default=go1.25\n"
-			}
 			writeBuildFixture(t, dir, map[string]string{
 				"go.mod":         mod,
-				"client_test.go": "package vendorclient\nimport(\"testing\";\"fmt\";\"time\";\"example.com/vendorhelper\")\nfunc TestVendor(t *testing.T){if vendorhelper.Value!=7{t.Fatal(\"vendored patch lost\")};timer:=time.NewTimer(time.Hour);defer timer.Stop();fmt.Printf(\"TIMER_CAP=%d\\n\",cap(timer.C))}\n",
+				"client_test.go": "package vendorclient\nimport(\"testing\";\"fmt\";\"time\";\"example.com/vendorhelper\")\nfunc TestVendor(t *testing.T){if vendorhelper.Value!=7{t.Fatal(\"vendored patch lost\")};timer:=time.NewTimer(time.Hour);defer timer.Stop();fmt.Printf(\"TIMER_CAP=%d\\n\",cap(timer.C));func(){defer func(){fmt.Printf(\"PANIC_NIL=%T\\n\",recover())}();panic(nil)}()}\n",
 			})
 			if mode.modfile {
-				if err := os.WriteFile(filepath.Join(dir, "alternate.mod"), []byte(mod), 0600); err != nil {
+				// Only the selected modfile restores Go 1.20 defaults: if ddtest
+				// read go.mod instead, panic(nil) would recover differently.
+				if err := os.WriteFile(filepath.Join(dir, "alternate.mod"), []byte(mod+"godebug default=go1.20\n"), 0600); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -143,6 +142,7 @@ func TestMiniProvisionsVendorAndPreservesPatchedSources(t *testing.T) {
 					nativeOutput = out
 				} else {
 					assertNativeTimerCapacity(t, nativeOutput, out)
+					assertNativeOutputLine(t, "PANIC_NIL=", nativeOutput, out)
 				}
 			}
 			if data, _ := os.ReadFile(manifest); string(data) != string(before) {

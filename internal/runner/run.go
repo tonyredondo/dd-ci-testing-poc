@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,6 +67,23 @@ type Plan struct {
 	compilerCache     []string
 	// workspaceLock keeps a cached vendor workspace from being pruned.
 	workspaceLock *os.File
+	// execHelper is the cross-compilation program Go would run test binaries
+	// with; execWrapper restores the caller's Go settings before a -exec program.
+	execHelper  string
+	execWrapper string
+}
+
+// savedEnvironment records the caller's values of the Go settings that go test
+// receives from this plan instead.
+func (p Plan) savedEnvironment() []string {
+	if p.Workfile == "" {
+		return nil
+	}
+	saved := []string{goenv.Save("GOWORK")}
+	if p.moduleWorkspace {
+		saved = append(saved, goenv.Save("GOFLAGS"))
+	}
+	return saved
 }
 
 // Release lets other runs prune the plan's cached vendor workspace. Call it
@@ -406,6 +424,17 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	if e = add(filepath.Join(native.Dir, "zz_dd_ci_visibility_hooks.go"), hooks); e != nil {
 		return plan, e
 	}
+	// Go keys cached test results on its own environment, which holds the
+	// temporary workspace, while tests see the caller's values. Keying the test
+	// binaries on those values keeps a cached result from outliving them.
+	if plan.Workfile != "" && opts.exec == "" {
+		plan.execHelper = crossExecHelper(opts.environment)
+	}
+	// Go caches by binary content, so the fingerprint must reach the binary.
+	callerEnvironment := ""
+	if saved := plan.savedEnvironment(); saved != nil {
+		callerEnvironment = fmt.Sprintf("func init() { __dd_ci_runtime.RegisterTestEnvironment(\"%x\") }\n", sha256.Sum256([]byte(strings.Join(saved, "\x00"))))
+	}
 	for _, p := range packages {
 		if p.ImportPath == "testing" || p.ImportPath == runtimePackage || len(p.TestGoFiles)+len(p.XTestGoFiles) == 0 {
 			continue
@@ -417,7 +446,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		if runtime == Mini {
 			// The caller's compiler path identifies this package without baking
 			// its directory into the source. Identical packages still share files.
-			content = "package " + p.Name + "_test\nimport __dd_ci_runtime " + fmt.Sprintf("%q", runtimePackage) + "\nfunc init() { __dd_ci_runtime.RegisterTestPackage() }\n"
+			content = "package " + p.Name + "_test\nimport __dd_ci_runtime " + fmt.Sprintf("%q", runtimePackage) + "\nfunc init() { __dd_ci_runtime.RegisterTestPackage() }\n" + callerEnvironment
 		}
 		if e = add(filepath.Join(p.Dir, "zz_dd_ci_visibility_test.go"), content); e != nil {
 			return plan, e
@@ -612,14 +641,34 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 		}
 	}
 	debug.printf("tool selection testify=%t goleak=%t cover=%t user_toolexec=%t orchestrion=%t sdk_ci_gate=%t", plan.testify, plan.goleak, plan.coverOverlay, opts.toolexec != "", plan.orchestrion, plan.sdkCI)
+	// A -exec program, or Go's cross-compilation helper, starts before the test
+	// binary can restore the caller's Go settings. Go already disables result
+	// caching for those runs, so ddtest's wrapper restores them first.
+	if plan.Workfile != "" && (opts.exec != "" || plan.execHelper != "") {
+		words := []string{plan.execHelper}
+		if opts.exec != "" {
+			if words, err = splitFlags(opts.exec); err != nil {
+				fmt.Fprintln(stderr, version.BuildLogPrefix+" ERROR: invalid -exec:", err)
+				return 2
+			}
+		}
+		executable, e := os.Executable()
+		if e == nil {
+			plan.execWrapper, e = quoteToolWords(append([]string{executable, "test-exec"}, words...))
+		}
+		if e != nil {
+			fmt.Fprintln(stderr, version.BuildLogPrefix+" ERROR:", e)
+			return 2
+		}
+	}
 	forwarded := goTestArguments(plan, opts, tool)
 	if plan.Workfile != "" {
 		// The temporary workspace belongs to the build, including chained tools.
 		// The test runtime's goenv/restore package gives test processes the
 		// caller's values before any client package can start a go command.
-		env = append(env, goenv.Save("GOWORK"), "GOWORK="+plan.Workfile)
+		env = append(append(env, plan.savedEnvironment()...), "GOWORK="+plan.Workfile)
 		if plan.moduleWorkspace {
-			env = append(env, goenv.Save("GOFLAGS"), "GOFLAGS="+plan.workspaceGoFlags)
+			env = append(env, "GOFLAGS="+plan.workspaceGoFlags)
 		}
 	}
 	if plan.launcher != nil {
@@ -662,6 +711,9 @@ func goTestArguments(plan Plan, opts options, tool string) []string {
 	if tool != "" {
 		forwarded = append(forwarded, "-toolexec="+tool)
 	}
+	if plan.execWrapper != "" {
+		forwarded = append(forwarded, "-exec="+plan.execWrapper)
+	}
 	lastGcflags := -1
 	if len(plan.compilerCache) != 0 {
 		for i, argument := range opts.arguments {
@@ -674,7 +726,7 @@ func goTestArguments(plan Plan, opts options, tool string) []string {
 		}
 	}
 	for i, argument := range opts.arguments {
-		if argument.flag == "overlay" || argument.flag == "toolexec" && tool != "" || argument.flag == "modfile" && (plan.Modfile != "" || plan.modfileOverlay) {
+		if argument.flag == "overlay" || argument.flag == "toolexec" && tool != "" || argument.flag == "exec" && plan.execWrapper != "" || argument.flag == "modfile" && (plan.Modfile != "" || plan.modfileOverlay) {
 			continue
 		}
 		if plan.moduleWorkspace && argument.flag == "mod" {

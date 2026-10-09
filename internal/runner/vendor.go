@@ -341,7 +341,7 @@ func isDirectoryPath(path string) bool {
 var userCacheDir = os.UserCacheDir
 
 // vendorWorkspaceLayout changes every cache key when the stored layout changes.
-const vendorWorkspaceLayout = "ddtest-vendor-workspace-v2"
+const vendorWorkspaceLayout = "ddtest-vendor-workspace-v3"
 
 // vendorWorkspaceRetention bounds unused workspaces. Each one holds only
 // go.work, modules.txt and links, but every vendor change creates a new one.
@@ -353,8 +353,9 @@ var vendorWorkspaceLockOpened = func() {}
 // vendorWorkspace gives work the caller's vendor tree and returns the go.work
 // that Go must use. Go reads a workspace's vendor directory next to go.work,
 // and reads its modules.txt outside the overlay, so that file gets its own
-// workspace header. Every other top-level entry links to the caller's tree:
-// nothing is copied and local patches stay live.
+// workspace header. The caller's directories are recreated and every other
+// entry links to the caller's tree: no file contents are copied and local
+// patches stay live, while cmd/go can still traverse vendored directories.
 //
 // Go's build cache keys include each package directory. A content-addressed
 // workspace in the user cache keeps vendored directories identical between
@@ -369,7 +370,7 @@ func vendorWorkspace(ctx context.Context, work string, vendor vendorManifest, re
 	if err != nil {
 		return "", nil, err
 	}
-	entries, err := os.ReadDir(source)
+	tree, err := readVendorTree(source)
 	if err != nil {
 		return "", nil, err
 	}
@@ -377,7 +378,7 @@ func vendorWorkspace(ctx context.Context, work string, vendor vendorManifest, re
 	if err := vendor.declareAliases(ctx, work); err != nil {
 		return "", nil, err
 	}
-	stable, lock, err := stableVendorWorkspace(ctx, work, vendor, original, entries)
+	stable, lock, err := stableVendorWorkspace(ctx, work, vendor, original, tree)
 	if err == nil {
 		retargetVendorOverlay(source, filepath.Join(filepath.Dir(stable), "vendor"), replacements)
 		debug.printf("vendor workspace=cached-links")
@@ -388,7 +389,7 @@ func vendorWorkspace(ctx context.Context, work string, vendor vendorManifest, re
 	}
 	target := filepath.Join(filepath.Dir(work), "vendor")
 	manifest := vendor.contents(original, filepath.Dir(work))
-	if err := linkVendor(source, target, manifest, entries); err == nil && vendor.linkAliases(filepath.Dir(work)) == nil {
+	if err := linkVendor(source, target, manifest, tree); err == nil && vendor.linkAliases(filepath.Dir(work)) == nil {
 		retargetVendorOverlay(source, target, replacements)
 		debug.printf("vendor workspace=run-links")
 		return work, nil, nil
@@ -408,7 +409,7 @@ func vendorWorkspace(ctx context.Context, work string, vendor vendorManifest, re
 // use a workspace hold <key>.lock shared; pruning needs it exclusively and
 // never waits. Concurrent runs build privately and rename; one that loses the
 // race reuses the identical winner. Unexpected contents are never modified.
-func stableVendorWorkspace(ctx context.Context, work string, vendor vendorManifest, original []byte, entries []fs.DirEntry) (string, *os.File, error) {
+func stableVendorWorkspace(ctx context.Context, work string, vendor vendorManifest, original []byte, tree []vendorEntry) (string, *os.File, error) {
 	source := vendor.dir
 	cache, err := userCacheDir()
 	if err != nil {
@@ -432,8 +433,8 @@ func stableVendorWorkspace(ctx context.Context, work string, vendor vendorManife
 	for _, part := range [][]byte{[]byte(vendorWorkspaceLayout), []byte(source), []byte(vendor.base), []byte(strconv.FormatBool(vendor.module)), []byte(strings.Join(replaced, "\x00")), workData, sum, original} {
 		fmt.Fprintf(hash, "%d:%s", len(part), part)
 	}
-	for _, entry := range entries {
-		fmt.Fprintf(hash, "%d:%s:%d", len(entry.Name()), entry.Name(), entry.Type())
+	for _, entry := range tree {
+		fmt.Fprintf(hash, "%d:%s:%t", len(entry.rel), entry.rel, entry.dir)
 	}
 	key := hex.EncodeToString(hash.Sum(nil))[:32]
 	parent := filepath.Join(cache, "ddtest", "vendor-workspaces")
@@ -450,7 +451,7 @@ func stableVendorWorkspace(ctx context.Context, work string, vendor vendorManife
 		lock.Close()
 		return "", nil, err
 	}
-	if validVendorWorkspace(root, workData, source, manifest, entries) && vendor.validAliases(root) {
+	if validVendorWorkspace(root, workData, manifest, tree) && vendor.validAliases(root) {
 		// Only retention depends on this time. The held lock already keeps the
 		// workspace from being pruned while this run uses it.
 		now := time.Now()
@@ -470,13 +471,13 @@ func stableVendorWorkspace(ctx context.Context, work string, vendor vendorManife
 			return fail(err)
 		}
 	}
-	if err := linkVendor(source, filepath.Join(staging, "vendor"), manifest, entries); err != nil {
+	if err := linkVendor(source, filepath.Join(staging, "vendor"), manifest, tree); err != nil {
 		return fail(err)
 	}
 	if err := vendor.linkAliases(staging); err != nil {
 		return fail(err)
 	}
-	if err := os.Rename(staging, root); err != nil && !(validVendorWorkspace(root, workData, source, manifest, entries) && vendor.validAliases(root)) {
+	if err := os.Rename(staging, root); err != nil && !(validVendorWorkspace(root, workData, manifest, tree) && vendor.validAliases(root)) {
 		return fail(err)
 	}
 	pruneVendorWorkspaces(parent, key)
@@ -511,20 +512,53 @@ func sameOpenFile(file *os.File, path string) bool {
 	return heldErr == nil && currentErr == nil && os.SameFile(held, current)
 }
 
-// linkVendor writes the workspace manifest and links every other top-level
-// entry, so nested links and later source edits behave as in the caller's tree.
-func linkVendor(source, target string, manifest []byte, entries []fs.DirEntry) error {
+// vendorEntry is a path below the caller's vendor directory, other than the
+// root modules.txt.
+type vendorEntry struct {
+	rel string // Relative to the vendor directory.
+	dir bool   // A real directory, recreated rather than linked.
+}
+
+// readVendorTree lists the caller's vendor tree in lexical order. Real
+// directories are traversed. Files and symbolic links, including links to
+// directories, are entries to link: cmd/go then traverses the same directories
+// in package patterns and ignores the same directory links, as it does in the
+// caller's tree. Listing names reads no file contents.
+func readVendorTree(source string) ([]vendorEntry, error) {
+	var tree []vendorEntry
+	err := filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil || rel == "." || rel == "modules.txt" {
+			return err
+		}
+		tree = append(tree, vendorEntry{rel: rel, dir: entry.IsDir()})
+		return nil
+	})
+	return tree, err
+}
+
+// linkVendor writes the workspace manifest, recreates the caller's directories
+// and links every other entry. Linked files keep later edits visible; real
+// directories keep vendored packages visible to wildcard patterns.
+func linkVendor(source, target string, manifest []byte, tree []vendorEntry) error {
 	if err := os.MkdirAll(target, 0700); err != nil {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(target, "modules.txt"), manifest, 0600); err != nil {
 		return err
 	}
-	for _, entry := range entries {
-		if entry.Name() == "modules.txt" {
+	for _, entry := range tree {
+		path := filepath.Join(target, entry.rel)
+		if entry.dir {
+			if err := os.Mkdir(path, 0700); err != nil {
+				return err
+			}
 			continue
 		}
-		if err := os.Symlink(filepath.Join(source, entry.Name()), filepath.Join(target, entry.Name())); err != nil {
+		if err := os.Symlink(filepath.Join(source, entry.rel), path); err != nil {
 			return err
 		}
 	}
@@ -532,8 +566,9 @@ func linkVendor(source, target string, manifest []byte, entries []fs.DirEntry) e
 }
 
 // validVendorWorkspace reports whether root holds exactly what linkVendor and
-// stableVendorWorkspace store. Go may add checksums to go.work.sum later.
-func validVendorWorkspace(root string, work []byte, source string, manifest []byte, entries []fs.DirEntry) bool {
+// stableVendorWorkspace store: the same go.work and manifest, and the same
+// directories and links. Go may add checksums to go.work.sum later.
+func validVendorWorkspace(root string, work, manifest []byte, tree []vendorEntry) bool {
 	if data, err := os.ReadFile(filepath.Join(root, "go.work")); err != nil || !bytes.Equal(data, work) {
 		return false
 	}
@@ -541,29 +576,23 @@ func validVendorWorkspace(root string, work []byte, source string, manifest []by
 	if data, err := os.ReadFile(filepath.Join(vendor, "modules.txt")); err != nil || !bytes.Equal(data, manifest) {
 		return false
 	}
-	present, err := os.ReadDir(vendor)
-	if err != nil {
-		return false
-	}
-	links := 0
-	for _, entry := range entries {
-		if entry.Name() == "modules.txt" {
-			continue
+	next := 0
+	err := filepath.WalkDir(vendor, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		links++
-		link := filepath.Join(vendor, entry.Name())
-		info, err := os.Lstat(link)
-		if err != nil || info.Mode()&os.ModeSymlink == 0 {
-			return false
+		rel, err := filepath.Rel(vendor, path)
+		if err != nil || rel == "." || rel == "modules.txt" {
+			return err
 		}
-		// Compare files, not link text: Windows can report another spelling.
-		linked, err := os.Stat(link)
-		original, originalErr := os.Stat(filepath.Join(source, entry.Name()))
-		if err != nil || originalErr != nil || !os.SameFile(linked, original) {
-			return false
+		if next == len(tree) || tree[next].rel != rel || tree[next].dir != entry.IsDir() ||
+			!entry.IsDir() && entry.Type()&fs.ModeSymlink == 0 {
+			return errors.New("unexpected vendor workspace entry")
 		}
-	}
-	return len(present) == links+1
+		next++
+		return nil
+	})
+	return err == nil && next == len(tree)
 }
 
 // pruneVendorWorkspaces removes workspaces unused for the retention period,

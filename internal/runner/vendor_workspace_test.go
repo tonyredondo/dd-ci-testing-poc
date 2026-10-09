@@ -55,6 +55,18 @@ func useVendorWorkspace(t *testing.T, work, source string, replacements map[stri
 	return got, err
 }
 
+// assertLinkedVendor checks the fixture's layout: real directories, so cmd/go
+// can traverse them in package patterns, and a linked source file.
+func assertLinkedVendor(t *testing.T, vendor string) {
+	t.Helper()
+	if info, err := os.Lstat(filepath.Join(vendor, "example.com", "dep")); err != nil || !info.IsDir() {
+		t.Fatalf("vendored directory was not recreated: %v %v", info, err)
+	}
+	if info, err := os.Lstat(filepath.Join(vendor, "example.com", "dep", "dep.go")); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("vendored source was not linked: %v %v", info, err)
+	}
+}
+
 func withUserCache(t *testing.T, dir func() (string, error)) {
 	t.Helper()
 	previous := userCacheDir
@@ -80,9 +92,7 @@ func TestVendorWorkspaceLinksAndReusesCachedDirectory(t *testing.T) {
 		t.Fatalf("workspace outside the user cache: %s", got)
 	}
 	vendor := filepath.Join(filepath.Dir(got), "vendor")
-	if info, err := os.Lstat(filepath.Join(vendor, "example.com")); err != nil || info.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("vendored sources were not linked: %v %v", info, err)
-	}
+	assertLinkedVendor(t, vendor)
 	if data, err := os.ReadFile(filepath.Join(vendor, "modules.txt")); err != nil || !strings.HasPrefix(string(data), "## workspace\n# example.com/dep") {
 		t.Fatalf("workspace manifest: %q %v", data, err)
 	}
@@ -141,6 +151,18 @@ func TestVendorWorkspaceKeyFollowsManifestAndWorkspace(t *testing.T) {
 	if err != nil || third == second {
 		t.Fatalf("workspace change reused %s: %s %v", second, third, err)
 	}
+	// A file added to the vendored tree needs its own link.
+	added := filepath.Join(source, "example.com", "dep", "added.go")
+	if err := os.WriteFile(added, []byte("package dep\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	fourth, err := useVendorWorkspace(t, work, source, map[string]string{})
+	if err != nil || fourth == third {
+		t.Fatalf("added vendored file reused %s: %s %v", third, fourth, err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(fourth), "vendor", "example.com", "dep", "added.go")); err != nil {
+		t.Fatalf("added vendored file is missing: %v", err)
+	}
 	if data, err := os.ReadFile(filepath.Join(filepath.Dir(first), "vendor", "modules.txt")); err != nil || !strings.Contains(string(data), "v1.0.0") {
 		t.Fatalf("existing workspace changed: %q %v", data, err)
 	}
@@ -163,9 +185,7 @@ func TestVendorWorkspaceNeverReusesUnexpectedContents(t *testing.T) {
 	if err != nil || got != work {
 		t.Fatalf("unexpected cached contents were reused: %s %v", got, err)
 	}
-	if info, err := os.Lstat(filepath.Join(filepath.Dir(work), "vendor", "example.com")); err != nil || info.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("run workspace was not linked: %v %v", info, err)
-	}
+	assertLinkedVendor(t, filepath.Join(filepath.Dir(work), "vendor"))
 	if _, err := os.Stat(extra); err != nil {
 		t.Fatalf("existing cache entry was modified: %v", err)
 	}
@@ -179,9 +199,7 @@ func TestVendorWorkspaceWithoutUserCacheUsesRunDirectory(t *testing.T) {
 	if err != nil || got != work {
 		t.Fatalf("run workspace: %s %v", got, err)
 	}
-	if info, err := os.Lstat(filepath.Join(filepath.Dir(work), "vendor", "example.com")); err != nil || info.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("run workspace was not linked: %v %v", info, err)
-	}
+	assertLinkedVendor(t, filepath.Join(filepath.Dir(work), "vendor"))
 }
 
 func requireFileLocks(t *testing.T) {
