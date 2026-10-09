@@ -166,8 +166,8 @@ jobs:
           CI_MODE: ${{ matrix.mode }}
           CI_SHARDS: ${{ matrix.shards }}
           # Two groups at a time keep the runner busy while fixtures start processes.
-          # With a cold module cache, concurrent go get calls once left a fixture's
-          # go.sum incomplete, so groups then run one at a time.
+          # In a cold run with two concurrent groups, a fixture's go.sum lacked a
+          # Testify entry, so groups without a restored cache run one at a time.
           CI_PARALLEL: ${{ steps.cache.outputs.cache-matched-key != '' && 2 || 1 }}
           GO_TEST_TIMEOUT: ${{ matrix.os == 'windows-latest' && '35m' || matrix.os == 'macos-latest' && '25m' || matrix.mode == 'race' && '25m' || '20m' }}
         run: |
@@ -299,7 +299,7 @@ jobs:
           retention-days: 7
 
   tip:
-    name: mini (Linux, tip, normal, ${{ matrix.job }})
+    name: mini (Linux, tip, normal)
     needs: [plan, go-tip]
     if: needs.plan.outputs.tip-enabled == 'true'
     strategy:

@@ -200,13 +200,13 @@
         "cli",
         "transparency",
         "testify",
-        "fuzz"
+        "fuzz",
+        "parity",
+        "sdk"
       ],
       [
         "orchestrion",
         "sdk-orchestrion",
-        "sdk",
-        "parity",
         "units"
       ]
     ],
@@ -219,29 +219,27 @@
       ],
       [
         "fuzz",
-        "units"
+        "units",
+        "sdk"
       ],
       [
         "orchestrion",
-        "testify",
-        "sdk"
+        "testify"
       ]
     ],
     "differential/macos-latest/normal": [
       [
         "cli",
         "parity",
-        "sdk"
-      ],
-      [
+        "sdk",
         "transparency",
-        "testify",
         "units"
       ],
       [
         "orchestrion",
         "fuzz",
-        "sdk-orchestrion"
+        "sdk-orchestrion",
+        "testify"
       ]
     ],
     "differential/windows-latest/normal": [

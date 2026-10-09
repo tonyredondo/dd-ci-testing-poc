@@ -233,7 +233,11 @@ flowchart LR
 
 Normal and deferred cases stay together so they can share fixtures. A job lists the
 integration tests once, then runs each of its groups as a separate `go test`
-invocation. Jobs have independent workspaces and run in parallel.
+invocation. When the job restored a Go cache, it runs two groups at a time
+(`--parallel 2`); the console prefixes each line with its group, and each group
+keeps its own logs and manifest. With a cold module cache it runs one group at a
+time: in a cold run with two concurrent groups, a fixture's `go.sum` lacked a
+Testify entry after both groups fetched the same modules. Jobs have independent workspaces and run in parallel.
 
 The jobs of one configuration restore a shared Go build and module cache. Most
 fixtures compile the same SDK, Orchestrion and dependency packages, so this cache
@@ -271,7 +275,8 @@ ORCHESTRION_BIN="$(go env GOPATH)/bin/orchestrion" \
 ```
 
 Choose a fresh output directory for each run; each group writes a subdirectory.
-Replace `sdk` with another group or a comma-separated list such as `cli,parity`,
+Replace `sdk` with another group or a comma-separated list such as `cli,parity`
+(add `--parallel 2` to run two of them at a time),
 or select `--suite mini --go 1.25.x --shard native` for the minimum toolchain's
 native integration. `--mode race` enables the race detector in the group and its
 fixtures. These are correctness checks; their durations are not benchmark results.
