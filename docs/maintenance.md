@@ -263,11 +263,15 @@ See [Go's GODEBUG contract](https://go.dev/doc/godebug). A missing `go`
 directive means Go 1.16 in `go.mod` and Go 1.18 in `go.work`; keep those
 defaults when a temporary workspace needs a newer `go` line.
 
-Temporary workspace settings belong to ddtest's `go test` command only. Restore
-every Go environment variable that preparation replaces in
-`internal/instrument/hooks.go`, using `SaveEnvironment` for the saved value.
-Vendor workspaces are content-addressed: bump `vendorWorkspaceLayout` in
-`internal/runner/vendor.go` whenever their stored files or links change.
+Temporary workspace settings belong to ddtest's `go test` command only. List
+every Go environment variable that preparation replaces in `goenv.Settings`,
+and save it with `goenv.Save`. `internal/goenv` must keep importing only
+`syscall`: its tests check that it initializes before `os` and before an earlier
+dependency. Vendor workspaces are content-addressed: bump
+`vendorWorkspaceLayout` in `internal/runner/vendor.go` whenever their stored
+files or links change. Reuse and pruning coordinate through `<key>.lock`; keep
+the lock beside the workspace so removal never deletes a file a waiting run
+opened inside it.
 
 Check Go 1.25, 1.26, 1.27 and tip after changing these paths. The frozen SDK
 requires Go 1.26, so the Go 1.25 job runs all local runtime packages and explicit

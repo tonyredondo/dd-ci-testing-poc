@@ -273,9 +273,12 @@ func TestVendorWorkspaceKeepsNativeModuleRoot(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	work, err := provideMiniVendorWorkspace(t.Context(), root, root, t.TempDir(), nil)
+	work, lock, err := provideMiniVendorWorkspace(t.Context(), root, root, t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if lock != nil {
+		defer lock.Close()
 	}
 	out, err := goTool(t.Context(), root, nil, "work", "edit", "-json", work)
 	if err != nil {

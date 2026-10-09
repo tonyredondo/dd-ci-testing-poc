@@ -74,9 +74,12 @@ unchanged except for updates its own `-mod=mod` imports would require under
 native Go.
 
 The temporary `go.work`, and the `GOFLAGS` adapted for it, apply only to the
-`go test` command that `ddtest` starts. Testing's hook restores the caller's
-`GOWORK` and `GOFLAGS` before test code runs, so `go` commands started by tests
-see the same module, workspace and flags as under native `go test`.
+`go test` command that `ddtest` starts. Mini's `internal/goenv` package
+restores the caller's `GOWORK` and `GOFLAGS` in the test process. It imports
+only `syscall` and its path sorts before `os`, so Go initializes it before any
+package that can start a command, including dependencies that do not import
+`testing`. Commands started by tests, or by those dependencies, see the same
+module, workspace and flags as under native `go test`.
 
 Mini uses native Go 1.25 APIs. `internal/compat` contains only `AsType` and
 `Pointer`, which adapt Go 1.26 helpers used by the incorporated sources. The
@@ -110,8 +113,12 @@ The workspace lives in the user cache, under `ddtest/vendor-workspaces`, at a
 path derived from its `go.work`, manifest and linked entries. Go's build cache
 keys include each package directory, so this stable path lets unchanged vendored
 packages reuse compiled archives between runs. A changed manifest or workspace
-selects a new path. Entries unused for 14 days are removed when a new one is
-created; deleting them is always safe, and removal never follows the links.
+selects a new path. A run holds a shared lock on its workspace until `go test`
+exits. When a new workspace is created, entries unused for 14 days are removed,
+but only while their lock can be taken exclusively without waiting; a workspace
+in use is never removed. A run that waited while another removed its workspace
+rebuilds it. Removal never follows the links, and deleting the directory by hand
+is safe when no `ddtest` run is active.
 Without a usable user cache, the links live in the run's temporary directory.
 Without symbolic links, as on Windows without the required privilege, files are
 hard-linked or copied there instead. The original vendor tree is never edited. Native Go still

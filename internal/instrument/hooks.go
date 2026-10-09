@@ -3,16 +3,12 @@ package instrument
 import (
 	"go/ast"
 	"go/token"
-	"os"
 )
 
 // Hooks uses the exact link targets and signatures in the SDK's Orchestrion
 // advice. Keeping these symbols also preserves the SDK's woven ownership gate.
 const Hooks = `package testing
-import (
- _ "unsafe"
- __dd_ci_os "os"
-)
+import _ "unsafe"
 //go:linkname __dd_civisibility_instrumentTestingBuiltWithOrchestrion github.com/DataDog/dd-trace-go/v2/internal/civisibility/integrations/gotesting.instrumentTestingBuiltWithOrchestrion
 func __dd_civisibility_instrumentTestingBuiltWithOrchestrion()
 //go:linkname __dd_civisibility_instrumentTestingMWithControl github.com/DataDog/dd-trace-go/v2/internal/civisibility/integrations/gotesting.instrumentTestingMWithControl
@@ -36,39 +32,6 @@ func __dd_civisibility_instrumentTestingParallel(*T) bool
 //go:linkname __dd_civisibility_instrumentTestingBFunc github.com/DataDog/dd-trace-go/v2/internal/civisibility/integrations/gotesting.instrumentTestingBFunc
 func __dd_civisibility_instrumentTestingBFunc(*B, string, func(*B)) (string, func(*B))
 func init() { __dd_civisibility_instrumentTestingBuiltWithOrchestrion() }
-` + environmentHook
-
-// SavedEnvironmentPrefix names the variables that carry a caller's Go command
-// settings while ddtest replaces them for its own go test invocation.
-const SavedEnvironmentPrefix = "DDTEST_ORIGINAL_"
-
-// SaveEnvironment records name's current value for environmentHook: "=value"
-// when it is set, or an empty value when it is unset.
-func SaveEnvironment(name string) string {
-	if value, ok := os.LookupEnv(name); ok {
-		return SavedEnvironmentPrefix + name + "==" + value
-	}
-	return SavedEnvironmentPrefix + name + "="
-}
-
-// environmentHook restores the settings that ddtest replaces only for go test.
-// Packages that import testing initialize after it, so tests and the go
-// commands they start see the caller's workspace and flags.
-const environmentHook = `func init() {
- for _, name := range [...]string{"GOWORK", "GOFLAGS"} {
-  key := "` + SavedEnvironmentPrefix + `" + name
-  saved, ok := __dd_ci_os.LookupEnv(key)
-  if !ok {
-   continue
-  }
-  _ = __dd_ci_os.Unsetenv(key)
-  if saved != "" && saved[0] == '=' {
-   _ = __dd_ci_os.Setenv(name, saved[1:])
-  } else {
-   _ = __dd_ci_os.Unsetenv(name)
-  }
- }
-}
 `
 
 // ParallelStopHook lets Mini's in-process retries record the end of a parallel

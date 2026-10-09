@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/goenv"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/instrument"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
@@ -63,10 +64,21 @@ type Plan struct {
 	testify           bool
 	goleak            bool
 	compilerCache     []string
+	// workspaceLock keeps a cached vendor workspace from being pruned.
+	workspaceLock *os.File
+}
+
+// Release lets other runs prune the plan's cached vendor workspace. Call it
+// after all go processes using the plan finish, before removing Dir.
+func (p Plan) Release() {
+	if p.workspaceLock != nil {
+		_ = p.workspaceLock.Close()
+	}
 }
 
 // Prepare creates a complete plan before native Go compilation starts. Callers
-// own the plan directory and must remove it after all compiler processes finish.
+// own the plan directory and must remove it, and call Release, after all
+// compiler processes finish.
 func Prepare(ctx context.Context, dir string, args []string) (Plan, error) {
 	return PrepareRuntime(ctx, dir, args, SDK)
 }
@@ -164,6 +176,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	plan.orchestrion = isOrchestrionToolexec(opts.toolexec)
 	defer func() {
 		if err != nil {
+			plan.Release()
 			_ = os.RemoveAll(temp)
 		}
 	}()
@@ -185,7 +198,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			if opts.mod != "mod" && opts.mod != "readonly" {
 				vendor := filepath.Join(filepath.Dir(work), "vendor")
 				if _, err := os.Stat(filepath.Join(vendor, "modules.txt")); err == nil {
-					if plan.Workfile, e = vendorWorkspace(ctx, plan.Workfile, vendor, replacements); e != nil {
+					if plan.Workfile, plan.workspaceLock, e = vendorWorkspace(ctx, plan.Workfile, vendor, replacements); e != nil {
 						return plan, e
 					}
 				}
@@ -215,7 +228,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 					if e = useModuleWorkspaceFlags(&opts, &plan); e != nil {
 						return plan, e
 					}
-					plan.Workfile, e = provideMiniVendorWorkspace(ctx, dir, root, temp, replacements)
+					plan.Workfile, plan.workspaceLock, e = provideMiniVendorWorkspace(ctx, dir, root, temp, replacements)
 					if e != nil {
 						return plan, e
 					}
@@ -557,7 +570,10 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 	}
 	plan, interrupted, err := prepareInterruptibly(ctx, dir, opts, runtime, signals, stderr)
 	if err == nil {
-		defer os.RemoveAll(plan.Dir)
+		defer func() {
+			plan.Release()
+			_ = os.RemoveAll(plan.Dir)
+		}()
 	}
 	if interrupted != nil {
 		debug.printf("preparation interrupted")
@@ -596,11 +612,12 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 	debug.printf("tool selection testify=%t goleak=%t cover=%t user_toolexec=%t orchestrion=%t sdk_ci_gate=%t", plan.testify, plan.goleak, plan.coverOverlay, opts.toolexec != "", plan.orchestrion, plan.sdkCI)
 	forwarded := goTestArguments(plan, opts, tool)
 	if plan.Workfile != "" {
-		// The temporary workspace is for this build only. Testing's hook restores
-		// the caller's values before test code can start its own go commands.
-		env = append(env, instrument.SaveEnvironment("GOWORK"), "GOWORK="+plan.Workfile)
+		// The temporary workspace is for this build only. Mini's goenv package
+		// restores the caller's values before any client package can start a go
+		// command, including dependencies initialized before testing.
+		env = append(env, goenv.Save("GOWORK"), "GOWORK="+plan.Workfile)
 		if plan.moduleWorkspace {
-			env = append(env, instrument.SaveEnvironment("GOFLAGS"), "GOFLAGS="+plan.workspaceGoFlags)
+			env = append(env, goenv.Save("GOFLAGS"), "GOFLAGS="+plan.workspaceGoFlags)
 		}
 	}
 	if plan.launcher != nil {

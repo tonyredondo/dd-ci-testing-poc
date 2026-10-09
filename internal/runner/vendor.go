@@ -100,14 +100,14 @@ func moduleWorkspaceInput(ctx context.Context, dir, root, temp string, replaceme
 	return source, nil
 }
 
-func provideMiniVendorWorkspace(ctx context.Context, dir, root, temp string, replacements map[string]string) (string, error) {
+func provideMiniVendorWorkspace(ctx context.Context, dir, root, temp string, replacements map[string]string) (string, *os.File, error) {
 	source, err := moduleWorkspaceInput(ctx, dir, root, temp, replacements)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	work, err := provideMiniWorkspace(ctx, dir, source, temp, replacements)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	return vendorWorkspace(ctx, work, filepath.Join(root, "vendor"), replacements)
 }
@@ -122,6 +122,9 @@ const vendorWorkspaceLayout = "ddtest-vendor-workspace-v1"
 // go.work, modules.txt and links, but every vendor change creates a new one.
 const vendorWorkspaceRetention = 14 * 24 * time.Hour
 
+// vendorWorkspaceLockOpened lets tests interleave a prune with a waiting run.
+var vendorWorkspaceLockOpened = func() {}
+
 // vendorWorkspace gives work the caller's vendor tree and returns the go.work
 // that Go must use. Go reads a workspace's vendor directory next to go.work,
 // and reads its modules.txt outside the overlay, so that file gets its own
@@ -130,56 +133,59 @@ const vendorWorkspaceRetention = 14 * 24 * time.Hour
 //
 // Go's build cache keys include each package directory. A content-addressed
 // workspace in the user cache keeps vendored directories identical between
-// runs, so unchanged dependencies are not recompiled. Without that cache the
-// links use the run's directory; without symbolic links, files are snapshotted.
-func vendorWorkspace(ctx context.Context, work, source string, replacements map[string]string) (string, error) {
+// runs, so unchanged dependencies are not recompiled. The returned lock keeps
+// that workspace from being pruned; hold it until go test exits. Without the
+// cache, links use the run's directory; without symbolic links, files are
+// snapshotted there. Both run-local forms return no lock.
+func vendorWorkspace(ctx context.Context, work, source string, replacements map[string]string) (string, *os.File, error) {
 	debug := debugFromContext(ctx)
 	manifest, err := readModuleFile(filepath.Join(source, "modules.txt"), replacements)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if !bytes.HasPrefix(manifest, []byte("## workspace")) {
 		manifest = append([]byte("## workspace\n"), manifest...)
 	}
 	entries, err := os.ReadDir(source)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	if stable, err := stableVendorWorkspace(work, source, manifest, entries); err == nil {
+	if stable, lock, err := stableVendorWorkspace(work, source, manifest, entries); err == nil {
 		retargetVendorOverlay(source, filepath.Join(filepath.Dir(stable), "vendor"), replacements)
 		debug.printf("vendor workspace=cached-links")
-		return stable, nil
+		return stable, lock, nil
 	}
 	target := filepath.Join(filepath.Dir(work), "vendor")
 	if err := linkVendor(source, target, manifest, entries); err == nil {
 		retargetVendorOverlay(source, target, replacements)
 		debug.printf("vendor workspace=run-links")
-		return work, nil
+		return work, nil, nil
 	}
 	if err := os.RemoveAll(target); err != nil {
-		return "", err
+		return "", nil, err
 	}
 	debug.printf("vendor workspace=snapshot")
-	return work, snapshotVendor(source, target, replacements)
+	return work, nil, snapshotVendor(source, target, replacements)
 }
 
 // stableVendorWorkspace returns a go.work whose directory is derived from
-// everything stored there. Concurrent runs build privately and rename; a run
-// that loses the race reuses the identical winner. An existing directory with
-// unexpected contents is never modified.
-func stableVendorWorkspace(work, source string, manifest []byte, entries []fs.DirEntry) (string, error) {
+// everything stored there, and the shared lock that protects it. Runs that
+// use a workspace hold <key>.lock shared; pruning needs it exclusively and
+// never waits. Concurrent runs build privately and rename; one that loses the
+// race reuses the identical winner. Unexpected contents are never modified.
+func stableVendorWorkspace(work, source string, manifest []byte, entries []fs.DirEntry) (string, *os.File, error) {
 	cache, err := userCacheDir()
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	workData, err := os.ReadFile(work)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	sum, err := os.ReadFile(work + ".sum")
 	hasSum := err == nil
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return "", err
+		return "", nil, err
 	}
 	hash := sha256.New()
 	for _, part := range [][]byte{[]byte(vendorWorkspaceLayout), []byte(source), workData, sum, manifest} {
@@ -191,35 +197,73 @@ func stableVendorWorkspace(work, source string, manifest []byte, entries []fs.Di
 	key := hex.EncodeToString(hash.Sum(nil))[:32]
 	parent := filepath.Join(cache, "ddtest", "vendor-workspaces")
 	root := filepath.Join(parent, key)
-	if validVendorWorkspace(root, workData, source, manifest, entries) {
-		now := time.Now()
-		_ = os.Chtimes(root, now, now) // Retention counts from the last use.
-		return filepath.Join(root, "go.work"), nil
-	}
 	if err := os.MkdirAll(parent, 0700); err != nil {
-		return "", err
+		return "", nil, err
+	}
+	lock, err := holdVendorWorkspace(root + ".lock")
+	if err != nil {
+		return "", nil, err
+	}
+	fail := func(err error) (string, *os.File, error) {
+		lock.Close()
+		return "", nil, err
+	}
+	if validVendorWorkspace(root, workData, source, manifest, entries) {
+		// Only retention depends on this time. The held lock already keeps the
+		// workspace from being pruned while this run uses it.
+		now := time.Now()
+		_ = os.Chtimes(root, now, now)
+		return filepath.Join(root, "go.work"), lock, nil
 	}
 	staging, err := os.MkdirTemp(parent, key+".tmp-")
 	if err != nil {
-		return "", err
+		return fail(err)
 	}
 	defer os.RemoveAll(staging) // Already gone after a successful rename.
 	if err := os.WriteFile(filepath.Join(staging, "go.work"), workData, 0600); err != nil {
-		return "", err
+		return fail(err)
 	}
 	if hasSum {
 		if err := os.WriteFile(filepath.Join(staging, "go.work.sum"), sum, 0600); err != nil {
-			return "", err
+			return fail(err)
 		}
 	}
 	if err := linkVendor(source, filepath.Join(staging, "vendor"), manifest, entries); err != nil {
-		return "", err
+		return fail(err)
 	}
 	if err := os.Rename(staging, root); err != nil && !validVendorWorkspace(root, workData, source, manifest, entries) {
-		return "", err
+		return fail(err)
 	}
 	pruneVendorWorkspaces(parent, key)
-	return filepath.Join(root, "go.work"), nil
+	return filepath.Join(root, "go.work"), lock, nil
+}
+
+// holdVendorWorkspace takes the workspace lock shared. A pruner may remove the
+// lock file while this run waits, so the held lock must still be the file at
+// path; otherwise the run retries with the current file.
+func holdVendorWorkspace(path string) (*os.File, error) {
+	for attempt := 0; attempt < 3; attempt++ {
+		lock, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
+		if err != nil {
+			return nil, err
+		}
+		vendorWorkspaceLockOpened()
+		if err := lockFile(lock, false, true); err != nil {
+			lock.Close()
+			return nil, err
+		}
+		if sameOpenFile(lock, path) {
+			return lock, nil
+		}
+		lock.Close()
+	}
+	return nil, errors.New("vendor workspace lock was replaced repeatedly")
+}
+
+func sameOpenFile(file *os.File, path string) bool {
+	held, heldErr := file.Stat()
+	current, currentErr := os.Stat(path)
+	return heldErr == nil && currentErr == nil && os.SameFile(held, current)
 }
 
 // linkVendor writes the workspace manifest and links every other top-level
@@ -277,8 +321,9 @@ func validVendorWorkspace(root string, work []byte, source string, manifest []by
 	return len(present) == links+1
 }
 
-// pruneVendorWorkspaces removes unused workspaces and abandoned staging
-// directories. Removal deletes links, never the caller's vendored files.
+// pruneVendorWorkspaces removes workspaces unused for the retention period,
+// their locks and abandoned staging directories. Removal deletes links, never
+// the caller's vendored files.
 func pruneVendorWorkspaces(parent, keep string) {
 	entries, err := os.ReadDir(parent)
 	if err != nil {
@@ -286,13 +331,52 @@ func pruneVendorWorkspaces(parent, keep string) {
 	}
 	cutoff := time.Now().Add(-vendorWorkspaceRetention)
 	for _, entry := range entries {
-		if entry.Name() == keep {
+		name := entry.Name()
+		key, isLock := strings.CutSuffix(name, ".lock")
+		if name == keep || key == keep {
 			continue
 		}
-		if info, err := entry.Info(); err == nil && info.ModTime().Before(cutoff) {
-			_ = os.RemoveAll(filepath.Join(parent, entry.Name()))
+		info, err := entry.Info()
+		if err != nil || !info.ModTime().Before(cutoff) {
+			continue
+		}
+		switch {
+		case strings.Contains(name, ".tmp-"):
+			// Staging directories are private to the run that creates them.
+			_ = os.RemoveAll(filepath.Join(parent, name))
+		case isLock:
+			if _, err := os.Lstat(filepath.Join(parent, key)); errors.Is(err, os.ErrNotExist) {
+				removeUnusedVendorWorkspace(parent, key, cutoff)
+			}
+		case entry.IsDir():
+			removeUnusedVendorWorkspace(parent, name, cutoff)
 		}
 	}
+}
+
+// removeUnusedVendorWorkspace removes a workspace only while no run holds it.
+// A run that reused it after the directory scan refreshed its time, so the
+// time is checked again under the exclusive lock.
+func removeUnusedVendorWorkspace(parent, key string, cutoff time.Time) {
+	path := filepath.Join(parent, key+".lock")
+	lock, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
+	if err != nil {
+		return
+	}
+	defer lock.Close()
+	if lockFile(lock, true, false) != nil || !sameOpenFile(lock, path) {
+		return
+	}
+	root := filepath.Join(parent, key)
+	if info, err := os.Lstat(root); err == nil && !info.ModTime().Before(cutoff) {
+		return
+	}
+	if err := os.RemoveAll(root); err != nil {
+		return
+	}
+	// Windows keeps a lock file that another process still has open; a later
+	// prune removes it.
+	_ = os.Remove(path)
 }
 
 // retargetVendorOverlay moves the caller's vendor overlay entries, including

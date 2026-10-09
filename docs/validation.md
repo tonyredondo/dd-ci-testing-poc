@@ -161,8 +161,8 @@ The transparency and safety regressions cover these contracts:
 | Package setup failures | `TestMiniContinuesAfterPackageSetupFailures`: valid packages execute beside mixed-package, missing and empty targets with native exit status |
 | Event metadata placement | Accepted change from the SDK: shared CI/Git/system strings use event-kind envelope metadata. `TestMiniCIConfigurationWireParity` and common-tag wire tests: defaults and local overrides retain effective values; raw payload assertions check their placement |
 | Workspace and vendor provisioning | `TestMiniProvisionsWorkspaceWithoutChangingModules`, `TestMiniProvisionsVendorAndPreservesPatchedSources`: preserve caller files, loop semantics, local patches, program defaults and modfiles from flags or `GOFLAGS`; runner tests cover selected versions, forks, source overlays, cached vendor links and their fallbacks |
-| Go environment of tests | `TestMiniTemporaryWorkspaceRestoresGoEnvironment`: older modules, vendor and existing workspaces; tests see the caller's `GOWORK` and `GOFLAGS`, and their `go list -m` and nested builds match native Go |
-| Vendored build cache | `TestMiniVendorWorkspaceLinksAndReusesBuildCache`: the vendor workspace links sources, an unchanged vendored package is not recompiled, and later vendor edits are used |
+| Go environment of tests | `TestMiniTemporaryWorkspaceRestoresGoEnvironment`: older modules, vendor and existing workspaces; tests and a dependency initialized before `testing` see the caller's `GOWORK` and `GOFLAGS`, and their `go list -m` and nested builds match native Go. `internal/goenv` tests check its imports and initialization order |
+| Vendored build cache | `TestMiniVendorWorkspaceLinksAndReusesBuildCache`: the vendor workspace links sources, an unchanged vendored package is not recompiled, and later vendor edits are used. Runner tests check that pruning skips a workspace in use and that a run waiting during a prune rebuilds it |
 | Enforced dependency boundary | `scripts/test_dependency_boundary.py`: reject unused external requirements and nonstandard packages outside this module |
 
 

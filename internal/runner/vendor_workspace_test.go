@@ -38,6 +38,17 @@ func requireSymlinks(t *testing.T) {
 	}
 }
 
+// useVendorWorkspace attaches source and holds any cached workspace until the
+// test ends, as a run holds it until go test exits.
+func useVendorWorkspace(t *testing.T, work, source string, replacements map[string]string) (string, error) {
+	t.Helper()
+	got, lock, err := vendorWorkspace(t.Context(), work, source, replacements)
+	if lock != nil {
+		t.Cleanup(func() { lock.Close() })
+	}
+	return got, err
+}
+
 func withUserCache(t *testing.T, dir func() (string, error)) {
 	t.Helper()
 	previous := userCacheDir
@@ -55,7 +66,7 @@ func TestVendorWorkspaceLinksAndReusesCachedDirectory(t *testing.T) {
 		filepath.Join(source, "example.com", "dep", "virtual.go"): backing,
 		filepath.Join(source, "example.com", "dep", "dep.go"):     "",
 	}
-	got, err := vendorWorkspace(t.Context(), work, source, replacements)
+	got, err := useVendorWorkspace(t, work, source, replacements)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +103,7 @@ func TestVendorWorkspaceLinksAndReusesCachedDirectory(t *testing.T) {
 	if err := os.WriteFile(again, data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if reused, err := vendorWorkspace(t.Context(), again, source, map[string]string{}); err != nil || reused != got {
+	if reused, err := useVendorWorkspace(t, again, source, map[string]string{}); err != nil || reused != got {
 		t.Fatalf("unchanged inputs did not reuse %s: %s %v", got, reused, err)
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(again), "vendor")); !os.IsNotExist(err) {
@@ -105,7 +116,7 @@ func TestVendorWorkspaceKeyFollowsManifestAndWorkspace(t *testing.T) {
 	cache := t.TempDir()
 	withUserCache(t, func() (string, error) { return cache, nil })
 	source, work := vendorFixture(t)
-	first, err := vendorWorkspace(t.Context(), work, source, map[string]string{})
+	first, err := useVendorWorkspace(t, work, source, map[string]string{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,14 +124,14 @@ func TestVendorWorkspaceKeyFollowsManifestAndWorkspace(t *testing.T) {
 	if err := os.WriteFile(manifest, []byte("# example.com/dep v1.0.1\n## explicit\nexample.com/dep\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	second, err := vendorWorkspace(t.Context(), work, source, map[string]string{})
+	second, err := useVendorWorkspace(t, work, source, map[string]string{})
 	if err != nil || second == first {
 		t.Fatalf("manifest change reused %s: %s %v", first, second, err)
 	}
 	if err := os.WriteFile(work, []byte("go 1.25.0\nuse ./other\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	third, err := vendorWorkspace(t.Context(), work, source, map[string]string{})
+	third, err := useVendorWorkspace(t, work, source, map[string]string{})
 	if err != nil || third == second {
 		t.Fatalf("workspace change reused %s: %s %v", second, third, err)
 	}
@@ -134,7 +145,7 @@ func TestVendorWorkspaceNeverReusesUnexpectedContents(t *testing.T) {
 	cache := t.TempDir()
 	withUserCache(t, func() (string, error) { return cache, nil })
 	source, work := vendorFixture(t)
-	cached, err := vendorWorkspace(t.Context(), work, source, map[string]string{})
+	cached, err := useVendorWorkspace(t, work, source, map[string]string{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +153,7 @@ func TestVendorWorkspaceNeverReusesUnexpectedContents(t *testing.T) {
 	if err := os.WriteFile(extra, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	got, err := vendorWorkspace(t.Context(), work, source, map[string]string{})
+	got, err := useVendorWorkspace(t, work, source, map[string]string{})
 	if err != nil || got != work {
 		t.Fatalf("unexpected cached contents were reused: %s %v", got, err)
 	}
@@ -158,7 +169,7 @@ func TestVendorWorkspaceWithoutUserCacheUsesRunDirectory(t *testing.T) {
 	requireSymlinks(t)
 	withUserCache(t, func() (string, error) { return "", errors.New("no home directory") })
 	source, work := vendorFixture(t)
-	got, err := vendorWorkspace(t.Context(), work, source, map[string]string{})
+	got, err := useVendorWorkspace(t, work, source, map[string]string{})
 	if err != nil || got != work {
 		t.Fatalf("run workspace: %s %v", got, err)
 	}
@@ -167,8 +178,51 @@ func TestVendorWorkspaceWithoutUserCacheUsesRunDirectory(t *testing.T) {
 	}
 }
 
+func requireFileLocks(t *testing.T) {
+	t.Helper()
+	file, err := os.CreateTemp(t.TempDir(), "lock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if err := lockFile(file, false, false); errors.Is(err, errors.ErrUnsupported) {
+		t.Skip("file locks unavailable")
+	} else if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFileLocksConflictAcrossOpens(t *testing.T) {
+	requireFileLocks(t)
+	path := filepath.Join(t.TempDir(), "lock")
+	open := func() *os.File {
+		file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { file.Close() })
+		return file
+	}
+	first, second, pruner := open(), open(), open()
+	if err := lockFile(first, false, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := lockFile(second, false, false); err != nil {
+		t.Fatalf("shared locks conflict: %v", err)
+	}
+	if err := lockFile(pruner, true, false); !errors.Is(err, errLockBusy) {
+		t.Fatalf("exclusive lock while shared: %v", err)
+	}
+	first.Close()
+	second.Close()
+	if err := lockFile(pruner, true, false); err != nil {
+		t.Fatalf("exclusive lock after release: %v", err)
+	}
+}
+
 func TestPruneVendorWorkspacesKeepsRecentAndLinkedSources(t *testing.T) {
 	requireSymlinks(t)
+	requireFileLocks(t)
 	parent := t.TempDir()
 	source := t.TempDir()
 	original := filepath.Join(source, "dep.go")
@@ -176,7 +230,7 @@ func TestPruneVendorWorkspacesKeepsRecentAndLinkedSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := time.Now().Add(-2 * vendorWorkspaceRetention)
-	for _, name := range []string{"old", "kept", "recent"} {
+	for _, name := range []string{"old", "kept", "recent", "staging.tmp-1"} {
 		dir := filepath.Join(parent, name)
 		if err := os.Mkdir(dir, 0700); err != nil {
 			t.Fatal(err)
@@ -190,14 +244,120 @@ func TestPruneVendorWorkspacesKeepsRecentAndLinkedSources(t *testing.T) {
 			}
 		}
 	}
+	// A lock left by a removed workspace is removed as well.
+	orphan := filepath.Join(parent, "orphan.lock")
+	if err := os.WriteFile(orphan, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(orphan, old, old); err != nil {
+		t.Fatal(err)
+	}
 	pruneVendorWorkspaces(parent, "kept")
-	for name, want := range map[string]bool{"old": false, "kept": true, "recent": true} {
+	for name, want := range map[string]bool{"old": false, "old.lock": false, "orphan.lock": false, "staging.tmp-1": false, "kept": true, "recent": true} {
 		if _, err := os.Lstat(filepath.Join(parent, name)); (err == nil) != want {
 			t.Fatalf("%s present=%t want %t", name, err == nil, want)
 		}
 	}
 	if _, err := os.Stat(original); err != nil {
 		t.Fatalf("pruning removed a linked source: %v", err)
+	}
+}
+
+// A run holds its workspace until go test exits. However old it looks, another
+// run's prune must leave it in place; once released, it can be removed.
+func TestPruneSkipsVendorWorkspaceInUse(t *testing.T) {
+	requireSymlinks(t)
+	requireFileLocks(t)
+	cache := t.TempDir()
+	withUserCache(t, func() (string, error) { return cache, nil })
+	source, work := vendorFixture(t)
+	path, lock, err := vendorWorkspace(t.Context(), work, source, map[string]string{})
+	if err != nil || lock == nil {
+		t.Fatalf("cached workspace: %s %v %v", path, lock, err)
+	}
+	defer lock.Close()
+	root := filepath.Dir(path)
+	old := time.Now().Add(-2 * vendorWorkspaceRetention)
+	if err := os.Chtimes(root, old, old); err != nil {
+		t.Fatal(err)
+	}
+	pruneVendorWorkspaces(filepath.Dir(root), "another")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("prune removed a workspace in use: %v", err)
+	}
+	lock.Close()
+	pruneVendorWorkspaces(filepath.Dir(root), "another")
+	for _, removed := range []string{root, root + ".lock"} {
+		if _, err := os.Lstat(removed); !os.IsNotExist(err) {
+			t.Fatalf("unused workspace remains: %s %v", removed, err)
+		}
+	}
+}
+
+// A run that opened the lock while another run pruned the workspace must not
+// report the removed directory: it rebuilds and holds the current lock.
+func TestVendorWorkspaceReuseAfterConcurrentPruneRebuilds(t *testing.T) {
+	requireSymlinks(t)
+	requireFileLocks(t)
+	cache := t.TempDir()
+	withUserCache(t, func() (string, error) { return cache, nil })
+	source, work := vendorFixture(t)
+	path, lock, err := vendorWorkspace(t.Context(), work, source, map[string]string{})
+	if err != nil || lock == nil {
+		t.Fatalf("cached workspace: %s %v %v", path, lock, err)
+	}
+	lock.Close()
+	root := filepath.Dir(path)
+	lockPath := root + ".lock"
+	pruner, err := os.OpenFile(lockPath, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pruner.Close()
+	if err := lockFile(pruner, true, false); err != nil {
+		t.Fatal(err)
+	}
+	opened := make(chan struct{}, 1)
+	previous := vendorWorkspaceLockOpened
+	vendorWorkspaceLockOpened = func() {
+		select {
+		case opened <- struct{}{}:
+		default:
+		}
+	}
+	t.Cleanup(func() { vendorWorkspaceLockOpened = previous })
+	type result struct {
+		path string
+		lock *os.File
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		path, lock, err := vendorWorkspace(t.Context(), work, source, map[string]string{})
+		done <- result{path, lock, err}
+	}()
+	<-opened
+	// The pruner removes the workspace and its lock while the run waits.
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Remove(lockPath) // Windows keeps a file that the run has open.
+	pruner.Close()
+	var got result
+	select {
+	case got = <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("run did not finish after the prune")
+	}
+	if got.err != nil || got.lock == nil {
+		t.Fatalf("rebuilt workspace: %v %v", got.lock, got.err)
+	}
+	defer got.lock.Close()
+	if _, err := os.Stat(got.path); err != nil {
+		t.Fatalf("run reported a removed workspace: %v", err)
+	}
+	if !sameOpenFile(got.lock, lockPath) {
+		t.Fatal("run holds a lock that no longer protects the workspace")
 	}
 }
 

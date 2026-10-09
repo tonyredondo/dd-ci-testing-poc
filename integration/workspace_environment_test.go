@@ -32,7 +32,8 @@ func userCacheEnv(t *testing.T, dir string) []string {
 	return append(env, "XDG_CACHE_HOME="+dir)
 }
 
-// vendorWorkspaceDirs lists the persistent workspaces ddtest stored below dir.
+// vendorWorkspaceDirs lists the persistent workspace directories ddtest stored
+// below dir.
 func vendorWorkspaceDirs(t *testing.T, dir string) []string {
 	t.Helper()
 	var workspaces []string
@@ -43,7 +44,9 @@ func vendorWorkspaceDirs(t *testing.T, dir string) []string {
 		if entry.IsDir() && entry.Name() == "vendor-workspaces" {
 			children, err := os.ReadDir(path)
 			for _, child := range children {
-				workspaces = append(workspaces, filepath.Join(path, child.Name()))
+				if child.IsDir() { // Skip each workspace's lock file.
+					workspaces = append(workspaces, filepath.Join(path, child.Name()))
+				}
 			}
 			if err != nil {
 				return err
@@ -64,8 +67,9 @@ func symlinksAvailable(t *testing.T) bool {
 	return os.Symlink(dir, filepath.Join(dir, "link")) == nil
 }
 
-// A temporary workspace belongs to ddtest's build. Tests, and the go commands
-// they start, must see the caller's GOWORK and GOFLAGS, as with native go test.
+// A temporary workspace belongs to ddtest's build. Tests, dependencies that
+// initialize before testing, and the go commands they start must see the
+// caller's GOWORK and GOFLAGS, as with native go test.
 func TestMiniTemporaryWorkspaceRestoresGoEnvironment(t *testing.T) {
 	driver := sharedDriver(t, "..")
 	for _, layout := range []string{"older-module", "vendor", "workspace"} {
@@ -79,14 +83,19 @@ func TestMiniTemporaryWorkspaceRestoresGoEnvironment(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			writeBuildFixture(t, helper, map[string]string{"go.mod": "module example.com/environmenthelper\ngo 1.21\n", "helper.go": "package environmenthelper\nconst Value=1\n"})
+			// The helper does not import testing, so Go can initialize it first.
+			writeBuildFixture(t, helper, map[string]string{"go.mod": "module example.com/environmenthelper\ngo 1.21\n", "helper.go": `package environmenthelper
+import ("os/exec";"strings")
+var Value, InitMain = 1, ""
+func init() { out, _ := exec.Command("go", "list", "-m").Output(); InitMain = strings.TrimSpace(string(out)) }
+`})
 			writeBuildFixture(t, nested, map[string]string{"go.mod": "module example.com/nested\ngo 1.21\n", "main.go": "package main\nfunc main(){}\n"})
 			writeBuildFixture(t, client, map[string]string{
 				"go.mod": fmt.Sprintf("module example.com/environment\ngo 1.21\nrequire example.com/environmenthelper v0.0.0\nreplace example.com/environmenthelper => %q\n", filepath.ToSlash(helper)),
 				"environment_test.go": `package environment
 import ("fmt";"os";"os/exec";"strings";"testing";"example.com/environmenthelper")
 func TestEnvironment(t *testing.T) {
- _ = environmenthelper.Value
+ fmt.Printf("ENV INIT_MAIN=%q\n", environmenthelper.InitMain)
  for _, name := range []string{"GOWORK", "GOFLAGS", "DDTEST_ORIGINAL_GOWORK", "DDTEST_ORIGINAL_GOFLAGS"} {
   value, ok := os.LookupEnv(name)
   fmt.Printf("ENV %s=%t:%q\n", name, ok, value)
@@ -126,7 +135,7 @@ func TestEnvironment(t *testing.T) {
 			if code != 0 {
 				t.Fatalf("exit=%d\n%s%s", code, out, stderr)
 			}
-			if want, got := lines(native), lines(out); len(want) != 6 || !slices.Equal(got, want) {
+			if want, got := lines(native), lines(out); len(want) != 7 || !slices.Equal(got, want) {
 				t.Fatalf("test environment changed:\nnative: %q\nddtest: %q", want, got)
 			}
 		})
