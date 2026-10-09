@@ -136,19 +136,32 @@ jobs:
         with:
           path: ${{ runner.temp }}/orchestrion-reference
           key: orchestrion-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('testdata/orchestrion/go.mod', 'testdata/orchestrion/go.sum') }}
+      # A job with a cold module cache downloads hundreds of modules; retry
+      # transient proxy failures instead of failing the job.
       - name: Build frozen Orchestrion reference
         shell: bash
         run: |
           reference="$RUNNER_TEMP/orchestrion-reference/orchestrion"
           if [[ "$RUNNER_OS" == "Windows" ]]; then reference="$reference.exe"; fi
-          if [[ ! -x "$reference" ]]; then
-            go -C testdata/orchestrion build -mod=readonly -o "$reference" github.com/DataDog/orchestrion
-          fi
+          for attempt in 1 2 3; do
+            [[ -x "$reference" ]] && break
+            go -C testdata/orchestrion build -mod=readonly -o "$reference" github.com/DataDog/orchestrion && break
+            echo "::warning::Orchestrion build attempt $attempt failed"
+            sleep $((attempt * 15))
+          done
           go version -m "$reference"
           echo "ORCHESTRION_BIN=$reference" >> "$GITHUB_ENV"
       - name: Verify fixture modules
         shell: bash
-        run: (cd testdata/fixture && go mod download && go mod verify)
+        working-directory: testdata/fixture
+        run: |
+          for attempt in 1 2 3; do
+            go mod download && break
+            if [[ $attempt == 3 ]]; then exit 1; fi
+            echo "::warning::Fixture module download attempt $attempt failed"
+            sleep $((attempt * 15))
+          done
+          go mod verify
       - name: Vet
         if: contains(format(',{0},', matrix.shards), ',units,')
         shell: bash
