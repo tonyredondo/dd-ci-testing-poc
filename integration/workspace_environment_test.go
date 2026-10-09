@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -245,5 +246,102 @@ func TestMiniVendorWorkspaceLinksAndReusesBuildCache(t *testing.T) {
 	}
 	if info, err := os.Lstat(filepath.Join(workspaces[0], "vendor", "example.com")); err != nil || info.Mode()&os.ModeSymlink == 0 {
 		t.Fatalf("vendor workspace copied sources instead of linking them: %v %v", info, err)
+	}
+}
+
+// ddtest must use the vendored sources that go test uses: a go mod vendor tree
+// beside go.work belongs to its module and is ignored, while relative local
+// replacements keep working when the manifest moves to a temporary workspace.
+func TestMiniVendorSelectionMatchesGo(t *testing.T) {
+	driver := sharedDriver(t, "..")
+	for _, tc := range []struct {
+		name, work, vendor string
+		absolute           bool
+	}{
+		// Absolute replacements keep a misused vendor tree consistent, so the
+		// wrong sources would run silently instead of failing.
+		{"module-vendor-beside-go1.21-workspace", "go 1.21\nuse .\n", "module", true},
+		{"module-vendor-beside-go1.25-workspace", "go 1.25.0\nuse .\n", "module", true},
+		{"module-vendor-beside-workspace-relative-replacements", "go 1.21\nuse .\n", "module", false},
+		{"module-vendor-with-relative-replacements", "", "module", false},
+		{"workspace-vendor-with-relative-replacements", "go 1.22\nuse ./client\nreplace example.com/other => ./other\n", "workspace", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			client := filepath.Join(root, "client")
+			for _, name := range []string{"helper", "other"} {
+				dir := filepath.Join(root, name)
+				if err := os.Mkdir(dir, 0700); err != nil {
+					t.Fatal(err)
+				}
+				writeBuildFixture(t, dir, map[string]string{"go.mod": "module example.com/" + name + "\ngo 1.21\n", name + ".go": "package " + name + "\nconst Value=1\n"})
+			}
+			if err := os.Mkdir(client, 0700); err != nil {
+				t.Fatal(err)
+			}
+			local := func(name string) string {
+				if tc.absolute {
+					return strconv.Quote(filepath.ToSlash(filepath.Join(root, name)))
+				}
+				return "../" + name
+			}
+			mod := "module example.com/vendorselection\ngo 1.21\nrequire (\nexample.com/helper v0.0.0\nexample.com/other v0.0.0\n)\nreplace example.com/helper => " + local("helper") + "\n"
+			if tc.vendor == "module" {
+				mod += "replace example.com/other => " + local("other") + "\n"
+			}
+			writeBuildFixture(t, client, map[string]string{
+				"go.mod":         mod,
+				"client_test.go": "package vendorselection\nimport(\"fmt\";\"testing\";\"example.com/helper\";\"example.com/other\")\nfunc TestValues(t *testing.T){fmt.Printf(\"VALUES=%d,%d\\n\",helper.Value,other.Value)}\n",
+			})
+			env := append(testEnv("GOPROXY=off", "DD_CIVISIBILITY_ENABLED=false"), userCacheEnv(t, t.TempDir())...)
+			vendor := filepath.Join(client, "vendor")
+			if tc.vendor == "module" {
+				if out, stderr, code := command(t, client, append(env, "GOWORK=off"), "go", "mod", "vendor"); code != 0 {
+					t.Fatal(out, stderr)
+				}
+			}
+			switch {
+			case tc.vendor == "module" && tc.work != "":
+				// go.work beside the module's own vendor directory.
+				writeBuildFixture(t, client, map[string]string{"go.work": tc.work})
+			case tc.work != "":
+				writeBuildFixture(t, root, map[string]string{"go.work": tc.work})
+			}
+			if tc.vendor == "workspace" {
+				if out, stderr, code := command(t, root, env, "go", "work", "vendor"); code != 0 {
+					t.Fatal(out, stderr)
+				}
+				vendor = filepath.Join(root, "vendor")
+			}
+			// Patched vendored copies make the selected source observable.
+			for _, name := range []string{"helper", "other"} {
+				path := filepath.Join(vendor, "example.com", name, name+".go")
+				if err := os.WriteFile(path, []byte("package "+name+"\nconst Value=7\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.work == "" {
+				env = append(env, "GOWORK=off")
+			}
+			values := func(out string) string {
+				for _, line := range strings.Split(out, "\n") {
+					if strings.HasPrefix(line, "VALUES=") {
+						return strings.TrimSpace(line)
+					}
+				}
+				return ""
+			}
+			native, nativeErr, nativeCode := command(t, client, env, "go", "test", "-v", "-count=1", ".")
+			if nativeCode != 0 {
+				t.Fatalf("native: %s%s", native, nativeErr)
+			}
+			out, stderr, code := command(t, client, env, driver, "test", "-v", "-count=1", ".")
+			if code != 0 {
+				t.Fatalf("exit=%d\n%s%s", code, out, stderr)
+			}
+			if want, got := values(native), values(out); want == "" || got != want {
+				t.Fatalf("selected sources differ: native=%q ddtest=%q", want, got)
+			}
+		})
 	}
 }

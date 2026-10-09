@@ -271,7 +271,9 @@ restores nothing on its own. Both packages must keep importing only `syscall`:
 their tests check that restoration initializes before `os` and before an earlier
 dependency. Vendor workspaces are content-addressed: bump
 `vendorWorkspaceLayout` in `internal/runner/vendor.go` whenever their stored
-files or links change. Reuse and pruning coordinate through `<key>.lock`; keep
+files or links change. `goSelectsVendor` mirrors cmd/go's `setDefaultBuildMod`, and
+`vendorManifest.contents` its `canonicalizeReplacePath`; recheck both when Go
+changes vendoring. Reuse and pruning coordinate through `<key>.lock`; keep
 the lock beside the workspace so removal never deletes a file a waiting run
 opened inside it.
 

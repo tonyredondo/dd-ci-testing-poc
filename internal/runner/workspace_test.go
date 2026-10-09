@@ -175,7 +175,7 @@ func TestVendorSnapshotPreservesSourceOverlaysAndSymlinkFiles(t *testing.T) {
 	}
 	virtual := filepath.Join(source, "virtual.go")
 	replacements := map[string]string{virtual: original}
-	if err := snapshotVendor(source, target, replacements); err != nil {
+	if err := snapshotVendor(source, target, []byte("## workspace\n"), replacements); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := os.ReadFile(filepath.Join(target, "linked.go")); err != nil || string(got) != "package fixture\n" {

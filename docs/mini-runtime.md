@@ -104,12 +104,22 @@ workspace. Existing requirements and local or remote replacements retain their
 selected sources; absent runtimes use the CLI sources or its exact published
 version. The original workspace, checksums and module files stay unchanged.
 
+`ddtest` uses a vendor directory only where Go would: with `-mod=vendor`, or by
+default when the `go` directive is at least 1.14 and `modules.txt` was written
+for the same mode. A `go mod vendor` tree beside `go.work` belongs to its module,
+so workspace builds ignore it, as `go test` does.
+
 For a module using `vendor`, a temporary workspace contains the client and Mini.
 Go reads a workspace's vendor directory next to its `go.work`, and reads
 `vendor/modules.txt` outside the overlay. That manifest is the only copied file:
-it gains the workspace header. Every other top-level vendor entry is a symbolic
-link to the client's tree, so nothing else is copied and local patches stay live.
-Alternate modfiles keep working in any spelling, including `GOFLAGS`.
+a module manifest gains the workspace header. Go canonicalizes a module's
+relative local replacement against the `go.work` directory, so those paths are
+rewritten for the temporary workspace; replacements declared in the caller's
+`go.work` become absolute, like that workspace's copy. As with `go work vendor`,
+a replacement path containing whitespace cannot be represented in the manifest.
+Every other top-level vendor entry is a symbolic link to the client's tree, so
+nothing else is copied and local patches stay live. Alternate modfiles keep
+working in any spelling, including `GOFLAGS`.
 
 The workspace lives in the user cache, under `ddtest/vendor-workspaces`, at a
 path derived from its `go.work`, manifest and linked entries. Go's build cache

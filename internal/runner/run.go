@@ -195,45 +195,47 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 				return plan, e
 			}
 
-			if opts.mod != "mod" && opts.mod != "readonly" {
-				vendor := filepath.Join(filepath.Dir(work), "vendor")
-				if _, err := os.Stat(filepath.Join(vendor, "modules.txt")); err == nil {
-					if plan.Workfile, plan.workspaceLock, e = vendorWorkspace(ctx, plan.Workfile, vendor, replacements); e != nil {
-						return plan, e
-					}
+			// Use the vendor directory only where Go would: a go mod vendor tree
+			// next to go.work belongs to its module, not to the workspace.
+			vendor := filepath.Join(filepath.Dir(work), "vendor")
+			workData, _ := readModuleFile(work, replacements)
+			if goSelectsVendor(opts.mod, moduleDirective(workData, "go"), vendor, true, replacements) {
+				replaced, err := workspaceReplacedModules(ctx, dir, plan.Workfile)
+				if err != nil {
+					return plan, err
+				}
+				selected := vendorManifest{dir: vendor, base: filepath.Dir(work), workReplaced: replaced}
+				if plan.Workfile, plan.workspaceLock, e = vendorWorkspace(ctx, plan.Workfile, selected, replacements); e != nil {
+					return plan, e
 				}
 			}
 			opts.workfile = plan.Workfile
-		} else if opts.mod != "mod" && opts.mod != "readonly" {
-			root := moduleRoot(dir)
-			if root != "" {
-				vendor := filepath.Join(root, "vendor")
-				_, manifestErr := os.Stat(filepath.Join(vendor, "modules.txt"))
-				_, runtimeErr := os.Stat(filepath.Join(vendor, filepath.FromSlash(miniModule), "testopt"))
-				if manifestErr == nil && os.IsNotExist(runtimeErr) {
-					if opts.modfile != "" {
-						source := opts.modfile
-						if !filepath.IsAbs(source) {
-							source = filepath.Join(dir, source)
-						}
-						var data []byte
-						if data, e = readModuleFile(source, replacements); e != nil {
-							return plan, e
-						}
-						if e = overlaySelectedModfile(source, root, temp, data, &plan, replacements); e != nil {
-							return plan, e
-						}
-					}
-					// Workspace mode rejects -modfile in any spelling, including GOFLAGS.
-					if e = useModuleWorkspaceFlags(&opts, &plan); e != nil {
+		} else if root := moduleRoot(dir); root != "" {
+			vendor := filepath.Join(root, "vendor")
+			source := opts.modfile
+			if source == "" {
+				source = filepath.Join(root, "go.mod")
+			} else if !filepath.IsAbs(source) {
+				source = filepath.Join(dir, source)
+			}
+			data, _ := readModuleFile(source, replacements)
+			_, manifestErr := os.Stat(filepath.Join(vendor, "modules.txt"))
+			_, runtimeErr := os.Stat(filepath.Join(vendor, filepath.FromSlash(miniModule), "testopt"))
+			if manifestErr == nil && os.IsNotExist(runtimeErr) && goSelectsVendor(opts.mod, moduleDirective(data, "go"), vendor, false, replacements) {
+				if opts.modfile != "" {
+					if e = overlaySelectedModfile(source, root, temp, data, &plan, replacements); e != nil {
 						return plan, e
 					}
-					plan.Workfile, plan.workspaceLock, e = provideMiniVendorWorkspace(ctx, dir, root, temp, replacements)
-					if e != nil {
-						return plan, e
-					}
-					opts.workfile = plan.Workfile
 				}
+				// Workspace mode rejects -modfile in any spelling, including GOFLAGS.
+				if e = useModuleWorkspaceFlags(&opts, &plan); e != nil {
+					return plan, e
+				}
+				plan.Workfile, plan.workspaceLock, e = provideMiniVendorWorkspace(ctx, dir, root, temp, replacements)
+				if e != nil {
+					return plan, e
+				}
+				opts.workfile = plan.Workfile
 			}
 		}
 		if plan.Workfile == "" {

@@ -169,6 +169,25 @@ func useModuleWorkspaceFlags(opts *options, plan *Plan) error {
 	return nil
 }
 
+// workspaceReplacedModules lists the modules that a go.work file replaces.
+func workspaceReplacedModules(ctx context.Context, dir, work string) (map[string]bool, error) {
+	out, err := goTool(ctx, dir, nil, "work", "edit", "-json", work)
+	if err != nil {
+		return nil, err
+	}
+	var parsed struct {
+		Replace []struct{ Old struct{ Path string } }
+	}
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		return nil, fmt.Errorf("parse workspace edit JSON (%d bytes): %w", len(out), err)
+	}
+	replaced := map[string]bool{}
+	for _, replace := range parsed.Replace {
+		replaced[replace.Old.Path] = true
+	}
+	return replaced, nil
+}
+
 // workspaceModuleFlags adapts only flags that Go forbids in workspace mode.
 // The selected modfile is supplied by the overlay, and workspace loading owns
 // its checksum file. Other build flags retain their original order and values.

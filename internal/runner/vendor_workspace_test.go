@@ -31,6 +31,11 @@ func vendorFixture(t *testing.T) (source, work string) {
 	return source, work
 }
 
+// moduleVendor describes a go mod vendor tree beside its module.
+func moduleVendor(source string) vendorManifest {
+	return vendorManifest{dir: source, base: filepath.Dir(source), module: true}
+}
+
 func requireSymlinks(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
@@ -43,7 +48,7 @@ func requireSymlinks(t *testing.T) {
 // test ends, as a run holds it until go test exits.
 func useVendorWorkspace(t *testing.T, work, source string, replacements map[string]string) (string, error) {
 	t.Helper()
-	got, lock, err := vendorWorkspace(t.Context(), work, source, replacements)
+	got, lock, err := vendorWorkspace(t.Context(), work, moduleVendor(source), replacements)
 	if lock != nil {
 		t.Cleanup(func() { lock.Close() })
 	}
@@ -272,7 +277,7 @@ func TestPruneSkipsVendorWorkspaceInUse(t *testing.T) {
 	cache := t.TempDir()
 	withUserCache(t, func() (string, error) { return cache, nil })
 	source, work := vendorFixture(t)
-	path, lock, err := vendorWorkspace(t.Context(), work, source, map[string]string{})
+	path, lock, err := vendorWorkspace(t.Context(), work, moduleVendor(source), map[string]string{})
 	if err != nil || lock == nil {
 		t.Fatalf("cached workspace: %s %v %v", path, lock, err)
 	}
@@ -302,7 +307,7 @@ func TestVendorWorkspaceLockWaitHonorsCancellation(t *testing.T) {
 	cache := t.TempDir()
 	withUserCache(t, func() (string, error) { return cache, nil })
 	source, work := vendorFixture(t)
-	path, lock, err := vendorWorkspace(t.Context(), work, source, map[string]string{})
+	path, lock, err := vendorWorkspace(t.Context(), work, moduleVendor(source), map[string]string{})
 	if err != nil || lock == nil {
 		t.Fatalf("cached workspace: %s %v %v", path, lock, err)
 	}
@@ -319,7 +324,7 @@ func TestVendorWorkspaceLockWaitHonorsCancellation(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		_, held, err := vendorWorkspace(ctx, work, source, map[string]string{})
+		_, held, err := vendorWorkspace(ctx, work, moduleVendor(source), map[string]string{})
 		if held != nil {
 			held.Close()
 		}
@@ -343,7 +348,7 @@ func TestVendorWorkspaceReuseAfterConcurrentPruneRebuilds(t *testing.T) {
 	cache := t.TempDir()
 	withUserCache(t, func() (string, error) { return cache, nil })
 	source, work := vendorFixture(t)
-	path, lock, err := vendorWorkspace(t.Context(), work, source, map[string]string{})
+	path, lock, err := vendorWorkspace(t.Context(), work, moduleVendor(source), map[string]string{})
 	if err != nil || lock == nil {
 		t.Fatalf("cached workspace: %s %v %v", path, lock, err)
 	}
@@ -374,7 +379,7 @@ func TestVendorWorkspaceReuseAfterConcurrentPruneRebuilds(t *testing.T) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		path, lock, err := vendorWorkspace(t.Context(), work, source, map[string]string{})
+		path, lock, err := vendorWorkspace(t.Context(), work, moduleVendor(source), map[string]string{})
 		done <- result{path, lock, err}
 	}()
 	<-opened
@@ -432,5 +437,94 @@ func TestUseModuleWorkspaceFlagsRemovesEveryModfileSpelling(t *testing.T) {
 	}
 	if plan.workspaceGoFlags != "'-tags=fixture'" || !plan.moduleWorkspace || opts.workspaceGoFlags == nil || *opts.workspaceGoFlags != plan.workspaceGoFlags {
 		t.Fatalf("GOFLAGS for the workspace: %q %+v", plan.workspaceGoFlags, opts.workspaceGoFlags)
+	}
+}
+
+// goSelectsVendor mirrors cmd/go's setDefaultBuildMod for an existing vendor
+// directory: the explicit flag, the go directive and the manifest's mode.
+func TestGoSelectsVendorMirrorsCmdGo(t *testing.T) {
+	moduleManifest := "# example.com/dep v1.0.0\n## explicit\nexample.com/dep\n"
+	workspaceManifest := "## workspace\n" + moduleManifest
+	for _, tc := range []struct {
+		name, mod, goVersion, manifest string
+		workspace, missing, want       bool
+	}{
+		{name: "module default", goVersion: "1.21", manifest: moduleManifest, want: true},
+		{name: "module before 1.14", goVersion: "1.13", manifest: moduleManifest},
+		{name: "module without go directive", manifest: moduleManifest},
+		{name: "module with workspace manifest", goVersion: "1.21", manifest: workspaceManifest},
+		{name: "module without manifest", goVersion: "1.21", want: true},
+		{name: "workspace with module manifest", goVersion: "1.25", manifest: moduleManifest, workspace: true},
+		{name: "workspace manifest", goVersion: "1.22", manifest: workspaceManifest, workspace: true, want: true},
+		{name: "workspace without manifest", goVersion: "1.22", workspace: true},
+		{name: "explicit vendor", mod: "vendor", manifest: moduleManifest, workspace: true, want: true},
+		{name: "explicit readonly", mod: "readonly", goVersion: "1.21", manifest: moduleManifest},
+		{name: "explicit mod", mod: "mod", goVersion: "1.21", manifest: moduleManifest},
+		{name: "missing directory", mod: "vendor", missing: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "vendor")
+			if !tc.missing {
+				if err := os.Mkdir(dir, 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.manifest != "" {
+				if err := os.WriteFile(filepath.Join(dir, "modules.txt"), []byte(tc.manifest), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := goSelectsVendor(tc.mod, tc.goVersion, dir, tc.workspace, nil); got != tc.want {
+				t.Fatalf("selected=%t want %t", got, tc.want)
+			}
+		})
+	}
+}
+
+// Go canonicalizes a module's relative replacement against the go.work
+// directory and compares a go.work replacement verbatim; the temporary go.work
+// makes the latter absolute.
+func TestVendorManifestRewritesReplacementsForWorkspace(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "client")
+	workspace := filepath.Join(t.TempDir(), "workspace")
+	absolute := filepath.Join(t.TempDir(), "absolute")
+	relative := func(path string) string {
+		rel, err := filepath.Rel(workspace, filepath.Join(base, path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return toDirectoryPath(rel)
+	}
+	original := strings.Join([]string{
+		"# example.com/helper v0.0.0 => ./helper",
+		"## explicit; go 1.21",
+		"example.com/helper",
+		"# example.com/shared v1.0.0 => ../shared",
+		"# example.com/fork v1.0.0 => example.com/forked v1.2.0",
+		"# example.com/abs v0.0.0 => " + absolute,
+		"# example.com/work => ./work",
+		"# example.com/helper => ./helper",
+		"",
+	}, "\n")
+	vendor := vendorManifest{base: base, module: true, workReplaced: map[string]bool{"example.com/work": true}}
+	want := strings.Join([]string{
+		"## workspace",
+		"# example.com/helper v0.0.0 => " + relative("helper"),
+		"## explicit; go 1.21",
+		"example.com/helper",
+		"# example.com/shared v1.0.0 => " + relative(filepath.Join("..", "shared")),
+		"# example.com/fork v1.0.0 => example.com/forked v1.2.0",
+		"# example.com/abs v0.0.0 => " + absolute,
+		"# example.com/work => " + filepath.Join(base, "work"),
+		"# example.com/helper => " + relative("helper"),
+		"",
+	}, "\n")
+	if got := string(vendor.contents([]byte(original), workspace)); got != want {
+		t.Fatalf("workspace manifest:\n%s\nwant:\n%s", got, want)
+	}
+	// A workspace manifest keeps its header; only paths move with the workspace.
+	vendor.module = false
+	if got := string(vendor.contents([]byte("## workspace\n"), workspace)); got != "## workspace\n" {
+		t.Fatalf("workspace header changed: %q", got)
 	}
 }

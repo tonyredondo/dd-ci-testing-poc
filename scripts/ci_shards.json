@@ -53,6 +53,7 @@
       "TestMiniTemporaryWorkspaceRestoresGoEnvironment",
       "TestMiniTestifyDuplicateIdentity",
       "TestMiniTestingCompatibility",
+      "TestMiniVendorSelectionMatchesGo",
       "TestMiniVendorWorkspaceLinksAndReusesBuildCache",
       "TestParallelNormalizationPreservesOutput",
       "TestResultCache",
@@ -146,6 +147,7 @@
       "TestMiniStartupOverlapsSettingsAndTelemetry",
       "TestMiniTemporaryWorkspaceKeepsBuildToolEnvironment",
       "TestMiniTemporaryWorkspaceRestoresGoEnvironment",
+      "TestMiniVendorSelectionMatchesGo",
       "TestMiniVendorWorkspaceLinksAndReusesBuildCache"
     ],
     "fuzz": [

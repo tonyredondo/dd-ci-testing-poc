@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -109,7 +110,104 @@ func provideMiniVendorWorkspace(ctx context.Context, dir, root, temp string, rep
 	if err != nil {
 		return "", nil, err
 	}
-	return vendorWorkspace(ctx, work, filepath.Join(root, "vendor"), replacements)
+	return vendorWorkspace(ctx, work, vendorManifest{dir: filepath.Join(root, "vendor"), base: root, module: true}, replacements)
+}
+
+// vendorManifest is a vendor directory that Go selects natively, and how its
+// modules.txt must change for a temporary workspace elsewhere.
+type vendorManifest struct {
+	dir string // The caller's vendor directory.
+	// base is the directory that the manifest's relative replacements were
+	// written against: the module root, or the caller's go.work directory.
+	base string
+	// module marks a go mod vendor manifest, which needs the workspace header.
+	module bool
+	// workReplaced lists modules replaced by the caller's go.work. Go compares
+	// those replacements verbatim, and the temporary go.work makes them absolute.
+	workReplaced map[string]bool
+}
+
+// goSelectsVendor mirrors cmd/go's choice: -mod=vendor uses the directory;
+// by default it needs a go directive of at least 1.14 and a modules.txt
+// written for the same mode, a workspace or a single module.
+func goSelectsVendor(mod, goVersion, dir string, workspace bool, replacements map[string]string) bool {
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return false
+	}
+	switch mod {
+	case "vendor":
+		return true
+	case "":
+	default:
+		return false
+	}
+	if goVersion == "" || compareGoVersion(goVersion, "1.14") < 0 {
+		return false
+	}
+	manifest, err := readModuleFile(filepath.Join(dir, "modules.txt"), replacements)
+	if err != nil {
+		return !workspace // A module vendor directory may predate modules.txt.
+	}
+	return manifestIsForWorkspace(manifest) == workspace
+}
+
+// manifestIsForWorkspace reads the first line's annotations as cmd/go does.
+func manifestIsForWorkspace(manifest []byte) bool {
+	line, _, _ := strings.Cut(string(manifest), "\n")
+	if annotations, ok := strings.CutPrefix(line, "## "); ok {
+		for entry := range strings.SplitSeq(annotations, ";") {
+			if strings.TrimSpace(entry) == "workspace" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// contents returns modules.txt for a workspace whose go.work is in workspace.
+// Go canonicalizes a module's relative replacement against the go.work
+// directory, so those paths are rewritten for this location. Replacements
+// from the caller's go.work are absolute in the temporary go.work.
+func (v vendorManifest) contents(original []byte, workspace string) []byte {
+	manifest := string(original)
+	if v.module && !manifestIsForWorkspace(original) {
+		manifest = "## workspace\n" + manifest
+	}
+	lines := strings.Split(manifest, "\n")
+	for i, line := range lines {
+		// "# module [version] => directory" names a directory replacement.
+		fields := strings.Fields(line)
+		n := len(fields)
+		if n < 4 || fields[0] != "#" || fields[n-2] != "=>" || filepath.IsAbs(fields[n-1]) {
+			continue
+		}
+		path := filepath.Join(v.base, fields[n-1])
+		if !v.workReplaced[fields[1]] {
+			if relative, err := filepath.Rel(workspace, path); err == nil {
+				path = relative
+			}
+			path = toDirectoryPath(path)
+		}
+		fields[n-1] = path
+		lines[i] = strings.Join(fields, " ")
+	}
+	return []byte(strings.Join(lines, "\n"))
+}
+
+// toDirectoryPath and isDirectoryPath match cmd/go's canonical spelling of
+// local replacement directories.
+func toDirectoryPath(path string) string {
+	if isDirectoryPath(path) {
+		return path
+	}
+	return "./" + filepath.ToSlash(filepath.Clean(path))
+}
+
+func isDirectoryPath(path string) bool {
+	return path == "." || strings.HasPrefix(path, "./") || strings.HasPrefix(path, `.\`) ||
+		path == ".." || strings.HasPrefix(path, "../") || strings.HasPrefix(path, `..\`) ||
+		strings.HasPrefix(path, "/") || strings.HasPrefix(path, `\`) ||
+		len(path) >= 2 && ('A' <= path[0] && path[0] <= 'Z' || 'a' <= path[0] && path[0] <= 'z') && path[1] == ':'
 }
 
 // userCacheDir locates persistent vendor workspaces; tests replace it.
@@ -137,20 +235,18 @@ var vendorWorkspaceLockOpened = func() {}
 // that workspace from being pruned; hold it until go test exits. Without the
 // cache, links use the run's directory; without symbolic links, files are
 // snapshotted there. Both run-local forms return no lock.
-func vendorWorkspace(ctx context.Context, work, source string, replacements map[string]string) (string, *os.File, error) {
+func vendorWorkspace(ctx context.Context, work string, vendor vendorManifest, replacements map[string]string) (string, *os.File, error) {
 	debug := debugFromContext(ctx)
-	manifest, err := readModuleFile(filepath.Join(source, "modules.txt"), replacements)
+	source := vendor.dir
+	original, err := readModuleFile(filepath.Join(source, "modules.txt"), replacements)
 	if err != nil {
 		return "", nil, err
-	}
-	if !bytes.HasPrefix(manifest, []byte("## workspace")) {
-		manifest = append([]byte("## workspace\n"), manifest...)
 	}
 	entries, err := os.ReadDir(source)
 	if err != nil {
 		return "", nil, err
 	}
-	stable, lock, err := stableVendorWorkspace(ctx, work, source, manifest, entries)
+	stable, lock, err := stableVendorWorkspace(ctx, work, vendor, original, entries)
 	if err == nil {
 		retargetVendorOverlay(source, filepath.Join(filepath.Dir(stable), "vendor"), replacements)
 		debug.printf("vendor workspace=cached-links")
@@ -160,6 +256,7 @@ func vendorWorkspace(ctx context.Context, work, source string, replacements map[
 		return "", nil, ctxErr
 	}
 	target := filepath.Join(filepath.Dir(work), "vendor")
+	manifest := vendor.contents(original, filepath.Dir(work))
 	if err := linkVendor(source, target, manifest, entries); err == nil {
 		retargetVendorOverlay(source, target, replacements)
 		debug.printf("vendor workspace=run-links")
@@ -169,7 +266,7 @@ func vendorWorkspace(ctx context.Context, work, source string, replacements map[
 		return "", nil, err
 	}
 	debug.printf("vendor workspace=snapshot")
-	return work, nil, snapshotVendor(source, target, replacements)
+	return work, nil, snapshotVendor(source, target, manifest, replacements)
 }
 
 // stableVendorWorkspace returns a go.work whose directory is derived from
@@ -177,7 +274,8 @@ func vendorWorkspace(ctx context.Context, work, source string, replacements map[
 // use a workspace hold <key>.lock shared; pruning needs it exclusively and
 // never waits. Concurrent runs build privately and rename; one that loses the
 // race reuses the identical winner. Unexpected contents are never modified.
-func stableVendorWorkspace(ctx context.Context, work, source string, manifest []byte, entries []fs.DirEntry) (string, *os.File, error) {
+func stableVendorWorkspace(ctx context.Context, work string, vendor vendorManifest, original []byte, entries []fs.DirEntry) (string, *os.File, error) {
+	source := vendor.dir
 	cache, err := userCacheDir()
 	if err != nil {
 		return "", nil, err
@@ -191,8 +289,13 @@ func stableVendorWorkspace(ctx context.Context, work, source string, manifest []
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return "", nil, err
 	}
+	replaced := make([]string, 0, len(vendor.workReplaced))
+	for path := range vendor.workReplaced {
+		replaced = append(replaced, path)
+	}
+	sort.Strings(replaced)
 	hash := sha256.New()
-	for _, part := range [][]byte{[]byte(vendorWorkspaceLayout), []byte(source), workData, sum, manifest} {
+	for _, part := range [][]byte{[]byte(vendorWorkspaceLayout), []byte(source), []byte(vendor.base), []byte(strconv.FormatBool(vendor.module)), []byte(strings.Join(replaced, "\x00")), workData, sum, original} {
 		fmt.Fprintf(hash, "%d:%s", len(part), part)
 	}
 	for _, entry := range entries {
@@ -201,6 +304,7 @@ func stableVendorWorkspace(ctx context.Context, work, source string, manifest []
 	key := hex.EncodeToString(hash.Sum(nil))[:32]
 	parent := filepath.Join(cache, "ddtest", "vendor-workspaces")
 	root := filepath.Join(parent, key)
+	manifest := vendor.contents(original, root)
 	if err := os.MkdirAll(parent, 0700); err != nil {
 		return "", nil, err
 	}
@@ -407,7 +511,7 @@ func retargetVendorOverlay(source, target string, replacements map[string]string
 // preserves patched sources; hard links avoid copying large vendor trees and a
 // copy is used across filesystems. The modules.txt copy is always independent
 // because Go reads that file outside its overlay filesystem.
-func snapshotVendor(source, target string, replacements map[string]string) error {
+func snapshotVendor(source, target string, manifest []byte, replacements map[string]string) error {
 	// Include virtual files added by an overlay, not just files visited on disk.
 	for path, backing := range replacements {
 		rel, err := filepath.Rel(source, path)
@@ -439,14 +543,7 @@ func snapshotVendor(source, target string, replacements map[string]string) error
 			}
 		}
 		if rel == "modules.txt" {
-			data, err := os.ReadFile(backing)
-			if err != nil {
-				return err
-			}
-			if !strings.HasPrefix(string(data), "## workspace") {
-				data = append([]byte("## workspace\n"), data...)
-			}
-			return os.WriteFile(logical, data, 0600)
+			return os.WriteFile(logical, manifest, 0600)
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
 			info, err := os.Stat(backing)
