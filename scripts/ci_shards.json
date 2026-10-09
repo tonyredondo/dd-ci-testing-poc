@@ -198,53 +198,59 @@
     "differential/ubuntu-latest/normal": [
       [
         "cli",
-        "parity"
-      ],
-      [
         "transparency",
-        "sdk",
-        "units"
-      ],
-      [
         "testify",
         "fuzz"
       ],
       [
         "orchestrion",
-        "sdk-orchestrion"
+        "sdk-orchestrion",
+        "sdk",
+        "parity",
+        "units"
       ]
     ],
     "differential/ubuntu-latest/race": [
       [
         "cli",
-        "parity"
-      ],
-      [
+        "parity",
         "transparency",
-        "sdk"
+        "sdk-orchestrion"
       ],
       [
-        "testify",
+        "fuzz",
         "units"
       ],
       [
-        "orchestrion"
-      ],
-      [
-        "sdk-orchestrion",
-        "fuzz"
+        "orchestrion",
+        "testify",
+        "sdk"
       ]
     ],
     "differential/macos-latest/normal": [
       [
+        "cli",
+        "parity",
+        "sdk"
+      ],
+      [
         "transparency",
+        "testify",
         "units"
       ],
       [
+        "orchestrion",
+        "fuzz",
         "sdk-orchestrion"
-      ],
+      ]
+    ],
+    "differential/windows-latest/normal": [
       [
         "cli",
+        "units"
+      ],
+      [
+        "transparency",
         "parity"
       ],
       [
@@ -254,31 +260,9 @@
       [
         "orchestrion",
         "fuzz"
-      ]
-    ],
-    "differential/windows-latest/normal": [
-      [
-        "cli"
       ],
       [
-        "sdk-orchestrion",
-        "units"
-      ],
-      [
-        "orchestrion"
-      ],
-      [
-        "transparency"
-      ],
-      [
-        "testify"
-      ],
-      [
-        "parity",
-        "sdk"
-      ],
-      [
-        "fuzz"
+        "sdk-orchestrion"
       ]
     ],
     "mini/ubuntu-latest/normal": [

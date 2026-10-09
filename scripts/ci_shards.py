@@ -109,9 +109,10 @@ def matrix(groups, suite, tip=False):
         s, os_name, go_version, mode = config
         if s != suite or (go_version == "tip") != tip:
             continue
-        for shards in groups["jobs"][job_key(config)]:
+        for index, shards in enumerate(groups["jobs"][job_key(config)]):
+            # Jobs of one configuration share a Go cache; the first job saves it.
             include.append(dict(suite=s, os=os_name, go=go_version, mode=mode,
-                                shards=",".join(shards), job="-".join(shards)))
+                                shards=",".join(shards), job="-".join(shards), owner=index == 0))
     return {"include": include}
 
 
@@ -278,6 +279,24 @@ def run(args):
         raise ValueError("; ".join(sorted(failures)))
 
 
+def retry(args, sleep=time.sleep):
+    """Run a network step again when it fails or stalls; a module fetch can hang for minutes."""
+    command = args.argv[1:] if args.argv[:1] == ["--"] else args.argv
+    if not command or args.attempts < 1:
+        raise ValueError("retry requires a command and at least one attempt")
+    for attempt in range(1, args.attempts + 1):
+        try:
+            if subprocess.run(command, cwd=ROOT, timeout=args.timeout).returncode == 0:
+                return
+            reason = "failed"
+        except subprocess.TimeoutExpired:
+            reason = f"did not finish within {args.timeout} seconds"
+        print(f"::warning::attempt {attempt} of {' '.join(command)} {reason}", flush=True)
+        if attempt < args.attempts:
+            sleep(15 * attempt)
+    raise ValueError(f"{' '.join(command)} failed after {args.attempts} attempts")
+
+
 def collect_manifests(source, groups, revision, tree, expected_configurations=CONFIGURATIONS):
     expected = {(*config, shard) for config in expected_configurations for shard in SHARDS[config[0]]}
     manifests = {}
@@ -363,6 +382,10 @@ def main():
     aggregate_parser.add_argument("--input", type=Path, required=True)
     aggregate_parser.add_argument("--output", type=Path, required=True)
     aggregate_parser.add_argument("--with-tip", action="store_true")
+    retry_parser = commands.add_parser("retry")
+    retry_parser.add_argument("--attempts", type=int, default=3)
+    retry_parser.add_argument("--timeout", type=float, default=300, help="seconds per attempt")
+    retry_parser.add_argument("argv", nargs=argparse.REMAINDER, metavar="command")
     args = parser.parse_args()
     try:
         if args.command == "matrix":
@@ -372,6 +395,8 @@ def main():
                 print(name + "=" + json.dumps(value, separators=(",", ":")))
         elif args.command == "run":
             run(args)
+        elif args.command == "retry":
+            retry(args)
         else:
             aggregate(args)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:

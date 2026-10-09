@@ -4,6 +4,7 @@ import copy
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -22,16 +23,19 @@ class ShardTests(unittest.TestCase):
 
     def test_matrix_and_platform_inventory(self):
         differential = ci_shards.matrix(self.groups, "differential")["include"]
-        self.assertEqual(25, len(differential))
+        self.assertEqual(15, len(differential))
         self.assertEqual(2, len(ci_shards.matrix(self.groups, "mini")["include"]))
         self.assertEqual([dict(suite="mini", os="ubuntu-latest", go="tip", mode="normal",
-                               shards="units,native,fuzz", job="units-native-fuzz")],
+                               shards="units,native,fuzz", job="units-native-fuzz", owner=True)],
                          ci_shards.matrix(self.groups, "mini", tip=True)["include"])
         # Each configuration runs every group exactly once across its jobs.
         for config in ci_shards.CONFIGURATIONS[:5]:
             jobs = [item["shards"].split(",") for item in differential
                     if (item["suite"], item["os"], item["go"], item["mode"]) == config]
             self.assertEqual(sorted(ci_shards.SHARDS["differential"]), sorted(sum(jobs, [])))
+            owners = [item["owner"] for item in differential
+                      if (item["suite"], item["os"], item["go"], item["mode"]) == config]
+            self.assertEqual([True] + [False] * (len(owners) - 1), owners)
         for platform, count in (("ubuntu-latest", 120), ("macos-latest", 120), ("windows-latest", 121)):
             tests = [name for shard in ci_shards.SHARDS["differential"][1:]
                      for name in ci_shards.selected_tests(self.groups, "differential", "1.27.x", shard, platform)]
@@ -78,6 +82,20 @@ class ShardTests(unittest.TestCase):
         self.assertEqual("atexit_sleep_ms=0", ci_shards.race_options(""))
         self.assertEqual("halt_on_error=1 atexit_sleep_ms=0", ci_shards.race_options("halt_on_error=1"))
         self.assertEqual("atexit_sleep_ms=250", ci_shards.race_options("atexit_sleep_ms=250"))
+
+    def test_retry_repeats_failed_and_stalled_network_steps(self):
+        args = type("Args", (), dict(argv=["--", "go", "mod", "download"], attempts=3, timeout=5))()
+        outcomes = [subprocess.TimeoutExpired("go", 5), mock.Mock(returncode=1), mock.Mock(returncode=0)]
+        sleeps = []
+        with mock.patch("subprocess.run", side_effect=outcomes) as run, mock.patch("sys.stdout"):
+            ci_shards.retry(args, sleep=sleeps.append)
+        self.assertEqual(3, run.call_count)
+        self.assertEqual(["go", "mod", "download"], run.call_args.args[0])
+        self.assertEqual(5, run.call_args.kwargs["timeout"])
+        self.assertEqual([15, 30], sleeps)
+        with mock.patch("subprocess.run", return_value=mock.Mock(returncode=1)), mock.patch("sys.stdout"):
+            with self.assertRaisesRegex(ValueError, "failed after 3 attempts"):
+                ci_shards.retry(args, sleep=sleeps.append)
 
     def test_tip_revision_accepts_git_abbreviations_and_checks_the_actual_commit(self):
         sha = "2557edd671b4ec84af8a5841a621a6abab39774b"

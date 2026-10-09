@@ -121,47 +121,39 @@ jobs:
         run: |
           echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
           echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
-      # Jobs compile different fixtures, so each job keeps its own build cache.
+      # The jobs of a configuration share one Go cache. It holds the SDK, Orchestrion
+      # and dependency builds that most fixtures reuse, and the modules they need.
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cache
         with:
           path: |
             ${{ steps.paths.outputs.build }}
             ${{ steps.paths.outputs.modules }}
-          key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-differential-${{ matrix.mode }}-${{ matrix.job }}-${{ hashFiles('**/go.sum') }}
+          key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-differential-${{ matrix.mode }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-differential-${{ matrix.mode }}-${{ matrix.job }}-
             go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-differential-${{ matrix.mode }}-
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/orchestrion-reference
           key: orchestrion-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('testdata/orchestrion/go.mod', 'testdata/orchestrion/go.sum') }}
-      # A job with a cold module cache downloads hundreds of modules; retry
-      # transient proxy failures instead of failing the job.
+      # A module fetch from the proxy can fail or stall for minutes. Download
+      # explicitly with a deadline and retries, then build without the network.
       - name: Build frozen Orchestrion reference
         shell: bash
         run: |
           reference="$RUNNER_TEMP/orchestrion-reference/orchestrion"
           if [[ "$RUNNER_OS" == "Windows" ]]; then reference="$reference.exe"; fi
-          for attempt in 1 2 3; do
-            [[ -x "$reference" ]] && break
-            go -C testdata/orchestrion build -mod=readonly -o "$reference" github.com/DataDog/orchestrion && break
-            echo "::warning::Orchestrion build attempt $attempt failed"
-            sleep $((attempt * 15))
-          done
+          if [[ ! -x "$reference" ]]; then
+            python scripts/ci_shards.py retry -- go -C testdata/orchestrion mod download
+            go -C testdata/orchestrion build -mod=readonly -o "$reference" github.com/DataDog/orchestrion
+          fi
           go version -m "$reference"
           echo "ORCHESTRION_BIN=$reference" >> "$GITHUB_ENV"
       - name: Verify fixture modules
         shell: bash
-        working-directory: testdata/fixture
         run: |
-          for attempt in 1 2 3; do
-            go mod download && break
-            if [[ $attempt == 3 ]]; then exit 1; fi
-            echo "::warning::Fixture module download attempt $attempt failed"
-            sleep $((attempt * 15))
-          done
-          go mod verify
+          python scripts/ci_shards.py retry -- go -C testdata/fixture mod download
+          go -C testdata/fixture mod verify
       - name: Vet
         if: contains(format(',{0},', matrix.shards), ',units,')
         shell: bash
@@ -173,17 +165,22 @@ jobs:
           CI_GO: ${{ matrix.go }}
           CI_MODE: ${{ matrix.mode }}
           CI_SHARDS: ${{ matrix.shards }}
+          CI_PARALLEL: ${{ matrix.go == '1.26.x' && 2 || 1 }}
           GO_TEST_TIMEOUT: ${{ matrix.os == 'windows-latest' && '35m' || matrix.os == 'macos-latest' && '25m' || matrix.mode == 'race' && '25m' || '20m' }}
         run: |
           python scripts/ci_shards.py run --suite differential --os "$CI_PLATFORM" \
-            --go "$CI_GO" --mode "$CI_MODE" --shard "$CI_SHARDS" \
+            --go "$CI_GO" --mode "$CI_MODE" --shard "$CI_SHARDS" --parallel "$CI_PARALLEL" \
             --timeout "$GO_TEST_TIMEOUT" --output artifacts
       - name: Report Go cache sizes
         if: always()
         shell: bash
         run: du -sh "${{ steps.paths.outputs.build }}" "${{ steps.paths.outputs.modules }}" || true
+      # One cache per configuration fits the repository's 10 GB cache budget. Pull
+      # requests save only when nothing was restored; main and nightly runs keep it.
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: success() && steps.cache.outputs.cache-hit != 'true'
+        if: >-
+          success() && matrix.owner && steps.cache.outputs.cache-hit != 'true' &&
+          (github.event_name != 'pull_request' || steps.cache.outputs.cache-matched-key == '')
         with:
           path: |
             ${{ steps.paths.outputs.build }}
@@ -256,9 +253,9 @@ jobs:
           path: |
             ${{ steps.paths.outputs.build }}
             ${{ steps.paths.outputs.modules }}
-          key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-mini-${{ matrix.mode }}-${{ matrix.job }}-${{ hashFiles('**/go.sum') }}
+          key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-mini-${{ matrix.mode }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-mini-${{ matrix.mode }}-${{ matrix.job }}-
+            go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-mini-${{ matrix.mode }}-
       - name: Vet
         if: contains(format(',{0},', matrix.shards), ',units,')
         shell: bash
@@ -280,8 +277,12 @@ jobs:
         if: always()
         shell: bash
         run: du -sh "${{ steps.paths.outputs.build }}" "${{ steps.paths.outputs.modules }}" || true
+      # One cache per configuration fits the repository's 10 GB cache budget. Pull
+      # requests save only when nothing was restored; main and nightly runs keep it.
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: success() && steps.cache.outputs.cache-hit != 'true'
+        if: >-
+          success() && matrix.owner && steps.cache.outputs.cache-hit != 'true' &&
+          (github.event_name != 'pull_request' || steps.cache.outputs.cache-matched-key == '')
         with:
           path: |
             ${{ steps.paths.outputs.build }}
