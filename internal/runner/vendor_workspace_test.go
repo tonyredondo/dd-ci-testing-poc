@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -185,7 +186,7 @@ func requireFileLocks(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer file.Close()
-	if err := lockFile(file, false, false); errors.Is(err, errors.ErrUnsupported) {
+	if err := tryLockFile(file, false); errors.Is(err, errors.ErrUnsupported) {
 		t.Skip("file locks unavailable")
 	} else if err != nil {
 		t.Fatal(err)
@@ -204,18 +205,18 @@ func TestFileLocksConflictAcrossOpens(t *testing.T) {
 		return file
 	}
 	first, second, pruner := open(), open(), open()
-	if err := lockFile(first, false, true); err != nil {
+	if err := tryLockFile(first, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := lockFile(second, false, false); err != nil {
+	if err := tryLockFile(second, false); err != nil {
 		t.Fatalf("shared locks conflict: %v", err)
 	}
-	if err := lockFile(pruner, true, false); !errors.Is(err, errLockBusy) {
+	if err := tryLockFile(pruner, true); !errors.Is(err, errLockBusy) {
 		t.Fatalf("exclusive lock while shared: %v", err)
 	}
 	first.Close()
 	second.Close()
-	if err := lockFile(pruner, true, false); err != nil {
+	if err := tryLockFile(pruner, true); err != nil {
 		t.Fatalf("exclusive lock after release: %v", err)
 	}
 }
@@ -294,6 +295,46 @@ func TestPruneSkipsVendorWorkspaceInUse(t *testing.T) {
 	}
 }
 
+// Preparation stops when its context ends, even while a pruner holds the lock.
+func TestVendorWorkspaceLockWaitHonorsCancellation(t *testing.T) {
+	requireSymlinks(t)
+	requireFileLocks(t)
+	cache := t.TempDir()
+	withUserCache(t, func() (string, error) { return cache, nil })
+	source, work := vendorFixture(t)
+	path, lock, err := vendorWorkspace(t.Context(), work, source, map[string]string{})
+	if err != nil || lock == nil {
+		t.Fatalf("cached workspace: %s %v %v", path, lock, err)
+	}
+	lock.Close()
+	pruner, err := os.OpenFile(filepath.Dir(path)+".lock", os.O_RDWR, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pruner.Close()
+	if err := tryLockFile(pruner, true); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, held, err := vendorWorkspace(ctx, work, source, map[string]string{})
+		if held != nil {
+			held.Close()
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("canceled preparation returned %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("waiting for the workspace lock ignored cancellation")
+	}
+}
+
 // A run that opened the lock while another run pruned the workspace must not
 // report the removed directory: it rebuilds and holds the current lock.
 func TestVendorWorkspaceReuseAfterConcurrentPruneRebuilds(t *testing.T) {
@@ -314,7 +355,7 @@ func TestVendorWorkspaceReuseAfterConcurrentPruneRebuilds(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer pruner.Close()
-	if err := lockFile(pruner, true, false); err != nil {
+	if err := tryLockFile(pruner, true); err != nil {
 		t.Fatal(err)
 	}
 	opened := make(chan struct{}, 1)

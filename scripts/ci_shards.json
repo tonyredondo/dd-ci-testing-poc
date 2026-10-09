@@ -49,6 +49,7 @@
       "TestMiniRuntimeProvisionUsesModuleOverlay",
       "TestMiniRuntimeWithoutRequirementLeavesModuleUntouched",
       "TestMiniStartupOverlapsSettingsAndTelemetry",
+      "TestMiniTemporaryWorkspaceKeepsBuildToolEnvironment",
       "TestMiniTemporaryWorkspaceRestoresGoEnvironment",
       "TestMiniTestifyDuplicateIdentity",
       "TestMiniTestingCompatibility",
@@ -143,6 +144,7 @@
       "TestMiniProvisionsWorkspaceWithoutChangingModules",
       "TestMiniRuntimeProvisionUsesModuleOverlay",
       "TestMiniStartupOverlapsSettingsAndTelemetry",
+      "TestMiniTemporaryWorkspaceKeepsBuildToolEnvironment",
       "TestMiniTemporaryWorkspaceRestoresGoEnvironment",
       "TestMiniVendorWorkspaceLinksAndReusesBuildCache"
     ],

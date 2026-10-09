@@ -1,6 +1,7 @@
 package goenv
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,18 +42,38 @@ func TestRestoreAppliesAndRemovesSavedValues(t *testing.T) {
 }
 
 // Initialization order is the contract: anything that imports os, directly or
-// through os/exec, initializes after this package.
-func TestImportsNoPackageThatCanStartCommands(t *testing.T) {
-	out, err := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", ".").Output()
+// through os/exec, initializes after the restore package.
+func TestRestoreImportsNoPackageThatCanStartCommands(t *testing.T) {
+	for _, pkg := range []string{".", "./restore"} {
+		out, err := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", pkg).Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		deps := strings.Fields(string(out))
+		if slices.Contains(deps, "os") {
+			t.Fatalf("%s depends on os: %v", pkg, deps)
+		}
+		if self := deps[len(deps)-1]; self >= "os" {
+			t.Fatalf("%s must sort before os", self)
+		}
+	}
+}
+
+// The CLI's build-tool helpers import goenv to save values. The tools they run
+// belong to the build, so importing goenv must keep ddtest's settings.
+func TestImportingGoenvKeepsBuildSettings(t *testing.T) {
+	if os.Getenv("DDTEST_GOENV_HELPER") != "" {
+		fmt.Printf("GOWORK=%s\n", os.Getenv("GOWORK"))
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^TestImportingGoenvKeepsBuildSettings$")
+	cmd.Env = append(os.Environ(), "DDTEST_GOENV_HELPER=1", "GOWORK=build.work", SavedPrefix+"GOWORK==caller.work")
+	out, err := cmd.Output()
 	if err != nil {
 		t.Fatal(err)
 	}
-	deps := strings.Fields(string(out))
-	if slices.Contains(deps, "os") {
-		t.Fatalf("goenv depends on os: %v", deps)
-	}
-	if self := deps[len(deps)-1]; self >= "os" {
-		t.Fatalf("%s must sort before os", self)
+	if !strings.Contains(string(out), "GOWORK=build.work\n") {
+		t.Fatalf("importing goenv changed the build settings: %s", out)
 	}
 }
 

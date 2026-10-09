@@ -263,10 +263,12 @@ See [Go's GODEBUG contract](https://go.dev/doc/godebug). A missing `go`
 directive means Go 1.16 in `go.mod` and Go 1.18 in `go.work`; keep those
 defaults when a temporary workspace needs a newer `go` line.
 
-Temporary workspace settings belong to ddtest's `go test` command only. List
-every Go environment variable that preparation replaces in `goenv.Settings`,
-and save it with `goenv.Save`. `internal/goenv` must keep importing only
-`syscall`: its tests check that it initializes before `os` and before an earlier
+Temporary workspace settings belong to ddtest's `go test` command and the build
+tools it runs. List every Go environment variable that preparation replaces in
+`goenv.Settings`, and save it with `goenv.Save`. Only the test runtime may import
+`internal/goenv/restore`; the CLI and its tool helpers import `goenv`, which
+restores nothing on its own. Both packages must keep importing only `syscall`:
+their tests check that restoration initializes before `os` and before an earlier
 dependency. Vendor workspaces are content-addressed: bump
 `vendorWorkspaceLayout` in `internal/runner/vendor.go` whenever their stored
 files or links change. Reuse and pruning coordinate through `<key>.lock`; keep

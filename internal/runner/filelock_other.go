@@ -8,4 +8,4 @@ import (
 )
 
 // Without file locks, vendor workspaces stay in each run's own directory.
-func lockFile(*os.File, bool, bool) error { return errors.ErrUnsupported }
+func tryLockFile(*os.File, bool) error { return errors.ErrUnsupported }

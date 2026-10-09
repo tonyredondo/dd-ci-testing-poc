@@ -1,10 +1,10 @@
-// Package goenv restores Go command settings that ddtest replaces only for its
-// own go test command, such as a temporary GOWORK.
+// Package goenv saves and restores Go command settings that ddtest replaces
+// only for its own go test command, such as a temporary GOWORK.
 //
-// Go initializes ready packages in import-path order. This package imports
-// only syscall and its path sorts before "os", so it initializes before os and
-// therefore before any package that can start a go command, including client
-// dependencies that do not import testing.
+// Importing this package changes nothing. The CLI and its build-tool helpers
+// use it to save values; those helpers must keep ddtest's settings because the
+// tools they run belong to the build. Only the test runtime imports
+// goenv/restore, which restores the saved values while initializing.
 package goenv
 
 import "syscall"
@@ -14,8 +14,6 @@ const SavedPrefix = "DDTEST_ORIGINAL_"
 
 // Settings are the variables that ddtest may replace for go test.
 var Settings = [...]string{"GOWORK", "GOFLAGS"}
-
-func init() { Restore() }
 
 // Save returns the environment entry that records name's current value:
 // "=value" when it is set, or an empty value when it is unset.

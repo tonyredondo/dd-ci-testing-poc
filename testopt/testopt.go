@@ -10,7 +10,7 @@ import (
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
 	// Restores the caller's Go settings before any package that imports os.
-	_ "github.com/tonyredondo/dd-ci-testing-poc/internal/goenv"
+	_ "github.com/tonyredondo/dd-ci-testing-poc/internal/goenv/restore"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer"
 	infra "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations/gotesting"

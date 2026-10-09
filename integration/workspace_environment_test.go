@@ -142,6 +142,58 @@ func TestEnvironment(t *testing.T) {
 	}
 }
 
+// Tools that ddtest chains belong to the build: unlike test processes, a user
+// -toolexec must keep the temporary workspace that makes Mini resolvable.
+func TestMiniTemporaryWorkspaceKeepsBuildToolEnvironment(t *testing.T) {
+	driver := sharedDriver(t, "..")
+	root := t.TempDir()
+	wrapper, client := filepath.Join(root, "wrapper"), filepath.Join(root, "client")
+	for _, dir := range []string{wrapper, client} {
+		if err := os.Mkdir(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeBuildFixture(t, wrapper, map[string]string{
+		"go.mod": "module example.com/toolwrapper\ngo 1.21\n",
+		"main.go": `package main
+import ("fmt";"os";"os/exec";"path/filepath";"strings")
+func main() {
+ tool := os.Args[1]
+ if strings.TrimSuffix(filepath.Base(tool), ".exe") == "compile" && strings.HasPrefix(os.Getenv("TOOLEXEC_IMPORTPATH"), "example.com/toolclient") {
+  out, err := exec.Command("go", "list", "github.com/tonyredondo/dd-ci-testing-poc/testopt").CombinedOutput()
+  if err != nil { fmt.Fprintf(os.Stderr, "wrapper go list failed: %v\n%s", err, out); os.Exit(1) }
+  if err := os.WriteFile(os.Getenv("TOOL_MARKER"), out, 0600); err != nil { panic(err) }
+ }
+ cmd := exec.Command(tool, os.Args[2:]...)
+ cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+ if err := cmd.Run(); err != nil {
+  if exit, ok := err.(*exec.ExitError); ok { os.Exit(exit.ExitCode()) }
+  panic(err)
+ }
+}
+`,
+	})
+	writeBuildFixture(t, client, map[string]string{
+		"go.mod":         "module example.com/toolclient\ngo 1.21\n",
+		"client_test.go": "package toolclient\nimport \"testing\"\nfunc TestTool(t *testing.T){}\n",
+	})
+	env := testEnv("GOWORK=off", "GOPROXY=off", "DD_CIVISIBILITY_ENABLED=false")
+	binary := filepath.Join(root, executableName("toolwrapper"))
+	if out, stderr, code := command(t, wrapper, env, "go", "build", "-o", binary, "."); code != 0 {
+		t.Fatal(out, stderr)
+	}
+	marker := filepath.Join(root, "marker")
+	// Covering testing makes ddtest's selective tool chain the user's wrapper.
+	args := []string{"test", "-count=1", "-coverpkg=testing", "-toolexec=" + quoteToolArgument(t, binary), "."}
+	out, stderr, code := command(t, client, append(env, "TOOL_MARKER="+marker), driver, args...)
+	if code != 0 {
+		t.Fatalf("exit=%d\n%s%s", code, out, stderr)
+	}
+	if data, err := os.ReadFile(marker); err != nil || !strings.Contains(string(data), "testopt") {
+		t.Fatalf("wrapper did not resolve Mini through the build workspace: %q %v", data, err)
+	}
+}
+
 // Linked vendor workspaces live at a stable path, so Go's build cache reuses
 // unchanged vendored packages. The links keep later vendor edits visible.
 func TestMiniVendorWorkspaceLinksAndReusesBuildCache(t *testing.T) {

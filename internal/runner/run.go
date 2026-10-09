@@ -612,9 +612,9 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 	debug.printf("tool selection testify=%t goleak=%t cover=%t user_toolexec=%t orchestrion=%t sdk_ci_gate=%t", plan.testify, plan.goleak, plan.coverOverlay, opts.toolexec != "", plan.orchestrion, plan.sdkCI)
 	forwarded := goTestArguments(plan, opts, tool)
 	if plan.Workfile != "" {
-		// The temporary workspace is for this build only. Mini's goenv package
-		// restores the caller's values before any client package can start a go
-		// command, including dependencies initialized before testing.
+		// The temporary workspace belongs to the build, including chained tools.
+		// The test runtime's goenv/restore package gives test processes the
+		// caller's values before any client package can start a go command.
 		env = append(env, goenv.Save("GOWORK"), "GOWORK="+plan.Workfile)
 		if plan.moduleWorkspace {
 			env = append(env, goenv.Save("GOFLAGS"), "GOFLAGS="+plan.workspaceGoFlags)

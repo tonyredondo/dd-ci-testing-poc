@@ -16,15 +16,13 @@ const (
 	errorLockViolation      = syscall.Errno(33)
 )
 
-// lockFile locks the file's first byte. Windows locks belong to the handle, so
-// separate opens conflict even within one process; closing releases.
-func lockFile(file *os.File, exclusive, wait bool) error {
-	var flags uintptr
+// tryLockFile locks the file's first byte without waiting. Windows locks
+// belong to the handle, so separate opens conflict even within one process;
+// closing releases.
+func tryLockFile(file *os.File, exclusive bool) error {
+	flags := uintptr(lockfileFailImmediately)
 	if exclusive {
 		flags |= lockfileExclusiveLock
-	}
-	if !wait {
-		flags |= lockfileFailImmediately
 	}
 	overlapped := new(syscall.Overlapped)
 	r1, _, err := syscall.SyscallN(procLockFileEx.Addr(), file.Fd(), flags, 0, 1, 0, uintptr(unsafe.Pointer(overlapped)))

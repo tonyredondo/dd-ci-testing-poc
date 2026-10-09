@@ -23,7 +23,7 @@ class ShardTests(unittest.TestCase):
         self.assertEqual(36, len(ci_shards.matrix("differential")["include"]))
         self.assertEqual(6, len(ci_shards.matrix("mini")["include"]))
         self.assertEqual(3, len(ci_shards.matrix("mini", tip=True)["include"]))
-        for platform, count in (("ubuntu-latest", 115), ("macos-latest", 115), ("windows-latest", 116)):
+        for platform, count in (("ubuntu-latest", 116), ("macos-latest", 116), ("windows-latest", 117)):
             tests = [name for shard in ci_shards.SHARDS["differential"][1:]
                      for name in ci_shards.selected_tests(self.groups, "differential", "1.27.x", shard, platform)]
             self.assertEqual(count, len(tests))
@@ -32,7 +32,7 @@ class ShardTests(unittest.TestCase):
             for changed in (tests[:-1], tests + ["TestNewUnassignedCase"]):
                 with self.assertRaisesRegex(ValueError, "test inventory changed"):
                     ci_shards.validate_inventory(self.groups, changed, platform)
-        for version, count in (("1.25.x", 21), ("tip", 25)):
+        for version, count in (("1.25.x", 22), ("tip", 26)):
             tests = [name for shard in ci_shards.SHARDS["mini"][1:]
                      for name in ci_shards.selected_tests(self.groups, "mini", version, shard, "ubuntu-latest")]
             self.assertEqual(count, len(tests))

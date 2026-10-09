@@ -150,10 +150,14 @@ func vendorWorkspace(ctx context.Context, work, source string, replacements map[
 	if err != nil {
 		return "", nil, err
 	}
-	if stable, lock, err := stableVendorWorkspace(work, source, manifest, entries); err == nil {
+	stable, lock, err := stableVendorWorkspace(ctx, work, source, manifest, entries)
+	if err == nil {
 		retargetVendorOverlay(source, filepath.Join(filepath.Dir(stable), "vendor"), replacements)
 		debug.printf("vendor workspace=cached-links")
 		return stable, lock, nil
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return "", nil, ctxErr
 	}
 	target := filepath.Join(filepath.Dir(work), "vendor")
 	if err := linkVendor(source, target, manifest, entries); err == nil {
@@ -173,7 +177,7 @@ func vendorWorkspace(ctx context.Context, work, source string, replacements map[
 // use a workspace hold <key>.lock shared; pruning needs it exclusively and
 // never waits. Concurrent runs build privately and rename; one that loses the
 // race reuses the identical winner. Unexpected contents are never modified.
-func stableVendorWorkspace(work, source string, manifest []byte, entries []fs.DirEntry) (string, *os.File, error) {
+func stableVendorWorkspace(ctx context.Context, work, source string, manifest []byte, entries []fs.DirEntry) (string, *os.File, error) {
 	cache, err := userCacheDir()
 	if err != nil {
 		return "", nil, err
@@ -200,7 +204,7 @@ func stableVendorWorkspace(work, source string, manifest []byte, entries []fs.Di
 	if err := os.MkdirAll(parent, 0700); err != nil {
 		return "", nil, err
 	}
-	lock, err := holdVendorWorkspace(root + ".lock")
+	lock, err := holdVendorWorkspace(ctx, root+".lock")
 	if err != nil {
 		return "", nil, err
 	}
@@ -241,14 +245,14 @@ func stableVendorWorkspace(work, source string, manifest []byte, entries []fs.Di
 // holdVendorWorkspace takes the workspace lock shared. A pruner may remove the
 // lock file while this run waits, so the held lock must still be the file at
 // path; otherwise the run retries with the current file.
-func holdVendorWorkspace(path string) (*os.File, error) {
+func holdVendorWorkspace(ctx context.Context, path string) (*os.File, error) {
 	for attempt := 0; attempt < 3; attempt++ {
 		lock, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
 		if err != nil {
 			return nil, err
 		}
 		vendorWorkspaceLockOpened()
-		if err := lockFile(lock, false, true); err != nil {
+		if err := waitForSharedLock(ctx, lock); err != nil {
 			lock.Close()
 			return nil, err
 		}
@@ -364,7 +368,7 @@ func removeUnusedVendorWorkspace(parent, key string, cutoff time.Time) {
 		return
 	}
 	defer lock.Close()
-	if lockFile(lock, true, false) != nil || !sameOpenFile(lock, path) {
+	if tryLockFile(lock, true) != nil || !sameOpenFile(lock, path) {
 		return
 	}
 	root := filepath.Join(parent, key)
@@ -374,9 +378,13 @@ func removeUnusedVendorWorkspace(parent, key string, cutoff time.Time) {
 	if err := os.RemoveAll(root); err != nil {
 		return
 	}
-	// Windows keeps a lock file that another process still has open; a later
-	// prune removes it.
-	_ = os.Remove(path)
+	if os.Remove(path) != nil {
+		// Windows cannot remove an open file, including this handle. A run that
+		// opens it meanwhile finds no workspace and rebuilds one; a file that
+		// another run still has open stays for a later prune.
+		lock.Close()
+		_ = os.Remove(path)
+	}
 }
 
 // retargetVendorOverlay moves the caller's vendor overlay entries, including
