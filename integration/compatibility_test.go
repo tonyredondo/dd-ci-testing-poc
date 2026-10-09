@@ -517,6 +517,14 @@ func configureReferenceFixture(t *testing.T, dir string) {
 	if err = os.WriteFile(filepath.Join(dir, "orchestrion.tool.go"), []byte(tool), 0644); err != nil {
 		t.Fatal(err)
 	}
+	// go get can leave an upgraded module's checksum out of go.sum: on a warm
+	// Windows cache, with two test groups running go commands at once, Testify's
+	// was missing and every native build failed. Loading the fixture's packages
+	// and tests with -mod=mod adds the checksums they need. Unlike go mod tidy,
+	// it never drops requirements that a test adds code for later.
+	if out, e, code := command(t, dir, testEnv(), "go", "list", "-mod=mod", "-deps", "-test", "./..."); code != 0 {
+		t.Fatalf("complete common graph: %s\n%s", out, e)
+	}
 	// Check the pin once, as orchestrion go does before a build; testEnv then
 	// skips that check in every toolexec call. A different binary fails here.
 	if out, e, code := command(t, dir, testEnv(orchestrionPinChecked+"=false"), os.Getenv("ORCHESTRION_BIN"), "go", "version"); code != 0 || strings.Contains(out+e, "is not present in your go.mod") {
