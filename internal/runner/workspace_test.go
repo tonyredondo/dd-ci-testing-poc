@@ -193,9 +193,13 @@ func TestVendorSnapshotPreservesSourceOverlaysAndSymlinkFiles(t *testing.T) {
 }
 
 func TestWorkspaceNewerRuntimePreservesProgramDefaults(t *testing.T) {
-	// A go.work without a go directive means Go 1.18 to the go command.
-	for _, tc := range []struct{ directive, client, want string }{{"go 1.21\n", "1.21", "default=go1.21"}, {"", "1.18", "default=go1.18"}} {
-		t.Run(tc.want, func(t *testing.T) { testWorkspaceProgramDefaults(t, tc.directive, tc.client, tc.want) })
+	// A go.work without a go directive means Go 1.18 to the go command. Subtest
+	// names stay out of the expected text: they appear in temporary paths.
+	for _, tc := range []struct{ name, directive, client, want string }{
+		{"declared", "go 1.21\n", "1.21", "godebug default=go1.21\n"},
+		{"missing", "", "1.18", "godebug default=go1.18\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) { testWorkspaceProgramDefaults(t, tc.directive, tc.client, tc.want) })
 	}
 }
 
@@ -211,10 +215,11 @@ func testWorkspaceProgramDefaults(t *testing.T, directive, clientGo, want string
 	}
 	work := filepath.Join(root, "go.work")
 	for path, data := range map[string]string{
-		work:                                 directive + "use ./client\nreplace " + miniModule + " => ./mini\n",
-		filepath.Join(client, "go.mod"):      "module example.com/client\ngo " + clientGo + "\n",
-		filepath.Join(client, "main.go"):     "package main\nimport(\"fmt\";\"time\")\nfunc main(){timer:=time.NewTimer(time.Hour);defer timer.Stop();fmt.Println(cap(timer.C))}\n",
-		filepath.Join(runtimeRoot, "go.mod"): "module " + miniModule + "\ngo 1.25.0\n",
+		work:                            directive + "use ./client\nreplace " + miniModule + " => ./mini\n",
+		filepath.Join(client, "go.mod"): "module example.com/client\ngo " + clientGo + "\n",
+		// Go 1.27 no longer selects timer channels from GODEBUG; panicnil remains.
+		filepath.Join(client, "main.go"):                    "package main\nimport(\"fmt\";\"time\")\nfunc main(){timer:=time.NewTimer(time.Hour);defer timer.Stop();fmt.Println(cap(timer.C));defer func(){fmt.Printf(\"%T\\n\",recover())}();panic(nil)}\n",
+		filepath.Join(runtimeRoot, "go.mod"):                "module " + miniModule + "\ngo 1.25.0\n",
 		filepath.Join(runtimeRoot, "testopt", "testopt.go"): "package testopt\n",
 	} {
 		if err := os.WriteFile(path, []byte(data), 0600); err != nil {

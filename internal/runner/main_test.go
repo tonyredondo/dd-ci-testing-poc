@@ -3,6 +3,7 @@ package runner
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"sync"
 	"testing"
 )
@@ -28,4 +29,18 @@ func TestMain(m *testing.M) {
 		}
 	}
 	os.Exit(code)
+}
+
+// Helper processes re-execute this binary and exit inside m.Run, so TestMain's
+// cleanup never runs for them. They must not create a user cache.
+func TestHelperProcessesLeaveNoTemporaryFiles(t *testing.T) {
+	temp := t.TempDir()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestPackageListHelperProcess$", "--", "success")
+	cmd.Env = append(os.Environ(), "DDTEST_PACKAGE_LIST_HELPER=1", "TMPDIR="+temp, "TMP="+temp, "TEMP="+temp)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	if entries, err := os.ReadDir(temp); err != nil || len(entries) != 0 {
+		t.Fatalf("helper process left temporary files: %v %v", entries, err)
+	}
 }
