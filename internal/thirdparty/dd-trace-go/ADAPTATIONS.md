@@ -87,14 +87,12 @@ whole point under the same lock, then constructs the wire payload after release.
 
 Every concurrent increment belongs to exactly one collection. `Get` returns
 `NaN` until a submission and after collection, while a submitted zero is a real
-point. Fractional/negative values and gauge replacement keep their semantics.
+point. Fractional/negative values keep their semantics.
 Timestamps are captured before competing for the lock. They need not be
 monotonic between concurrent callers.
 
-Rate metrics retain their existing atomic interval start and short-interval
-rule. A short interval does not consume the accumulated count; an eligible
-collection detaches the count and divides it by that interval. Distributions,
-wire fields and interval calculation have not been redesigned.
+CI telemetry emits only counts and distributions; the SDK's gauge and rate
+metrics are not ported. Distributions and wire fields have not been redesigned.
 
 Checks: `TestMetricPointLifecycle`,
 `TestConcurrentMetricCollectionPreservesValues`, telemetry HTTP parity and
@@ -637,8 +635,8 @@ describes the contracts and Go tests to keep during an SDK update.
 
 The CI bootstrap and `civisibility/utils/net/client.go` share the selected
 service. Preserve that binding during SDK updates: settings and telemetry must
-not name a different service from events or logs. The new environment keys are
-registered in local `env/ci_service.go`, without editing the generated SDK map.
+not name a different service from events or logs. The port reads environment
+variables directly, so the new keys need no registration.
 The SDK base remains independently pinned.
 
 Checks: `TestGitHubRules`, `TestGitLabRules`, `TestRepositoryExamples`,
