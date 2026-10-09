@@ -165,7 +165,10 @@ jobs:
           CI_GO: ${{ matrix.go }}
           CI_MODE: ${{ matrix.mode }}
           CI_SHARDS: ${{ matrix.shards }}
-          CI_PARALLEL: ${{ matrix.go == '1.26.x' && 2 || 1 }}
+          # Two groups at a time keep the runner busy while fixtures start processes.
+          # With a cold module cache, concurrent go get calls once left a fixture's
+          # go.sum incomplete, so groups then run one at a time.
+          CI_PARALLEL: ${{ steps.cache.outputs.cache-matched-key != '' && 2 || 1 }}
           GO_TEST_TIMEOUT: ${{ matrix.os == 'windows-latest' && '35m' || matrix.os == 'macos-latest' && '25m' || matrix.mode == 'race' && '25m' || '20m' }}
         run: |
           python scripts/ci_shards.py run --suite differential --os "$CI_PLATFORM" \

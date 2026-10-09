@@ -320,6 +320,9 @@ When a group's duration changes noticeably, rebalance the `jobs` layout in
 [`ci_shards.json`](../scripts/ci_shards.json) with the per-group times in the
 `compatibility-evidence` summary. The account runs at most 20 jobs at a time,
 five of them on macOS, so fewer, balanced jobs finish sooner than many short ones.
+Keep the CLI group in the first job of each layout. That job saves the shared Go
+cache, and a cache built by the CLI and parity groups shortened the other jobs'
+groups by up to 78% in measured runs.
 
 The full compatibility suite exercises actual binaries, payloads, retry
 processes and failure paths. Its comparison preserves CI attributes and

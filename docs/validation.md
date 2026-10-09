@@ -233,11 +233,19 @@ flowchart LR
 
 Normal and deferred cases stay together so they can share fixtures. A job lists the
 integration tests once, then runs each of its groups as a separate `go test`
-invocation. Jobs have independent workspaces and run in parallel. Each job restores
-and, when its key is new, saves its own Go build and module caches, so fixtures
-that only one job compiles stay warm. The frozen Orchestrion binary is cached per
-platform and Go version. Tip is built once from a recorded source SHA. All tip
-groups download that toolchain, check its revision, and disable automatic upgrades.
+invocation. Jobs have independent workspaces and run in parallel.
+
+The jobs of one configuration restore a shared Go build and module cache. Most
+fixtures compile the same SDK, Orchestrion and dependency packages, so this cache
+shortens most groups. A job's cache takes 0.7 to 1.5 GB compressed, so one cache
+per configuration is what fits the repository's 10 GB limit. The first job of each
+layout saves it when its key is new: the Go version and every `go.sum` are part of
+the key. Pull requests save only when nothing was restored, so `main` and nightly
+runs own the caches. The frozen Orchestrion binary is cached per platform and Go
+version. Module downloads outside tests retry with a five-minute deadline per
+attempt, because a proxy fetch can stall for several minutes. Tip is built once
+from a recorded source SHA. All tip groups download that toolchain, check its
+revision, and disable automatic upgrades.
 
 The runner sets `GORACE=atexit_sleep_ms=0` unless the caller already chose that
 option, and the harness passes `GORACE` to fixtures. A race-enabled program
