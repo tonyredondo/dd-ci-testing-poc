@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile-only Native, Orchestrion and Mini benchmarks and offline Markdown table generation.
+"""Compile-only four-variant benchmarks and offline Markdown table generation.
 
 The run command requires Linux, cgroup v2 and a systemd user manager. Every
 build gets an exclusive scope so detached Orchestrion daemons are accounted
@@ -158,10 +158,7 @@ def table_lines(manifest, summary, scenarios=None, cases=None):
                 for variant in variants(manifest):
                     median = cell[variant]["wall_s"]["median"]
                     text = f"{median:.3f} s"
-                    if variant == "orchestrion" and "native" in cell:
-                        native = cell["native"]["wall_s"]["median"]
-                        text += f" ({100 * (median / native - 1):+.1f}%)"
-                    elif variant in ("sdk", "mini") and "native" in cell and "orchestrion" in cell:
+                    if variant in ("sdk", "mini") and "native" in cell and "orchestrion" in cell:
                         reference = cell["orchestrion"]["wall_s"]["median"]
                         native = cell["native"]["wall_s"]["median"]
                         text += f" ({100 * (median / reference - 1):+.1f}%; {100 * (median / native - 1):+.1f}%)"
@@ -191,20 +188,13 @@ def render(directory):
 
 def overview_lines(manifest, summary, link):
     """Keep the README short; comparison tables belong in the linked reports."""
-    if "measurement_origins" in manifest:
-        mini = manifest["measurement_origins"]["mini"]
-        reference = manifest["measurement_origins"]["native"]
-        provenance = [f"Mini was measured on {mini['started_at'][:10]} at `{mini['source_head']}`.",
-                      f"Native and Orchestrion retain their {reference['started_at'][:10]} observations."]
-    else:
-        provenance = [f"Measured at commit `{manifest['source_head']}`."]
     return "\n".join([
         "## Benchmarks", "",
         "[Build, runtime and memory tables](docs/benchmarks.md) compare Native,",
         "Orchestrion and POC Mini at 4/32 CPUs, with coverage and race cases.",
-        f"The [recorded build data]({link}/README.md) contains",
-        f"{summary['measured_observations']:,} comparative observations.",
-        *provenance, "",
+        f"The [recorded dataset]({link}/README.md) contains",
+        f"{summary['measured_observations']:,} comparative observations, measured at",
+        f"commit `{manifest['source_head']}`. Use a new run to measure another revision.", "",
         "[Run benchmarks or regenerate the tables](docs/build-benchmarks.md).", "",
     ])
 
@@ -310,10 +300,6 @@ class Runner:
                 raise ValueError("--baseline requires --variant mini")
             for key in ("sdk_version", "sdk_commit", "orchestrion_version", "cases", "cpus", "repetitions"):
                 self.config[key] = previous[key]
-            input_head = previous.get("input_source_head", previous["source_head"])
-            original = json.loads(subprocess.check_output(
-                ["git", "show", input_head + ":scripts/build-benchmark.json"], cwd=ROOT, text=True))
-            self.config["subjects"] = original["subjects"]
         self.output = args.output.resolve()
         if self.output.exists() or self.output == Path("/tmp") or Path("/tmp") in self.output.parents:
             raise ValueError("use a new output directory outside /tmp")
@@ -408,20 +394,14 @@ class Runner:
             previous = read_json(self.baseline / "build/manifest.json")
             if self.manifest["toolchain"] != previous["toolchain"] or self.affinity != {int(k): v for k, v in previous["affinity"].items() if int(k) in self.args.cpus}:
                 raise ValueError("refresh must use the baseline toolchain and CPU affinity")
-            archived_go = [value for name, value in previous["source_and_tool_sha256"].items()
-                           if name.endswith("/bin/go")]
-            if archived_go != [digest(self.go)]:
-                raise ValueError("refresh must use the archived Go executable")
-            input_head = previous.get("input_source_head", previous["source_head"])
-            self.manifest["input_source_head"] = input_head
             self.manifest["baseline"] = {"directory": str(self.baseline), "source_head": previous["source_head"], "manifest_sha256": digest(self.baseline / "build/manifest.json")}
             inputs = self.output / "baseline-inputs"
             prefix = "scripts/testdata/build-benchmark/"
-            files = self.setup(["git", "ls-tree", "-r", "--name-only", input_head, "--", prefix], ROOT).splitlines()
+            files = self.setup(["git", "ls-tree", "-r", "--name-only", previous["source_head"], "--", prefix], ROOT).splitlines()
             for name in files:
                 target = inputs / name.removeprefix(prefix)
                 target.parent.mkdir(parents=True, exist_ok=True)
-                content = subprocess.check_output(["git", "show", input_head + ":" + name], cwd=ROOT)
+                content = subprocess.check_output(["git", "show", previous["source_head"] + ":" + name], cwd=ROOT)
                 target.write_bytes(content)
             if not files:
                 raise ValueError("baseline input sources unavailable")
@@ -493,6 +473,7 @@ class Runner:
     def command(self, case, cpus, variant, extra):
         prefixes = {"native": [str(self.go), "test"],
                     "orchestrion": [str(self.go), "test", f"-toolexec={self.orchestrion} toolexec"],
+                    "sdk": [str(self.ddto), "test", "--runtime=sdk"],
                     "mini": [str(self.ddto), "test", "--runtime=mini"]}
         ldflags = ["-w"] + [flag.removeprefix("-ldflags=") for flag in extra if flag.startswith("-ldflags=")]
         rest = [flag for flag in extra if not flag.startswith("-ldflags=")]
@@ -603,12 +584,12 @@ class Runner:
             sdk = SDK_MODULE + "/internal/"
             mini = POC_MODULE + "/internal/thirdparty/dd-trace-go/"
             suffix = "civisibility/integrations/gotesting.instrumentTestingMWithControl"
-            if ((sdk + suffix in symbols) != (variant == "orchestrion") or
+            if ((sdk + suffix in symbols) != (variant in ("orchestrion", "sdk")) or
                     (mini + suffix in symbols) != (variant == "mini")):
                 raise ValueError("testing instrumentation hook mismatch")
             if case["subject"].startswith("testify"):
                 suffix = "civisibility/integrations/gotesting.instrumentTestifySuiteRun"
-                if ((sdk + suffix in symbols) != (variant == "orchestrion") or
+                if ((sdk + suffix in symbols) != (variant in ("orchestrion", "sdk")) or
                         (mini + suffix in symbols) != (variant == "mini")):
                     raise ValueError("Testify instrumentation hook mismatch")
             sections = self.setup(["readelf", "-SW", str(binary)], ROOT)
@@ -707,7 +688,7 @@ class Runner:
         m = self.manifest
         lines = ["# Compile-only measurements: " + ", ".join(LABELS[v] for v in self.variants), "",
                  f"POC `{m['source_head']}`; `{m['toolchain']}`; SDK `{m['sdk_version']}`; Orchestrion `{m['orchestrion_version']}`.", "",
-                 "Values are medians in seconds. Orchestrion's percentage compares time against Native. POC percentages compare Orchestrion first, then Native; all use unrounded medians.", "",
+                 "Values are medians in seconds. POC percentages show the signed change against total Orchestrion wall time first, then against Native; both use unrounded medians.", "",
                  "All variants compile with `go test -c -o <directory>/ -ldflags=-w ./...`. Test binaries are never run. The selected variants use the same prepared source and module graph. Orchestrion loads only the pinned SDK's testing aspects.", "",
                  "Builds run serially in rotating order. Each cold run has an empty Go build cache and no existing output. Downloads are disabled during timing; modules and OS page cache stay warm. Affinity, `GOMAXPROCS` and `-p` match the selected CPU count; manifest.json records logical CPU IDs and physical core topology.", "",
                  "Unchanged output reuse, forced linking and reachable edits are checked with tool traces. Final binaries are checked for the expected testing/Testify hooks and absence of DWARF. CPU and memory include daemons and nested builds through exclusive cgroups. Wall time ends at the top-level command's exit; drain wait is recorded separately.", "",
