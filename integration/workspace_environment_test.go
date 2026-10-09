@@ -196,7 +196,7 @@ func main() {
 }
 
 // Linked vendor workspaces live at a stable path, so Go's build cache reuses
-// unchanged vendored packages. The links keep later vendor edits visible.
+// unchanged vendored packages, and later vendor edits are used.
 func TestMiniVendorWorkspaceLinksAndReusesBuildCache(t *testing.T) {
 	driver := sharedDriver(t, "..")
 	dir := t.TempDir()
@@ -212,7 +212,6 @@ func TestMiniVendorWorkspaceLinksAndReusesBuildCache(t *testing.T) {
 		t.Fatal(out, stderr)
 	}
 	patched := filepath.Join(dir, "vendor", "example.com", "linkedhelper", "helper.go")
-	links := symlinksAvailable(t)
 	for i, value := range []int{7, 7, 8} {
 		if i != 1 {
 			if err := os.WriteFile(patched, []byte(fmt.Sprintf("package linkedhelper\nconst Value=%d\n", value)), 0600); err != nil {
@@ -230,23 +229,45 @@ func TestMiniVendorWorkspaceLinksAndReusesBuildCache(t *testing.T) {
 		for _, line := range compilerTraceLines(stderr) {
 			compiled = compiled || strings.Contains(line, "-p example.com/linkedhelper")
 		}
-		if links && i == 1 && compiled {
+		if i == 1 && compiled {
 			t.Fatalf("unchanged vendored package was recompiled:\n%s", stderr)
 		}
 	}
 	if data, err := os.ReadFile(filepath.Join(dir, "vendor", "modules.txt")); err != nil || strings.Contains(string(data), "## workspace") {
 		t.Fatalf("client vendor manifest changed: %q %v", data, err)
 	}
+	// The edit before the last run changed the file's time, so it has its own
+	// workspace.
 	workspaces := vendorWorkspaceDirs(t, cache)
-	if !links {
+	if len(workspaces) != 2 {
+		t.Fatalf("expected a workspace before and after the edit: %q", workspaces)
+	}
+	if !hardLinksAvailable(t, dir, cache) {
 		return
 	}
-	if len(workspaces) != 1 {
-		t.Fatalf("expected one reusable vendor workspace: %q", workspaces)
+	original, err := os.Stat(patched)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if info, err := os.Lstat(filepath.Join(workspaces[0], "vendor", "example.com", "linkedhelper", "helper.go")); err != nil || info.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("vendor workspace copied sources instead of linking them: %v %v", info, err)
+	for _, workspace := range workspaces {
+		if info, err := os.Lstat(filepath.Join(workspace, "vendor", "example.com", "linkedhelper", "helper.go")); err == nil && os.SameFile(info, original) {
+			return
+		}
 	}
+	t.Fatalf("no vendor workspace shares the edited source: %q", workspaces)
+}
+
+// hardLinksAvailable reports whether a file in from can be hard-linked into to.
+func hardLinksAvailable(t *testing.T, from, to string) bool {
+	t.Helper()
+	file := filepath.Join(from, "hard-link-probe")
+	if err := os.WriteFile(file, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(file)
+	link := filepath.Join(to, "hard-link-probe")
+	defer os.Remove(link)
+	return os.Link(file, link) == nil
 }
 
 // ddtest must use the vendored sources that go test uses. Go selects a vendor
@@ -263,6 +284,12 @@ func TestMiniVendorSelectionMatchesGo(t *testing.T) {
 		work, workAt, vendor      string
 		clientGo                  string
 		absolute, workOff, spaced bool
+		// exact names a module that a versioned replacement also replaces,
+		// outside the project directory: in go.work where it says EXACT,
+		// otherwise in go.mod.
+		exact string
+		// linkedVendor moves the vendor directory and links to it.
+		linkedVendor bool
 	}{
 		// Absolute replacements keep a misused vendor tree consistent, so the
 		// wrong sources would run silently instead of failing.
@@ -277,6 +304,12 @@ func TestMiniVendorSelectionMatchesGo(t *testing.T) {
 		// gain the spaces of the project's directory.
 		{name: "module-vendor-in-directory-with-spaces", vendor: "module", spaced: true},
 		{name: "workspace-vendor-in-directory-with-spaces", work: "go 1.22\nuse ./client\nreplace example.com/other => ./other\n", workAt: "root", vendor: "workspace", spaced: true},
+		// The whitespace alias of every version must not hide another version's
+		// replacement.
+		{name: "module-vendor-in-directory-with-spaces-and-exact-replacement", vendor: "module", spaced: true, exact: "helper"},
+		{name: "workspace-vendor-in-directory-with-spaces-and-exact-replacement", work: "go 1.22\nuse ./client\nreplace example.com/other => ./other\nreplace example.com/other v0.0.0 => EXACT\n", workAt: "root", vendor: "workspace", spaced: true, exact: "other"},
+		// Go follows a vendor directory that is itself a link.
+		{name: "module-vendor-through-link", vendor: "module", linkedVendor: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -297,6 +330,18 @@ func TestMiniVendorSelectionMatchesGo(t *testing.T) {
 			if err := os.Mkdir(client, 0700); err != nil {
 				t.Fatal(err)
 			}
+			exact := ""
+			if tc.exact != "" {
+				dir := filepath.Join(t.TempDir(), "exact")
+				if err := os.Mkdir(dir, 0700); err != nil {
+					t.Fatal(err)
+				}
+				writeBuildFixture(t, dir, map[string]string{"go.mod": "module example.com/" + tc.exact + "\ngo 1.21\n", tc.exact + ".go": "package " + tc.exact + "\nconst Value=1\n"})
+				exact = strconv.Quote(filepath.ToSlash(dir))
+			}
+			if tc.linkedVendor && !symlinksAvailable(t) {
+				t.Skip("symlinks unavailable")
+			}
 			local := func(name string) string {
 				if tc.absolute {
 					return strconv.Quote(filepath.ToSlash(filepath.Join(root, name)))
@@ -310,6 +355,9 @@ func TestMiniVendorSelectionMatchesGo(t *testing.T) {
 			mod := "module example.com/vendorselection\ngo " + clientGo + "\nrequire (\nexample.com/helper v0.0.0\nexample.com/other v0.0.0\n)\nreplace example.com/helper => " + local("helper") + "\n"
 			if !strings.Contains(tc.work, "example.com/other =>") {
 				mod += "replace example.com/other => " + local("other") + "\n"
+			}
+			if tc.exact != "" && !strings.Contains(tc.work, "EXACT") {
+				mod += "replace example.com/" + tc.exact + " v0.0.0 => " + exact + "\n"
 			}
 			writeBuildFixture(t, client, map[string]string{
 				"go.mod":         mod,
@@ -327,7 +375,7 @@ func TestMiniVendorSelectionMatchesGo(t *testing.T) {
 				}
 			}
 			if tc.work != "" {
-				writeBuildFixture(t, workDir, map[string]string{"go.work": tc.work})
+				writeBuildFixture(t, workDir, map[string]string{"go.work": strings.ReplaceAll(tc.work, "EXACT", exact)})
 			}
 			if tc.vendor == "workspace" {
 				if out, stderr, code := command(t, workDir, env, "go", "work", "vendor"); code != 0 {
@@ -339,6 +387,15 @@ func TestMiniVendorSelectionMatchesGo(t *testing.T) {
 			for _, name := range []string{"helper", "other"} {
 				path := filepath.Join(vendor, "example.com", name, name+".go")
 				if err := os.WriteFile(path, []byte("package "+name+"\nconst Value=7\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.linkedVendor {
+				shared := filepath.Join(root, "shared-vendor")
+				if err := os.Rename(vendor, shared); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(shared, vendor); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -368,22 +425,29 @@ func TestMiniVendorSelectionMatchesGo(t *testing.T) {
 	}
 }
 
-// Wildcard patterns over vendored packages must select the same packages as
-// go test: cmd/go ignores linked directories when it expands patterns, so a
-// failing vendored test would otherwise disappear from the run.
-func TestMiniVendorPatternsMatchGo(t *testing.T) {
+// The vendor workspace must present the vendored tree as go test sees it.
+// Wildcard patterns must select the same packages: cmd/go ignores linked
+// directories when it expands patterns, so a failing vendored test would
+// otherwise disappear from the run. //go:embed must accept the same files:
+// cmd/go rejects linked files and skips them in embedded directories.
+func TestMiniVendorTreeMatchesGo(t *testing.T) {
 	driver := sharedDriver(t, "..")
 	root := t.TempDir()
 	client, helper := filepath.Join(root, "client"), filepath.Join(root, "helper")
-	for _, dir := range []string{client, helper} {
-		if err := os.Mkdir(dir, 0700); err != nil {
+	for _, dir := range []string{client, filepath.Join(helper, "assets")} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	writeBuildFixture(t, helper, map[string]string{"go.mod": "module example.com/patternhelper\ngo 1.21\n", "helper.go": "package patternhelper\nconst Value=1\n"})
+	writeBuildFixture(t, helper, map[string]string{
+		"go.mod":         "module example.com/patternhelper\ngo 1.21\n",
+		"helper.go":      "package patternhelper\nimport \"embed\"\nconst Value=1\n//go:embed data.txt\nvar Data string\n//go:embed assets\nvar Assets embed.FS\n",
+		"data.txt":       "embedded file",
+		"assets/one.txt": "embedded directory",
+	})
 	writeBuildFixture(t, client, map[string]string{
 		"go.mod":         "module example.com/patternclient\ngo 1.21\nrequire example.com/patternhelper v0.0.0\nreplace example.com/patternhelper => ../helper\n",
-		"client_test.go": "package patternclient\nimport(\"testing\";\"example.com/patternhelper\")\nfunc TestClient(t *testing.T){_ = patternhelper.Value}\n",
+		"client_test.go": "package patternclient\nimport(\"fmt\";\"testing\";\"example.com/patternhelper\")\nfunc TestClient(t *testing.T){one, err := patternhelper.Assets.ReadFile(\"assets/one.txt\");fmt.Printf(\"EMBED=%q,%q,%v\\n\", patternhelper.Data, one, err)}\n",
 	})
 	env := append(testEnv("GOWORK=off", "GOPROXY=off", "DD_CIVISIBILITY_ENABLED=false"), userCacheEnv(t, t.TempDir())...)
 	if out, stderr, code := command(t, client, env, "go", "mod", "vendor"); code != 0 {
@@ -398,15 +462,18 @@ func TestMiniVendorPatternsMatchGo(t *testing.T) {
 		for _, line := range strings.Split(out, "\n") {
 			if fields := strings.Fields(line); len(fields) >= 2 && (fields[0] == "ok" || fields[0] == "FAIL" || fields[0] == "?") {
 				lines = append(lines, fields[0]+" "+fields[1])
+			} else if strings.HasPrefix(line, "EMBED=") {
+				lines = append(lines, strings.TrimSpace(line))
 			}
 		}
 		slices.Sort(lines)
 		return lines
 	}
-	args := []string{"test", "-count=1", ".", "example.com/patternhelper/..."}
+	args := []string{"test", "-v", "-count=1", ".", "example.com/patternhelper/..."}
 	native, nativeErr, nativeCode := command(t, client, env, "go", args...)
 	out, stderr, code := command(t, client, env, driver, args...)
-	if want, got := results(native), results(out); code != nativeCode || !slices.Equal(got, want) || !slices.Contains(want, "FAIL example.com/patternhelper") {
+	if want, got := results(native), results(out); code != nativeCode || !slices.Equal(got, want) || !slices.Contains(want, "FAIL example.com/patternhelper") ||
+		!slices.Contains(want, `EMBED="embedded file","embedded directory",<nil>`) {
 		t.Fatalf("native exit=%d %q\n%s%s\nddtest exit=%d %q\n%s%s", nativeCode, want, native, nativeErr, code, got, out, stderr)
 	}
 }
@@ -469,7 +536,8 @@ func main() {
   value, ok := os.LookupEnv(name)
   fmt.Printf("WRAPPER %s=%t:%q\n", name, ok, value)
  }
- cmd := exec.Command(os.Args[1], os.Args[2:]...)
+ fmt.Printf("WRAPPER ARG=%q\n", os.Args[1])
+ cmd := exec.Command(os.Args[2], os.Args[3:]...)
  cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
  if err := cmd.Run(); err != nil { os.Exit(1) }
 }
@@ -493,10 +561,11 @@ func main() {
 		}
 		return selected
 	}
-	args := []string{"test", "-v", "-count=1", "-exec=" + quoteToolArgument(t, binary), "."}
+	// cmd/go accepts both quote characters inside an unquoted argument.
+	args := []string{"test", "-v", "-count=1", "-exec=" + quoteToolArgument(t, binary) + ` PAYLOAD={"s":"don't"}`, "."}
 	native, nativeErr, nativeCode := command(t, client, env, "go", args...)
 	out, stderr, code := command(t, client, env, driver, args...)
-	if want, got := lines(native), lines(out); nativeCode != 0 || code != 0 || len(want) != 4 || !slices.Equal(got, want) {
+	if want, got := lines(native), lines(out); nativeCode != 0 || code != 0 || len(want) != 5 || !slices.Equal(got, want) {
 		t.Fatalf("native exit=%d %q\n%s%s\nddtest exit=%d %q\n%s%s", nativeCode, want, native, nativeErr, code, got, out, stderr)
 	}
 }

@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -44,6 +45,19 @@ func requireSymlinks(t *testing.T) {
 	}
 }
 
+// requireHardLinks skips where the test's temporary directories cannot share
+// files, and vendor workspaces would hold copies.
+func requireHardLinks(t *testing.T) {
+	t.Helper()
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(file, filepath.Join(t.TempDir(), "link")); err != nil {
+		t.Skipf("hard links unavailable: %v", err)
+	}
+}
+
 // useVendorWorkspace attaches source and holds any cached workspace until the
 // test ends, as a run holds it until go test exits.
 func useVendorWorkspace(t *testing.T, work, source string, replacements map[string]string) (string, error) {
@@ -56,14 +70,17 @@ func useVendorWorkspace(t *testing.T, work, source string, replacements map[stri
 }
 
 // assertLinkedVendor checks the fixture's layout: real directories, so cmd/go
-// can traverse them in package patterns, and a linked source file.
-func assertLinkedVendor(t *testing.T, vendor string) {
+// can traverse them in package patterns, and the caller's file, hard-linked:
+// //go:embed rejects symbolic links, and a copy would duplicate contents.
+func assertLinkedVendor(t *testing.T, vendor, source string) {
 	t.Helper()
 	if info, err := os.Lstat(filepath.Join(vendor, "example.com", "dep")); err != nil || !info.IsDir() {
 		t.Fatalf("vendored directory was not recreated: %v %v", info, err)
 	}
-	if info, err := os.Lstat(filepath.Join(vendor, "example.com", "dep", "dep.go")); err != nil || info.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("vendored source was not linked: %v %v", info, err)
+	linked, err := os.Lstat(filepath.Join(vendor, "example.com", "dep", "dep.go"))
+	original, originalErr := os.Lstat(filepath.Join(source, "example.com", "dep", "dep.go"))
+	if err != nil || originalErr != nil || !linked.Mode().IsRegular() || !os.SameFile(linked, original) {
+		t.Fatalf("vendored source is not the caller's file: %v %v %v", linked, err, originalErr)
 	}
 }
 
@@ -75,7 +92,7 @@ func withUserCache(t *testing.T, dir func() (string, error)) {
 }
 
 func TestVendorWorkspaceLinksAndReusesCachedDirectory(t *testing.T) {
-	requireSymlinks(t)
+	requireHardLinks(t)
 	cache := t.TempDir()
 	withUserCache(t, func() (string, error) { return cache, nil })
 	source, work := vendorFixture(t)
@@ -92,7 +109,7 @@ func TestVendorWorkspaceLinksAndReusesCachedDirectory(t *testing.T) {
 		t.Fatalf("workspace outside the user cache: %s", got)
 	}
 	vendor := filepath.Join(filepath.Dir(got), "vendor")
-	assertLinkedVendor(t, vendor)
+	assertLinkedVendor(t, vendor, source)
 	if data, err := os.ReadFile(filepath.Join(vendor, "modules.txt")); err != nil || !strings.HasPrefix(string(data), "## workspace\n# example.com/dep") {
 		t.Fatalf("workspace manifest: %q %v", data, err)
 	}
@@ -101,14 +118,6 @@ func TestVendorWorkspaceLinksAndReusesCachedDirectory(t *testing.T) {
 	}
 	if deleted, ok := replacements[filepath.Join(vendor, "example.com", "dep", "dep.go")]; !ok || deleted != "" {
 		t.Fatal("overlay deletion was not retargeted")
-	}
-	// Links keep later edits visible without rebuilding the workspace.
-	edited := "package dep\nconst Value = 2\n"
-	if err := os.WriteFile(filepath.Join(source, "example.com", "dep", "dep.go"), []byte(edited), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if data, err := os.ReadFile(filepath.Join(vendor, "example.com", "dep", "dep.go")); err != nil || string(data) != edited {
-		t.Fatalf("linked source: %q %v", data, err)
 	}
 	// Another run with the same inputs has its own temporary go.work.
 	again := filepath.Join(t.TempDir(), "go.work")
@@ -125,10 +134,17 @@ func TestVendorWorkspaceLinksAndReusesCachedDirectory(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(filepath.Dir(again), "vendor")); !os.IsNotExist(err) {
 		t.Fatalf("cached workspace also created a run vendor directory: %v", err)
 	}
+	// Edits in place reach the shared file.
+	edited := "package dep\nconst Value = 2\n"
+	if err := os.WriteFile(filepath.Join(source, "example.com", "dep", "dep.go"), []byte(edited), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(filepath.Join(vendor, "example.com", "dep", "dep.go")); err != nil || string(data) != edited {
+		t.Fatalf("linked source: %q %v", data, err)
+	}
 }
 
 func TestVendorWorkspaceKeyFollowsManifestAndWorkspace(t *testing.T) {
-	requireSymlinks(t)
 	cache := t.TempDir()
 	withUserCache(t, func() (string, error) { return cache, nil })
 	source, work := vendorFixture(t)
@@ -163,43 +179,115 @@ func TestVendorWorkspaceKeyFollowsManifestAndWorkspace(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(filepath.Dir(fourth), "vendor", "example.com", "dep", "added.go")); err != nil {
 		t.Fatalf("added vendored file is missing: %v", err)
 	}
+	// A replaced or copied file is current only while its time matches.
+	changed := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(added, changed, changed); err != nil {
+		t.Fatal(err)
+	}
+	fifth, err := useVendorWorkspace(t, work, source, map[string]string{})
+	if err != nil || fifth == fourth {
+		t.Fatalf("changed vendored file reused %s: %s %v", fourth, fifth, err)
+	}
 	if data, err := os.ReadFile(filepath.Join(filepath.Dir(first), "vendor", "modules.txt")); err != nil || !strings.Contains(string(data), "v1.0.0") {
 		t.Fatalf("existing workspace changed: %q %v", data, err)
 	}
 }
 
 func TestVendorWorkspaceNeverReusesUnexpectedContents(t *testing.T) {
-	requireSymlinks(t)
-	cache := t.TempDir()
-	withUserCache(t, func() (string, error) { return cache, nil })
-	source, work := vendorFixture(t)
-	cached, err := useVendorWorkspace(t, work, source, map[string]string{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	extra := filepath.Join(filepath.Dir(cached), "vendor", "extra.example")
-	if err := os.WriteFile(extra, nil, 0600); err != nil {
-		t.Fatal(err)
-	}
-	got, err := useVendorWorkspace(t, work, source, map[string]string{})
-	if err != nil || got != work {
-		t.Fatalf("unexpected cached contents were reused: %s %v", got, err)
-	}
-	assertLinkedVendor(t, filepath.Join(filepath.Dir(work), "vendor"))
-	if _, err := os.Stat(extra); err != nil {
-		t.Fatalf("existing cache entry was modified: %v", err)
+	for _, tc := range []struct {
+		name   string
+		links  bool
+		tamper func(t *testing.T, vendor, source string) string // Returns a path that must stay.
+	}{
+		{name: "extra entry", tamper: func(t *testing.T, vendor, _ string) string {
+			extra := filepath.Join(vendor, "extra.example")
+			if err := os.WriteFile(extra, nil, 0600); err != nil {
+				t.Fatal(err)
+			}
+			return extra
+		}},
+		{name: "replaced file", tamper: func(t *testing.T, vendor, _ string) string {
+			stored := filepath.Join(vendor, "example.com", "dep", "dep.go")
+			if err := os.Remove(stored); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(stored, []byte("package dep\nconst Value = 2 // unrelated\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			return stored
+		}},
+		{name: "retargeted link", links: true, tamper: func(t *testing.T, vendor, _ string) string {
+			stored := filepath.Join(vendor, "example.com", "dep", "linked.go")
+			unrelated := filepath.Join(t.TempDir(), "unrelated.go")
+			if err := os.WriteFile(unrelated, []byte("package dep\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Remove(stored); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(unrelated, stored); err != nil {
+				t.Fatal(err)
+			}
+			return stored
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requireHardLinks(t)
+			cache := t.TempDir()
+			withUserCache(t, func() (string, error) { return cache, nil })
+			source, work := vendorFixture(t)
+			if tc.links {
+				requireSymlinks(t)
+				// The caller's own link is stored as a link to it.
+				if err := os.Symlink("dep.go", filepath.Join(source, "example.com", "dep", "linked.go")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cached, err := useVendorWorkspace(t, work, source, map[string]string{})
+			if err != nil || cached == work {
+				t.Fatalf("cached workspace: %s %v", cached, err)
+			}
+			kept := tc.tamper(t, filepath.Join(filepath.Dir(cached), "vendor"), source)
+			got, err := useVendorWorkspace(t, work, source, map[string]string{})
+			if err != nil || got != work {
+				t.Fatalf("unexpected cached contents were reused: %s %v", got, err)
+			}
+			assertLinkedVendor(t, filepath.Join(filepath.Dir(work), "vendor"), source)
+			if _, err := os.Lstat(kept); err != nil {
+				t.Fatalf("existing cache entry was modified: %v", err)
+			}
+		})
 	}
 }
 
-func TestVendorWorkspaceWithoutUserCacheUsesRunDirectory(t *testing.T) {
+// Like cmd/go, ddtest follows a vendor directory that is itself a link, but
+// no link below it.
+func TestVendorWorkspaceFollowsLinkedVendorDirectory(t *testing.T) {
 	requireSymlinks(t)
+	requireHardLinks(t)
+	cache := t.TempDir()
+	withUserCache(t, func() (string, error) { return cache, nil })
+	shared, work := vendorFixture(t)
+	source := filepath.Join(t.TempDir(), "vendor")
+	if err := os.Symlink(shared, source); err != nil {
+		t.Fatal(err)
+	}
+	got, err := useVendorWorkspace(t, work, source, map[string]string{})
+	if err != nil || got == work {
+		t.Fatalf("cached workspace: %s %v", got, err)
+	}
+	assertLinkedVendor(t, filepath.Join(filepath.Dir(got), "vendor"), shared)
+}
+
+func TestVendorWorkspaceWithoutUserCacheUsesRunDirectory(t *testing.T) {
+	requireHardLinks(t)
 	withUserCache(t, func() (string, error) { return "", errors.New("no home directory") })
 	source, work := vendorFixture(t)
 	got, err := useVendorWorkspace(t, work, source, map[string]string{})
 	if err != nil || got != work {
 		t.Fatalf("run workspace: %s %v", got, err)
 	}
-	assertLinkedVendor(t, filepath.Join(filepath.Dir(work), "vendor"))
+	assertLinkedVendor(t, filepath.Join(filepath.Dir(work), "vendor"), source)
 }
 
 func requireFileLocks(t *testing.T) {
@@ -246,6 +334,7 @@ func TestFileLocksConflictAcrossOpens(t *testing.T) {
 
 func TestPruneVendorWorkspacesKeepsRecentAndLinkedSources(t *testing.T) {
 	requireSymlinks(t)
+	requireHardLinks(t)
 	requireFileLocks(t)
 	parent := t.TempDir()
 	source := t.TempDir()
@@ -260,6 +349,9 @@ func TestPruneVendorWorkspacesKeepsRecentAndLinkedSources(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := os.Symlink(source, filepath.Join(dir, "linked")); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Link(original, filepath.Join(dir, "shared.go")); err != nil {
 			t.Fatal(err)
 		}
 		if name != "recent" {
@@ -282,15 +374,14 @@ func TestPruneVendorWorkspacesKeepsRecentAndLinkedSources(t *testing.T) {
 			t.Fatalf("%s present=%t want %t", name, err == nil, want)
 		}
 	}
-	if _, err := os.Stat(original); err != nil {
-		t.Fatalf("pruning removed a linked source: %v", err)
+	if data, err := os.ReadFile(original); err != nil || string(data) != "package dep\n" {
+		t.Fatalf("pruning removed a linked source: %q %v", data, err)
 	}
 }
 
 // A run holds its workspace until go test exits. However old it looks, another
 // run's prune must leave it in place; once released, it can be removed.
 func TestPruneSkipsVendorWorkspaceInUse(t *testing.T) {
-	requireSymlinks(t)
 	requireFileLocks(t)
 	cache := t.TempDir()
 	withUserCache(t, func() (string, error) { return cache, nil })
@@ -320,7 +411,6 @@ func TestPruneSkipsVendorWorkspaceInUse(t *testing.T) {
 
 // Preparation stops when its context ends, even while a pruner holds the lock.
 func TestVendorWorkspaceLockWaitHonorsCancellation(t *testing.T) {
-	requireSymlinks(t)
 	requireFileLocks(t)
 	cache := t.TempDir()
 	withUserCache(t, func() (string, error) { return cache, nil })
@@ -361,7 +451,6 @@ func TestVendorWorkspaceLockWaitHonorsCancellation(t *testing.T) {
 // A run that opened the lock while another run pruned the workspace must not
 // report the removed directory: it rebuilds and holds the current lock.
 func TestVendorWorkspaceReuseAfterConcurrentPruneRebuilds(t *testing.T) {
-	requireSymlinks(t)
 	requireFileLocks(t)
 	cache := t.TempDir()
 	withUserCache(t, func() (string, error) { return cache, nil })
@@ -559,14 +648,20 @@ func TestVendorManifestRewritesReplacementsForWorkspace(t *testing.T) {
 
 // cmd/go splits modules.txt lines on whitespace, so a moved relative path that
 // gains the project's spaces is unreadable. Such targets use whitespace-free
-// links declared in the temporary go.work, which Go compares verbatim.
+// links declared in the temporary go.work, which Go compares verbatim. Go reads
+// go.work replacements first, so an alias for every version of a module would
+// also replace its other versioned replacements; those are declared there too.
 func TestVendorManifestAliasesTargetsWithWhitespace(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "my project", "client")
+	exact := filepath.Join(t.TempDir(), "exact")
 	original := strings.Join([]string{
 		"# example.com/helper v0.0.0 => ../helper",
 		"## explicit; go 1.21",
 		"example.com/helper",
 		"# example.com/plain v0.0.0 => ../../plain",
+		"# example.com/helper v0.0.1 => " + exact,
+		"# example.com/helper v0.0.2 => ../../plain",
+		"# example.com/helper v0.0.3 => example.com/fork v1.0.0",
 		"# example.com/helper => ../helper",
 		"",
 	}, "\n")
@@ -586,6 +681,9 @@ func TestVendorManifestAliasesTargetsWithWhitespace(t *testing.T) {
 		"## explicit; go 1.21",
 		"example.com/helper",
 		"# example.com/plain v0.0.0 => " + toDirectoryPath(plain),
+		"# example.com/helper v0.0.1 => " + exact,
+		"# example.com/helper v0.0.2 => " + filepath.Join(base, "..", "..", "plain"),
+		"# example.com/helper v0.0.3 => example.com/fork v1.0.0",
 		"# example.com/helper => ./replacements/0",
 		"",
 	}, "\n")
@@ -603,12 +701,30 @@ func TestVendorManifestAliasesTargetsWithWhitespace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, replace := range []string{`"Path": "example.com/helper"`, `"Version": "v0.0.0"`, `"Path": "./replacements/0"`} {
-		if !strings.Contains(out, replace) {
-			t.Fatalf("go.work lacks %s:\n%s", replace, out)
+	var declared struct {
+		Replace []struct {
+			Old, New struct{ Path, Version string }
 		}
 	}
-	if strings.Count(out, `"Path": "./replacements/0"`) != 2 {
-		t.Fatalf("go.work needs both the versioned and the all-version alias:\n%s", out)
+	if err := json.Unmarshal([]byte(out), &declared); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, replace := range declared.Replace {
+		got[replace.Old.Path+"@"+replace.Old.Version] = replace.New.Path + "@" + replace.New.Version
+	}
+	for old, target := range map[string]string{
+		"example.com/helper@":       "./replacements/0@",
+		"example.com/helper@v0.0.0": "./replacements/0@",
+		"example.com/helper@v0.0.1": exact + "@",
+		"example.com/helper@v0.0.2": filepath.Join(base, "..", "..", "plain") + "@",
+		"example.com/helper@v0.0.3": "example.com/fork@v1.0.0",
+	} {
+		if got[old] != target {
+			t.Fatalf("go.work replaces %s with %q, want %q:\n%s", old, got[old], target, out)
+		}
+	}
+	if len(got) != 5 {
+		t.Fatalf("go.work replacements: %q", got)
 	}
 }

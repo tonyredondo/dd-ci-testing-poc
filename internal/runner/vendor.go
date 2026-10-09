@@ -133,6 +133,11 @@ type vendorManifest struct {
 	// temporary go.work, whose replacements Go compares verbatim.
 	aliases      map[moduleVersion]string
 	aliasTargets []string
+	// redeclared holds the other versioned replacements of a module aliased for
+	// every version. Go reads go.work replacements before any go.mod's, so that
+	// alias would replace those versions too; each is declared in the temporary
+	// go.work as well, with the target that the manifest records.
+	redeclared map[moduleVersion]string
 }
 
 type moduleVersion struct{ path, version string }
@@ -155,12 +160,33 @@ func directoryReplacement(line string) (fields []string, module moduleVersion, o
 	return fields, module, true
 }
 
+// versionedReplacement reports the module version and the go.work target of a
+// "# module version => directory" or "# module version => module version"
+// manifest line. A relative directory becomes absolute, as the caller's go.work
+// replacements do in the temporary go.work.
+func (v vendorManifest) versionedReplacement(line string) (module moduleVersion, target string, ok bool) {
+	fields := strings.Fields(line)
+	switch {
+	case len(fields) == 5 && fields[0] == "#" && fields[3] == "=>":
+		target = fields[4]
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(v.base, target)
+		}
+	case len(fields) == 6 && fields[0] == "#" && fields[3] == "=>":
+		target = fields[4] + "@" + fields[5]
+	default:
+		return moduleVersion{}, "", false
+	}
+	return moduleVersion{fields[1], fields[2]}, target, true
+}
+
 // assignAliases finds relative replacements whose targets contain whitespace.
 // The caller's own manifest never contains those paths: a relative path from
 // the module or go.work directory stays inside the shared ancestor.
 func (v *vendorManifest) assignAliases(original []byte) {
 	targets := map[string]string{}
-	for line := range strings.SplitSeq(string(original), "\n") {
+	lines := strings.Split(string(original), "\n")
+	for _, line := range lines {
 		fields, module, ok := directoryReplacement(line)
 		if !ok || filepath.IsAbs(fields[len(fields)-1]) {
 			continue
@@ -180,17 +206,34 @@ func (v *vendorManifest) assignAliases(original []byte) {
 		}
 		v.aliases[module] = alias
 	}
+	for _, line := range lines {
+		module, target, ok := v.versionedReplacement(line)
+		if !ok || v.aliases[module] != "" || v.aliases[moduleVersion{path: module.path}] == "" {
+			continue
+		}
+		if v.redeclared == nil {
+			v.redeclared = map[moduleVersion]string{}
+		}
+		v.redeclared[module] = target
+	}
 }
 
-// declareAliases adds the aliases to the temporary go.work. Replacements of
-// every version come first: go work edit drops a module's versioned
-// replacements when it sets one for every version.
+// declareAliases adds the aliases and the replacements they would hide to the
+// temporary go.work. Replacements of every version come first: go work edit
+// drops a module's versioned replacements when it sets one for every version.
 func (v vendorManifest) declareAliases(ctx context.Context, work string) error {
-	if len(v.aliases) == 0 {
+	targets := map[moduleVersion]string{}
+	for module, alias := range v.aliases {
+		targets[module] = alias
+	}
+	for module, target := range v.redeclared {
+		targets[module] = target
+	}
+	if len(targets) == 0 {
 		return nil
 	}
-	modules := make([]moduleVersion, 0, len(v.aliases))
-	for module := range v.aliases {
+	modules := make([]moduleVersion, 0, len(targets))
+	for module := range targets {
 		modules = append(modules, module)
 	}
 	sort.Slice(modules, func(i, j int) bool {
@@ -205,7 +248,7 @@ func (v vendorManifest) declareAliases(ctx context.Context, work string) error {
 		if module.version != "" {
 			old += "@" + module.version
 		}
-		args = append(args, "-replace="+old+"="+v.aliases[module])
+		args = append(args, "-replace="+old+"="+targets[module])
 	}
 	_, err := goTool(ctx, filepath.Dir(work), nil, append(args, work)...)
 	return err
@@ -290,7 +333,8 @@ func manifestIsForWorkspace(manifest []byte) bool {
 // contents returns modules.txt for a workspace whose go.work is in workspace.
 // Go canonicalizes a module's relative replacement against the go.work
 // directory, so those paths are rewritten for this location. Replacements
-// from the caller's go.work are absolute in the temporary go.work.
+// from the caller's go.work, and those redeclared there, are absolute in the
+// temporary go.work.
 func (v vendorManifest) contents(original []byte, workspace string) []byte {
 	manifest := string(original)
 	if v.module && !manifestIsForWorkspace(original) {
@@ -309,7 +353,7 @@ func (v vendorManifest) contents(original []byte, workspace string) []byte {
 			continue
 		}
 		path := filepath.Join(v.base, fields[n-1])
-		if !v.fromWorkspace(module.path, module.version) {
+		if _, redeclared := v.redeclared[module]; !redeclared && !v.fromWorkspace(module.path, module.version) {
 			if relative, err := filepath.Rel(workspace, path); err == nil {
 				path = relative
 			}
@@ -341,10 +385,11 @@ func isDirectoryPath(path string) bool {
 var userCacheDir = os.UserCacheDir
 
 // vendorWorkspaceLayout changes every cache key when the stored layout changes.
-const vendorWorkspaceLayout = "ddtest-vendor-workspace-v3"
+const vendorWorkspaceLayout = "ddtest-vendor-workspace-v4"
 
-// vendorWorkspaceRetention bounds unused workspaces. Each one holds only
-// go.work, modules.txt and links, but every vendor change creates a new one.
+// vendorWorkspaceRetention bounds unused workspaces. Each one holds go.work,
+// modules.txt and links, or copies across filesystems, and every vendor change
+// creates a new one.
 const vendorWorkspaceRetention = 14 * 24 * time.Hour
 
 // vendorWorkspaceLockOpened lets tests interleave a prune with a waiting run.
@@ -353,15 +398,17 @@ var vendorWorkspaceLockOpened = func() {}
 // vendorWorkspace gives work the caller's vendor tree and returns the go.work
 // that Go must use. Go reads a workspace's vendor directory next to go.work,
 // and reads its modules.txt outside the overlay, so that file gets its own
-// workspace header. The caller's directories are recreated and every other
-// entry links to the caller's tree: no file contents are copied and local
-// patches stay live, while cmd/go can still traverse vendored directories.
+// workspace header. The caller's directories are recreated, so cmd/go can
+// traverse them, and files are hard links to the caller's: regular files, as
+// //go:embed requires, without copying contents. Files are copied only where
+// linking fails, as across filesystems.
 //
-// Go's build cache keys include each package directory. A content-addressed
-// workspace in the user cache keeps vendored directories identical between
-// runs, so unchanged dependencies are not recompiled. The returned lock keeps
-// that workspace from being pruned; hold it until go test exits. Without the
-// cache, links use the run's directory; without symbolic links, files are
+// Go's build cache keys include each package directory. A workspace in the
+// user cache, addressed by its contents and each file's size and time, keeps
+// vendored directories identical between runs, so unchanged dependencies are
+// not recompiled. The returned lock keeps that workspace from being pruned;
+// hold it until go test exits. Without the cache, the run's directory holds
+// the links; where links to the caller's own links are unavailable, files are
 // snapshotted there. Both run-local forms return no lock.
 func vendorWorkspace(ctx context.Context, work string, vendor vendorManifest, replacements map[string]string) (string, *os.File, error) {
 	debug := debugFromContext(ctx)
@@ -434,7 +481,10 @@ func stableVendorWorkspace(ctx context.Context, work string, vendor vendorManife
 		fmt.Fprintf(hash, "%d:%s", len(part), part)
 	}
 	for _, entry := range tree {
-		fmt.Fprintf(hash, "%d:%s:%t", len(entry.rel), entry.rel, entry.dir)
+		fmt.Fprintf(hash, "%d:%s:%t:%t", len(entry.rel), entry.rel, entry.dir, entry.file == nil)
+		if entry.file != nil {
+			fmt.Fprintf(hash, ":%d:%d", entry.file.Size(), entry.file.ModTime().UnixNano())
+		}
 	}
 	key := hex.EncodeToString(hash.Sum(nil))[:32]
 	parent := filepath.Join(cache, "ddtest", "vendor-workspaces")
@@ -451,7 +501,7 @@ func stableVendorWorkspace(ctx context.Context, work string, vendor vendorManife
 		lock.Close()
 		return "", nil, err
 	}
-	if validVendorWorkspace(root, workData, manifest, tree) && vendor.validAliases(root) {
+	if validVendorWorkspace(root, workData, manifest, source, tree) && vendor.validAliases(root) {
 		// Only retention depends on this time. The held lock already keeps the
 		// workspace from being pruned while this run uses it.
 		now := time.Now()
@@ -477,7 +527,7 @@ func stableVendorWorkspace(ctx context.Context, work string, vendor vendorManife
 	if err := vendor.linkAliases(staging); err != nil {
 		return fail(err)
 	}
-	if err := os.Rename(staging, root); err != nil && !(validVendorWorkspace(root, workData, manifest, tree) && vendor.validAliases(root)) {
+	if err := os.Rename(staging, root); err != nil && !(validVendorWorkspace(root, workData, manifest, source, tree) && vendor.validAliases(root)) {
 		return fail(err)
 	}
 	pruneVendorWorkspaces(parent, key)
@@ -517,32 +567,41 @@ func sameOpenFile(file *os.File, path string) bool {
 type vendorEntry struct {
 	rel string // Relative to the vendor directory.
 	dir bool   // A real directory, recreated rather than linked.
+	// file describes a regular file, which the workspace shares; the workspace
+	// links to any other entry, such as a symbolic link, in the caller's tree.
+	file fs.FileInfo
 }
 
-// readVendorTree lists the caller's vendor tree in lexical order. Real
-// directories are traversed. Files and symbolic links, including links to
-// directories, are entries to link: cmd/go then traverses the same directories
-// in package patterns and ignores the same directory links, as it does in the
-// caller's tree. Listing names reads no file contents.
+// readVendorTree lists the caller's vendor tree in lexical order. Like cmd/go's
+// package scans, it follows a linked vendor directory but no link below it, so
+// cmd/go traverses the same directories and ignores the same links in the
+// workspace as in the caller's tree. Listing reads no file contents.
 func readVendorTree(source string) ([]vendorEntry, error) {
+	root := filepath.Clean(source) + string(filepath.Separator)
 	var tree []vendorEntry
-	err := filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || path == root {
 			return err
 		}
 		rel, err := filepath.Rel(source, path)
-		if err != nil || rel == "." || rel == "modules.txt" {
+		if err != nil || rel == "modules.txt" {
 			return err
 		}
-		tree = append(tree, vendorEntry{rel: rel, dir: entry.IsDir()})
+		item := vendorEntry{rel: rel, dir: entry.IsDir()}
+		if entry.Type().IsRegular() {
+			if item.file, err = entry.Info(); err != nil {
+				return err
+			}
+		}
+		tree = append(tree, item)
 		return nil
 	})
 	return tree, err
 }
 
 // linkVendor writes the workspace manifest, recreates the caller's directories
-// and links every other entry. Linked files keep later edits visible; real
-// directories keep vendored packages visible to wildcard patterns.
+// and shares every file. Real directories keep vendored packages visible to
+// wildcard patterns.
 func linkVendor(source, target string, manifest []byte, tree []vendorEntry) error {
 	if err := os.MkdirAll(target, 0700); err != nil {
 		return err
@@ -551,24 +610,51 @@ func linkVendor(source, target string, manifest []byte, tree []vendorEntry) erro
 		return err
 	}
 	for _, entry := range tree {
-		path := filepath.Join(target, entry.rel)
-		if entry.dir {
-			if err := os.Mkdir(path, 0700); err != nil {
-				return err
-			}
-			continue
+		path, original := filepath.Join(target, entry.rel), filepath.Join(source, entry.rel)
+		var err error
+		switch {
+		case entry.dir:
+			err = os.Mkdir(path, 0700)
+		case entry.file == nil:
+			err = os.Symlink(original, path)
+		default:
+			err = shareVendorFile(original, path, entry.file)
 		}
-		if err := os.Symlink(filepath.Join(source, entry.rel), path); err != nil {
+		if err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+// shareVendorFile hard-links path to the caller's file, which edits in place
+// keep current. Where that fails, as across filesystems, path is a copy with
+// the original's time, which validation compares.
+func shareVendorFile(original, path string, file fs.FileInfo) error {
+	if os.Link(original, path) == nil {
+		return nil
+	}
+	input, err := os.Open(original)
+	if err != nil {
+		return err
+	}
+	defer input.Close()
+	output, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(output, input)
+	if err := errors.Join(copyErr, output.Close()); err != nil {
+		return err
+	}
+	return os.Chtimes(path, time.Time{}, file.ModTime())
+}
+
 // validVendorWorkspace reports whether root holds exactly what linkVendor and
-// stableVendorWorkspace store: the same go.work and manifest, and the same
-// directories and links. Go may add checksums to go.work.sum later.
-func validVendorWorkspace(root string, work, manifest []byte, tree []vendorEntry) bool {
+// stableVendorWorkspace store: the same go.work and manifest, the same
+// directories, links to the caller's entries, and its files. Go may add
+// checksums to go.work.sum later.
+func validVendorWorkspace(root string, work, manifest []byte, source string, tree []vendorEntry) bool {
 	if data, err := os.ReadFile(filepath.Join(root, "go.work")); err != nil || !bytes.Equal(data, work) {
 		return false
 	}
@@ -585,8 +671,7 @@ func validVendorWorkspace(root string, work, manifest []byte, tree []vendorEntry
 		if err != nil || rel == "." || rel == "modules.txt" {
 			return err
 		}
-		if next == len(tree) || tree[next].rel != rel || tree[next].dir != entry.IsDir() ||
-			!entry.IsDir() && entry.Type()&fs.ModeSymlink == 0 {
+		if next == len(tree) || tree[next].rel != rel || !tree[next].storedAt(path, entry, filepath.Join(source, rel)) {
 			return errors.New("unexpected vendor workspace entry")
 		}
 		next++
@@ -595,9 +680,26 @@ func validVendorWorkspace(root string, work, manifest []byte, tree []vendorEntry
 	return err == nil && next == len(tree)
 }
 
+// storedAt reports whether path, an entry of a workspace, is what linkVendor
+// stores for e: a directory, a link to the caller's entry at original, or the
+// caller's file. A hard link is that file; a copy has its size and time.
+func (e vendorEntry) storedAt(path string, entry fs.DirEntry, original string) bool {
+	switch {
+	case e.dir:
+		return entry.IsDir()
+	case e.file == nil:
+		target, err := os.Readlink(path)
+		return err == nil && entry.Type()&fs.ModeSymlink != 0 && filepath.Clean(target) == filepath.Clean(original)
+	case !entry.Type().IsRegular():
+		return false
+	}
+	info, err := entry.Info()
+	return err == nil && (os.SameFile(info, e.file) || info.Size() == e.file.Size() && info.ModTime().Equal(e.file.ModTime()))
+}
+
 // pruneVendorWorkspaces removes workspaces unused for the retention period,
-// their locks and abandoned staging directories. Removal deletes links, never
-// the caller's vendored files.
+// their locks and abandoned staging directories. Removal deletes links and
+// copies, never the caller's vendored files.
 func pruneVendorWorkspaces(parent, keep string) {
 	entries, err := os.ReadDir(parent)
 	if err != nil {
@@ -673,8 +775,8 @@ func retargetVendorOverlay(source, target string, replacements map[string]string
 	}
 }
 
-// snapshotVendor is the fallback where symbolic links are unavailable. It
-// preserves patched sources; hard links avoid copying large vendor trees and a
+// snapshotVendor is the fallback where the caller's own links cannot be
+// recreated. It preserves patched sources; hard links avoid copying large vendor trees and a
 // copy is used across filesystems. The modules.txt copy is always independent
 // because Go reads that file outside its overlay filesystem.
 func snapshotVendor(source, target string, manifest []byte, replacements map[string]string) error {

@@ -55,8 +55,8 @@
       "TestMiniTestCacheFollowsCallerEnvironment",
       "TestMiniTestifyDuplicateIdentity",
       "TestMiniTestingCompatibility",
-      "TestMiniVendorPatternsMatchGo",
       "TestMiniVendorSelectionMatchesGo",
+      "TestMiniVendorTreeMatchesGo",
       "TestMiniVendorWorkspaceLinksAndReusesBuildCache",
       "TestParallelNormalizationPreservesOutput",
       "TestResultCache",
@@ -152,8 +152,8 @@
       "TestMiniTemporaryWorkspaceKeepsBuildToolEnvironment",
       "TestMiniTemporaryWorkspaceRestoresGoEnvironment",
       "TestMiniTestCacheFollowsCallerEnvironment",
-      "TestMiniVendorPatternsMatchGo",
       "TestMiniVendorSelectionMatchesGo",
+      "TestMiniVendorTreeMatchesGo",
       "TestMiniVendorWorkspaceLinksAndReusesBuildCache"
     ],
     "fuzz": [

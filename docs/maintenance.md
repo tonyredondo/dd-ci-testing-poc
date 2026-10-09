@@ -274,7 +274,9 @@ dependency. Vendor workspaces are content-addressed: bump
 files or links change. `goSelectsVendor` mirrors cmd/go's `setDefaultBuildMod`, and
 `vendorManifest.contents` its `canonicalizeReplacePath`; recheck both when Go
 changes vendoring. Never write a manifest path containing whitespace: cmd/go
-splits those lines on spaces, so such targets use `replacements/<n>` links. Reuse and pruning coordinate through `<key>.lock`; keep
+splits those lines on spaces, so such targets use `replacements/<n>` links.
+`declareAliases` relies on cmd/go's `replacementFrom` reading `go.work`
+replacements before any `go.mod` replacement. Reuse and pruning coordinate through `<key>.lock`; keep
 the lock beside the workspace so removal never deletes a file a waiting run
 opened inside it.
 

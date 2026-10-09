@@ -86,7 +86,11 @@ those dependencies, see the same module, workspace and flags as under native
 A `go test -exec` program, or the `go_$GOOS_$GOARCH_exec` helper that Go uses
 when cross-compiling, starts before the test binary. `ddtest` runs it through
 `ddtest test-exec`, which restores the caller's values first; Go already
-disables result caching for such runs. Go keys cached test results on its own
+disables result caching for such runs. Arguments reach the program as Go parsed
+them, including an unquoted argument with both quote characters. On Windows,
+where the wrapper cannot replace itself, the program runs in a job that ends it
+if Go terminates the wrapper on timeout, as Go would end the program itself.
+Processes that the program leaves running after it exits are not ended. Go keys cached test results on its own
 environment, which holds the temporary workspace. Each test binary therefore
 records a fingerprint of the caller's values, so a cached result is reused only
 for the same caller environment.
@@ -135,30 +139,42 @@ classified as Go looks it up: a `go.work` replacement of one version does not
 affect other versions of that module. Go splits manifest lines on whitespace, so
 a moved path that would contain the spaces of the project's directory is replaced
 by a link inside the workspace, such as `./replacements/0`. The temporary
-`go.work` declares that link as the module's replacement.
+`go.work` declares that link as the module's replacement. Go reads `go.work`
+replacements before any `go.mod` replacement, so when the link replaces every
+version, the temporary `go.work` also declares the module's other versioned
+replacements, as the manifest records them.
 
-The client's vendor directories are recreated, and every other entry is a
-symbolic link to the client's file, so no file contents are copied and local
-patches stay live. Real directories keep vendored packages visible to wildcard
-patterns such as `example.com/helper/...`; Go ignores linked directories there.
-Alternate modfiles keep working in any spelling, including `GOFLAGS`.
+The client's vendor directories are recreated, and each file is a hard link to
+the client's file, so no contents are copied and edits in place stay live. Go
+sees regular files, as `//go:embed` requires: it rejects symbolic links. Real
+directories keep vendored packages visible to wildcard patterns such as
+`example.com/helper/...`; Go ignores linked directories there. Links inside the
+client's vendor tree stay links. Like Go, `ddtest` follows a `vendor` directory
+that is itself a link. Where hard links fail, as when the user cache is on
+another filesystem, files are copied with their times. Linking updates the
+client file's change time, so Git may check its contents once. Alternate
+modfiles keep working in any spelling, including `GOFLAGS`.
 
 The workspace lives in the user cache, under `ddtest/vendor-workspaces`, at a
-path derived from its `go.work`, manifest and the names of the vendored paths,
-which each run lists without reading file contents. Go's build cache keys
-include each package directory, so this stable path lets unchanged vendored
-packages reuse compiled archives between runs. A changed manifest or workspace
-selects a new path, as does adding or removing a vendored file. A run holds a
+path derived from its `go.work`, manifest, and the names, sizes and times of the
+vendored files, which each run reads without reading file contents. Go's build
+cache keys include each package directory, so this stable path lets unchanged
+vendored packages reuse compiled archives between runs. A changed manifest or
+workspace selects a new path, as does adding, removing or changing a vendored
+file; the next run then compiles vendored packages again. Each run checks that
+the workspace's files are still the client's files, or copies with the same size
+and time, and that its links still point to the client's entries. A run holds a
 shared lock on its workspace until `go test` exits; waiting for that lock stops
 when preparation is canceled or interrupted. When a new workspace is created,
 entries unused for 14 days are removed, but only while their lock can be taken
 exclusively without waiting; a workspace in use is never removed. A run that
-waited while another removed its workspace rebuilds it. Removal never follows
-the links, and deleting the directory by hand is safe when no `ddtest` run is
-active. Without a usable user cache, the links live in the run's temporary
-directory. Without symbolic links, as on Windows without the required privilege,
-files are hard-linked or copied there instead. The original vendor tree is never
-edited. Native Go still reports inconsistent vendor metadata rather than
+waited while another removed its workspace rebuilds it. Removing a workspace
+deletes only its own links and copies, and deleting the directory by hand is
+safe when no `ddtest` run is active. Without a usable user cache, the links live
+in the run's temporary directory. Where the client's own links cannot be
+recreated, as on Windows without the symbolic-link privilege, the files they
+point to are hard-linked or copied there instead. The original vendor tree is
+never edited. Native Go still reports inconsistent vendor metadata rather than
 silently selecting other versions. An already vendored Mini can continue using
 its existing sources.
 
