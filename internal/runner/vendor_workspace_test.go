@@ -538,3 +538,59 @@ func TestVendorManifestRewritesReplacementsForWorkspace(t *testing.T) {
 		t.Fatalf("workspace header changed: %q", got)
 	}
 }
+
+// cmd/go splits modules.txt lines on whitespace, so a moved relative path that
+// gains the project's spaces is unreadable. Such targets use whitespace-free
+// links declared in the temporary go.work, which Go compares verbatim.
+func TestVendorManifestAliasesTargetsWithWhitespace(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "my project", "client")
+	original := strings.Join([]string{
+		"# example.com/helper v0.0.0 => ../helper",
+		"## explicit; go 1.21",
+		"example.com/helper",
+		"# example.com/plain v0.0.0 => ../../plain",
+		"# example.com/helper => ../helper",
+		"",
+	}, "\n")
+	vendor := vendorManifest{base: base, module: true}
+	vendor.assignAliases([]byte(original))
+	if len(vendor.aliasTargets) != 1 || vendor.aliasTargets[0] != filepath.Join(filepath.Dir(base), "helper") {
+		t.Fatalf("alias targets: %q", vendor.aliasTargets)
+	}
+	workspace := t.TempDir()
+	plain, err := filepath.Rel(workspace, filepath.Join(base, "..", "..", "plain"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Join([]string{
+		"## workspace",
+		"# example.com/helper v0.0.0 => ./replacements/0",
+		"## explicit; go 1.21",
+		"example.com/helper",
+		"# example.com/plain v0.0.0 => " + toDirectoryPath(plain),
+		"# example.com/helper => ./replacements/0",
+		"",
+	}, "\n")
+	if got := string(vendor.contents([]byte(original), workspace)); got != want {
+		t.Fatalf("workspace manifest:\n%s\nwant:\n%s", got, want)
+	}
+	work := filepath.Join(workspace, "go.work")
+	if err := os.WriteFile(work, []byte("go 1.25.0\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := vendor.declareAliases(t.Context(), work); err != nil {
+		t.Fatal(err)
+	}
+	out, err := goTool(t.Context(), workspace, nil, "work", "edit", "-json", work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, replace := range []string{`"Path": "example.com/helper"`, `"Version": "v0.0.0"`, `"Path": "./replacements/0"`} {
+		if !strings.Contains(out, replace) {
+			t.Fatalf("go.work lacks %s:\n%s", replace, out)
+		}
+	}
+	if strings.Count(out, `"Path": "./replacements/0"`) != 2 {
+		t.Fatalf("go.work needs both the versioned and the all-version alias:\n%s", out)
+	}
+}

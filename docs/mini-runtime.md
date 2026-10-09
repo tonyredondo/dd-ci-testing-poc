@@ -118,8 +118,10 @@ relative local replacement against the `go.work` directory, so those paths are
 rewritten for the temporary workspace; replacements declared in the caller's
 `go.work` become absolute, like that workspace's copy. Each manifest entry is
 classified as Go looks it up: a `go.work` replacement of one version does not
-affect other versions of that module. As with `go work vendor`,
-a replacement path containing whitespace cannot be represented in the manifest.
+affect other versions of that module. Go splits manifest lines on whitespace, so
+a moved path that would contain the spaces of the project's directory is replaced
+by a link inside the workspace, such as `./replacements/0`. The temporary
+`go.work` declares that link as the module's replacement.
 Every other top-level vendor entry is a symbolic link to the client's tree, so
 nothing else is copied and local patches stay live. Alternate modfiles keep
 working in any spelling, including `GOFLAGS`.

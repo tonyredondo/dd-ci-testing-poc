@@ -260,9 +260,9 @@ func TestMiniVendorSelectionMatchesGo(t *testing.T) {
 		name string
 		// work is written in workAt ("client" or the parent "root"); vendor is
 		// produced there by go mod vendor ("module") or go work vendor.
-		work, workAt, vendor string
-		clientGo             string
-		absolute, workOff    bool
+		work, workAt, vendor      string
+		clientGo                  string
+		absolute, workOff, spaced bool
 	}{
 		// Absolute replacements keep a misused vendor tree consistent, so the
 		// wrong sources would run silently instead of failing.
@@ -273,9 +273,19 @@ func TestMiniVendorSelectionMatchesGo(t *testing.T) {
 		{name: "workspace-vendor-with-relative-replacements", work: "go 1.22\nuse ./client\nreplace example.com/other => ./other\n", workAt: "root", vendor: "workspace"},
 		{name: "workspace-vendor-with-one-version-replaced-by-go-work", work: "go 1.22\nuse ./client\nreplace example.com/helper v0.0.1 => ./other\n", workAt: "root", vendor: "workspace"},
 		{name: "workspace-vendor-ignored-with-gowork-off", work: "go 1.25.0\nuse .\n", workAt: "client", vendor: "workspace", clientGo: "1.25.0", workOff: true},
+		// modules.txt cannot represent whitespace; moved relative paths must not
+		// gain the spaces of the project's directory.
+		{name: "module-vendor-in-directory-with-spaces", vendor: "module", spaced: true},
+		{name: "workspace-vendor-in-directory-with-spaces", work: "go 1.22\nuse ./client\nreplace example.com/other => ./other\n", workAt: "root", vendor: "workspace", spaced: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
+			if tc.spaced {
+				root = filepath.Join(root, "my project")
+				if err := os.Mkdir(root, 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
 			client := filepath.Join(root, "client")
 			for _, name := range []string{"helper", "other"} {
 				dir := filepath.Join(root, name)

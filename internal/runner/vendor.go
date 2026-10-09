@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 func compareGoVersion(left, right string) int { return goversion.Compare("go"+left, "go"+right) }
@@ -126,9 +127,120 @@ type vendorManifest struct {
 	// an empty version replaces every version. Go compares those replacements
 	// verbatim, and the temporary go.work makes them absolute.
 	workReplaced map[moduleVersion]bool
+	// aliases name replacement targets whose paths contain whitespace, which
+	// modules.txt cannot represent: cmd/go splits its lines on spaces. Each
+	// alias is a whitespace-free link inside the workspace, declared in the
+	// temporary go.work, whose replacements Go compares verbatim.
+	aliases      map[moduleVersion]string
+	aliasTargets []string
 }
 
 type moduleVersion struct{ path, version string }
+
+// replacementAliasDir holds the links named by vendorManifest.aliases.
+const replacementAliasDir = "replacements"
+
+// directoryReplacement reports the module, version ("" for every version) and
+// path of a "# module [version] => directory" manifest line.
+func directoryReplacement(line string) (fields []string, module moduleVersion, ok bool) {
+	fields = strings.Fields(line)
+	n := len(fields)
+	if n < 4 || fields[0] != "#" || fields[n-2] != "=>" {
+		return nil, moduleVersion{}, false
+	}
+	module.path = fields[1]
+	if n == 5 {
+		module.version = fields[2]
+	}
+	return fields, module, true
+}
+
+// assignAliases finds relative replacements whose targets contain whitespace.
+// The caller's own manifest never contains those paths: a relative path from
+// the module or go.work directory stays inside the shared ancestor.
+func (v *vendorManifest) assignAliases(original []byte) {
+	targets := map[string]string{}
+	for line := range strings.SplitSeq(string(original), "\n") {
+		fields, module, ok := directoryReplacement(line)
+		if !ok || filepath.IsAbs(fields[len(fields)-1]) {
+			continue
+		}
+		target := filepath.Join(v.base, fields[len(fields)-1])
+		if !strings.ContainsFunc(target, unicode.IsSpace) {
+			continue
+		}
+		alias, seen := targets[target]
+		if !seen {
+			alias = "./" + replacementAliasDir + "/" + strconv.Itoa(len(v.aliasTargets))
+			targets[target] = alias
+			v.aliasTargets = append(v.aliasTargets, target)
+		}
+		if v.aliases == nil {
+			v.aliases = map[moduleVersion]string{}
+		}
+		v.aliases[module] = alias
+	}
+}
+
+// declareAliases adds the aliases to the temporary go.work. Replacements of
+// every version come first: go work edit drops a module's versioned
+// replacements when it sets one for every version.
+func (v vendorManifest) declareAliases(ctx context.Context, work string) error {
+	if len(v.aliases) == 0 {
+		return nil
+	}
+	modules := make([]moduleVersion, 0, len(v.aliases))
+	for module := range v.aliases {
+		modules = append(modules, module)
+	}
+	sort.Slice(modules, func(i, j int) bool {
+		if (modules[i].version == "") != (modules[j].version == "") {
+			return modules[i].version == ""
+		}
+		return modules[i].path+"@"+modules[i].version < modules[j].path+"@"+modules[j].version
+	})
+	args := []string{"work", "edit"}
+	for _, module := range modules {
+		old := module.path
+		if module.version != "" {
+			old += "@" + module.version
+		}
+		args = append(args, "-replace="+old+"="+v.aliases[module])
+	}
+	_, err := goTool(ctx, filepath.Dir(work), nil, append(args, work)...)
+	return err
+}
+
+// linkAliases creates each alias in workspace. Go does not read replacement
+// directories in vendor mode; the links keep other module queries accurate.
+func (v vendorManifest) linkAliases(workspace string) error {
+	for i, target := range v.aliasTargets {
+		link := filepath.Join(workspace, replacementAliasDir, strconv.Itoa(i))
+		if err := os.MkdirAll(filepath.Dir(link), 0700); err != nil {
+			return err
+		}
+		if err := os.Symlink(target, link); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v vendorManifest) validAliases(workspace string) bool {
+	for i, target := range v.aliasTargets {
+		link := filepath.Join(workspace, replacementAliasDir, strconv.Itoa(i))
+		info, err := os.Lstat(link)
+		if err != nil || info.Mode()&os.ModeSymlink == 0 {
+			return false
+		}
+		linked, err := os.Stat(link)
+		original, originalErr := os.Stat(target)
+		if err != nil || originalErr != nil || !os.SameFile(linked, original) {
+			return false
+		}
+	}
+	return true
+}
 
 // fromWorkspace reports whether the caller's go.work supplies the replacement
 // for path at version, using cmd/go's lookup: that exact version, then a
@@ -186,18 +298,18 @@ func (v vendorManifest) contents(original []byte, workspace string) []byte {
 	}
 	lines := strings.Split(manifest, "\n")
 	for i, line := range lines {
-		// "# module [version] => directory" names a directory replacement.
-		fields := strings.Fields(line)
+		fields, module, ok := directoryReplacement(line)
 		n := len(fields)
-		if n < 4 || fields[0] != "#" || fields[n-2] != "=>" || filepath.IsAbs(fields[n-1]) {
+		if !ok || filepath.IsAbs(fields[n-1]) {
 			continue
 		}
-		version := ""
-		if n == 5 {
-			version = fields[2]
+		if alias, aliased := v.aliases[module]; aliased {
+			fields[n-1] = alias
+			lines[i] = strings.Join(fields, " ")
+			continue
 		}
 		path := filepath.Join(v.base, fields[n-1])
-		if !v.fromWorkspace(fields[1], version) {
+		if !v.fromWorkspace(module.path, module.version) {
 			if relative, err := filepath.Rel(workspace, path); err == nil {
 				path = relative
 			}
@@ -229,7 +341,7 @@ func isDirectoryPath(path string) bool {
 var userCacheDir = os.UserCacheDir
 
 // vendorWorkspaceLayout changes every cache key when the stored layout changes.
-const vendorWorkspaceLayout = "ddtest-vendor-workspace-v1"
+const vendorWorkspaceLayout = "ddtest-vendor-workspace-v2"
 
 // vendorWorkspaceRetention bounds unused workspaces. Each one holds only
 // go.work, modules.txt and links, but every vendor change creates a new one.
@@ -261,6 +373,10 @@ func vendorWorkspace(ctx context.Context, work string, vendor vendorManifest, re
 	if err != nil {
 		return "", nil, err
 	}
+	vendor.assignAliases(original)
+	if err := vendor.declareAliases(ctx, work); err != nil {
+		return "", nil, err
+	}
 	stable, lock, err := stableVendorWorkspace(ctx, work, vendor, original, entries)
 	if err == nil {
 		retargetVendorOverlay(source, filepath.Join(filepath.Dir(stable), "vendor"), replacements)
@@ -272,12 +388,15 @@ func vendorWorkspace(ctx context.Context, work string, vendor vendorManifest, re
 	}
 	target := filepath.Join(filepath.Dir(work), "vendor")
 	manifest := vendor.contents(original, filepath.Dir(work))
-	if err := linkVendor(source, target, manifest, entries); err == nil {
+	if err := linkVendor(source, target, manifest, entries); err == nil && vendor.linkAliases(filepath.Dir(work)) == nil {
 		retargetVendorOverlay(source, target, replacements)
 		debug.printf("vendor workspace=run-links")
 		return work, nil, nil
 	}
 	if err := os.RemoveAll(target); err != nil {
+		return "", nil, err
+	}
+	if err := os.RemoveAll(filepath.Join(filepath.Dir(work), replacementAliasDir)); err != nil {
 		return "", nil, err
 	}
 	debug.printf("vendor workspace=snapshot")
@@ -331,7 +450,7 @@ func stableVendorWorkspace(ctx context.Context, work string, vendor vendorManife
 		lock.Close()
 		return "", nil, err
 	}
-	if validVendorWorkspace(root, workData, source, manifest, entries) {
+	if validVendorWorkspace(root, workData, source, manifest, entries) && vendor.validAliases(root) {
 		// Only retention depends on this time. The held lock already keeps the
 		// workspace from being pruned while this run uses it.
 		now := time.Now()
@@ -354,7 +473,10 @@ func stableVendorWorkspace(ctx context.Context, work string, vendor vendorManife
 	if err := linkVendor(source, filepath.Join(staging, "vendor"), manifest, entries); err != nil {
 		return fail(err)
 	}
-	if err := os.Rename(staging, root); err != nil && !validVendorWorkspace(root, workData, source, manifest, entries) {
+	if err := vendor.linkAliases(staging); err != nil {
+		return fail(err)
+	}
+	if err := os.Rename(staging, root); err != nil && !(validVendorWorkspace(root, workData, source, manifest, entries) && vendor.validAliases(root)) {
 		return fail(err)
 	}
 	pruneVendorWorkspaces(parent, key)
