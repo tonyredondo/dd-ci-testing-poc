@@ -49,8 +49,10 @@
       "TestMiniRuntimeProvisionUsesModuleOverlay",
       "TestMiniRuntimeWithoutRequirementLeavesModuleUntouched",
       "TestMiniStartupOverlapsSettingsAndTelemetry",
+      "TestMiniTemporaryWorkspaceRestoresGoEnvironment",
       "TestMiniTestifyDuplicateIdentity",
       "TestMiniTestingCompatibility",
+      "TestMiniVendorWorkspaceLinksAndReusesBuildCache",
       "TestParallelNormalizationPreservesOutput",
       "TestResultCache",
       "TestSDKProvisionProgressUsesStderr",
@@ -140,7 +142,9 @@
       "TestMiniProvisionsVendorAndPreservesPatchedSources",
       "TestMiniProvisionsWorkspaceWithoutChangingModules",
       "TestMiniRuntimeProvisionUsesModuleOverlay",
-      "TestMiniStartupOverlapsSettingsAndTelemetry"
+      "TestMiniStartupOverlapsSettingsAndTelemetry",
+      "TestMiniTemporaryWorkspaceRestoresGoEnvironment",
+      "TestMiniVendorWorkspaceLinksAndReusesBuildCache"
     ],
     "fuzz": [
       "TestMiniFuzzExampleLifecycle",

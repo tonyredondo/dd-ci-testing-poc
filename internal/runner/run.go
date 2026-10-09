@@ -185,7 +185,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			if opts.mod != "mod" && opts.mod != "readonly" {
 				vendor := filepath.Join(filepath.Dir(work), "vendor")
 				if _, err := os.Stat(filepath.Join(vendor, "modules.txt")); err == nil {
-					if e = snapshotVendor(vendor, filepath.Join(temp, "vendor"), replacements); e != nil {
+					if plan.Workfile, e = vendorWorkspace(ctx, plan.Workfile, vendor, replacements); e != nil {
 						return plan, e
 					}
 				}
@@ -203,19 +203,17 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 						if !filepath.IsAbs(source) {
 							source = filepath.Join(dir, source)
 						}
-						backing := filepath.Join(temp, "vendor-client.mod")
-						if e = copyModuleFile(source, backing, replacements); e != nil {
+						var data []byte
+						if data, e = readModuleFile(source, replacements); e != nil {
 							return plan, e
 						}
-						replacements[filepath.Join(root, "go.mod")] = backing
-						plan.modfileOverlay = true
-						flags := opts.buildFlags[:0]
-						for _, flag := range opts.buildFlags {
-							if !strings.HasPrefix(flag, "-modfile=") {
-								flags = append(flags, flag)
-							}
+						if e = overlaySelectedModfile(source, root, temp, data, &plan, replacements); e != nil {
+							return plan, e
 						}
-						opts.buildFlags = flags
+					}
+					// Workspace mode rejects -modfile in any spelling, including GOFLAGS.
+					if e = useModuleWorkspaceFlags(&opts, &plan); e != nil {
+						return plan, e
 					}
 					plan.Workfile, e = provideMiniVendorWorkspace(ctx, dir, root, temp, replacements)
 					if e != nil {
@@ -598,9 +596,11 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 	debug.printf("tool selection testify=%t goleak=%t cover=%t user_toolexec=%t orchestrion=%t sdk_ci_gate=%t", plan.testify, plan.goleak, plan.coverOverlay, opts.toolexec != "", plan.orchestrion, plan.sdkCI)
 	forwarded := goTestArguments(plan, opts, tool)
 	if plan.Workfile != "" {
-		env = append(env, "GOWORK="+plan.Workfile)
+		// The temporary workspace is for this build only. Testing's hook restores
+		// the caller's values before test code can start its own go commands.
+		env = append(env, instrument.SaveEnvironment("GOWORK"), "GOWORK="+plan.Workfile)
 		if plan.moduleWorkspace {
-			env = append(env, "GOFLAGS="+plan.workspaceGoFlags)
+			env = append(env, instrument.SaveEnvironment("GOFLAGS"), "GOFLAGS="+plan.workspaceGoFlags)
 		}
 	}
 	if plan.launcher != nil {

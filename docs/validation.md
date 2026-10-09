@@ -155,12 +155,14 @@ The transparency and safety regressions cover these contracts:
 | Reserved span fields | `TestReservedTagsUpdateEventFields`, `TestReservedTagsReachWireFieldsAndEventKind`: names, service, resource and type reach the decoded event fields |
 | Reentrant tag values | `TestTagFormattingCanReadItsSpan`: stringers, formatters, slices and errors can read the span; a callback that finishes it cannot add a late tag |
 | Consumer dependency versions | `TestMiniPreservesOlderConsumerDependencies`, `TestMiniConsumerAddsOnlyOwnModule`: readonly/mod builds keep old Testify, go-spew and YAML; consumer tidy adds only Mini |
-| Consumer language version | `TestMiniPreservesConsumerLanguage`: Go 1.21, 1.22 and 1.25 loop closures and timer compatibility match native Go |
+| Consumer language version | `TestMiniPreservesConsumerLanguage`: Go 1.21, 1.22, 1.25 and a missing `go` directive; loop closures, timer compatibility and `panic(nil)` match native Go |
 | SDK compiler cache | `TestMiniLegacySDKShim`: native SDK builds before and after Mini retain CI reporting, and SDK spans retain their APM transport |
 | Optional SDK mirror compatibility | `TestMiniUnsupportedSDKMirrorRetainsTestReporting`: SDK 2.10.1 builds twice, warns, and retains one test/session per run without duplicate SDK reporting |
 | Package setup failures | `TestMiniContinuesAfterPackageSetupFailures`: valid packages execute beside mixed-package, missing and empty targets with native exit status |
-| Event metadata placement | `TestMiniCIConfigurationWireParity` and common-tag wire tests: shared CI/Git/system defaults and local overrides retain effective values; raw payload assertions check their placement |
-| Workspace and vendor provisioning | `TestMiniProvisionsWorkspaceWithoutChangingModules`, `TestMiniProvisionsVendorAndPreservesPatchedSources`: preserve caller files, loop semantics, local patches, program defaults and explicit modfiles; runner tests cover selected versions, forks, source overlays and symlink files |
+| Event metadata placement | Accepted change from the SDK: shared CI/Git/system strings use event-kind envelope metadata. `TestMiniCIConfigurationWireParity` and common-tag wire tests: defaults and local overrides retain effective values; raw payload assertions check their placement |
+| Workspace and vendor provisioning | `TestMiniProvisionsWorkspaceWithoutChangingModules`, `TestMiniProvisionsVendorAndPreservesPatchedSources`: preserve caller files, loop semantics, local patches, program defaults and modfiles from flags or `GOFLAGS`; runner tests cover selected versions, forks, source overlays, cached vendor links and their fallbacks |
+| Go environment of tests | `TestMiniTemporaryWorkspaceRestoresGoEnvironment`: older modules, vendor and existing workspaces; tests see the caller's `GOWORK` and `GOFLAGS`, and their `go list -m` and nested builds match native Go |
+| Vendored build cache | `TestMiniVendorWorkspaceLinksAndReusesBuildCache`: the vendor workspace links sources, an unchanged vendored package is not recompiled, and later vendor edits are used |
 | Enforced dependency boundary | `scripts/test_dependency_boundary.py`: reject unused external requirements and nonstandard packages outside this module |
 
 

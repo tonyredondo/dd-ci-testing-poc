@@ -105,6 +105,12 @@ itself with the native tool; Windows delegates through a child. Process startup
 still has a cost even when dispatch does little work. The [latest build matrix](benchmarks.md)
 measures the complete invocation, including preparation and tool processes.
 
+Vendor workspaces link the client's tree instead of copying it, at a stable
+path in the user cache. Go's compile cache keys include each package directory,
+so a per-run location would recompile every vendored package on every run.
+`TestMiniVendorWorkspaceLinksAndReusesBuildCache` checks that an unchanged
+vendored package is not compiled again.
+
 Selected-version validation must run before compilation: cached archives can
 remain usable when vendor metadata changes but source bytes do not.
 [`TestTestifyVersionGuardWithWarmVendoredSources`](../integration/vendor_cache_test.go)

@@ -10,6 +10,22 @@ import (
 
 const minimumGoVersion = "go1.25.0"
 
+// Go assumes these versions, including their GODEBUG defaults, when go.mod or
+// go.work has no go directive.
+const (
+	defaultGoModVersion  = "1.16"
+	defaultGoWorkVersion = "1.18"
+)
+
+// goDebugDefault returns the GODEBUG default=go1.N value for a Go version.
+func goDebugDefault(version string) string {
+	parts := strings.Split(version, ".")
+	if len(parts) < 2 {
+		return ""
+	}
+	return "go" + strings.Join(parts[:2], ".")
+}
+
 type goEnvironment struct {
 	GOMOD, GOWORK, GOMODCACHE, GOVERSION string
 }

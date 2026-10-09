@@ -259,7 +259,15 @@ Each module keeps its language, and the workspace retains the caller's effective
 GODEBUG defaults. Native `-mod=mod` may update the client's own requirements;
 Mini's injected imports must never cause those updates. Alternate modfiles,
 overlays, workspaces and vendored patches participate in this contract.
-See [Go's GODEBUG contract](https://go.dev/doc/godebug).
+See [Go's GODEBUG contract](https://go.dev/doc/godebug). A missing `go`
+directive means Go 1.16 in `go.mod` and Go 1.18 in `go.work`; keep those
+defaults when a temporary workspace needs a newer `go` line.
+
+Temporary workspace settings belong to ddtest's `go test` command only. Restore
+every Go environment variable that preparation replaces in
+`internal/instrument/hooks.go`, using `SaveEnvironment` for the saved value.
+Vendor workspaces are content-addressed: bump `vendorWorkspaceLayout` in
+`internal/runner/vendor.go` whenever their stored files or links change.
 
 Check Go 1.25, 1.26, 1.27 and tip after changing these paths. The frozen SDK
 requires Go 1.26, so the Go 1.25 job runs all local runtime packages and explicit

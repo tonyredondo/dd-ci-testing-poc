@@ -193,6 +193,13 @@ func TestVendorSnapshotPreservesSourceOverlaysAndSymlinkFiles(t *testing.T) {
 }
 
 func TestWorkspaceNewerRuntimePreservesProgramDefaults(t *testing.T) {
+	// A go.work without a go directive means Go 1.18 to the go command.
+	for _, tc := range []struct{ directive, client, want string }{{"go 1.21\n", "1.21", "default=go1.21"}, {"", "1.18", "default=go1.18"}} {
+		t.Run(tc.want, func(t *testing.T) { testWorkspaceProgramDefaults(t, tc.directive, tc.client, tc.want) })
+	}
+}
+
+func testWorkspaceProgramDefaults(t *testing.T, directive, clientGo, want string) {
 	t.Setenv("GOPROXY", "off")
 	root := t.TempDir()
 	client := filepath.Join(root, "client")
@@ -204,8 +211,8 @@ func TestWorkspaceNewerRuntimePreservesProgramDefaults(t *testing.T) {
 	}
 	work := filepath.Join(root, "go.work")
 	for path, data := range map[string]string{
-		work:                                 "go 1.21\nuse ./client\nreplace " + miniModule + " => ./mini\n",
-		filepath.Join(client, "go.mod"):      "module example.com/client\ngo 1.21\n",
+		work:                                 directive + "use ./client\nreplace " + miniModule + " => ./mini\n",
+		filepath.Join(client, "go.mod"):      "module example.com/client\ngo " + clientGo + "\n",
 		filepath.Join(client, "main.go"):     "package main\nimport(\"fmt\";\"time\")\nfunc main(){timer:=time.NewTimer(time.Hour);defer timer.Stop();fmt.Println(cap(timer.C))}\n",
 		filepath.Join(runtimeRoot, "go.mod"): "module " + miniModule + "\ngo 1.25.0\n",
 		filepath.Join(runtimeRoot, "testopt", "testopt.go"): "package testopt\n",
@@ -236,7 +243,7 @@ func TestWorkspaceNewerRuntimePreservesProgramDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "go 1.25.0") || !strings.Contains(string(data), "default=go1.21") {
+	if !strings.Contains(string(data), "go 1.25.0") || !strings.Contains(string(data), want) {
 		t.Fatalf("workspace does not preserve defaults: %s", data)
 	}
 }
