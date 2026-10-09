@@ -503,10 +503,17 @@ func TestVendorManifestRewritesReplacementsForWorkspace(t *testing.T) {
 		"# example.com/fork v1.0.0 => example.com/forked v1.2.0",
 		"# example.com/abs v0.0.0 => " + absolute,
 		"# example.com/work => ./work",
+		"# example.com/pinned v0.0.0 => ./pinned",
+		"# example.com/pinned v0.0.1 => ./other",
+		"# example.com/pinned => ./pinned",
 		"# example.com/helper => ./helper",
 		"",
 	}, "\n")
-	vendor := vendorManifest{base: base, module: true, workReplaced: map[string]bool{"example.com/work": true}}
+	// go.work replaces every version of work, but only pinned v0.0.1.
+	vendor := vendorManifest{base: base, module: true, workReplaced: map[moduleVersion]bool{
+		{path: "example.com/work"}:                      true,
+		{path: "example.com/pinned", version: "v0.0.1"}: true,
+	}}
 	want := strings.Join([]string{
 		"## workspace",
 		"# example.com/helper v0.0.0 => " + relative("helper"),
@@ -516,6 +523,9 @@ func TestVendorManifestRewritesReplacementsForWorkspace(t *testing.T) {
 		"# example.com/fork v1.0.0 => example.com/forked v1.2.0",
 		"# example.com/abs v0.0.0 => " + absolute,
 		"# example.com/work => " + filepath.Join(base, "work"),
+		"# example.com/pinned v0.0.0 => " + relative("pinned"),
+		"# example.com/pinned v0.0.1 => " + filepath.Join(base, "other"),
+		"# example.com/pinned => " + relative("pinned"),
 		"# example.com/helper => " + relative("helper"),
 		"",
 	}, "\n")

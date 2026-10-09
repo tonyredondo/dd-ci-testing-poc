@@ -169,21 +169,24 @@ func useModuleWorkspaceFlags(opts *options, plan *Plan) error {
 	return nil
 }
 
-// workspaceReplacedModules lists the modules that a go.work file replaces.
-func workspaceReplacedModules(ctx context.Context, dir, work string) (map[string]bool, error) {
+// workspaceReplacedModules lists the module versions that a go.work file
+// replaces; an empty version replaces every version of that module.
+func workspaceReplacedModules(ctx context.Context, dir, work string) (map[moduleVersion]bool, error) {
 	out, err := goTool(ctx, dir, nil, "work", "edit", "-json", work)
 	if err != nil {
 		return nil, err
 	}
 	var parsed struct {
-		Replace []struct{ Old struct{ Path string } }
+		Replace []struct {
+			Old struct{ Path, Version string }
+		}
 	}
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
 		return nil, fmt.Errorf("parse workspace edit JSON (%d bytes): %w", len(out), err)
 	}
-	replaced := map[string]bool{}
+	replaced := map[moduleVersion]bool{}
 	for _, replace := range parsed.Replace {
-		replaced[replace.Old.Path] = true
+		replaced[moduleVersion{replace.Old.Path, replace.Old.Version}] = true
 	}
 	return replaced, nil
 }

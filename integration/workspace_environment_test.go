@@ -249,22 +249,30 @@ func TestMiniVendorWorkspaceLinksAndReusesBuildCache(t *testing.T) {
 	}
 }
 
-// ddtest must use the vendored sources that go test uses: a go mod vendor tree
-// beside go.work belongs to its module and is ignored, while relative local
-// replacements keep working when the manifest moves to a temporary workspace.
+// ddtest must use the vendored sources that go test uses. Go selects a vendor
+// directory by mode: a go mod vendor tree beside go.work, or a go work vendor
+// tree under GOWORK=off, is ignored. Relative local replacements, including a
+// go.work replacement of one version, must survive the move to a temporary
+// workspace.
 func TestMiniVendorSelectionMatchesGo(t *testing.T) {
 	driver := sharedDriver(t, "..")
 	for _, tc := range []struct {
-		name, work, vendor string
-		absolute           bool
+		name string
+		// work is written in workAt ("client" or the parent "root"); vendor is
+		// produced there by go mod vendor ("module") or go work vendor.
+		work, workAt, vendor string
+		clientGo             string
+		absolute, workOff    bool
 	}{
 		// Absolute replacements keep a misused vendor tree consistent, so the
 		// wrong sources would run silently instead of failing.
-		{"module-vendor-beside-go1.21-workspace", "go 1.21\nuse .\n", "module", true},
-		{"module-vendor-beside-go1.25-workspace", "go 1.25.0\nuse .\n", "module", true},
-		{"module-vendor-beside-workspace-relative-replacements", "go 1.21\nuse .\n", "module", false},
-		{"module-vendor-with-relative-replacements", "", "module", false},
-		{"workspace-vendor-with-relative-replacements", "go 1.22\nuse ./client\nreplace example.com/other => ./other\n", "workspace", false},
+		{name: "module-vendor-beside-go1.21-workspace", work: "go 1.21\nuse .\n", workAt: "client", vendor: "module", absolute: true},
+		{name: "module-vendor-beside-go1.25-workspace", work: "go 1.25.0\nuse .\n", workAt: "client", vendor: "module", absolute: true},
+		{name: "module-vendor-beside-workspace-relative-replacements", work: "go 1.21\nuse .\n", workAt: "client", vendor: "module"},
+		{name: "module-vendor-with-relative-replacements", vendor: "module"},
+		{name: "workspace-vendor-with-relative-replacements", work: "go 1.22\nuse ./client\nreplace example.com/other => ./other\n", workAt: "root", vendor: "workspace"},
+		{name: "workspace-vendor-with-one-version-replaced-by-go-work", work: "go 1.22\nuse ./client\nreplace example.com/helper v0.0.1 => ./other\n", workAt: "root", vendor: "workspace"},
+		{name: "workspace-vendor-ignored-with-gowork-off", work: "go 1.25.0\nuse .\n", workAt: "client", vendor: "workspace", clientGo: "1.25.0", workOff: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -285,8 +293,12 @@ func TestMiniVendorSelectionMatchesGo(t *testing.T) {
 				}
 				return "../" + name
 			}
-			mod := "module example.com/vendorselection\ngo 1.21\nrequire (\nexample.com/helper v0.0.0\nexample.com/other v0.0.0\n)\nreplace example.com/helper => " + local("helper") + "\n"
-			if tc.vendor == "module" {
+			clientGo := tc.clientGo
+			if clientGo == "" {
+				clientGo = "1.21"
+			}
+			mod := "module example.com/vendorselection\ngo " + clientGo + "\nrequire (\nexample.com/helper v0.0.0\nexample.com/other v0.0.0\n)\nreplace example.com/helper => " + local("helper") + "\n"
+			if !strings.Contains(tc.work, "example.com/other =>") {
 				mod += "replace example.com/other => " + local("other") + "\n"
 			}
 			writeBuildFixture(t, client, map[string]string{
@@ -294,24 +306,24 @@ func TestMiniVendorSelectionMatchesGo(t *testing.T) {
 				"client_test.go": "package vendorselection\nimport(\"fmt\";\"testing\";\"example.com/helper\";\"example.com/other\")\nfunc TestValues(t *testing.T){fmt.Printf(\"VALUES=%d,%d\\n\",helper.Value,other.Value)}\n",
 			})
 			env := append(testEnv("GOPROXY=off", "DD_CIVISIBILITY_ENABLED=false"), userCacheEnv(t, t.TempDir())...)
+			workDir := root
+			if tc.workAt == "client" {
+				workDir = client
+			}
 			vendor := filepath.Join(client, "vendor")
 			if tc.vendor == "module" {
 				if out, stderr, code := command(t, client, append(env, "GOWORK=off"), "go", "mod", "vendor"); code != 0 {
 					t.Fatal(out, stderr)
 				}
 			}
-			switch {
-			case tc.vendor == "module" && tc.work != "":
-				// go.work beside the module's own vendor directory.
-				writeBuildFixture(t, client, map[string]string{"go.work": tc.work})
-			case tc.work != "":
-				writeBuildFixture(t, root, map[string]string{"go.work": tc.work})
+			if tc.work != "" {
+				writeBuildFixture(t, workDir, map[string]string{"go.work": tc.work})
 			}
 			if tc.vendor == "workspace" {
-				if out, stderr, code := command(t, root, env, "go", "work", "vendor"); code != 0 {
+				if out, stderr, code := command(t, workDir, env, "go", "work", "vendor"); code != 0 {
 					t.Fatal(out, stderr)
 				}
-				vendor = filepath.Join(root, "vendor")
+				vendor = filepath.Join(workDir, "vendor")
 			}
 			// Patched vendored copies make the selected source observable.
 			for _, name := range []string{"helper", "other"} {
@@ -320,7 +332,7 @@ func TestMiniVendorSelectionMatchesGo(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if tc.work == "" {
+			if tc.work == "" || tc.workOff {
 				env = append(env, "GOWORK=off")
 			}
 			values := func(out string) string {

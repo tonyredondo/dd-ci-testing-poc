@@ -122,9 +122,20 @@ type vendorManifest struct {
 	base string
 	// module marks a go mod vendor manifest, which needs the workspace header.
 	module bool
-	// workReplaced lists modules replaced by the caller's go.work. Go compares
-	// those replacements verbatim, and the temporary go.work makes them absolute.
-	workReplaced map[string]bool
+	// workReplaced lists the module versions replaced by the caller's go.work;
+	// an empty version replaces every version. Go compares those replacements
+	// verbatim, and the temporary go.work makes them absolute.
+	workReplaced map[moduleVersion]bool
+}
+
+type moduleVersion struct{ path, version string }
+
+// fromWorkspace reports whether the caller's go.work supplies the replacement
+// for path at version, using cmd/go's lookup: that exact version, then a
+// replacement of every version. A manifest line without a version names the
+// latter.
+func (v vendorManifest) fromWorkspace(path, version string) bool {
+	return v.workReplaced[moduleVersion{path, version}] || v.workReplaced[moduleVersion{path: path}]
 }
 
 // goSelectsVendor mirrors cmd/go's choice: -mod=vendor uses the directory;
@@ -181,8 +192,12 @@ func (v vendorManifest) contents(original []byte, workspace string) []byte {
 		if n < 4 || fields[0] != "#" || fields[n-2] != "=>" || filepath.IsAbs(fields[n-1]) {
 			continue
 		}
+		version := ""
+		if n == 5 {
+			version = fields[2]
+		}
 		path := filepath.Join(v.base, fields[n-1])
-		if !v.workReplaced[fields[1]] {
+		if !v.fromWorkspace(fields[1], version) {
 			if relative, err := filepath.Rel(workspace, path); err == nil {
 				path = relative
 			}
@@ -290,8 +305,8 @@ func stableVendorWorkspace(ctx context.Context, work string, vendor vendorManife
 		return "", nil, err
 	}
 	replaced := make([]string, 0, len(vendor.workReplaced))
-	for path := range vendor.workReplaced {
-		replaced = append(replaced, path)
+	for module := range vendor.workReplaced {
+		replaced = append(replaced, module.path+"@"+module.version)
 	}
 	sort.Strings(replaced)
 	hash := sha256.New()
