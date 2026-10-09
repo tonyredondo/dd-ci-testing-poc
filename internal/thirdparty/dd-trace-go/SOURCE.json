@@ -35,7 +35,7 @@
     },
     {
       "path": "TESTS.json",
-      "sha256": "ad0dd28192bcf16d067f05785e31574a34c37855b6dfaee62ee393f67c6a14da",
+      "sha256": "50c2ba54462c43e95961a26d2563f71b0261801121ff827b902648653029f6ad",
       "role": "local"
     },
     {
@@ -635,6 +635,13 @@
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/retry_process.go",
       "source_sha256": "e1bdfd9174b86b856a05dbeb4278d386e8126cbb272248b9f7ab00bf8ee8feca"
+    },
+    {
+      "path": "civisibility/integrations/gotesting/retry_process_launch_gate_test.go",
+      "sha256": "b4e14411d37c7440cc2a2d01c7a4cd3586c3d2739350f16ec024be55f76c2b92",
+      "role": "adapted",
+      "source_path": "internal/civisibility/integrations/gotesting/retry_process_test.go",
+      "source_sha256": "5dd1b08003bd3dca0ca07de93f462ff225a9002b549b38dc1147ebc981f3d64f"
     },
     {
       "path": "civisibility/integrations/gotesting/retry_process_control.go",

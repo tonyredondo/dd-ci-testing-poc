@@ -2,7 +2,7 @@
   "sdk": "github.com/DataDog/dd-trace-go/v2@v2.12.0-dev.3.0.20261008222249-870449702d0a",
   "full_file_count": 61,
   "full_ci_test_file_count": 59,
-  "selected_test_or_helper_files": 7,
+  "selected_test_or_helper_files": 8,
   "assertion_policy": "Preserve upstream assertions and synthetic input semantics; adapt repository/namespace and replace APM mock bootstrap for the native runtime. End-to-end wire tests verify actual delivery separately. Documented correctness adaptations use independent source oracles; named source starts are checked against AST declaration lines. Assert/require calls use equivalent standard-library-only internal test helpers; the port uses native Go 1.25 APIs, with two helpers for Go 1.26 calls; temporary workspaces preserve each consumer module language.",
   "files": [
     {
@@ -516,6 +516,14 @@
       "adapted_sha256": "3d0f38e45c9f1fbf60d6a85b3c3019182baf88301bd46c1d154c07835b840e4f",
       "kind": "helpers",
       "adaptation": "extracted only recording CI event/session/module/suite/test helpers; no APM tracer mocks; standard-library assertion helpers"
+    },
+    {
+      "source": "internal/civisibility/integrations/gotesting/retry_process_test.go",
+      "destination": "internal/thirdparty/dd-trace-go/civisibility/integrations/gotesting/retry_process_launch_gate_test.go",
+      "source_sha256": "5dd1b08003bd3dca0ca07de93f462ff225a9002b549b38dc1147ebc981f3d64f",
+      "adapted_sha256": "b4e14411d37c7440cc2a2d01c7a4cd3586c3d2739350f16ec024be55f76c2b92",
+      "kind": "selected",
+      "adaptation": "Port TestRunProcessRetryAttemptRechecksCancellationAfterLaunchGateWait and its launch-gate, limiter, timer and context helpers; preserve both deterministic cancellation/deadline cases and all assertions; internal import relocation and standard-library assertion helpers. No child process is started."
     },
     {
       "source": "internal/civisibility/integrations/civisibility_parent_test.go",
