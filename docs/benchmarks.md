@@ -16,9 +16,10 @@ The run contains 6,224 comparative builds
 six times at each CPU count. All 48 build cells are qualified. Runtime compatibility
 passes in 44 of 48 cells; four Gin race combinations have real failures.
 
-All time cells are medians in **seconds**. POC percentages show the signed change
-against total Orchestrion time first, then Native. `(-50%; +20%)` means half
-Orchestrion time and 20% more than Native. Positive first values remain positive.
+All time cells are medians in **seconds**. The Orchestrion percentage is its signed
+change against Native. POC percentages show the signed change against total
+Orchestrion time first, then Native. `(-50%; +20%)` means half Orchestrion time
+and 20% more than Native. Positive first values remain positive.
 The excerpts below use no extra flags; the linked reports include every Testify,
 coverage and race combination, all observations, ranges and median uncertainty.
 No slow observations were removed.
@@ -54,66 +55,66 @@ than the stability of every matrix cell. Both control datasets are retained.
 
 | Project | Flags | CPUs | Native | Orchestrion | POC SDK | POC Mini |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Gin | `none` | 4 | 17.896 s | 51.532 s | 27.986 s (-45.7%; +56.4%) | 19.590 s (-62.0%; +9.5%) |
-| Gin | `none` | 32 | 10.844 s | 22.679 s | 14.805 s (-34.7%; +36.5%) | 11.836 s (-47.8%; +9.1%) |
-| Chi | `none` | 4 | 7.764 s | 30.543 s | 18.221 s (-40.3%; +134.7%) | 9.510 s (-68.9%; +22.5%) |
-| Chi | `none` | 32 | 4.576 s | 16.765 s | 9.929 s (-40.8%; +117.0%) | 5.961 s (-64.4%; +30.3%) |
-| Testify Direct | `none` | 4 | 8.078 s | 33.039 s | 18.006 s (-45.5%; +122.9%) | 9.998 s (-69.7%; +23.8%) |
-| Testify Direct | `none` | 32 | 4.867 s | 20.067 s | 9.921 s (-50.6%; +103.8%) | 6.431 s (-68.0%; +32.1%) |
-| Testify External | `none` | 4 | 8.381 s | 30.092 s | 18.676 s (-37.9%; +122.8%) | 10.283 s (-65.8%; +22.7%) |
-| Testify External | `none` | 32 | 4.810 s | 18.167 s | 11.453 s (-37.0%; +138.1%) | 6.241 s (-65.6%; +29.8%) |
+| Gin | `none` | 4 | 17.896 s | 51.532 s (+188.0%) | 27.986 s (-45.7%; +56.4%) | 19.590 s (-62.0%; +9.5%) |
+| Gin | `none` | 32 | 10.844 s | 22.679 s (+109.1%) | 14.805 s (-34.7%; +36.5%) | 11.836 s (-47.8%; +9.1%) |
+| Chi | `none` | 4 | 7.764 s | 30.543 s (+293.4%) | 18.221 s (-40.3%; +134.7%) | 9.510 s (-68.9%; +22.5%) |
+| Chi | `none` | 32 | 4.576 s | 16.765 s (+266.3%) | 9.929 s (-40.8%; +117.0%) | 5.961 s (-64.4%; +30.3%) |
+| Testify Direct | `none` | 4 | 8.078 s | 33.039 s (+309.0%) | 18.006 s (-45.5%; +122.9%) | 9.998 s (-69.7%; +23.8%) |
+| Testify Direct | `none` | 32 | 4.867 s | 20.067 s (+312.3%) | 9.921 s (-50.6%; +103.8%) | 6.431 s (-68.0%; +32.1%) |
+| Testify External | `none` | 4 | 8.381 s | 30.092 s (+259.0%) | 18.676 s (-37.9%; +122.8%) | 10.283 s (-65.8%; +22.7%) |
+| Testify External | `none` | 32 | 4.810 s | 18.167 s (+277.7%) | 11.453 s (-37.0%; +138.1%) | 6.241 s (-65.6%; +29.8%) |
 
 ## Cached compilation — unchanged output reused
 
 | Project | Flags | CPUs | Native | Orchestrion | POC SDK | POC Mini |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Gin | `none` | 4 | 0.098 s | 0.366 s | 0.230 s (-37.3%; +134.3%) | 0.171 s (-53.2%; +74.6%) |
-| Gin | `none` | 32 | 0.097 s | 0.410 s | 0.241 s (-41.1%; +148.5%) | 0.189 s (-53.9%; +94.7%) |
-| Chi | `none` | 4 | 0.063 s | 0.329 s | 0.187 s (-43.0%; +197.4%) | 0.123 s (-62.5%; +95.3%) |
-| Chi | `none` | 32 | 0.067 s | 0.385 s | 0.197 s (-48.8%; +194.8%) | 0.138 s (-64.1%; +106.8%) |
-| Testify Direct | `none` | 4 | 0.059 s | 0.314 s | 0.179 s (-43.0%; +206.0%) | 0.119 s (-62.1%; +103.5%) |
-| Testify Direct | `none` | 32 | 0.061 s | 0.358 s | 0.188 s (-47.4%; +209.6%) | 0.132 s (-63.1%; +117.3%) |
-| Testify External | `none` | 4 | 0.059 s | 0.314 s | 0.182 s (-42.2%; +208.9%) | 0.122 s (-61.2%; +107.1%) |
-| Testify External | `none` | 32 | 0.059 s | 0.358 s | 0.188 s (-47.3%; +217.2%) | 0.132 s (-63.2%; +121.7%) |
+| Gin | `none` | 4 | 0.098 s | 0.366 s (+273.5%) | 0.230 s (-37.3%; +134.3%) | 0.171 s (-53.2%; +74.6%) |
+| Gin | `none` | 32 | 0.097 s | 0.410 s (+322.2%) | 0.241 s (-41.1%; +148.5%) | 0.189 s (-53.9%; +94.7%) |
+| Chi | `none` | 4 | 0.063 s | 0.329 s (+421.5%) | 0.187 s (-43.0%; +197.4%) | 0.123 s (-62.5%; +95.3%) |
+| Chi | `none` | 32 | 0.067 s | 0.385 s (+476.1%) | 0.197 s (-48.8%; +194.8%) | 0.138 s (-64.1%; +106.8%) |
+| Testify Direct | `none` | 4 | 0.059 s | 0.314 s (+436.9%) | 0.179 s (-43.0%; +206.0%) | 0.119 s (-62.1%; +103.5%) |
+| Testify Direct | `none` | 32 | 0.061 s | 0.358 s (+488.3%) | 0.188 s (-47.4%; +209.6%) | 0.132 s (-63.1%; +117.3%) |
+| Testify External | `none` | 4 | 0.059 s | 0.314 s (+434.2%) | 0.182 s (-42.2%; +208.9%) | 0.122 s (-61.2%; +107.1%) |
+| Testify External | `none` | 32 | 0.059 s | 0.358 s (+502.3%) | 0.188 s (-47.3%; +217.2%) | 0.132 s (-63.2%; +121.7%) |
 
 ## Warm dependencies — forced fresh link
 
 | Project | Flags | CPUs | Native | Orchestrion | POC SDK | POC Mini |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Gin | `none` | 4 | 1.158 s | 5.302 s | 4.323 s (-18.5%; +273.3%) | 1.745 s (-67.1%; +50.7%) |
-| Gin | `none` | 32 | 1.213 s | 5.372 s | 4.368 s (-18.7%; +260.0%) | 1.902 s (-64.6%; +56.7%) |
-| Chi | `none` | 4 | 0.266 s | 1.810 s | 1.026 s (-43.3%; +285.8%) | 0.386 s (-78.6%; +45.3%) |
-| Chi | `none` | 32 | 0.272 s | 1.759 s | 1.018 s (-42.1%; +274.4%) | 0.404 s (-77.0%; +48.5%) |
-| Testify Direct | `none` | 4 | 0.246 s | 1.622 s | 0.861 s (-46.9%; +250.5%) | 0.374 s (-77.0%; +52.0%) |
-| Testify Direct | `none` | 32 | 0.270 s | 1.795 s | 0.883 s (-50.8%; +226.6%) | 0.394 s (-78.1%; +45.5%) |
-| Testify External | `none` | 4 | 0.239 s | 1.716 s | 0.968 s (-43.6%; +305.2%) | 0.374 s (-78.2%; +56.7%) |
-| Testify External | `none` | 32 | 0.256 s | 1.867 s | 0.995 s (-46.7%; +288.7%) | 0.393 s (-79.0%; +53.4%) |
+| Gin | `none` | 4 | 1.158 s | 5.302 s (+357.8%) | 4.323 s (-18.5%; +273.3%) | 1.745 s (-67.1%; +50.7%) |
+| Gin | `none` | 32 | 1.213 s | 5.372 s (+342.7%) | 4.368 s (-18.7%; +260.0%) | 1.902 s (-64.6%; +56.7%) |
+| Chi | `none` | 4 | 0.266 s | 1.810 s (+580.4%) | 1.026 s (-43.3%; +285.8%) | 0.386 s (-78.6%; +45.3%) |
+| Chi | `none` | 32 | 0.272 s | 1.759 s (+547.0%) | 1.018 s (-42.1%; +274.4%) | 0.404 s (-77.0%; +48.5%) |
+| Testify Direct | `none` | 4 | 0.246 s | 1.622 s (+560.1%) | 0.861 s (-46.9%; +250.5%) | 0.374 s (-77.0%; +52.0%) |
+| Testify Direct | `none` | 32 | 0.270 s | 1.795 s (+563.7%) | 0.883 s (-50.8%; +226.6%) | 0.394 s (-78.1%; +45.5%) |
+| Testify External | `none` | 4 | 0.239 s | 1.716 s (+618.1%) | 0.968 s (-43.6%; +305.2%) | 0.374 s (-78.2%; +56.7%) |
+| Testify External | `none` | 32 | 0.256 s | 1.867 s (+629.4%) | 0.995 s (-46.7%; +288.7%) | 0.393 s (-79.0%; +53.4%) |
 
 ## Incremental compilation — reachable test-body edit
 
 | Project | Flags | CPUs | Native | Orchestrion | POC SDK | POC Mini |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Gin | `none` | 4 | 1.280 s | 2.810 s | 2.219 s (-21.0%; +73.4%) | 1.400 s (-50.2%; +9.4%) |
-| Gin | `none` | 32 | 1.160 s | 2.871 s | 2.054 s (-28.5%; +77.1%) | 1.241 s (-56.8%; +7.0%) |
-| Chi | `none` | 4 | 0.413 s | 1.794 s | 0.979 s (-45.4%; +137.4%) | 0.523 s (-70.8%; +26.9%) |
-| Chi | `none` | 32 | 0.409 s | 1.901 s | 1.072 s (-43.6%; +161.9%) | 0.544 s (-71.4%; +32.8%) |
-| Testify Direct | `none` | 4 | 0.285 s | 2.451 s | 1.059 s (-56.8%; +271.9%) | 0.413 s (-83.2%; +44.8%) |
-| Testify Direct | `none` | 32 | 0.287 s | 1.882 s | 1.045 s (-44.5%; +263.7%) | 0.436 s (-76.8%; +51.7%) |
-| Testify External | `none` | 4 | 0.253 s | 1.742 s | 0.969 s (-44.4%; +283.7%) | 0.373 s (-78.6%; +47.8%) |
-| Testify External | `none` | 32 | 0.264 s | 1.933 s | 0.999 s (-48.3%; +278.9%) | 0.406 s (-79.0%; +53.8%) |
+| Gin | `none` | 4 | 1.280 s | 2.810 s (+119.6%) | 2.219 s (-21.0%; +73.4%) | 1.400 s (-50.2%; +9.4%) |
+| Gin | `none` | 32 | 1.160 s | 2.871 s (+147.6%) | 2.054 s (-28.5%; +77.1%) | 1.241 s (-56.8%; +7.0%) |
+| Chi | `none` | 4 | 0.413 s | 1.794 s (+334.9%) | 0.979 s (-45.4%; +137.4%) | 0.523 s (-70.8%; +26.9%) |
+| Chi | `none` | 32 | 0.409 s | 1.901 s (+364.2%) | 1.072 s (-43.6%; +161.9%) | 0.544 s (-71.4%; +32.8%) |
+| Testify Direct | `none` | 4 | 0.285 s | 2.451 s (+760.6%) | 1.059 s (-56.8%; +271.9%) | 0.413 s (-83.2%; +44.8%) |
+| Testify Direct | `none` | 32 | 0.287 s | 1.882 s (+554.8%) | 1.045 s (-44.5%; +263.7%) | 0.436 s (-76.8%; +51.7%) |
+| Testify External | `none` | 4 | 0.253 s | 1.742 s (+589.7%) | 0.969 s (-44.4%; +283.7%) | 0.373 s (-78.6%; +47.8%) |
+| Testify External | `none` | 32 | 0.264 s | 1.933 s (+633.3%) | 0.999 s (-48.3%; +278.9%) | 0.406 s (-79.0%; +53.8%) |
 
 ## Unused-constant edit — diagnostic
 
 | Project | Flags | CPUs | Native | Orchestrion | POC SDK | POC Mini |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Gin | `none` | 4 | 0.760 s | 1.161 s | 0.875 s (-24.7%; +15.1%) | 0.822 s (-29.2%; +8.2%) |
-| Gin | `none` | 32 | 0.651 s | 1.110 s | 0.804 s (-27.6%; +23.5%) | 0.737 s (-33.6%; +13.1%) |
-| Chi | `none` | 4 | 0.266 s | 0.657 s | 0.376 s (-42.8%; +41.5%) | 0.327 s (-50.2%; +23.2%) |
-| Chi | `none` | 32 | 0.250 s | 0.682 s | 0.402 s (-40.9%; +61.3%) | 0.328 s (-51.9%; +31.4%) |
-| Testify Direct | `none` | 4 | 0.102 s | 0.656 s | 0.237 s (-64.0%; +131.7%) | 0.171 s (-73.9%; +67.6%) |
-| Testify Direct | `none` | 32 | 0.099 s | 1.002 s | 0.223 s (-77.8%; +125.5%) | 0.174 s (-82.6%; +76.3%) |
-| Testify External | `none` | 4 | 0.078 s | 0.546 s | 0.192 s (-64.8%; +146.1%) | 0.137 s (-74.8%; +75.7%) |
-| Testify External | `none` | 32 | 0.080 s | 0.614 s | 0.202 s (-67.1%; +152.3%) | 0.151 s (-75.4%; +89.1%) |
+| Gin | `none` | 4 | 0.760 s | 1.161 s (+52.8%) | 0.875 s (-24.7%; +15.1%) | 0.822 s (-29.2%; +8.2%) |
+| Gin | `none` | 32 | 0.651 s | 1.110 s (+70.4%) | 0.804 s (-27.6%; +23.5%) | 0.737 s (-33.6%; +13.1%) |
+| Chi | `none` | 4 | 0.266 s | 0.657 s (+147.5%) | 0.376 s (-42.8%; +41.5%) | 0.327 s (-50.2%; +23.2%) |
+| Chi | `none` | 32 | 0.250 s | 0.682 s (+173.1%) | 0.402 s (-40.9%; +61.3%) | 0.328 s (-51.9%; +31.4%) |
+| Testify Direct | `none` | 4 | 0.102 s | 0.656 s (+542.8%) | 0.237 s (-64.0%; +131.7%) | 0.171 s (-73.9%; +67.6%) |
+| Testify Direct | `none` | 32 | 0.099 s | 1.002 s (+914.9%) | 0.223 s (-77.8%; +125.5%) | 0.174 s (-82.6%; +76.3%) |
+| Testify External | `none` | 4 | 0.078 s | 0.546 s (+598.3%) | 0.192 s (-64.8%; +146.1%) | 0.137 s (-74.8%; +75.7%) |
+| Testify External | `none` | 32 | 0.080 s | 0.614 s (+667.6%) | 0.202 s (-67.1%; +152.3%) | 0.151 s (-75.4%; +89.1%) |
 
 The unused-constant edit is a diagnostic: compiled code can remain reusable.
 Use the reachable test-body edit to assess editing and recompiling a test.
@@ -127,20 +128,21 @@ pages and kernel memory are included. This is neither a Go heap measurement
 nor the sum of independently observed process RSS peaks. Runtime receivers run
 outside the measured cgroup. Warmups and build qualification commands are excluded.
 
-The percentages compare the same memory metric against Orchestrion first and
-Native second. Failed variants have no comparative median; their individual
-peaks remain in the raw records.
+Orchestrion percentages compare the same memory metric against Native. POC
+percentages compare it against Orchestrion first and Native second. Failed
+variants have no comparative median; their individual peaks remain in the raw
+records.
 
 | Project | Flags | CPUs | Native | Orchestrion | POC SDK | POC Mini |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Gin | `none` | 4 | 1674.3 MiB | 2480.6 MiB | 2108.6 MiB (-15.0%; +25.9%) | 1741.7 MiB (-29.8%; +4.0%) |
-| Gin | `none` | 32 | 1851.3 MiB | 2639.9 MiB | 2256.8 MiB (-14.5%; +21.9%) | 1831.3 MiB (-30.6%; -1.1%) |
-| Chi | `none` | 4 | 464.5 MiB | 1292.0 MiB | 952.7 MiB (-26.3%; +105.1%) | 518.9 MiB (-59.8%; +11.7%) |
-| Chi | `none` | 32 | 699.1 MiB | 2021.4 MiB | 1253.3 MiB (-38.0%; +79.3%) | 712.6 MiB (-64.7%; +1.9%) |
-| Testify Direct | `none` | 4 | 446.0 MiB | 1015.8 MiB | 924.8 MiB (-9.0%; +107.4%) | 512.2 MiB (-49.6%; +14.8%) |
-| Testify Direct | `none` | 32 | 732.8 MiB | 1319.7 MiB | 1210.6 MiB (-8.3%; +65.2%) | 715.0 MiB (-45.8%; -2.4%) |
-| Testify External | `none` | 4 | 436.4 MiB | 1007.9 MiB | 904.8 MiB (-10.2%; +107.3%) | 505.5 MiB (-49.8%; +15.8%) |
-| Testify External | `none` | 32 | 711.6 MiB | 1358.1 MiB | 1273.8 MiB (-6.2%; +79.0%) | 730.3 MiB (-46.2%; +2.6%) |
+| Gin | `none` | 4 | 1674.3 MiB | 2480.6 MiB (+48.2%) | 2108.6 MiB (-15.0%; +25.9%) | 1741.7 MiB (-29.8%; +4.0%) |
+| Gin | `none` | 32 | 1851.3 MiB | 2639.9 MiB (+42.6%) | 2256.8 MiB (-14.5%; +21.9%) | 1831.3 MiB (-30.6%; -1.1%) |
+| Chi | `none` | 4 | 464.5 MiB | 1292.0 MiB (+178.1%) | 952.7 MiB (-26.3%; +105.1%) | 518.9 MiB (-59.8%; +11.7%) |
+| Chi | `none` | 32 | 699.1 MiB | 2021.4 MiB (+189.2%) | 1253.3 MiB (-38.0%; +79.3%) | 712.6 MiB (-64.7%; +1.9%) |
+| Testify Direct | `none` | 4 | 446.0 MiB | 1015.8 MiB (+127.8%) | 924.8 MiB (-9.0%; +107.4%) | 512.2 MiB (-49.6%; +14.8%) |
+| Testify Direct | `none` | 32 | 732.8 MiB | 1319.7 MiB (+80.1%) | 1210.6 MiB (-8.3%; +65.2%) | 715.0 MiB (-45.8%; -2.4%) |
+| Testify External | `none` | 4 | 436.4 MiB | 1007.9 MiB (+131.0%) | 904.8 MiB (-10.2%; +107.3%) | 505.5 MiB (-49.8%; +15.8%) |
+| Testify External | `none` | 32 | 711.6 MiB | 1358.1 MiB (+90.9%) | 1273.8 MiB (-6.2%; +79.0%) | 730.3 MiB (-46.2%; +2.6%) |
 
 ## Runtime of the prebuilt test binaries
 
@@ -154,27 +156,27 @@ multiplicity are checked against Native, and CI inventories against the SDK.
 
 | Project | Flags | CPUs | Native | Orchestrion | POC SDK | POC Mini | Mini deferred |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Gin | `none` | 4 | 0.183472 s | 0.227665 s | 0.230596 s (+1.3%; +25.7%) | 0.210650 s (-7.5%; +14.8%) | 0.372718 s (+63.7%; +103.1%) |
-| Gin | `none` | 32 | 0.192854 s | 0.235763 s | 0.239290 s (+1.5%; +24.1%) | 0.219925 s (-6.7%; +14.0%) | 0.405775 s (+72.1%; +110.4%) |
-| Chi | `none` | 4 | 26.136864 s | 26.174048 s | 26.177771 s (+0.0%; +0.2%) | 26.175779 s (+0.0%; +0.1%) | 26.186206 s (+0.0%; +0.2%) |
-| Chi | `none` | 32 | 26.141335 s | 26.179190 s | 26.182586 s (+0.0%; +0.2%) | 26.156964 s (-0.1%; +0.1%) | 26.172730 s (-0.0%; +0.1%) |
-| Testify Direct | `none` | 4 | 0.002768 s | 0.014293 s | 0.014375 s (+0.6%; +419.4%) | 0.009877 s (-30.9%; +256.9%) | 0.010434 s (-27.0%; +277.0%) |
-| Testify Direct | `none` | 32 | 0.003034 s | 0.016014 s | 0.015778 s (-1.5%; +420.0%) | 0.011020 s (-31.2%; +263.2%) | 0.011532 s (-28.0%; +280.1%) |
-| Testify External | `none` | 4 | 0.002716 s | 0.014248 s | 0.014253 s (+0.0%; +424.8%) | 0.009969 s (-30.0%; +267.1%) | 0.010055 s (-29.4%; +270.2%) |
-| Testify External | `none` | 32 | 0.002940 s | 0.016444 s | 0.015532 s (-5.5%; +428.4%) | 0.011040 s (-32.9%; +275.6%) | 0.011582 s (-29.6%; +294.0%) |
+| Gin | `none` | 4 | 0.183472 s | 0.227665 s (+24.1%) | 0.230596 s (+1.3%; +25.7%) | 0.210650 s (-7.5%; +14.8%) | 0.372718 s (+63.7%; +103.1%) |
+| Gin | `none` | 32 | 0.192854 s | 0.235763 s (+22.2%) | 0.239290 s (+1.5%; +24.1%) | 0.219925 s (-6.7%; +14.0%) | 0.405775 s (+72.1%; +110.4%) |
+| Chi | `none` | 4 | 26.136864 s | 26.174048 s (+0.1%) | 26.177771 s (+0.0%; +0.2%) | 26.175779 s (+0.0%; +0.1%) | 26.186206 s (+0.0%; +0.2%) |
+| Chi | `none` | 32 | 26.141335 s | 26.179190 s (+0.1%) | 26.182586 s (+0.0%; +0.2%) | 26.156964 s (-0.1%; +0.1%) | 26.172730 s (-0.0%; +0.1%) |
+| Testify Direct | `none` | 4 | 0.002768 s | 0.014293 s (+416.4%) | 0.014375 s (+0.6%; +419.4%) | 0.009877 s (-30.9%; +256.9%) | 0.010434 s (-27.0%; +277.0%) |
+| Testify Direct | `none` | 32 | 0.003034 s | 0.016014 s (+427.8%) | 0.015778 s (-1.5%; +420.0%) | 0.011020 s (-31.2%; +263.2%) | 0.011532 s (-28.0%; +280.1%) |
+| Testify External | `none` | 4 | 0.002716 s | 0.014248 s (+424.6%) | 0.014253 s (+0.0%; +424.8%) | 0.009969 s (-30.0%; +267.1%) | 0.010055 s (-29.4%; +270.2%) |
+| Testify External | `none` | 32 | 0.002940 s | 0.016444 s (+459.4%) | 0.015532 s (-5.5%; +428.4%) | 0.011040 s (-32.9%; +275.6%) | 0.011582 s (-29.6%; +294.0%) |
 
 ## Runtime: memory
 
 | Project | Flags | CPUs | Native | Orchestrion | POC SDK | POC Mini | Mini deferred |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Gin | `none` | 4 | 36.6 MiB | 60.3 MiB | 60.8 MiB (+0.8%; +65.8%) | 42.4 MiB (-29.8%; +15.6%) | 43.5 MiB (-27.8%; +18.8%) |
-| Gin | `none` | 32 | 42.2 MiB | 70.7 MiB | 75.1 MiB (+6.2%; +78.0%) | 55.3 MiB (-21.8%; +31.0%) | 50.5 MiB (-28.6%; +19.6%) |
-| Chi | `none` | 4 | 45.6 MiB | 79.7 MiB | 78.1 MiB (-2.0%; +71.0%) | 47.4 MiB (-40.5%; +3.8%) | 46.6 MiB (-41.5%; +2.1%) |
-| Chi | `none` | 32 | 94.7 MiB | 128.0 MiB | 117.0 MiB (-8.7%; +23.5%) | 91.7 MiB (-28.4%; -3.2%) | 89.6 MiB (-30.1%; -5.5%) |
-| Testify Direct | `none` | 4 | 14.5 MiB | 26.6 MiB | 27.0 MiB (+1.3%; +85.4%) | 17.3 MiB (-35.1%; +18.9%) | 17.1 MiB (-35.7%; +17.7%) |
-| Testify Direct | `none` | 32 | 15.0 MiB | 29.4 MiB | 29.2 MiB (-0.9%; +94.7%) | 18.3 MiB (-37.9%; +21.9%) | 18.5 MiB (-37.2%; +23.3%) |
-| Testify External | `none` | 4 | 14.3 MiB | 27.1 MiB | 26.4 MiB (-2.8%; +83.8%) | 17.3 MiB (-36.2%; +20.6%) | 17.3 MiB (-36.2%; +20.6%) |
-| Testify External | `none` | 32 | 14.5 MiB | 32.3 MiB | 29.3 MiB (-9.2%; +102.5%) | 18.3 MiB (-43.4%; +26.4%) | 18.8 MiB (-41.9%; +29.6%) |
+| Gin | `none` | 4 | 36.6 MiB | 60.3 MiB (+64.5%) | 60.8 MiB (+0.8%; +65.8%) | 42.4 MiB (-29.8%; +15.6%) | 43.5 MiB (-27.8%; +18.8%) |
+| Gin | `none` | 32 | 42.2 MiB | 70.7 MiB (+67.6%) | 75.1 MiB (+6.2%; +78.0%) | 55.3 MiB (-21.8%; +31.0%) | 50.5 MiB (-28.6%; +19.6%) |
+| Chi | `none` | 4 | 45.6 MiB | 79.7 MiB (+74.5%) | 78.1 MiB (-2.0%; +71.0%) | 47.4 MiB (-40.5%; +3.8%) | 46.6 MiB (-41.5%; +2.1%) |
+| Chi | `none` | 32 | 94.7 MiB | 128.0 MiB (+35.2%) | 117.0 MiB (-8.7%; +23.5%) | 91.7 MiB (-28.4%; -3.2%) | 89.6 MiB (-30.1%; -5.5%) |
+| Testify Direct | `none` | 4 | 14.5 MiB | 26.6 MiB (+83.0%) | 27.0 MiB (+1.3%; +85.4%) | 17.3 MiB (-35.1%; +18.9%) | 17.1 MiB (-35.7%; +17.7%) |
+| Testify Direct | `none` | 32 | 15.0 MiB | 29.4 MiB (+96.5%) | 29.2 MiB (-0.9%; +94.7%) | 18.3 MiB (-37.9%; +21.9%) | 18.5 MiB (-37.2%; +23.3%) |
+| Testify External | `none` | 4 | 14.3 MiB | 27.1 MiB (+89.1%) | 26.4 MiB (-2.8%; +83.8%) | 17.3 MiB (-36.2%; +20.6%) | 17.3 MiB (-36.2%; +20.6%) |
+| Testify External | `none` | 32 | 14.5 MiB | 32.3 MiB (+123.1%) | 29.3 MiB (-9.2%; +102.5%) | 18.3 MiB (-43.4%; +26.4%) | 18.8 MiB (-41.9%; +29.6%) |
 
 ### Runtime limits and failures
 

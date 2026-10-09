@@ -46,9 +46,13 @@ comparison by filtering it out. No Go toolchain, local binary or original
 `/var/tmp` path is needed to regenerate the documents.
 
 All durations in the tables are wall-clock seconds, with `s` in each cell.
-For example, `1.200 s (-40.0%; +20.0%)` means 40% less total command time than
-Orchestrion and 20% more than Native. The two percentages use unrounded medians
+Orchestrion cells show one percentage, the change against Native:
+`3.000 s (+150.0%)` takes two and a half times Native's time. In POC cells,
+`1.200 s (-40.0%; +20.0%)` means 40% less total command time than
+Orchestrion and 20% more than Native. All percentages use unrounded medians
 and retain their signs, including a positive first value when the POC is slower.
+The archived build report keeps its recorded format, without the Orchestrion
+percentage; `docs/benchmarks.md`, `memory.md` and new runs include it.
 `statistics.json` adds ranges, sample counts, variation and a deterministic
 bootstrap interval for the median. The interval estimates uncertainty by resampling
 the observed runs; it is not a range for future builds. Ranges are the actual

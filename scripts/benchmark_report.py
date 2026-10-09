@@ -49,6 +49,10 @@ def format_cell(cell, variant, field):
         entry = cell[variant]
         return f"FAIL {entry['failed']}/{entry['attempted']}" if entry["failed"] else "UNVERIFIED"
     text = f"{value / MIB:.1f} MiB" if field == "peak_bytes" else f"{value:.6f} s"
+    if variant == "orchestrion":
+        native = metric(cell, "native", field)
+        if native is not None:
+            text += f" ({100 * (value / native - 1):+.1f}%)"
     if variant in ("sdk", "mini", "mini-deferred"):
         native = metric(cell, "native", field)
         orchestrion = metric(cell, "orchestrion", field)
@@ -143,9 +147,10 @@ pages and kernel memory are included. This is neither a Go heap measurement
 nor the sum of independently observed process RSS peaks. Runtime receivers run
 outside the measured cgroup. Warmups and build qualification commands are excluded.
 
-The percentages compare the same memory metric against Orchestrion first and
-Native second. Failed variants have no comparative median; their individual
-peaks remain in the raw records.
+Orchestrion percentages compare the same memory metric against Native. POC
+percentages compare it against Orchestrion first and Native second. Failed
+variants have no comparative median; their individual peaks remain in the raw
+records.
 """
 
 
@@ -178,9 +183,10 @@ The run contains {build_stats['measured_observations']:,} comparative builds
 six times at each CPU count. All 48 build cells are qualified. Runtime compatibility
 passes in 44 of 48 cells; four Gin race combinations have real failures.
 
-All time cells are medians in **seconds**. POC percentages show the signed change
-against total Orchestrion time first, then Native. `(-50%; +20%)` means half
-Orchestrion time and 20% more than Native. Positive first values remain positive.
+All time cells are medians in **seconds**. The Orchestrion percentage is its signed
+change against Native. POC percentages show the signed change against total
+Orchestrion time first, then Native. `(-50%; +20%)` means half Orchestrion time
+and 20% more than Native. Positive first values remain positive.
 The excerpts below use no extra flags; the linked reports include every Testify,
 coverage and race combination, all observations, ranges and median uncertainty.
 No slow observations were removed.
@@ -193,6 +199,10 @@ No slow observations were removed.
 | [115-case parity comparison]({link}/parity/README.md) | Per-case times, matching session/module/suite/test/span counts and six rounds per CPU count |
 | [Agent delivery control]({link}/agent/README.md) | Gin with local EVP delivery and CI telemetry enabled |
 | [Data and provenance]({link}/README.md) | Original and validated compressed records, input hashes and collection limits |
+
+These runs predate the CLI's rename from `ddtest` to `ddto`. The recorded
+commands, paths and traces keep the original name, so they still match their
+input hashes.
 
 ## Compilation
 
@@ -208,7 +218,8 @@ The other configurations use 3/10/10/5/3. The 160-run Native link control passed
 the recorded convergence thresholds. It checks that control's median, rather
 than the stability of every matrix cell. Both control datasets are retained.
 """]
-    sections.append("\n".join(build.table_lines(manifest, build_stats["statistics"], cases=base)))
+    sections.append("\n".join(build.table_lines(manifest, build_stats["statistics"], cases=base,
+                                                  orchestrion_change=True)))
     sections.append(f"""The unused-constant edit is a diagnostic: compiled code can remain reusable.
 Use the reachable test-body edit to assess editing and recompiling a test.
 

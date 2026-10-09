@@ -49,6 +49,16 @@ class ReportTests(unittest.TestCase):
         self.assertEqual((mini["n"], mini["median"], mini["min"], mini["max"]), (3, 40, 20, 100))
         self.assertEqual(benchmark.render(self.directory), (report, summary))
 
+    def test_table_format_two_adds_orchestrion_change_against_native(self):
+        expected = "| Fixture | `none` | 4 | 20.000 s | 30.000 s (+50.0%) | 15.000 s (-50.0%; -25.0%) | 40.000 s (+33.3%; +100.0%) |"
+        report, summary = benchmark.render(self.directory)
+        self.assertNotIn("30.000 s (+50.0%)", report)  # Recorded datasets keep their format.
+        lines = benchmark.table_lines(self.manifest, summary["statistics"], orchestrion_change=True)
+        self.assertEqual(lines.count(expected), 5)
+        (self.directory / "manifest.json").write_text(json.dumps({**self.manifest, "table_format": 2}))
+        report, _ = benchmark.render(self.directory)
+        self.assertEqual(report.count(expected), 5)
+
     def test_readme_links_the_reports_without_duplicating_tables(self):
         _, summary = benchmark.render(self.directory)
         self.manifest.update(toolchain="go example", sdk_version="sdk-example")

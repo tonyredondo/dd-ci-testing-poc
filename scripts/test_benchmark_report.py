@@ -18,6 +18,13 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(report.format_cell(cell, "mini", "peak_bytes"), "4.0 MiB (+33.3%; +100.0%)")
         self.assertEqual(report.format_cell(cell, "sdk", "peak_bytes"), "1.0 MiB (-66.7%; -50.0%)")
 
+    def test_orchestrion_cells_compare_only_against_native(self):
+        cell = {"native": {"wall_s": {"median": 2}}, "orchestrion": {"wall_s": {"median": 5}}}
+        self.assertEqual(report.format_cell(cell, "orchestrion", "wall_s"), "5.000000 s (+150.0%)")
+        self.assertEqual(report.format_cell(cell, "native", "wall_s"), "2.000000 s")
+        cell["native"] = {"valid": False, "failed": 1, "attempted": 6}
+        self.assertEqual(report.format_cell(cell, "orchestrion", "wall_s"), "5.000000 s")
+
     def test_failed_reference_cannot_produce_a_percentage(self):
         cell = {"native": {"wall_s": {"median": 1}},
                 "orchestrion": {"valid": False, "failed": 2, "attempted": 6},

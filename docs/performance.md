@@ -395,15 +395,18 @@ Report medians with ranges and repetition counts; do not delete slow runs.
 Agree on time/run/disk limits before a large matrix.
 
 For a POC table cell, put the signed percentage relative to Orchestrion first,
-then the overhead relative to native:
+then the overhead relative to native. An Orchestrion cell has only its overhead
+relative to native:
 
 ```text
 100 * (POC / Orchestrion - 1)
 100 * (POC / Native - 1)
-Example format: 1.20 s (-40.0% vs Orchestrion; +20.0% vs Native)
+100 * (Orchestrion / Native - 1)
+Example POC format: 1.20 s (-40.0% vs Orchestrion; +20.0% vs Native)
+Example Orchestrion format: 2.00 s (+100.0% vs Native)
 ```
 
-The example is arithmetic, not a measurement. Compute percentages from
+The examples are arithmetic, not measurements. Compute percentages from
 unrounded medians. A negative first value means the POC took less time than
 Orchestrion; a positive second value means it took more time than native.
 

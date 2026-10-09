@@ -139,7 +139,11 @@ def summarize(grouped):
     return result
 
 
-def table_lines(manifest, summary, scenarios=None, cases=None):
+def table_lines(manifest, summary, scenarios=None, cases=None, orchestrion_change=None):
+    # Table format 2 adds Orchestrion's change against Native. Earlier datasets
+    # keep the README recorded in their archive hashes unless a caller asks for it.
+    if orchestrion_change is None:
+        orchestrion_change = manifest.get("table_format", 1) >= 2
     lines = []
     for scenario in scenarios or SCENARIOS:
         lines += ["## " + SCENARIOS[scenario], "",
@@ -152,6 +156,9 @@ def table_lines(manifest, summary, scenarios=None, cases=None):
                 for variant in VARIANTS:
                     median = cell[variant]["wall_s"]["median"]
                     text = f"{median:.3f} s"
+                    if variant == "orchestrion" and orchestrion_change:
+                        native = cell["native"]["wall_s"]["median"]
+                        text += f" ({100 * (median / native - 1):+.1f}%)"
                     if variant in ("sdk", "mini"):
                         reference = cell["orchestrion"]["wall_s"]["median"]
                         native = cell["native"]["wall_s"]["median"]
@@ -326,7 +333,7 @@ class Runner:
                         PYTHONDONTWRITEBYTECODE="1")
         self.affinity = {n: available[:n] for n in args.cpus}
         self.count = 0
-        self.manifest = {"schema_version": 1, "historical": False,
+        self.manifest = {"schema_version": 1, "historical": False, "table_format": 2,
                          "source_head": self.setup(["git", "rev-parse", "HEAD"], ROOT).strip(),
                          "worktree_status": self.setup(["git", "status", "--porcelain"], ROOT),
                          "toolchain": self.setup([str(self.go), "version"], ROOT).strip(),
@@ -657,7 +664,7 @@ class Runner:
         m = self.manifest
         lines = ["# Compile-only comparison: Native, Orchestrion, POC SDK and POC Mini", "",
                  f"POC `{m['source_head']}`; `{m['toolchain']}`; SDK `{m['sdk_version']}`; Orchestrion `{m['orchestrion_version']}`.", "",
-                 "Values are medians in seconds. POC percentages show the signed change against total Orchestrion wall time first, then against Native; both use unrounded medians.", "",
+                 "Values are medians in seconds. Orchestrion percentages show the signed change against Native. POC percentages show the signed change against total Orchestrion wall time first, then against Native; all use unrounded medians.", "",
                  "All variants compile with `go test -c -o <directory>/ -ldflags=-w ./...`. Test binaries are never run. The same prepared source and module graph is used for all four variants. Orchestrion loads only the pinned SDK's testing aspects.", "",
                  "Builds run serially in rotating order. Each cold run has an empty Go build cache and no existing output. Downloads are disabled during timing; modules and OS page cache stay warm. Affinity, `GOMAXPROCS` and `-p` match the selected CPU count; manifest.json records logical CPU IDs and physical core topology.", "",
                  "Unchanged output reuse, forced linking and reachable edits are checked with tool traces. Final binaries are checked for the expected testing/Testify hooks and absence of DWARF. CPU and memory include daemons and nested builds through exclusive cgroups. Wall time ends at the top-level command's exit; drain wait is recorded separately.", "",
