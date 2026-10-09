@@ -517,11 +517,13 @@ func configureReferenceFixture(t *testing.T, dir string) {
 	if err = os.WriteFile(filepath.Join(dir, "orchestrion.tool.go"), []byte(tool), 0644); err != nil {
 		t.Fatal(err)
 	}
-	// go get can leave an upgraded module's checksum out of go.sum: on a warm
-	// Windows cache, with two test groups running go commands at once, Testify's
-	// was missing and every native build failed. Loading the fixture's packages
-	// and tests with -mod=mod adds the checksums they need. Unlike go mod tidy,
-	// it never drops requirements that a test adds code for later.
+	// go get leaves a module's checksum out of go.sum when another go command is
+	// downloading that module: it waits for that download, finds the zip in place
+	// and records nothing. CI test groups share a module cache, so the upgraded
+	// Testify's checksum went missing and every native build failed. Loading the
+	// fixture's packages and tests with -mod=mod adds the checksums they need.
+	// Unlike go mod tidy, it never drops requirements that a test adds code for
+	// later.
 	if out, e, code := command(t, dir, testEnv(), "go", "list", "-mod=mod", "-deps", "-test", "./..."); code != 0 {
 		t.Fatalf("complete common graph: %s\n%s", out, e)
 	}
