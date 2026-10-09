@@ -43,7 +43,7 @@ class ReportTests(unittest.TestCase):
 
     def test_medians_keep_outliers_and_report_actual_positive_changes(self):
         report, summary = benchmark.render(self.directory)
-        expected = "| Fixture | `none` | 4 | 20.000 s | 30.000 s | 15.000 s (-50.0%; -25.0%) | 40.000 s (+33.3%; +100.0%) |"
+        expected = "| Fixture | `none` | 4 | 20.000 s | 30.000 s (+50.0%) | 15.000 s (-50.0%; -25.0%) | 40.000 s (+33.3%; +100.0%) |"
         self.assertEqual(report.count(expected), 5)
         mini = summary["statistics"]["fixture/4/cold"]["mini"]["wall_s"]
         self.assertEqual((mini["n"], mini["median"], mini["min"], mini["max"]), (3, 40, 20, 100))

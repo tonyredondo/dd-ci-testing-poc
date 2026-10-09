@@ -49,7 +49,11 @@ def format_cell(cell, variant, field):
         entry = cell[variant]
         return f"FAIL {entry['failed']}/{entry['attempted']}" if entry["failed"] else "UNVERIFIED"
     text = f"{value / MIB:.1f} MiB" if field == "peak_bytes" else f"{value:.6f} s"
-    if variant in ("sdk", "mini", "mini-deferred"):
+    if variant == "orchestrion":
+        native = metric(cell, "native", field)
+        if native is not None:
+            text += f" ({100 * (value / native - 1):+.1f}%)"
+    elif variant in ("sdk", "mini", "mini-deferred"):
         native = metric(cell, "native", field)
         orchestrion = metric(cell, "orchestrion", field)
         if orchestrion is None:
@@ -143,9 +147,9 @@ pages and kernel memory are included. This is neither a Go heap measurement
 nor the sum of independently observed process RSS peaks. Runtime receivers run
 outside the measured cgroup. Warmups and build qualification commands are excluded.
 
-The percentages compare the same memory metric against Orchestrion first and
-Native second. Failed variants have no comparative median; their individual
-peaks remain in the raw records.
+Orchestrion's percentage compares memory against Native. Mini's percentages
+compare memory against Orchestrion first and Native second. Failed variants
+have no comparative median; their individual peaks remain in the raw records.
 
 """
 
@@ -182,9 +186,9 @@ Another {mini_unverified} runs lack a valid historical SDK event reference; thei
 observed times, CPU and memory remain in the runtime report. Historical Orchestrion
 race failures are also retained.
 
-All time cells are medians in seconds. Mini's percentages compare total
-Orchestrion time first, then Native. For example, `(-50%; +20%)` means half
-Orchestrion's time and 20% more than Native's. Memory uses aggregate cgroup MiB.
+All time cells are medians in seconds. Orchestrion's percentage compares its
+time against Native. Mini's percentages compare Orchestrion first, then Native.
+For example, `(-50%; +20%)` means half Orchestrion's time and 20% more than Native's. Memory uses aggregate cgroup MiB.
 The records keep CPU time, ranges, repetitions, failures and median uncertainty.
 No slow observations are removed. Collection dates differ; a small difference
 in wall time alone does not establish a stable gain.

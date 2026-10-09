@@ -89,8 +89,10 @@ charged file-cache pages and kernel memory, not just the Go heap. The runtime
 receiver runs outside that scope. CPU-seconds can exceed wall-clock seconds on
 multiple cores. Tables use median wall time in seconds and memory in MiB.
 
-Mini percentages compare Orchestrion first, then Native, using unrounded
-medians. Ranges, sample counts and deterministic bootstrap intervals remain in
+Orchestrion's percentage compares the same metric against Native. Mini's
+percentages compare Orchestrion first, then Native. All use unrounded medians.
+Positive values mean more time or memory; negative values mean less. Ranges,
+sample counts and deterministic bootstrap intervals remain in
 `statistics.json`. The intervals describe the observed samples; they do not
 predict future runs. No slow observation is discarded.
 

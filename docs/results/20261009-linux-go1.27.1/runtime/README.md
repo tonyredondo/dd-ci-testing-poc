@@ -10,56 +10,59 @@ use the new source revision. Test inventories match Native; CI inventories use t
 recorded SDK reference. Native Examples absent from that reference are checked against
 the executable function/source table and added explicitly.
 
+Orchestrion's percentage compares time against Native. Mini's percentages compare
+Orchestrion first, then Native. Positive values mean more time; negative values mean less.
+
 | Project | Flags | CPUs | Native | Orchestrion | POC Mini | Mini deferred |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Gin | `none` | 4 | 0.183472 s | 0.227665 s | 0.248406 s (+9.1%; +35.4%) | 0.251560 s (+10.5%; +37.1%) |
-| Gin | `none` | 32 | 0.192854 s | 0.235763 s | 0.225299 s (-4.4%; +16.8%) | 0.228771 s (-3.0%; +18.6%) |
-| Chi | `none` | 4 | 26.136864 s | 26.174048 s | 26.161599 s (-0.0%; +0.1%) | 26.176719 s (+0.0%; +0.2%) |
-| Chi | `none` | 32 | 26.141335 s | 26.179190 s | 26.172962 s (-0.0%; +0.1%) | 26.179298 s (+0.0%; +0.1%) |
+| Gin | `none` | 4 | 0.183472 s | 0.227665 s (+24.1%) | 0.248406 s (+9.1%; +35.4%) | 0.251560 s (+10.5%; +37.1%) |
+| Gin | `none` | 32 | 0.192854 s | 0.235763 s (+22.2%) | 0.225299 s (-4.4%; +16.8%) | 0.228771 s (-3.0%; +18.6%) |
+| Chi | `none` | 4 | 26.136864 s | 26.174048 s (+0.1%) | 26.161599 s (-0.0%; +0.1%) | 26.176719 s (+0.0%; +0.2%) |
+| Chi | `none` | 32 | 26.141335 s | 26.179190 s (+0.1%) | 26.172962 s (-0.0%; +0.1%) | 26.179298 s (+0.0%; +0.1%) |
 | Gin | `-race` | 4 | 2.040156 s | FAIL 5/6 | 2.693232 s (vs Orchestrion unavailable; +32.0% vs Native) | 2.680854 s (vs Orchestrion unavailable; +31.4% vs Native) |
 | Gin | `-race` | 32 | 1.415086 s | FAIL 6/6 | 1.582640 s (vs Orchestrion unavailable; +11.8% vs Native) | 1.587447 s (vs Orchestrion unavailable; +12.2% vs Native) |
-| Gin | `-cover` | 4 | 0.188422 s | 0.484403 s | 0.271141 s (-44.0%; +43.9%) | 0.273019 s (-43.6%; +44.9%) |
-| Gin | `-cover` | 32 | 0.198064 s | 0.410552 s | 0.240136 s (-41.5%; +21.2%) | 0.231744 s (-43.6%; +17.0%) |
-| Gin | `-coverpkg=./... -covermode=atomic` | 4 | 0.253092 s | 6.616408 s | 7.732937 s (+16.9%; +2955.4%) | 8.017513 s (+21.2%; +3067.8%) |
-| Gin | `-coverpkg=./... -covermode=atomic` | 32 | 0.253249 s | 6.541288 s | 6.840932 s (+4.6%; +2601.3%) | 7.461775 s (+14.1%; +2846.4%) |
+| Gin | `-cover` | 4 | 0.188422 s | 0.484403 s (+157.1%) | 0.271141 s (-44.0%; +43.9%) | 0.273019 s (-43.6%; +44.9%) |
+| Gin | `-cover` | 32 | 0.198064 s | 0.410552 s (+107.3%) | 0.240136 s (-41.5%; +21.2%) | 0.231744 s (-43.6%; +17.0%) |
+| Gin | `-coverpkg=./... -covermode=atomic` | 4 | 0.253092 s | 6.616408 s (+2514.2%) | 7.732937 s (+16.9%; +2955.4%) | 8.017513 s (+21.2%; +3067.8%) |
+| Gin | `-coverpkg=./... -covermode=atomic` | 32 | 0.253249 s | 6.541288 s (+2482.9%) | 6.840932 s (+4.6%; +2601.3%) | 7.461775 s (+14.1%; +2846.4%) |
 | Gin | `-race -coverpkg=./... -covermode=atomic` | 4 | 3.415680 s | FAIL 5/6 | UNVERIFIED | UNVERIFIED |
 | Gin | `-race -coverpkg=./... -covermode=atomic` | 32 | 3.446807 s | FAIL 5/6 | UNVERIFIED | UNVERIFIED |
-| Chi | `-race` | 4 | 27.214190 s | 27.322207 s | 27.304056 s (-0.1%; +0.3%) | 27.304624 s (-0.1%; +0.3%) |
-| Chi | `-race` | 32 | 27.218039 s | 27.324007 s | 27.314174 s (-0.0%; +0.4%) | 27.289865 s (-0.1%; +0.3%) |
-| Chi | `-cover` | 4 | 26.136957 s | 26.229098 s | 26.178705 s (-0.2%; +0.2%) | 26.185012 s (-0.2%; +0.2%) |
-| Chi | `-cover` | 32 | 26.140129 s | 26.233960 s | 26.177565 s (-0.2%; +0.1%) | 26.163375 s (-0.3%; +0.1%) |
-| Chi | `-coverpkg=./... -covermode=atomic` | 4 | 26.139077 s | 26.788571 s | 26.792990 s (+0.0%; +2.5%) | 26.854130 s (+0.2%; +2.7%) |
-| Chi | `-coverpkg=./... -covermode=atomic` | 32 | 26.143078 s | 26.843831 s | 26.849861 s (+0.0%; +2.7%) | 26.924933 s (+0.3%; +3.0%) |
-| Chi | `-race -coverpkg=./... -covermode=atomic` | 4 | 27.227274 s | 28.864119 s | 28.841073 s (-0.1%; +5.9%) | 29.179477 s (+1.1%; +7.2%) |
-| Chi | `-race -coverpkg=./... -covermode=atomic` | 32 | 27.233273 s | 28.933591 s | 28.968658 s (+0.1%; +6.4%) | 29.473376 s (+1.9%; +8.2%) |
-| Testify Direct | `none` | 4 | 0.002768 s | 0.014293 s | 0.009830 s (-31.2%; +255.2%) | 0.009817 s (-31.3%; +254.7%) |
-| Testify Direct | `none` | 32 | 0.003034 s | 0.016014 s | 0.010971 s (-31.5%; +261.6%) | 0.010855 s (-32.2%; +257.7%) |
-| Testify Direct | `-race` | 4 | 1.008293 s | 1.041778 s | 1.021986 s (-1.9%; +1.4%) | 1.021930 s (-1.9%; +1.4%) |
-| Testify Direct | `-race` | 32 | 1.008927 s | 1.045827 s | 1.023457 s (-2.1%; +1.4%) | 1.023322 s (-2.2%; +1.4%) |
-| Testify Direct | `-cover` | 4 | 0.003040 s | 0.023040 s | 0.010447 s (-54.7%; +243.7%) | 0.010673 s (-53.7%; +251.1%) |
-| Testify Direct | `-cover` | 32 | 0.003225 s | 0.025315 s | 0.012056 s (-52.4%; +273.8%) | 0.011771 s (-53.5%; +265.0%) |
-| Testify Direct | `-coverpkg=./... -covermode=atomic` | 4 | 0.003020 s | 0.024021 s | 0.019850 s (-17.4%; +557.2%) | 0.020071 s (-16.4%; +564.5%) |
-| Testify Direct | `-coverpkg=./... -covermode=atomic` | 32 | 0.003157 s | 0.026260 s | 0.022349 s (-14.9%; +607.8%) | 0.021429 s (-18.4%; +578.7%) |
-| Testify Direct | `-race -coverpkg=./... -covermode=atomic` | 4 | 1.009339 s | 1.052694 s | 1.033867 s (-1.8%; +2.4%) | 1.034081 s (-1.8%; +2.5%) |
-| Testify Direct | `-race -coverpkg=./... -covermode=atomic` | 32 | 1.009875 s | 1.057152 s | 1.038497 s (-1.8%; +2.8%) | 1.037893 s (-1.8%; +2.8%) |
-| Testify Direct | `-coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 4 | 0.003584 s | 0.038847 s | 0.035444 s (-8.8%; +889.1%) | 0.036915 s (-5.0%; +930.1%) |
-| Testify Direct | `-coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 32 | 0.003901 s | 0.041828 s | 0.037961 s (-9.2%; +873.1%) | 0.040610 s (-2.9%; +940.9%) |
-| Testify Direct | `-race -coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 4 | 1.011706 s | 1.089557 s | 1.073968 s (-1.4%; +6.2%) | 1.083518 s (-0.6%; +7.1%) |
-| Testify Direct | `-race -coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 32 | 1.012462 s | 1.097505 s | 1.081431 s (-1.5%; +6.8%) | 1.090035 s (-0.7%; +7.7%) |
-| Testify External | `none` | 4 | 0.002716 s | 0.014248 s | 0.009660 s (-32.2%; +255.7%) | 0.009879 s (-30.7%; +263.7%) |
-| Testify External | `none` | 32 | 0.002940 s | 0.016444 s | 0.011059 s (-32.7%; +276.2%) | 0.010654 s (-35.2%; +262.4%) |
-| Testify External | `-race` | 4 | 1.008352 s | 1.041991 s | 1.022406 s (-1.9%; +1.4%) | 1.022081 s (-1.9%; +1.4%) |
-| Testify External | `-race` | 32 | 1.009078 s | 1.046242 s | 1.024275 s (-2.1%; +1.5%) | 1.024131 s (-2.1%; +1.5%) |
-| Testify External | `-cover` | 4 | 0.002880 s | 0.023010 s | 0.010401 s (-54.8%; +261.2%) | 0.010332 s (-55.1%; +258.8%) |
-| Testify External | `-cover` | 32 | 0.003031 s | 0.025533 s | 0.012098 s (-52.6%; +299.1%) | 0.011503 s (-54.9%; +279.5%) |
-| Testify External | `-coverpkg=./... -covermode=atomic` | 4 | 0.003078 s | 0.023386 s | 0.020097 s (-14.1%; +552.9%) | 0.020032 s (-14.3%; +550.8%) |
-| Testify External | `-coverpkg=./... -covermode=atomic` | 32 | 0.003307 s | 0.025663 s | 0.022204 s (-13.5%; +571.4%) | 0.021441 s (-16.5%; +548.3%) |
-| Testify External | `-race -coverpkg=./... -covermode=atomic` | 4 | 1.009322 s | 1.053227 s | 1.033897 s (-1.8%; +2.4%) | 1.034363 s (-1.8%; +2.5%) |
-| Testify External | `-race -coverpkg=./... -covermode=atomic` | 32 | 1.009809 s | 1.058201 s | 1.038764 s (-1.8%; +2.9%) | 1.038591 s (-1.9%; +2.9%) |
-| Testify External | `-coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 4 | 0.003702 s | 0.039288 s | 0.035951 s (-8.5%; +871.2%) | 0.037090 s (-5.6%; +902.0%) |
-| Testify External | `-coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 32 | 0.004002 s | 0.042201 s | 0.038650 s (-8.4%; +865.8%) | 0.040414 s (-4.2%; +909.8%) |
-| Testify External | `-race -coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 4 | 1.012068 s | 1.090319 s | 1.073952 s (-1.5%; +6.1%) | 1.083894 s (-0.6%; +7.1%) |
-| Testify External | `-race -coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 32 | 1.012989 s | 1.098761 s | 1.080224 s (-1.7%; +6.6%) | 1.089769 s (-0.8%; +7.6%) |
+| Chi | `-race` | 4 | 27.214190 s | 27.322207 s (+0.4%) | 27.304056 s (-0.1%; +0.3%) | 27.304624 s (-0.1%; +0.3%) |
+| Chi | `-race` | 32 | 27.218039 s | 27.324007 s (+0.4%) | 27.314174 s (-0.0%; +0.4%) | 27.289865 s (-0.1%; +0.3%) |
+| Chi | `-cover` | 4 | 26.136957 s | 26.229098 s (+0.4%) | 26.178705 s (-0.2%; +0.2%) | 26.185012 s (-0.2%; +0.2%) |
+| Chi | `-cover` | 32 | 26.140129 s | 26.233960 s (+0.4%) | 26.177565 s (-0.2%; +0.1%) | 26.163375 s (-0.3%; +0.1%) |
+| Chi | `-coverpkg=./... -covermode=atomic` | 4 | 26.139077 s | 26.788571 s (+2.5%) | 26.792990 s (+0.0%; +2.5%) | 26.854130 s (+0.2%; +2.7%) |
+| Chi | `-coverpkg=./... -covermode=atomic` | 32 | 26.143078 s | 26.843831 s (+2.7%) | 26.849861 s (+0.0%; +2.7%) | 26.924933 s (+0.3%; +3.0%) |
+| Chi | `-race -coverpkg=./... -covermode=atomic` | 4 | 27.227274 s | 28.864119 s (+6.0%) | 28.841073 s (-0.1%; +5.9%) | 29.179477 s (+1.1%; +7.2%) |
+| Chi | `-race -coverpkg=./... -covermode=atomic` | 32 | 27.233273 s | 28.933591 s (+6.2%) | 28.968658 s (+0.1%; +6.4%) | 29.473376 s (+1.9%; +8.2%) |
+| Testify Direct | `none` | 4 | 0.002768 s | 0.014293 s (+416.4%) | 0.009830 s (-31.2%; +255.2%) | 0.009817 s (-31.3%; +254.7%) |
+| Testify Direct | `none` | 32 | 0.003034 s | 0.016014 s (+427.8%) | 0.010971 s (-31.5%; +261.6%) | 0.010855 s (-32.2%; +257.7%) |
+| Testify Direct | `-race` | 4 | 1.008293 s | 1.041778 s (+3.3%) | 1.021986 s (-1.9%; +1.4%) | 1.021930 s (-1.9%; +1.4%) |
+| Testify Direct | `-race` | 32 | 1.008927 s | 1.045827 s (+3.7%) | 1.023457 s (-2.1%; +1.4%) | 1.023322 s (-2.2%; +1.4%) |
+| Testify Direct | `-cover` | 4 | 0.003040 s | 0.023040 s (+658.0%) | 0.010447 s (-54.7%; +243.7%) | 0.010673 s (-53.7%; +251.1%) |
+| Testify Direct | `-cover` | 32 | 0.003225 s | 0.025315 s (+685.0%) | 0.012056 s (-52.4%; +273.8%) | 0.011771 s (-53.5%; +265.0%) |
+| Testify Direct | `-coverpkg=./... -covermode=atomic` | 4 | 0.003020 s | 0.024021 s (+695.3%) | 0.019850 s (-17.4%; +557.2%) | 0.020071 s (-16.4%; +564.5%) |
+| Testify Direct | `-coverpkg=./... -covermode=atomic` | 32 | 0.003157 s | 0.026260 s (+731.7%) | 0.022349 s (-14.9%; +607.8%) | 0.021429 s (-18.4%; +578.7%) |
+| Testify Direct | `-race -coverpkg=./... -covermode=atomic` | 4 | 1.009339 s | 1.052694 s (+4.3%) | 1.033867 s (-1.8%; +2.4%) | 1.034081 s (-1.8%; +2.5%) |
+| Testify Direct | `-race -coverpkg=./... -covermode=atomic` | 32 | 1.009875 s | 1.057152 s (+4.7%) | 1.038497 s (-1.8%; +2.8%) | 1.037893 s (-1.8%; +2.8%) |
+| Testify Direct | `-coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 4 | 0.003584 s | 0.038847 s (+984.0%) | 0.035444 s (-8.8%; +889.1%) | 0.036915 s (-5.0%; +930.1%) |
+| Testify Direct | `-coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 32 | 0.003901 s | 0.041828 s (+972.2%) | 0.037961 s (-9.2%; +873.1%) | 0.040610 s (-2.9%; +940.9%) |
+| Testify Direct | `-race -coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 4 | 1.011706 s | 1.089557 s (+7.7%) | 1.073968 s (-1.4%; +6.2%) | 1.083518 s (-0.6%; +7.1%) |
+| Testify Direct | `-race -coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 32 | 1.012462 s | 1.097505 s (+8.4%) | 1.081431 s (-1.5%; +6.8%) | 1.090035 s (-0.7%; +7.7%) |
+| Testify External | `none` | 4 | 0.002716 s | 0.014248 s (+424.6%) | 0.009660 s (-32.2%; +255.7%) | 0.009879 s (-30.7%; +263.7%) |
+| Testify External | `none` | 32 | 0.002940 s | 0.016444 s (+459.4%) | 0.011059 s (-32.7%; +276.2%) | 0.010654 s (-35.2%; +262.4%) |
+| Testify External | `-race` | 4 | 1.008352 s | 1.041991 s (+3.3%) | 1.022406 s (-1.9%; +1.4%) | 1.022081 s (-1.9%; +1.4%) |
+| Testify External | `-race` | 32 | 1.009078 s | 1.046242 s (+3.7%) | 1.024275 s (-2.1%; +1.5%) | 1.024131 s (-2.1%; +1.5%) |
+| Testify External | `-cover` | 4 | 0.002880 s | 0.023010 s (+699.1%) | 0.010401 s (-54.8%; +261.2%) | 0.010332 s (-55.1%; +258.8%) |
+| Testify External | `-cover` | 32 | 0.003031 s | 0.025533 s (+742.3%) | 0.012098 s (-52.6%; +299.1%) | 0.011503 s (-54.9%; +279.5%) |
+| Testify External | `-coverpkg=./... -covermode=atomic` | 4 | 0.003078 s | 0.023386 s (+659.8%) | 0.020097 s (-14.1%; +552.9%) | 0.020032 s (-14.3%; +550.8%) |
+| Testify External | `-coverpkg=./... -covermode=atomic` | 32 | 0.003307 s | 0.025663 s (+676.0%) | 0.022204 s (-13.5%; +571.4%) | 0.021441 s (-16.5%; +548.3%) |
+| Testify External | `-race -coverpkg=./... -covermode=atomic` | 4 | 1.009322 s | 1.053227 s (+4.4%) | 1.033897 s (-1.8%; +2.4%) | 1.034363 s (-1.8%; +2.5%) |
+| Testify External | `-race -coverpkg=./... -covermode=atomic` | 32 | 1.009809 s | 1.058201 s (+4.8%) | 1.038764 s (-1.8%; +2.9%) | 1.038591 s (-1.9%; +2.9%) |
+| Testify External | `-coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 4 | 0.003702 s | 0.039288 s (+961.3%) | 0.035951 s (-8.5%; +871.2%) | 0.037090 s (-5.6%; +902.0%) |
+| Testify External | `-coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 32 | 0.004002 s | 0.042201 s (+954.5%) | 0.038650 s (-8.4%; +865.8%) | 0.040414 s (-4.2%; +909.8%) |
+| Testify External | `-race -coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 4 | 1.012068 s | 1.090319 s (+7.7%) | 1.073952 s (-1.5%; +6.1%) | 1.083894 s (-0.6%; +7.1%) |
+| Testify External | `-race -coverpkg=testing,github.com/stretchr/testify/suite -covermode=atomic` | 32 | 1.012989 s | 1.098761 s (+8.5%) | 1.080224 s (-1.7%; +6.6%) | 1.089769 s (-0.8%; +7.6%) |
 
 ## CPU, memory and dispersion
 

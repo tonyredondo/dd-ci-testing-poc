@@ -26,6 +26,19 @@ class RuntimeStatisticsTests(unittest.TestCase):
         self.assertEqual(native['wall_s']['max'],6.0)
         self.assertEqual(native['all_wall_s'][0],999.0)
 
+    def test_orchestrion_percentages_use_the_same_native_metric(self):
+        for row in self.rows:
+            if row['variant'] == 'orchestrion':
+                row['wall_s'] *= 1.5
+                row['peak_bytes'] *= 2
+        cell = refresh.runtime_statistics(self.rows, self.manifest)['fixture/4']
+        self.assertEqual(refresh.report.format_cell(cell, 'orchestrion', 'wall_s'),
+                         '6.000000 s (+50.0%)')
+        self.assertEqual(refresh.report.format_cell(cell, 'orchestrion', 'peak_bytes'),
+                         '0.0 MiB (+100.0%)')
+        cell['orchestrion'].update(valid=False, failed=1)
+        self.assertEqual(refresh.report.format_cell(cell, 'orchestrion', 'wall_s'), 'FAIL 1/6')
+
     def test_one_failed_run_invalidates_the_whole_comparative_cell(self):
         row=next(r for r in self.rows if r['variant']=='mini' and r['iteration']==0)
         row.update(validated_contract=False,validated_failure='test failed')

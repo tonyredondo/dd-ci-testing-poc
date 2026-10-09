@@ -158,7 +158,10 @@ def table_lines(manifest, summary, scenarios=None, cases=None):
                 for variant in variants(manifest):
                     median = cell[variant]["wall_s"]["median"]
                     text = f"{median:.3f} s"
-                    if variant in ("sdk", "mini") and "native" in cell and "orchestrion" in cell:
+                    if variant == "orchestrion" and "native" in cell:
+                        native = cell["native"]["wall_s"]["median"]
+                        text += f" ({100 * (median / native - 1):+.1f}%)"
+                    elif variant in ("sdk", "mini") and "native" in cell and "orchestrion" in cell:
                         reference = cell["orchestrion"]["wall_s"]["median"]
                         native = cell["native"]["wall_s"]["median"]
                         text += f" ({100 * (median / reference - 1):+.1f}%; {100 * (median / native - 1):+.1f}%)"
@@ -704,7 +707,7 @@ class Runner:
         m = self.manifest
         lines = ["# Compile-only measurements: " + ", ".join(LABELS[v] for v in self.variants), "",
                  f"POC `{m['source_head']}`; `{m['toolchain']}`; SDK `{m['sdk_version']}`; Orchestrion `{m['orchestrion_version']}`.", "",
-                 "Values are medians in seconds. POC percentages show the signed change against total Orchestrion wall time first, then against Native; both use unrounded medians.", "",
+                 "Values are medians in seconds. Orchestrion's percentage compares time against Native. POC percentages compare Orchestrion first, then Native; all use unrounded medians.", "",
                  "All variants compile with `go test -c -o <directory>/ -ldflags=-w ./...`. Test binaries are never run. The selected variants use the same prepared source and module graph. Orchestrion loads only the pinned SDK's testing aspects.", "",
                  "Builds run serially in rotating order. Each cold run has an empty Go build cache and no existing output. Downloads are disabled during timing; modules and OS page cache stay warm. Affinity, `GOMAXPROCS` and `-p` match the selected CPU count; manifest.json records logical CPU IDs and physical core topology.", "",
                  "Unchanged output reuse, forced linking and reachable edits are checked with tool traces. Final binaries are checked for the expected testing/Testify hooks and absence of DWARF. CPU and memory include daemons and nested builds through exclusive cgroups. Wall time ends at the top-level command's exit; drain wait is recorded separately.", "",

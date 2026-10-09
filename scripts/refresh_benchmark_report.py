@@ -143,6 +143,8 @@ def runtime_readme(directory, manifest, summary):
            'use the new source revision. Test inventories match Native; CI inventories use the',
            'recorded SDK reference. Native Examples absent from that reference are checked against',
            'the executable function/source table and added explicitly.','',
+           "Orchestrion's percentage compares time against Native. Mini's percentages compare",
+           'Orchestrion first, then Native. Positive values mean more time; negative values mean less.','',
            report.comparison_table(manifest,summary,'wall_s'),
            '## CPU, memory and dispersion','',
            '| Case | CPUs | Variant | Median (s) | Min-max (s) | CPU median (CPU-s) | Memory median (MiB) | Validation |',
@@ -225,7 +227,7 @@ def merge(args):
         'The other scenarios reuse unchanged output, force a fresh link, edit a reachable test body or edit an unused constant.\n\n'
         'Mini traces and symbols are checked again. Native and Orchestrion retain their original qualification. '
         'Those variants were not rerun. Dates differ, so small timing differences need the recorded ranges and uncertainty. '
-        'Percentages compare Orchestrion first, then Native. All time cells are seconds.\n')
+        "Orchestrion's percentage compares time against Native. Mini's percentages compare Orchestrion first, then Native. All time cells are seconds.\n")
     (output/'build/notes.md').write_text('The original convergence control is retained evidence for its collection date. It is not a new host-stability check.\n')
     build.report_command(argparse.Namespace(input=output/'build',output=None,check=False))
     for v in RETAINED:
@@ -315,6 +317,8 @@ def merge(args):
         'Three measured runs follow one warmup at each CPU count. Native and Orchestrion retain '
         'their original observations; Mini uses the new revision. Real CI events and telemetry '
         'are sent through the local EVP/telemetry proxy.\n\n'
+        "Orchestrion's percentage compares the same metric against Native. Mini's percentages "
+        'compare Orchestrion first, then Native.\n\n'
         +report.comparison_table(agent_manifest,agent_stats,'wall_s','agent')
         +'\n## Memory\n\n'+report.comparison_table(agent_manifest,agent_stats,'peak_bytes','agent'))
     (output/'README.md').write_text(
