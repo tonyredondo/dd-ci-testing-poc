@@ -181,7 +181,7 @@ missing test attributes in the comparator.
 Run from this checkout with the frozen reference available:
 
 ```sh
-go install github.com/DataDog/orchestrion@v1.13.2-0.20260917114356-5c24783fcd76
+go -C testdata/orchestrion build -mod=readonly -o "$(go env GOPATH)/bin/orchestrion" github.com/DataDog/orchestrion
 mkdir -p artifacts
 ORCHESTRION_BIN="$(go env GOPATH)/bin/orchestrion" \
   PARITY_REPORT_PATH="$PWD/artifacts/parity.json" \

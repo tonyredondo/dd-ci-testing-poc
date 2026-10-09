@@ -5,7 +5,12 @@ public dd-trace-go SDK, pinned to
 [main at 870449702d0a](https://github.com/DataDog/dd-trace-go/tree/870449702d0a0cea26a6223eefe2f0a198069d79).
 The reference is Orchestrion commit
 [5c24783fcd76](https://github.com/DataDog/orchestrion/commit/5c24783fcd76f00cd1ff21c418a6662785d6c811),
-installed as `v1.13.2-0.20260917114356-5c24783fcd76`.
+built as `v1.13.2-0.20260917114356-5c24783fcd76` from the locked
+[test tool module](../testdata/orchestrion/go.mod), with `x/tools v0.50.0`.
+CI uses the same Go toolchain for the reference build and the test build.
+That pairing lets both the standard-library importer and x/tools read the V5
+export format introduced by Go 1.27.2. The SDK reference and Orchestrion source
+revision stay pinned; the root module retains zero external dependencies.
 
 ## Architecture and dependency boundary
 

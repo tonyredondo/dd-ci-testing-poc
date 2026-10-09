@@ -129,7 +129,7 @@ regression gate, not evidence of every long-running fuzz workload or acceptance
 by a real Datadog intake.
 
 ```sh
-go install github.com/DataDog/orchestrion@v1.13.2-0.20260917114356-5c24783fcd76
+go -C testdata/orchestrion build -mod=readonly -o "$(go env GOPATH)/bin/orchestrion" github.com/DataDog/orchestrion
 ORCHESTRION_BIN="$(go env GOPATH)/bin/orchestrion" \
   PARITY_REPORT_PATH="$PWD/artifacts/parity.json" \
   go test -v -count=1 -timeout=30m ./integration
