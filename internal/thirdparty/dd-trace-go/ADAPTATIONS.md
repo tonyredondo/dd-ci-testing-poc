@@ -312,9 +312,10 @@ directory, and `RemovePackFiles` removes the directory after the upload.
 Before the first attempt, `packObjectsFolders` compares the filesystems of the
 temporary directory and the git directory: device numbers on Unix, volume names
 on Windows. When they differ, git could not move its pack, so it packs once, in
-the git directory, instead of repeating the whole pack after a failure. Where
-the filesystems cannot be compared, the temporary directory is still tried
-first. The git directory is now looked up before every packing, which adds one
+the git directory, instead of repeating the whole pack after a failure. The
+failed attempt also left git's temporary `tmp_idx_*` and `tmp_rev_*` files in
+the repository's `objects/pack` directory on every run. Where the filesystems
+cannot be compared, the temporary directory is still tried first. The git directory is now looked up before every packing, which adds one
 `git rev-parse` when the temporary directory works.
 
 Checks: `TestRemovePackFilesRemovesTemporaryDirectory`,
