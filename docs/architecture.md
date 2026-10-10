@@ -90,8 +90,15 @@ line directives. A generated file declares the private SDK hooks with
 `go:linkname`. For Mini, when testing declares its parallel-test counter, the
 file also registers the function that in-process retries use to record the end
 of a parallel attempt; nothing outside testing can reach that counter. Each
-selected package with tests receives a virtual external test file that
-blank-imports the chosen runtime.
+selected package with tests receives a virtual test file that imports the
+chosen runtime. It joins the package's internal tests when the package has no
+external test package, so Go compiles and vets no additional package. An
+external test package receives it instead, as does a package that the runtime
+itself imports, because only an external test package may import an importer
+of the package under test. With the internal placement, the runtime and its
+dependencies initialize before the package under test; the generated `init`
+follows the package's other files, and Mini's import name, `__dd_ci_runtime`,
+joins that package's scope.
 
 Existing overlays are merged before transformation, and every user `-overlay`
 spelling is replaced by the merged plan. Generated-path collisions, missing or

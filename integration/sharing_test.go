@@ -81,7 +81,8 @@ func TestSharedGeneratedFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := fmt.Sprintf("package %s_test\nimport _ %q\n", name, "github.com/DataDog/dd-trace-go/v2/civisibility")
+		// These packages have only internal tests, which receive the import.
+		want := fmt.Sprintf("package %s\nimport _ %q\n", name, "github.com/DataDog/dd-trace-go/v2/civisibility")
 		if string(data) != want || filepath.Dir(path) != plan.Dir {
 			t.Fatalf("backing content/ownership: %s: %q", path, data)
 		}

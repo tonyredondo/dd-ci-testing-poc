@@ -339,24 +339,23 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		validPackages = append(validPackages, p)
 	}
 	packages = validPackages
-	var native *goPackage
-	foundRuntime := false
+	var native, selectedRuntime *goPackage
 	for i := range packages {
 		p := &packages[i]
 		if p.ImportPath == "testing" {
 			native = p
 		}
 		if p.ImportPath == runtimePackage {
+			selectedRuntime = p
 			if runtime == SDK && (p.Module == nil || p.Module.Version != SDKVersion || p.Module.Replace != nil) {
 				return plan, fmt.Errorf("POC requires unmodified dd-trace-go %s", SDKVersion)
 			}
 			if debug != nil && p.Module != nil {
 				debug.printf("runtime module_version=%q replacement=%t", p.Module.Version, p.Module.Replace != nil)
 			}
-			foundRuntime = true
 		}
 	}
-	if !foundRuntime || native == nil {
+	if selectedRuntime == nil || native == nil {
 		return plan, fmt.Errorf("missing testing or selected CI runtime package")
 	}
 	rewritten, e := transformTesting(native, replacements, debug)
@@ -435,6 +434,15 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	if saved := plan.savedEnvironment(); saved != nil {
 		callerEnvironment = fmt.Sprintf("func init() { __dd_ci_runtime.RegisterTestEnvironment(\"%x\") }\n", sha256.Sum256([]byte(strings.Join(saved, "\x00"))))
 	}
+	// The runtime import joins the package's own tests when it has no external
+	// test package: a new one would be another package to compile and vet.
+	// Packages that the runtime imports keep it in an external test package,
+	// the only test package that may import them back.
+	runtimeImports := make(map[string]bool, len(selectedRuntime.Deps))
+	for _, path := range selectedRuntime.Deps {
+		runtimeImports[path] = true
+	}
+	internalImports := 0
 	for _, p := range packages {
 		if p.ImportPath == "testing" || p.ImportPath == runtimePackage || len(p.TestGoFiles)+len(p.XTestGoFiles) == 0 {
 			continue
@@ -442,17 +450,23 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		if p.Module == nil {
 			return plan, fmt.Errorf("stdlib tests are outside this POC: %s", p.ImportPath)
 		}
-		content := "package " + p.Name + "_test\nimport _ " + fmt.Sprintf("%q", runtimePackage) + "\n"
+		testPackage := p.Name + "_test"
+		if len(p.XTestGoFiles) == 0 && !runtimeImports[p.ImportPath] {
+			testPackage = p.Name
+			internalImports++
+		}
+		content := "package " + testPackage + "\nimport _ " + fmt.Sprintf("%q", runtimePackage) + "\n"
 		if runtime == Mini {
 			// The caller's compiler path identifies this package without baking
 			// its directory into the source. Identical packages still share files.
-			content = "package " + p.Name + "_test\nimport __dd_ci_runtime " + fmt.Sprintf("%q", runtimePackage) + "\nfunc init() { __dd_ci_runtime.RegisterTestPackage() }\n" + callerEnvironment
+			content = "package " + testPackage + "\nimport __dd_ci_runtime " + fmt.Sprintf("%q", runtimePackage) + "\nfunc init() { __dd_ci_runtime.RegisterTestPackage() }\n" + callerEnvironment
 		}
 		if e = add(filepath.Join(p.Dir, "zz_dd_ci_visibility_test.go"), content); e != nil {
 			return plan, e
 		}
 		plan.TestPackages++
 	}
+	debug.printf("runtime imports internal_test_packages=%d external_test_packages=%d", internalImports, plan.TestPackages-internalImports)
 	testifyPhase := debug.start("instrument testify")
 	testify, warning, e := prepareTestifyPackage(libraries[instrument.TestifySuiteImport], replacements, runtime, temp)
 	testifyPhase.finish(e)

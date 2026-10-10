@@ -62,6 +62,11 @@ inputs have different bytes and receive their own validation.
 
 Generated files are immutable and shared by identical content within one plan.
 Many packages with the same package name can share an import-only backing file.
+That file joins the package's internal tests when it has no external test
+package, as is usual. An external test package of its own would be one more
+compile and vet per test package whenever Go cannot reuse it, for example with
+an empty build cache. Building 61 test packages, 59 of them with only internal
+tests, took 180 compiles and 120 vets that way, and 121 and 61 now.
 The logical overlay entry still exists for every selected package, so metadata
 and conflict checks remain correct. Memory, overlay entries and package
 discovery can still grow with package count.

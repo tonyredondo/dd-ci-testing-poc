@@ -17,8 +17,9 @@ revision stay pinned; the root module retains zero external dependencies.
 The driver imports only the Go standard library and its own packages. A targeted
 `go list` supplies native `testing`, runtime and selected client-package metadata.
 Preparation parses `testing` with `go/parser` and writes an overlay containing
-changed sources, private hook declarations and an external runtime import for
-each selected test package. Native Go performs the build.
+changed sources, private hook declarations and a runtime import for each
+selected test package, in its internal tests unless it has an external test
+package. Native Go performs the build.
 
 Testify and goleak share library discovery. Known reachability without unknown
 test imports uses `go list -find`; unknown imports require `-deps` to discover
@@ -40,7 +41,7 @@ formatted result, so String methods run once. The SDK's ownership marker retains
 its existing name. Runtime retries, skip policies and finalization are owned by
 the selected runtime. This POC depends on its private hook ABI and is intentionally version-pinned.
 
-Virtual external test files anchor the public SDK import without editing project
+Virtual test files anchor the runtime import without editing project
 sources. Temporary plans are invocation-local and removed after Go exits. There
 is no additional persistent instrumentation cache. Test-result caching remains
 Go's choice: explicitly select packages for result caching, and use `-count=1`
