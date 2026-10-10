@@ -150,7 +150,7 @@ Only declared differences are normalized:
 
 | Mini location | SDK location | Internal function |
 | --- | --- | --- |
-| `testing.go:870` | `testing.go:864` | `(*M).executeInternalTest.func1` |
+| `testing.go:874` | `testing.go:864` | `(*M).executeInternalTest.func1` |
 | `instrumentation_orchestrion.go:427` | `instrumentation_orchestrion.go:424` | `instrumentTestingTFuncWithSourceOptions.func1.1` |
 | `instrumentation_orchestrion.go:433` | `instrumentation_orchestrion.go:430` | `instrumentTestingTFuncWithSourceOptions.func1` |
 | `instrumentation.go:775` | `instrumentation.go:775` | `applyAdditionalFeaturesToTestFunc.func2` |
@@ -176,6 +176,15 @@ and the dd-trace-go main branch at `d27b94332308` still has the SDK's patterns. 
 `TestMiniTestifyDuplicateIdentity` assert those expected payloads directly;
 the differential comparator does not hide either difference. They run with the
 complete suite on every CI platform.
+
+Mini counts only the tests, examples and fuzz seeds that `-test.run` and
+`-test.skip` let `M.Run` start. A suite or module whose other workloads are
+filtered out ends after its last selected workload. The SDK counts every
+workload, so such suites and modules end only at exit, after the session.
+The comparator ignores timestamps; `TestMiniFilteredTestsFinishSuiteBeforeSession`
+asserts the order directly. With `-test.count` above 1 or several `-test.cpu`
+values, Mini counts every workload like the SDK, so repeated-run scenarios
+keep the SDK's suite and module events.
 
 Mini also reports the declaration start of a confirmed named function, even
 when its optimized entry PC points at the closing brace. The constant-sum

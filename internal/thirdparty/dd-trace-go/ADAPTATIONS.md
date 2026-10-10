@@ -731,6 +731,46 @@ Checks: `TestCaptureFormattedErrorKeepsFirstError`,
 `BenchmarkCaptureFormattedErrorRepeated`, and the parity groups' error-stack
 comparisons.
 
+## Suites and modules of filtered tests
+
+Each suite and module counts the workloads that have not finished, and closes
+when its count returns to zero. Upstream counts every test, example and fuzz
+target when `M.Run` starts, including those that `-test.run` or `-test.skip`
+excludes. Those never start, so their suites and modules stayed open until the
+close actions at exit, which run after the session closes: their end times were
+the end of the process.
+
+[`civisibility/integrations/gotesting/test_selection.go`](civisibility/integrations/gotesting/test_selection.go)
+ports testing's matcher (`splitRegexp`, `rewrite`, simple and alternation
+matches) and applies it as `matcher.fullName` does to top-level names: the
+filter must match, and a skip pattern excludes a name only when it matches
+completely, so `-test.skip=TestA/sub` still starts `TestA`. Slashes and bars
+inside brackets or parentheses do not split. `instrumentInternalTests` and
+`instrumentInternalExamples` count only selected names; fuzz targets are
+counted when `-test.run` selects their seeds or whenever `-test.fuzz` is set.
+Benchmarks are unchanged.
+
+The flags are read at the start of `M.Run`, before it parses them: parsed
+values are used when `TestMain` already called `flag.Parse`; otherwise the
+arguments are parsed into copies of every registered flag, so no flag changes
+and nothing is printed. Everything is counted, as upstream does, when the
+binary does not match names with `testing/internal/testdeps`, a flag is
+missing, the arguments do not parse or a pattern does not compile. In those
+cases testing either matches differently or exits before running tests.
+Everything is also counted when `-test.count` is not 1 or `-test.cpu` lists
+several values. Tests then run in several rounds but are counted once, so
+suites and modules close after the first round and upstream starts new suites
+for later rounds; counting only the selected tests would change those
+repeated-run events. Suites with filtered tests still stay open until exit in
+such runs.
+
+Checks: `TestTestingSelectionMatchesTestingBinary` compiles a fixture and
+compares the selection with the tests, examples and fuzz seeds a real binary
+runs for 27 `-test.run`/`-test.skip` pairs; `TestTestingFlagValuesMatchFlagParse`
+compares the copies with `flag.Parse`; `TestMiniFilteredTestsFinishSuiteBeforeSession`
+checks that a suite with filtered tests ends before the session. Re-check
+testing's `match.go` when Go changes.
+
 ## Lazy stack classification
 
 [`stacktrace/stacktrace.go`](stacktrace/stacktrace.go) constructs its immutable

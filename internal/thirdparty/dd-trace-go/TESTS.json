@@ -682,6 +682,14 @@
     {
       "path": "integration/test_command_test.go",
       "purpose": "The Fuzz/Examples comparator aligns a Mini test.command with the longest SDK command that is its argument prefix, requires Mini's exact form for the fixture invocation and rejects retained volatile flags."
+    },
+    {
+      "path": "civisibility/integrations/gotesting/test_selection_test.go",
+      "purpose": "The -test.run/-test.skip selection agrees with the top-level tests, examples and fuzz seeds a compiled fixture binary runs for 27 pattern pairs; flag copies read the values flag.Parse sets without changing flags."
+    },
+    {
+      "path": "integration/mini_wire_test.go",
+      "purpose": "TestMiniFilteredTestsFinishSuiteBeforeSession: with tests excluded by -test.run, the selected tests' suite and module end before the session."
     }
   ],
   "local_delivery_checks": [
@@ -707,6 +715,9 @@
     },
     {
       "purpose": "Map only Mini executeInternalTest.func1 testing.go:870 to SDK testing.go:864; other library locations and application frames stay strict."
+    },
+    {
+      "purpose": "Map only Mini executeInternalTest.func1 testing.go:874 to SDK testing.go:864; other library locations and application frames stay strict."
     }
   ],
   "local_common_metadata_checks": [

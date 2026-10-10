@@ -111,6 +111,8 @@ type (
 		stickyExitCode       int
 		deferredFailure      bool
 		failfastLatched      bool
+		// selection is the workloads M.Run will start; nil selects all.
+		selection *testingSelection
 	}
 
 	// testIdentity represents the fully-qualified identity of a Go test or subtest.
@@ -391,6 +393,7 @@ func instrumentTestingMWithOptions(m *testing.M, wrapperOpts additionalFeatureWr
 	}
 
 	ddm := (*M)(m)
+	claim.selection = newTestingSelection(m)
 
 	// Instrument the internal tests for CI visibility.
 	ddm.instrumentInternalTests(getInternalTestArray(m), wrapperOpts, claim)
@@ -647,11 +650,12 @@ func (ddm *M) instrumentInternalTests(internalTests *[]testing.InternalTest, wra
 			},
 		}
 
-		// Increment the test count in the module.
-		addModulesCounters(moduleName, 1)
-
-		// Increment the test count in the suite.
-		addSuitesCounters(suiteName, 1)
+		// Count only the tests that -test.run and -test.skip let M.Run start: the
+		// suite and module close when their counts return to zero.
+		if claim.selectionOrAll().selects(test.Name) {
+			addModulesCounters(moduleName, 1)
+			addSuitesCounters(suiteName, 1)
+		}
 
 		testInfos[idx] = testInfo
 	}
