@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 )
@@ -25,6 +27,33 @@ func TestStopFlushesAggregatedErrorLogs(t *testing.T) {
 		}
 	}
 	t.Fatalf("aggregated error not flushed at Stop: %q", recorder.Logs())
+}
+
+// Per-test admission, coverage processing and the CI writers ask cidelivery
+// for the mode. It must stay the runtime client's even if a test changes the
+// environment variable, and follow the environment again after Stop.
+func TestStartFixesDeliveryModeUntilStop(t *testing.T) {
+	previous := active.Load()
+	t.Cleanup(func() { active.Store(previous) })
+	t.Setenv("DD_TRACE_AGENT_URL", "http://127.0.0.1:9")
+	for _, deferred := range []bool{false, true} {
+		t.Run(fmt.Sprintf("deferred=%t", deferred), func(t *testing.T) {
+			t.Setenv(cidelivery.DeferredEnv, strconv.FormatBool(deferred))
+			Start()
+			client := active.Load()
+			if client == nil || client.deferUntilIdle != deferred {
+				t.Fatal("runtime client did not start in the selected mode")
+			}
+			t.Setenv(cidelivery.DeferredEnv, strconv.FormatBool(!deferred))
+			if cidelivery.Enabled() != deferred {
+				t.Fatal("a later environment change overrode the client's mode")
+			}
+			Stop()
+			if cidelivery.Enabled() != !deferred {
+				t.Fatal("mode stayed fixed after Stop")
+			}
+		})
+	}
 }
 
 func TestRuntimeDeliveryDiagnostics(t *testing.T) {

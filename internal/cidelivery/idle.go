@@ -8,14 +8,50 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 )
 
 const DeferredEnv = "DD_CIVISIBILITY_DEFERRED_DELIVERY"
 
+// Delivery modes for fixedMode. modeEnvironment reads DeferredEnv.
+const (
+	modeEnvironment uint32 = iota
+	modeOrdinary
+	modeDeferred
+)
+
+// fixedMode holds the runtime client's delivery mode while that client is
+// active. The client reads DeferredEnv once, at startup; test admission,
+// coverage processing and the other CI writers must keep agreeing with it even
+// if a test changes the variable later, for example with t.Setenv.
+var fixedMode atomic.Uint32
+
+// Enabled reports whether deferred delivery is selected: the runtime client's
+// mode while it is active, otherwise the current value of DeferredEnv.
 func Enabled() bool {
+	switch fixedMode.Load() {
+	case modeOrdinary:
+		return false
+	case modeDeferred:
+		return true
+	}
 	v, _ := strconv.ParseBool(os.Getenv(DeferredEnv))
 	return v
 }
+
+// FixMode makes Enabled report the runtime client's mode until ReleaseMode.
+// Explicit clients do not call it; they own their delivery independently.
+func FixMode(deferred bool) {
+	mode := modeOrdinary
+	if deferred {
+		mode = modeDeferred
+	}
+	fixedMode.Store(mode)
+}
+
+// ReleaseMode returns Enabled to reading DeferredEnv after the runtime client
+// has closed.
+func ReleaseMode() { fixedMode.Store(modeEnvironment) }
 
 // Coordinator keeps delivery outside test bodies and their cleanup callbacks.
 // Buffered work may grow for the lifetime of a parallel group: waiting for an

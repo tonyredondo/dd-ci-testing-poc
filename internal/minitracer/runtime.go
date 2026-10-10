@@ -69,6 +69,9 @@ func Start(options ...StartOption) {
 		log.Error("CI mini tracer could not start: %s", err.Error())
 		return
 	}
+	// Test admission and the other CI writers follow this client's mode, even
+	// if a test changes the environment variable later.
+	cidelivery.FixMode(config.DeferUntilIdle)
 	active.Store(client)
 }
 func StartSpanFromContext(ctx context.Context, name string, options ...StartSpanOption) (*Span, context.Context) {
@@ -111,6 +114,7 @@ func Stop() {
 		if dropped := c.DroppedEvents(); dropped != 0 {
 			log.Error("CI mini tracer lost %d events", dropped)
 		}
+		cidelivery.ReleaseMode()
 	}
 	log.Flush()
 }
