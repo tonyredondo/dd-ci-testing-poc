@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
@@ -53,6 +54,35 @@ func TestStartFixesDeliveryModeUntilStop(t *testing.T) {
 				t.Fatal("mode stayed fixed after Stop")
 			}
 		})
+	}
+}
+
+// A client started while another is still closing reads the environment, and
+// the earlier client's release leaves the newer mode fixed.
+func TestRestartKeepsNewerDeliveryMode(t *testing.T) {
+	previous := active.Load()
+	t.Cleanup(func() { active.Store(previous) })
+	t.Setenv("DD_TRACE_AGENT_URL", "http://127.0.0.1:9")
+	t.Setenv(cidelivery.DeferredEnv, "false")
+	Start()
+	earlier := active.Load()
+	t.Setenv(cidelivery.DeferredEnv, "true")
+	Start()
+	later := active.Load()
+	if earlier == nil || later == nil || later == earlier || !later.deferUntilIdle {
+		t.Fatal("restarted client did not read the environment")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_ = earlier.Close(ctx)
+	earlier.releaseMode()
+	t.Setenv(cidelivery.DeferredEnv, "false")
+	if !cidelivery.Enabled() {
+		t.Fatal("an earlier client's release replaced the newer client's mode")
+	}
+	Stop()
+	if cidelivery.Enabled() {
+		t.Fatal("mode stayed fixed after Stop")
 	}
 }
 
