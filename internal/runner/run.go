@@ -496,11 +496,10 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		if goleak != nil {
 			plan.goleak = true
 			var flag string
-			flag, e = goleakCacheFlag(dir, opts, libraries[instrument.GoleakImport], goleak.Fingerprint)
-			plan.compilerCache = append(plan.compilerCache, flag)
-			if e != nil {
+			if flag, e = goleakCacheFlag(dir, opts, libraries[instrument.GoleakImport], goleak.Fingerprint); e != nil {
 				return plan, e
 			}
+			plan.compilerCache = append(plan.compilerCache, flag)
 		}
 	}
 	plan.coverOverlay = needsCoverOverlay(dir, opts, packages, []goPackage{*native})
