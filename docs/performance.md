@@ -182,6 +182,7 @@ invocation.
 | Literal Testify prefix check | Compiling `^Test` for each suite method | Match exactly the same method names |
 | Source parser without object resolution | Unused identifier objects in metadata lookup | Retain ITR comments, function ranges and parse errors |
 | Direct high trace-ID hex encoding | General-purpose integer formatting | Retain 16 lowercase hex digits, including leading zeros |
+| `math/rand/v2` trace and span IDs | A `crypto/rand` read, a system call on some platforms, for every event; parallel tests serialized on it | Unique nonzero 63-bit span IDs; a root span ID is the trace ID's low half; a child differs from its parent |
 | Lazy classification tries | Eager construction of stack-prefix tables | Preserve internal filtering, third-party matching and redaction; publish immutable tries once |
 | Internal codec/platform subsets | External runtime module requirements | Preserve original semantics, licenses and source provenance |
 

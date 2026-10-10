@@ -211,8 +211,9 @@ func TestRequest(t *testing.T) {
 ```
 
 W3C `traceparent`/`tracestate` and Datadog headers carry the full 128-bit trace ID
-and active span ID. Generated span IDs use 63 bits, as in the SDK. Sampling
-priority is propagation metadata; Mini records every CI event.
+and active span ID. Generated span IDs use 63 bits and come from `math/rand/v2`,
+as in the SDK: they are unique, not secret. Sampling priority is propagation
+metadata; Mini records every CI event.
 
 For a receiving APM tracer to use that identity, extract the carrier with its
 own API. Its private context value differs from Mini's. In a combined binary,
