@@ -121,6 +121,10 @@ replacement paths. The effective Mini sources become a main module in that
 workspace. Existing requirements and local or remote replacements retain their
 selected sources; absent runtimes use the CLI sources or its exact published
 version. The original workspace, checksums and module files stay unchanged.
+When the workspace does not select Mini, a `use` module's own replacement of
+Mini is read with `go mod edit -json`. Only module files that mention Mini's
+path, or contain a backslash that could escape it, need that command; those
+commands run concurrently, and their results apply in workspace order.
 
 `ddto` uses a vendor directory only where Go would: with `-mod=vendor`, or by
 default when the `go` directive is at least 1.14 and `modules.txt` was written
