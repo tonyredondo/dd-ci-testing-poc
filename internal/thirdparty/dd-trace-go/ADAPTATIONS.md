@@ -145,6 +145,48 @@ ordinary/deferred delivery and telemetry off/on. Its Mini process changes the
 global local zone; the SDK reference runs the same application paths without
 that mutation because its background clocks are not safe under it.
 
+## Per-test profile subtraction
+
+`readCoverProfile` and `coveredFilesBetween` in
+[`civisibility/integrations/gotesting/coverage/test_coverage.go`](civisibility/integrations/gotesting/coverage/test_coverage.go)
+replace upstream `parseCoverProfile` and `getFilesCovered`. Upstream split
+each profile line into strings, keyed every block of both profiles with
+`fmt.Sprintf`, resolved the relative path of every covered block and regrew a
+file's bitmap whenever a block ended further down.
+
+- The profile is read at once and each line is parsed in place. Only a file
+  name that differs from the previous line's is copied. The read is sized with
+  `Seek`, not `Stat` as in `os.ReadFile`: `Stat` converts timestamps with
+  `time.Local`, which coverage workers must not read while a test may change it. The parser accepts and
+  skips the same lines as `strings.Fields`, `strings.Split` and
+  `strconv.Atoi` did: signs, extra fields and separators, Unicode whitespace,
+  invalid UTF-8, `\r\n` and the scanner's maximum line length.
+- Blocks keep their order. testing writes a binary's profiles with the same
+  blocks in the same order, each file in one run sorted by position. When both
+  profiles have that layout, block `i` is compared with block `i`. Otherwise,
+  for example with a repeated position, blocks are matched by a struct key with
+  upstream's rules: the last duplicate before block wins, and an after block
+  without a match counts when its count is positive.
+- Each file name is resolved to its relative name once, still only when one of
+  its blocks is covered. Files with the same relative name share a bitmap,
+  allocated once at the largest covered end line.
+
+Results are identical: the test file first, then sorted names with the same
+bitmap bytes. Upstream panicked on a covered block that started below line 1;
+lines below 1 are now skipped. With 5,000 blocks, half of them covered,
+reading both profiles and subtracting them takes about 2.4 ms instead of
+4.9–8 ms on a loaded darwin/arm64 host (one CPU, medians), 367 allocations
+instead of 81,140, and 1.35 MB instead of 4.58 MB. File reads dominate what
+remains.
+
+Checks: `TestReadCoverProfileMatchesSDKParser` and
+`TestCoveredFilesMatchesSDK` compare generated and hand-written profiles with a
+copy of the upstream functions, covering both comparison paths, merged names,
+repeated and reordered blocks and odd ranges; the ported `test_coverage_test.go`
+assertions run unchanged through adapters. `BenchmarkCoverageProfileDiff`
+measures both algorithms. Integration: `TestMiniParallelAndRetryCoverageAttribution`,
+`TestMiniCoverageWithGlobalTimeChanges` and the coverage parity cases.
+
 ## Coverage module identity
 
 Upstream `InitializeCoverage` in

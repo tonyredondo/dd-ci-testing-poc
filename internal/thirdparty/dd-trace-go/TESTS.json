@@ -636,6 +636,10 @@
     {
       "path": "civisibility/integrations/gotesting/test_metadata_store_test.go",
       "purpose": "The concurrent execution-metadata store keeps map semantics: pointer keys, replacement on a second create, isolated deletes; concurrent create/read/replace/delete under -race."
+    },
+    {
+      "path": "civisibility/integrations/gotesting/coverage/profile_diff_test.go",
+      "purpose": "Ordered profile parsing and index/key subtraction return the upstream algorithm's blocks, covered files and bitmaps for generated and hand-written profiles; adapters run the ported coverage assertions unchanged."
     }
   ],
   "local_compatibility_checks": [
