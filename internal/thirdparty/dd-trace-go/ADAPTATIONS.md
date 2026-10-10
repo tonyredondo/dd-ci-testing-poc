@@ -345,6 +345,36 @@ oracle on a second clone of the same remote must leave the same refs and base
 SHA) and `TestCheckAndFetchBranchFetchesPullRequestBase` run real git against
 a `file://` remote. `TestGitRecorderHelperProcess` records the commands.
 
+## Pull-request head commit
+
+Upstream `fetchCommitData` in [`civisibility/utils/git.go`](civisibility/utils/git.go)
+reads the pull-request head commit that the CI provider names, for example
+GitHub's `pull_request.head.sha` or GitLab's merge-request source SHA. In a
+shallow checkout it first looks up the remote and runs `git fetch
+--update-shallow` of that commit, synchronously during bootstrap. Nothing
+checked whether the commit was already present, and a shallow checkout stays
+shallow after the fetch, so every test binary repeated the network fetch.
+
+After the existing shallow and Git-version checks, `commitObjectExists` runs
+`git cat-file -e <sha>^{commit}`. When it succeeds, the remote lookup and fetch
+are skipped and `git show` reads the commit as before. A missing commit is
+fetched exactly as upstream does. The `cat-file` command records no command
+telemetry; the skipped remote lookup and `fetch` are no longer counted. In a
+partial clone, git may fetch a missing object while resolving `^{commit}`.
+
+Parallel binaries that both miss the commit still fetch concurrently and can
+contend for `.git/shallow.lock`; the upstream tests already tolerate that
+error. The check removes the fetch from every binary that starts after one
+succeeded.
+
+Measured with a depth-1 GitHub clone over SSH, a GitHub pull-request event
+whose head commit is present and one package, 5 alternating runs: bootstrap
+807 ms -> 186 ms and test binary duration 1.34 s -> 0.81 s (medians); the
+fetch alone took 616-1024 ms.
+
+Checks: `TestFetchCommitDataFetchesOnlyMissingCommits` reads a present head
+commit without a fetch and still fetches a missing one, with real git.
+
 ## Source metadata parsing
 
 [`civisibility/integrations/manual_api_sourcecache.go`](civisibility/integrations/manual_api_sourcecache.go)

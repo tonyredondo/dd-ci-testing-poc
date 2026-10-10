@@ -361,8 +361,10 @@ Git command counters also differ where Mini avoids repeated work. Base-branch
 discovery for impacted tests lists every missing candidate branch with one
 `git ls-remote`, so `git.command` with `command:ls_remote_heads` counts one per
 discovery instead of one per missing branch, and fetches that git would reject
-are not run or counted. The parity fixtures supply the pull-request base commit,
-so they do not run this discovery.
+are not run or counted. A shallow checkout that already has the provider's
+pull-request head commit reads it without the remote lookup and `fetch`, so
+those commands are not counted either. The parity fixtures supply the
+pull-request base commit and no head commit, so they run neither path.
 
 SDK and Mini increment `endpoint_payload.dropped` once per abandoned batch.
 Mini keeps a failed `Flush` batch for recovery while open; final `Close` failure

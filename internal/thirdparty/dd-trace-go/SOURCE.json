@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "56d95de66cc72e29a3ab2897f8f0f009f48c4b0af46b5bec6fdf21717cd82ea9",
+      "sha256": "07c395b52d8e04d4da6bb8f9b1add7096c60cbd5185b46fe81a8ee001120a03b",
       "role": "local"
     },
     {
@@ -35,7 +35,7 @@
     },
     {
       "path": "TESTS.json",
-      "sha256": "fa280eff40761a748bbe8d0b1e6f305c1a92838b84dbdefa1a92e993f2a67b83",
+      "sha256": "5a88f780d99e67830ba3b0deff140223029058f6c54876526353e77afd525982",
       "role": "local"
     },
     {
@@ -1027,7 +1027,7 @@
     },
     {
       "path": "civisibility/utils/git.go",
-      "sha256": "2b433c4b78c63f07353310f511c60806a5b2e9906edfadb4f340d5551e5ab7cb",
+      "sha256": "b8c5310e40e53595551d68980c4a422a688b85bc2dc7ea0a1586fd6de19c4701",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/git.go",
       "source_sha256": "f146aed5bbd7a350309021e1546a931128db8a46bf637dee0b4407bcd78c08ab"
@@ -1055,6 +1055,11 @@
     {
       "path": "civisibility/utils/git_base_branch_test.go",
       "sha256": "3807c17c59bbbab10997edddb015375734d8e5e5b02163e0ed659d0119feebfd",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/utils/git_head_commit_test.go",
+      "sha256": "4707ff0519362851e929603e1780b6e359d815a79ea35d2e40814dcfe5baabe5",
       "role": "local"
     },
     {

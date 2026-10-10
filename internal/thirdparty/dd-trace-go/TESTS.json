@@ -620,6 +620,10 @@
     {
       "path": "civisibility/utils/git_base_branch_test.go",
       "purpose": "Base-branch discovery lists every missing candidate with one exact refs/heads ls-remote and fetches only existing branches in order; a per-branch upstream oracle on a second clone leaves the same remote-tracking refs and base SHA."
+    },
+    {
+      "path": "civisibility/utils/git_head_commit_test.go",
+      "purpose": "A shallow checkout reads a present pull-request head commit without a remote lookup or fetch and still fetches a missing one, with real git."
     }
   ],
   "local_compatibility_checks": [
