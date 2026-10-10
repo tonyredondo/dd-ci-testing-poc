@@ -169,29 +169,37 @@ func TestPackageGraphMatchesDeps(t *testing.T) {
 		t.Fatal(err)
 	}
 	patterns := []string{"./internal/runner", "./testopt", "os/user", "net/http", "testing"}
-	cmd := exec.Command("go", append([]string{"list", "-e", "-deps", "-json=ImportPath,DepOnly,Imports"}, patterns...)...)
-	cmd.Dir = root
-	listed, err := readPackages(t.Context(), cmd, "graph")
-	if err != nil {
-		t.Fatal(err)
-	}
-	graph := newPackageGraph(listed)
-	cmd = exec.Command("go", append([]string{"list", "-e", "-f", "{{.ImportPath}} {{join .Deps \" \"}}"}, patterns[0:]...)...)
-	cmd.Dir = root
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		fields := strings.Fields(line)
-		p := graph[fields[0]]
-		if p == nil || p.DepOnly {
-			t.Fatalf("%s is not a named package of the graph", fields[0])
-		}
-		got := slices.Sorted(maps.Keys(graph.imported(p)))
-		want := slices.Sorted(slices.Values(fields[1:]))
-		if !slices.Equal(got, want) {
-			t.Fatalf("%s: graph closure differs from Deps\n%v\n%v", fields[0], got, want)
-		}
+	// Linux with cgo adds the implicit imports of net and os/user, which other
+	// platforms build without cgo; go list needs no C compiler for them.
+	for _, env := range [][]string{nil, {"GOOS=linux", "GOARCH=amd64", "CGO_ENABLED=1"}} {
+		t.Run(strings.Join(append([]string{"host"}, env...), ","), func(t *testing.T) {
+			goList := func(args ...string) *exec.Cmd {
+				cmd := exec.Command("go", append(args, patterns...)...)
+				cmd.Dir = root
+				cmd.Env = append(os.Environ(), env...)
+				return cmd
+			}
+			listed, err := readPackages(t.Context(), goList("list", "-e", "-deps", "-json=ImportPath,DepOnly,Imports"), "graph")
+			if err != nil {
+				t.Fatal(err)
+			}
+			graph := newPackageGraph(listed)
+			out, err := goList("list", "-e", "-f", "{{.ImportPath}} {{join .Deps \" \"}}").Output()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+				fields := strings.Fields(line)
+				p := graph[fields[0]]
+				if p == nil || p.DepOnly {
+					t.Fatalf("%s is not a named package of the graph", fields[0])
+				}
+				got := slices.Sorted(maps.Keys(graph.imported(p)))
+				want := slices.Sorted(slices.Values(fields[1:]))
+				if !slices.Equal(got, want) {
+					t.Fatalf("%s: graph closure differs from Deps\n%v\n%v", fields[0], got, want)
+				}
+			}
+		})
 	}
 }
