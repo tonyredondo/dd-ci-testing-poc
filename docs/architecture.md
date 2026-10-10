@@ -131,7 +131,9 @@ and source ownership are described in [Testify instrumentation](testify.md).
 Each rewritten SDK package has its own compiler marker. A transitive marker
 through `testing` is insufficient when Go reuses unchanged dependency export data.
 The wrapper removes these markers before invoking the compiler; user flags stay
-intact. Goleak's package-only cache marker, delivery pause and exact worker filters are
+intact. Go applies a package's flags to its test variants too: the internal
+test variant compiles the package's sources, which receive the same edits, and
+its external test package and test main only lose the marker. Goleak's package-only cache marker, delivery pause and exact worker filters are
 described in [delivery and goleak](delivery.md).
 
 The plan lives for one invocation. Identical generated content shares a backing
