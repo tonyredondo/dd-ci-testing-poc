@@ -654,6 +654,10 @@
     {
       "path": "civisibility/integrations/logs/logs_hostname_test.go",
       "purpose": "Logs initialization in a fresh process uses os.Hostname and starts no hostname-discovery goroutine for goleak to report."
+    },
+    {
+      "path": "civisibility/utils/git_safe_directory_test.go",
+      "purpose": "safe.directory names the checkout root of a repository, a linked worktree or a submodule, whose .git is a file."
     }
   ],
   "local_delivery_checks": [

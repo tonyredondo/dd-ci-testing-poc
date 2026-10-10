@@ -811,7 +811,9 @@ func gitCommonDir() string {
 	return dir
 }
 
-// getParentGitFolder searches from the given directory upwards to find the nearest .git directory.
+// getParentGitFolder searches from the given directory upwards to find the nearest .git entry.
+// A linked worktree or submodule has a .git file that points to its git directory;
+// like codeownership.findGitRoot, accept it so the checkout root is still found.
 func getParentGitFolder(innerFolder string) (string, error) {
 	if innerFolder == "" {
 		return "", nil
@@ -821,7 +823,7 @@ func getParentGitFolder(innerFolder string) (string, error) {
 	for {
 		gitDirPath := filepath.Join(dir, ".git")
 		info, err := os.Stat(gitDirPath)
-		if err == nil && info.IsDir() {
+		if err == nil && (info.IsDir() || info.Mode().IsRegular()) {
 			return gitDirPath, nil
 		}
 		if err != nil && !os.IsNotExist(err) {

@@ -421,6 +421,23 @@ might have cached. Telemetry still uses `hostname.Get()` only when
 Checks: `TestInitializeUsesOSHostnameWithoutProbes` initializes logs in a fresh
 process, requires the OS hostname and finds no hostname-discovery goroutine.
 
+## Git safe.directory for linked checkouts
+
+Upstream `execGit` in [`civisibility/utils/git.go`](civisibility/utils/git.go)
+passes `-c safe.directory=<root>` so git accepts a checkout owned by another
+user, which is common in CI containers. `getParentGitFolder` found that root
+only through a `.git` directory. A linked worktree or a submodule has a `.git`
+file instead: a worktree got no `safe.directory`, and a submodule got its
+superproject's root. When ownership differed, git refused with "dubious
+ownership" and the Git metadata was lost.
+
+Here a regular `.git` file also identifies the checkout root, as
+`codeownership.findGitRoot` already accepts. The root of a worktree or
+submodule is the directory git names in its `safe.directory` advice.
+
+Checks: `TestSafeDirectoryConfigAcceptsGitFiles` resolves the root from a
+nested directory of a repository, a linked worktree and a submodule.
+
 ## Source metadata parsing
 
 [`civisibility/integrations/manual_api_sourcecache.go`](civisibility/integrations/manual_api_sourcecache.go)
