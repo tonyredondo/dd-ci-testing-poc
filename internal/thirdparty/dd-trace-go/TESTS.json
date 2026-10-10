@@ -615,7 +615,7 @@
     },
     {
       "path": "civisibility/utils/net/http_retry_test.go",
-      "purpose": "Each failure kind keeps its attempt count and waits only between attempts: none follows the final attempt, including the x-ratelimit-reset wait."
+      "purpose": "Each failure kind keeps its attempt count and waits only between attempts: none follows the final attempt, including the x-ratelimit-reset wait, which is honored only up to 60 seconds."
     },
     {
       "path": "civisibility/utils/git_base_branch_test.go",

@@ -344,10 +344,15 @@ func (rh *RequestHandler) internalSendRequest(config *RequestConfig, attempt int
 					// Assume it's a duration in seconds
 					waitDuration = time.Duration(resetTime) * time.Second
 				}
-				if waitDuration > 0 && hasNextAttempt(config, attempt) {
-					retrySleep(waitDuration)
+				// Like the test-cycle client's Retry-After, a reset more than a
+				// minute away falls back to the exponential backoff below.
+				if waitDuration <= maxRateLimitResetWait {
+					if waitDuration > 0 && hasNextAttempt(config, attempt) {
+						retrySleep(waitDuration)
+					}
+					return false, nil, nil
 				}
-				return false, nil, nil
+				log.Debug("ciVisibilityHttpClient: ignoring rate limit reset %s beyond %s", waitDuration.Round(time.Second), maxRateLimitResetWait)
 			}
 		}
 
@@ -471,6 +476,10 @@ func decompressData(data []byte) ([]byte, error) {
 	}
 	return decompressedData, nil
 }
+
+// maxRateLimitResetWait bounds the wait for an x-ratelimit-reset header,
+// matching the 60 seconds that the test-cycle client accepts for Retry-After.
+const maxRateLimitResetWait = 60 * time.Second
 
 // hasNextAttempt reports whether SendRequest makes another attempt after this one.
 func hasNextAttempt(config *RequestConfig, attempt int) bool {

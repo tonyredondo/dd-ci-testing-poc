@@ -276,8 +276,17 @@ errors are unchanged. The debug summary's `retry` field now reports whether
 another attempt follows. `retrySleep` performs every wait so tests can record
 the delays.
 
+A 429 response's `x-ratelimit-reset` header, a Unix timestamp or a number of
+seconds, set the wait before the next attempt without any bound, so a distant
+reset could hold settings, and the first test, indefinitely. The wait is now
+honored only up to 60 seconds, the bound the test-cycle client applies to
+`Retry-After`; a later reset uses the ordinary exponential backoff, as an
+absent or invalid header does. Telemetry has no rate-limit wait.
+
 Checks: `TestSendRequestWaitsOnlyBetweenAttempts` covers network errors, 5xx,
 429 without a reset header and unexpected response formats;
+`TestSendRequestBoundsRateLimitResetWait` covers resets within and beyond the
+bound, as seconds and as a timestamp;
 `TestSendRequestRateLimitResetWaitsOnlyBetweenAttempts` covers the
 `x-ratelimit-reset` wait. The ported `TestRateLimitHandlingWithRetries`,
 `TestRateLimitHandlingWithoutResetHeader` and

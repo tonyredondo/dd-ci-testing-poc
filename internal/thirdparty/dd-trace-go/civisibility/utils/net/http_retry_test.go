@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -109,5 +110,43 @@ func TestSendRequestRateLimitResetWaitsOnlyBetweenAttempts(t *testing.T) {
 	}
 	if got, want := sleeps(), []time.Duration{2 * time.Second, 2 * time.Second}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("waits = %v, want %v", got, want)
+	}
+}
+
+// An x-ratelimit-reset within a minute is waited for; a later reset, as a
+// Unix timestamp or as seconds, falls back to the exponential backoff, like
+// the test-cycle client's Retry-After bound.
+func TestSendRequestBoundsRateLimitResetWait(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		reset func() string
+		want  []time.Duration
+	}{
+		{name: "seconds within bound", reset: func() string { return "60" }, want: []time.Duration{time.Minute}},
+		{name: "seconds beyond bound", reset: func() string { return "61" }, want: []time.Duration{10 * time.Millisecond}},
+		{name: "timestamp beyond bound", reset: func() string { return strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) }, want: []time.Duration{10 * time.Millisecond}},
+		{name: "past reset", reset: func() string { return "0" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sleeps := recordRetrySleeps(t)
+			var attempts atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				attempts.Add(1)
+				w.Header().Set(HeaderRateLimitReset, tc.reset())
+				http.Error(w, "slow down", HTTPStatusTooManyRequests)
+			}))
+			defer server.Close()
+
+			handler := NewRequestHandlerWithClient(createNewHTTPClient())
+			if response, err := handler.SendRequest(RequestConfig{Method: http.MethodGet, URL: server.URL, MaxRetries: 1, Backoff: 10 * time.Millisecond}); err == nil || response != nil {
+				t.Fatalf("expected exhausted retries, got response=%v err=%v", response, err)
+			}
+			if attempts.Load() != 2 {
+				t.Fatalf("attempts = %d, want 2", attempts.Load())
+			}
+			if got := sleeps(); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("waits = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
