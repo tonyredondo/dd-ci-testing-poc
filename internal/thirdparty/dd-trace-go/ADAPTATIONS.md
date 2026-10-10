@@ -400,6 +400,27 @@ nothing during initialization; `TestMacOSProductVersionSources` covers the
 sysctl, compatibility, error and empty cases; `TestMacOSProductVersionMatchesSWVers`
 compares the sysctl with `sw_vers` on the host.
 
+## CI log hostname
+
+Upstream `logs.Initialize` in
+[`civisibility/integrations/logs/logs.go`](civisibility/integrations/logs/logs.go)
+sets the log entries' hostname from `hostname.Get()` and falls back to
+`os.Hostname()` when it is empty. Nothing in the CI runtime fills that cache
+first, so the call returns an empty string and starts `updateHostname` in a
+goroutine: GCE, Azure and EC2 metadata requests and `/bin/hostname -f`, with
+timeouts of up to a second each. Their result was never read, and the
+goroutine, which the goleak shim does not filter, could still be running when a
+test checked for leaks.
+
+Here `Initialize` reads `os.Hostname()` directly, the value upstream's first
+initialization used. A second initialization in the same process, after
+`Stop`, also keeps that value instead of a probed name the earlier goroutine
+might have cached. Telemetry still uses `hostname.Get()` only when
+`os.Hostname()` fails.
+
+Checks: `TestInitializeUsesOSHostnameWithoutProbes` initializes logs in a fresh
+process, requires the OS hostname and finds no hostname-discovery goroutine.
+
 ## Source metadata parsing
 
 [`civisibility/integrations/manual_api_sourcecache.go`](civisibility/integrations/manual_api_sourcecache.go)

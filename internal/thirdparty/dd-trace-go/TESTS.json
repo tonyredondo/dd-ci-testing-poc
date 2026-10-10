@@ -650,6 +650,10 @@
     {
       "path": "integration/cli_source_test.go",
       "purpose": "The optimized sum fixture must report lines 5-10 with normal, unoptimized and race builds. CLI checks verify Mini selection, runtime flag consumption, log identity and errors before Go starts."
+    },
+    {
+      "path": "civisibility/integrations/logs/logs_hostname_test.go",
+      "purpose": "Logs initialization in a fresh process uses os.Hostname and starts no hostname-discovery goroutine for goleak to report."
     }
   ],
   "local_delivery_checks": [
