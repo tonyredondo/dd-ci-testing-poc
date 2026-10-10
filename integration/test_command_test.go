@@ -51,7 +51,8 @@ func miniTestCommand(args []string) string {
 // command stays exact and fails the comparison. Child processes started by
 // the fixture are matched the same way. For the fixture's own invocation,
 // whose arguments are known, Mini's exact form must be present, so a Mini
-// that kept the SDK's form cannot pass unnoticed.
+// that kept the SDK's form cannot pass unnoticed. A nil invocation, for a
+// binary whose arguments go test chooses, skips that check.
 func alignMiniTestCommands(sdkEvents, miniEvents []map[string]any, invocation []string) []map[string]any {
 	sdkCommands := map[string]bool{}
 	for _, event := range sdkEvents {
@@ -72,7 +73,7 @@ func alignMiniTestCommands(sdkEvents, miniEvents []map[string]any, invocation []
 		if !ok {
 			continue
 		}
-		if command == miniTestCommand(invocation) {
+		if invocation != nil && command == miniTestCommand(invocation) {
 			invocationSeen = true
 		}
 		if sdkCommands[command] {
@@ -100,8 +101,10 @@ func alignMiniTestCommands(sdkEvents, miniEvents []map[string]any, invocation []
 			content["resource"] = strings.TrimSuffix(resource, command) + replacement
 		}
 	}
-	if mini := miniTestCommand(invocation); mini != sdkTestCommand(invocation) && !invocationSeen {
-		panic(fmt.Sprintf("no Mini event has test.command %q", mini))
+	if invocation != nil {
+		if mini := miniTestCommand(invocation); mini != sdkTestCommand(invocation) && !invocationSeen {
+			panic(fmt.Sprintf("no Mini event has test.command %q", mini))
+		}
 	}
 	return miniEvents
 }

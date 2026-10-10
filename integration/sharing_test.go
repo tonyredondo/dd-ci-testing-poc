@@ -133,8 +133,12 @@ func TestSharedBackingCompatibility(t *testing.T) {
 			if reference != "" {
 				referenceArgs := append([]string{"go", "test"}, args[1:]...)
 				want := execute(t, dir, reference, referenceArgs, true, false)
-				if got.code != want.code || got.out != want.out || !reflect.DeepEqual(got.events, want.events) {
-					t.Fatalf("shared backing differs from Orchestrion: %d/%d\n%s\n%s\n%v\n%v\n%s", got.code, want.code, got.out, want.out, got.events, want.events, want.stderr)
+				// With -cover, go test passes -test.gocoverdir early: the SDK's
+				// session resource then ends there, and Mini's keeps the later
+				// arguments, a declared difference.
+				events := normalizedEvents(alignMiniTestCommands(want.wireEvents, got.wireEvents, nil))
+				if got.code != want.code || got.out != want.out || !reflect.DeepEqual(events, want.events) {
+					t.Fatalf("shared backing differs from Orchestrion: %d/%d\n%s\n%s\n%v\n%v\n%s", got.code, want.code, got.out, want.out, events, want.events, want.stderr)
 				}
 			}
 		})

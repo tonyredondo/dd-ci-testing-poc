@@ -108,6 +108,7 @@
       "TestTestifyUserOverlay"
     ],
     "fuzz": [
+      "TestAlignMiniTestCommandsRequiresMiniForm",
       "TestCIVisibilityFuzzCampaign",
       "TestFuzzExampleCoverageParity",
       "TestFuzzExampleFixtureProvenance",
