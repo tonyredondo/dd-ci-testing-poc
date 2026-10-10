@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "07c395b52d8e04d4da6bb8f9b1add7096c60cbd5185b46fe81a8ee001120a03b",
+      "sha256": "e0eea2a2be31412ead88b9b4695d7c37f7da98901c152d1d04b48297addd8b04",
       "role": "local"
     },
     {
@@ -35,7 +35,7 @@
     },
     {
       "path": "TESTS.json",
-      "sha256": "5a88f780d99e67830ba3b0deff140223029058f6c54876526353e77afd525982",
+      "sha256": "5a9ddbbd9da23d06bef8b348f21fc7e8feb651458e46e70702d6511c9ac96b92",
       "role": "local"
     },
     {
@@ -1616,14 +1616,39 @@
     },
     {
       "path": "osinfo/osinfo.go",
-      "sha256": "3c7a60a71cebcaa4f58e35c421e4fe847b2b76700a1d2819a519a1db5b821dcb",
+      "sha256": "bd58f949a63539ef16d02f52d2d8406bcc54b9869073a4d7e76de70516af0cea",
       "role": "adapted",
       "source_path": "internal/osinfo/osinfo.go",
       "source_sha256": "3c7a60a71cebcaa4f58e35c421e4fe847b2b76700a1d2819a519a1db5b821dcb"
     },
     {
+      "path": "osinfo/osinfo_darwin.go",
+      "sha256": "9fe9515be2e62d4348d763e9be4ff42c667a4c8a6d2dac49916137b29127b5fb",
+      "role": "local"
+    },
+    {
+      "path": "osinfo/osinfo_darwin_test.go",
+      "sha256": "f521b5497c9862dba8364612771e961584d25496873df879500f5f6737707df3",
+      "role": "local"
+    },
+    {
+      "path": "osinfo/osinfo_lazy_test.go",
+      "sha256": "9edb87f7e7144b384284f893b90e2dc7aed4a6cbc589a95ddd1c994cc7e42945",
+      "role": "local"
+    },
+    {
+      "path": "osinfo/osinfo_nodarwin.go",
+      "sha256": "0323e918d46afd09f985a86c8e84a8c601c65c0ea76206ca888b2751157cc1d6",
+      "role": "local"
+    },
+    {
+      "path": "osinfo/osinfo_other.go",
+      "sha256": "472437625671dd5747bb38606a822eb060eb64824b58edab79c266da7e4e85c3",
+      "role": "local"
+    },
+    {
       "path": "osinfo/osinfo_unix.go",
-      "sha256": "dabfb206246533bad3544033f400a4aa251d4ea48b7e7b984e801ba02e74126b",
+      "sha256": "0541f9645d5ba5a5ac749fea28052cc5e45b0257738eac0db0b154b8f4731571",
       "role": "adapted",
       "source_path": "internal/osinfo/osinfo_unix.go",
       "source_sha256": "24beb920b042b2f753e409b95c0509b52a4ccf0afc03207f4a897d4701db98aa"
@@ -1635,7 +1660,7 @@
     },
     {
       "path": "osinfo/osinfo_windows.go",
-      "sha256": "0e2bb4692507627e524c92bbce417f9ba356a063ad0ed70a853efa8180865590",
+      "sha256": "9e547acc2f619acf3a6474022b5a9635778a2189f913ebe64c975f88f7481626",
       "role": "adapted",
       "source_path": "internal/osinfo/osinfo_windows.go",
       "source_sha256": "721549ef9184169aa82ef849c463f45e25181520b0634ea8f5dcbe2d7718e112"

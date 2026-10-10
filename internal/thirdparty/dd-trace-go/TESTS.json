@@ -624,6 +624,14 @@
     {
       "path": "civisibility/utils/git_head_commit_test.go",
       "purpose": "A shallow checkout reads a present pull-request head commit without a remote lookup or fetch and still fetches a missing one, with real git."
+    },
+    {
+      "path": "osinfo/osinfo_lazy_test.go",
+      "purpose": "Package initialization detects no OS metadata; the first accessor does."
+    },
+    {
+      "path": "osinfo/osinfo_darwin_test.go",
+      "purpose": "macOS reads kern.osproductversion, matches sw_vers on the host and keeps sw_vers with SYSTEM_VERSION_COMPAT or a failed or empty sysctl."
     }
   ],
   "local_compatibility_checks": [

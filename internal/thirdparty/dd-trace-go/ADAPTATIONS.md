@@ -375,6 +375,31 @@ fetch alone took 616-1024 ms.
 Checks: `TestFetchCommitDataFetchesOnlyMissingCommits` reads a present head
 commit without a fetch and still fetches a missing one, with real git.
 
+## OS metadata
+
+Upstream [`osinfo`](osinfo/osinfo_unix.go) detects OS metadata in its package
+`init`: `uname`, `/etc/os-release` and, on macOS, a `sw_vers -productVersion`
+process. Every test binary and process-retry child paid for that process,
+including those that never report OS metadata.
+
+Here the platform's `detect` runs on the first accessor call, once, under a
+`sync.Once`. In a CI test binary that is the tag bootstrap, before any test.
+On macOS, [`osinfo_darwin.go`](osinfo/osinfo_darwin.go) reads the same value
+from the `kern.osproductversion` sysctl. `SYSTEM_VERSION_COMPAT` can change
+`sw_vers`' answer, so a process with that variable set still runs `sw_vers`, as
+does a failed or empty sysctl. A failed `sw_vers` still skips the kernel
+metadata, as upstream does. Windows' registry read is also deferred to first
+use. Should a first use happen in a test, only the macOS fallback starts a
+process.
+
+Measured on macOS 26.6.2, the osinfo test binary running the kernel metadata
+test, 30 alternating runs: 29.4 ms -> 16.2 ms (medians).
+
+Checks: `TestOSMetadataLoadsOnFirstUse` proves that a fresh process detected
+nothing during initialization; `TestMacOSProductVersionSources` covers the
+sysctl, compatibility, error and empty cases; `TestMacOSProductVersionMatchesSWVers`
+compares the sysctl with `sw_vers` on the host.
+
 ## Source metadata parsing
 
 [`civisibility/integrations/manual_api_sourcecache.go`](civisibility/integrations/manual_api_sourcecache.go)
