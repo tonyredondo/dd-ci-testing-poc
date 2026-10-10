@@ -284,6 +284,30 @@ Checks: `TestSendRequestWaitsOnlyBetweenAttempts` covers network errors, 5xx,
 `TestSendRequestWithMaxRetriesExceeded` keep their lower bounds for the waits
 between attempts and now also bound the total from above.
 
+## Final tracer delivery at exit
+
+Upstream `exitCiVisibility` in
+[`civisibility/integrations/civisibility.go`](civisibility/integrations/civisibility.go)
+calls `tracer.Flush()` and then `tracer.Stop()`, after the session close has
+already flushed. Mini's `Stop` closes the process-wide client, and
+`Client.Close` in [`internal/minitracer/batch.go`](../../minitracer/batch.go)
+seals the open batch and delivers every queued batch directly, in both delivery
+modes, before it abandons what still fails. The separate `Flush` delivered the
+same queue: on success it found nothing to send, and after a failure it
+repeated the retries and the `FlushTimeout` bound that `Close` then repeated
+again. Exit now calls only `Stop`, so events finished after the session closed
+are still delivered, once.
+
+With an agent that refused connections, the exit's two delivery cycles took
+about 303 ms each; against a blackholed intake each is bounded by the
+10-second `FlushTimeout`. The session close's own flush and its diagnostics are
+unchanged.
+
+Checks: `TestExitCiVisibilityDeliversRemainingEventsOnce` delivers an event
+finished after session close and sees three attempts, not six, against a
+failing intake; `integration/TestMiniDeliveryFailurePreservesGoExit` keeps the
+flush and close error diagnostics.
+
 ## Source metadata parsing
 
 [`civisibility/integrations/manual_api_sourcecache.go`](civisibility/integrations/manual_api_sourcecache.go)

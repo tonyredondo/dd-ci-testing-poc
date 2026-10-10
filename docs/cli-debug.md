@@ -109,7 +109,8 @@ endpoint path or telemetry request type, status and retry information without
 adding headers, query strings or bodies.
 
 A session closes before `civisibility: exiting`, so its flush can explain a gap
-between `PASS` and that line. Test-cycle summaries report a sanitized host/path,
+between `PASS` and that line. Shutdown then closes the tracer once; its `close`
+summary includes the final delivery of events queued after the session closed. Test-cycle summaries report a sanitized host/path,
 one-based attempt number, HTTP status (`0` without a response), network-error
 flag, planned retry, request body bytes and gzip use. The payload summary reports
 uncompressed bytes and the actual attempt count. `retry=true` means another

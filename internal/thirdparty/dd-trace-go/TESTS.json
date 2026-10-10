@@ -652,6 +652,10 @@
     {
       "path": "integration/mini_test.go",
       "purpose": "Map only Mini executeInternalTest.func1 testing.go:844 to SDK testing.go:838; other library locations and application frames stay strict."
+    },
+    {
+      "path": "internal/thirdparty/dd-trace-go/civisibility/integrations/civisibility_exit_flush_test.go",
+      "purpose": "Exit delivers an event finished after session close through Stop alone, with one delivery's attempts against a failing intake."
     }
   ],
   "local_common_metadata_checks": [
