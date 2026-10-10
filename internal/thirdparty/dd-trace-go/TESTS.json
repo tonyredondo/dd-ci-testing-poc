@@ -185,9 +185,9 @@
       "source": "internal/civisibility/utils/net/http_test.go",
       "destination": "internal/thirdparty/dd-trace-go/civisibility/utils/net/http_test.go",
       "source_sha256": "4c280d018a3d9acef0c767aa30d15dd424cb2c49b3f95a044eb5013bda7985cd",
-      "adapted_sha256": "f7294863947456dae5ffe1931b32a2e0e034909de1d016845630313389e0a0eb",
+      "adapted_sha256": "45fcecbb4cd46a841c6645f7a9ffee32ddade859a04cf89487df9e62ba15eb74",
       "kind": "full",
-      "adaptation": "Internal import relocation only; standard-library assertion helpers"
+      "adaptation": "Internal import relocation only; standard-library assertion helpers; the three retry-timing tests expect no wait after the final attempt and bound the total from above"
     },
     {
       "source": "internal/civisibility/utils/net/known_tests_api_test.go",
@@ -612,6 +612,10 @@
     {
       "path": "civisibility/integrations/gotesting/coverage/module_info_test.go",
       "purpose": "Coverage initialization starts no go list; the first module reader resolves it once, from the initialization directory and environment."
+    },
+    {
+      "path": "civisibility/utils/net/http_retry_test.go",
+      "purpose": "Each failure kind keeps its attempt count and waits only between attempts: none follows the final attempt, including the x-ratelimit-reset wait."
     }
   ],
   "local_compatibility_checks": [

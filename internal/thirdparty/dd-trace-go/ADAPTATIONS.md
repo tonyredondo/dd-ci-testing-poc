@@ -259,6 +259,31 @@ phases, four hierarchy events and successful process exit with real HTTP and
 `-race`, including normal/deferred delivery and startup failures. See
 [debug timing boundaries](../../../docs/cli-debug.md#runtime-timing).
 
+## CI HTTP retries
+
+Upstream `RequestHandler.SendRequest` in
+[`civisibility/utils/net/http.go`](civisibility/utils/net/http.go) makes
+`MaxRetries + 1` attempts and backs off after every failed attempt, including
+the last, before returning "max retries exceeded". With the default three
+retries and 100 ms backoff, an unreachable agent or intake held each request
+for 1.5 s, 800 ms of it after the final attempt. The settings request runs
+before the first test, so every binary paid that wait at startup, and again in
+the repository upload that a close action waits for.
+
+Here `retryBackoff` and the rate-limit wait run only when another attempt
+follows. Attempt counts, delays between attempts, response handling and
+errors are unchanged. The debug summary's `retry` field now reports whether
+another attempt follows. `retrySleep` performs every wait so tests can record
+the delays.
+
+Checks: `TestSendRequestWaitsOnlyBetweenAttempts` covers network errors, 5xx,
+429 without a reset header and unexpected response formats;
+`TestSendRequestRateLimitResetWaitsOnlyBetweenAttempts` covers the
+`x-ratelimit-reset` wait. The ported `TestRateLimitHandlingWithRetries`,
+`TestRateLimitHandlingWithoutResetHeader` and
+`TestSendRequestWithMaxRetriesExceeded` keep their lower bounds for the waits
+between attempts and now also bound the total from above.
+
 ## Source metadata parsing
 
 [`civisibility/integrations/manual_api_sourcecache.go`](civisibility/integrations/manual_api_sourcecache.go)
