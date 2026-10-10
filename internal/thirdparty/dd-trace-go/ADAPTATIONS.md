@@ -603,6 +603,35 @@ syncing, keep new per-test debug logs guarded without moving any line that can
 appear in an error stack, and re-measure allocations per test with a
 many-subtest fixture.
 
+## Test execution metadata store
+
+[`civisibility/integrations/gotesting/instrumentation.go`](civisibility/integrations/gotesting/instrumentation.go)
+keeps each test's execution metadata in a `sync.Map` keyed by the
+`*testing.T` or `*testing.B` pointer. Upstream uses one map behind a
+process-wide `RWMutex`. Every test creates and deletes an entry, and every hook
+(`T.Run`, `Error`, `Skip`, `Fail`) reads one, so in parallel suites each create
+or delete held back the readers of all running tests. A mutex profile of 200
+parallel tests with 50 parallel subtests each attributed most of Mini's lock
+delay to this map.
+
+The semantics are the map's: the pointer is the key, a second create replaces
+the entry, deleting an absent key does nothing and only
+`*testExecutionMetadata` values are stored. If per-test state later moves into
+`testing`'s own structures, this keyed store remains the fallback for builds
+without that overlay.
+
+Measured on darwin/arm64 with 18 threads, medians of alternating runs: the
+parallel fixture (10,200 tests, `-count=10`) went from 0.81–0.89 s to
+0.66–0.71 s; a serial fixture of the same size stayed at 1.26–1.27 s. One
+create, three lookups and a delete take 161 ns instead of 372 ns with 18
+goroutines, and about 150 ns either way with one. `sync.Map` adds one 48-byte
+entry per create. A 64-shard `RWMutex` map measured the same wall time.
+
+Checks: `TestTestMetadataStoreKeepsMapSemantics`,
+`TestTestMetadataStoreConcurrentTests` under `-race`,
+`BenchmarkTestMetadataLifecycleParallel`, and the parity, retry and Testify
+integration groups.
+
 ## Lazy stack classification
 
 [`stacktrace/stacktrace.go`](stacktrace/stacktrace.go) constructs its immutable

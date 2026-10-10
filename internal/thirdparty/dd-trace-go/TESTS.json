@@ -632,6 +632,10 @@
     {
       "path": "osinfo/osinfo_darwin_test.go",
       "purpose": "macOS reads kern.osproductversion, matches sw_vers on the host and keeps sw_vers with SYSTEM_VERSION_COMPAT or a failed or empty sysctl."
+    },
+    {
+      "path": "civisibility/integrations/gotesting/test_metadata_store_test.go",
+      "purpose": "The concurrent execution-metadata store keeps map semantics: pointer keys, replacement on a second create, isolated deletes; concurrent create/read/replace/delete under -race."
     }
   ],
   "local_compatibility_checks": [
