@@ -616,6 +616,10 @@
     {
       "path": "civisibility/utils/net/http_retry_test.go",
       "purpose": "Each failure kind keeps its attempt count and waits only between attempts: none follows the final attempt, including the x-ratelimit-reset wait."
+    },
+    {
+      "path": "civisibility/utils/git_base_branch_test.go",
+      "purpose": "Base-branch discovery lists every missing candidate with one exact refs/heads ls-remote and fetches only existing branches in order; a per-branch upstream oracle on a second clone leaves the same remote-tracking refs and base SHA."
     }
   ],
   "local_compatibility_checks": [

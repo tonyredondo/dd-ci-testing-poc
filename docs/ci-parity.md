@@ -357,6 +357,13 @@ difference remains before a complete telemetry-parity claim:
   `endpoint_payload.requests_errors`; Mini records them with `error_type:network`.
   The fixture must expose this difference rather than discard it as an APM metric.
 
+Git command counters also differ where Mini avoids repeated work. Base-branch
+discovery for impacted tests lists every missing candidate branch with one
+`git ls-remote`, so `git.command` with `command:ls_remote_heads` counts one per
+discovery instead of one per missing branch, and fetches that git would reject
+are not run or counted. The parity fixtures supply the pull-request base commit,
+so they do not run this discovery.
+
 SDK and Mini increment `endpoint_payload.dropped` once per abandoned batch.
 Mini keeps a failed `Flush` batch for recovery while open; final `Close` failure
 abandons it. HTTP attempts and the number of events do not multiply that count.

@@ -308,6 +308,43 @@ finished after session close and sees three attempts, not six, against a
 failing intake; `integration/TestMiniDeliveryFailurePreservesGoExit` keeps the
 flush and close error diagnostics.
 
+## Base-branch discovery
+
+Upstream `GetBaseBranchSha` in [`civisibility/utils/git.go`](civisibility/utils/git.go)
+runs when impacted-test detection is enabled and no pull-request base commit is
+known. Without a pull-request base branch, `checkAndFetchBranch` checks each of
+the seven `possibleBaseBranches` in turn: `git show-ref` for its
+remote-tracking ref and, when that is missing, `git ls-remote --heads <remote>
+<branch>`, a network round trip, before a `git fetch --depth 1` of a branch the
+remote has. Branches that never exist, such as `preprod` or `trunk`, were listed
+again in every test binary, before its first test.
+
+`checkAndFetchBranches` keeps the `show-ref` checks, then lists every missing
+branch with one `ls-remote` and fetches, in candidate order, the branches it
+returned. Fetching one named branch updates only that branch's remote-tracking
+ref, so checking all branches first sees the refs that the per-branch order
+saw. The pull-request base branch uses the same function with one branch.
+
+Patterns and output use exact `refs/heads/<name>` refs. An `ls-remote` pattern
+matches the tail of a ref, so upstream's `master` also matched
+`refs/heads/feature/master`, and the combined output could contain a warning;
+either made upstream try a fetch that git rejects. Those failing fetches no
+longer run. Successful fetches, their order, the remote-tracking refs and the
+candidates that `findBestBranch` compares are unchanged. The CI telemetry
+`git.command` count for `ls_remote_heads` is now one per discovery instead of
+one per missing branch, and the rejected `fetch` commands are not counted.
+
+Measured against GitHub over SSH, one package with impacted tests enabled and
+`refs/remotes/origin/main` present, 5 alternating runs: 6 `ls-remote` calls
+(about 0.55 s each) became 1, and the test binary's duration fell from 4.60 s
+to 1.49 s (medians).
+
+Checks: `TestCheckAndFetchBranchesListsMissingBranchesOnce`,
+`TestCheckAndFetchBranchesMatchesPerBranchAlgorithm` (an upstream-algorithm
+oracle on a second clone of the same remote must leave the same refs and base
+SHA) and `TestCheckAndFetchBranchFetchesPullRequestBase` run real git against
+a `file://` remote. `TestGitRecorderHelperProcess` records the commands.
+
 ## Source metadata parsing
 
 [`civisibility/integrations/manual_api_sourcecache.go`](civisibility/integrations/manual_api_sourcecache.go)

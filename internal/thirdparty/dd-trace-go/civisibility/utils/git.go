@@ -916,9 +916,7 @@ func GetBaseBranchSha(defaultBranch string) (string, error) {
 	} else {
 		// Step 2a - we don't have git.pull_request.base_branch
 		// Fetch all possible base branches from remote
-		for _, branch := range possibleBaseBranches {
-			checkAndFetchBranch(branch, remoteName)
-		}
+		checkAndFetchBranches(possibleBaseBranches, remoteName)
 
 		// Get the list of remote branches present in local repo and see which ones are base-like
 		remoteBranches, err := getRemoteBranches(remoteName)
@@ -1008,22 +1006,56 @@ func removeRemotePrefix(branchName, remoteName string) string {
 
 // checkAndFetchBranch checks if a branch exists and fetches it if needed
 func checkAndFetchBranch(branch, remoteName string) {
-	// Check if branch exists locally (as remote ref)
-	_, err := execGitString(telemetry.ShowRefCommandType, "show-ref", "--verify", "--quiet", "refs/remotes/"+remoteName+"/"+branch)
-	if err == nil {
-		return // branch exists locally
+	checkAndFetchBranches([]string{branch}, remoteName)
+}
+
+// checkAndFetchBranches fetches, in order, each branch that has no local
+// remote-tracking ref but exists on the remote. One ls-remote lists all of the
+// missing branches instead of one network round trip per branch. Its patterns
+// and output are matched as exact refs/heads/<name> refs: an ls-remote pattern
+// also matches longer names such as refs/heads/feature/main, and its combined
+// output can contain warnings. Fetching one named branch updates only that
+// branch's remote-tracking ref, so checking every branch before fetching sees
+// the same refs as checking each one before its own fetch.
+func checkAndFetchBranches(branches []string, remoteName string) {
+	var missing []string
+	for _, branch := range branches {
+		// Check if branch exists locally (as remote ref)
+		_, err := execGitString(telemetry.ShowRefCommandType, "show-ref", "--verify", "--quiet", "refs/remotes/"+remoteName+"/"+branch)
+		if err != nil {
+			missing = append(missing, branch)
+		}
+	}
+	if len(missing) == 0 {
+		return // every branch exists locally
 	}
 
-	// Check if branch exists in remote
-	remoteHeads, err := execGitString(telemetry.LsRemoteHeadsCommandType, "ls-remote", "--heads", remoteName, branch)
+	// Check which branches exist in remote
+	args := make([]string, 0, len(missing)+3)
+	args = append(args, "ls-remote", "--heads", remoteName)
+	for _, branch := range missing {
+		args = append(args, "refs/heads/"+branch)
+	}
+	remoteHeads, err := execGitString(telemetry.LsRemoteHeadsCommandType, args...)
 	if err != nil || remoteHeads == "" {
-		return // branch doesn't exist in remote
+		return // no branch exists in remote
+	}
+	remoteRefs := make(map[string]bool, len(missing))
+	for line := range strings.SplitSeq(remoteHeads, "\n") {
+		if _, ref, found := strings.Cut(strings.TrimSpace(line), "\t"); found {
+			remoteRefs[strings.TrimSpace(ref)] = true
+		}
 	}
 
-	// Fetch the latest commit for this branch from remote (without creating local branch)
-	_, err = execGitString(telemetry.FetchCommandType, "fetch", "--depth", "1", remoteName, branch)
-	if err != nil {
-		log.Debug("civisibility.git: failed to fetch branch %s: %v", branch, err.Error())
+	for _, branch := range missing {
+		if !remoteRefs["refs/heads/"+branch] {
+			continue // branch doesn't exist in remote
+		}
+		// Fetch the latest commit for this branch from remote (without creating local branch)
+		_, err = execGitString(telemetry.FetchCommandType, "fetch", "--depth", "1", remoteName, branch)
+		if err != nil {
+			log.Debug("civisibility.git: failed to fetch branch %s: %v", branch, err.Error())
+		}
 	}
 }
 
