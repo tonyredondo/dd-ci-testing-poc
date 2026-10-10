@@ -178,8 +178,10 @@ flowchart TB
 
 Distributed trace identity is separate: the propagation package carries a
 128-bit trace ID and active span ID. Test-cycle serialization writes hierarchy
-IDs as native fields, with the SDK's event-specific ID rules. End events identify
-their session, module or suite; test events retain their own trace identity.
+IDs as native fields, with the SDK's event-specific ID rules. A hierarchy tag
+that is not an unsigned decimal number stays in meta, as the SDK leaves it. End
+events identify their session, module or suite; test events retain their own
+trace identity.
 Retries and parallel-test ownership are managed by the extracted testing hooks,
 which also control when a session closes and flushes.
 
