@@ -38,8 +38,8 @@ code also need an entry in
 
 Items 5, 6 and 9 move work that every test binary repeats into the CLI, which
 runs once per invocation. The CLI does the work and hands the results to the
-binaries through the environment and files they already read. Items 42, 43, 51
-and part of 53 are smaller steps in the same direction.
+binaries through the environment and files they already read. Items 42, 51 and
+part of 53 are smaller steps in the same direction.
 
 ### CLI and build path
 
@@ -47,9 +47,6 @@ These costs occur once per `ddto` invocation or once per compiled package.
 
 | Order | Change | Where it can help | Complexity |
 | --- | --- | --- | --- |
-| 11 | Query one dependency graph instead of per-package `Deps` | `go list` time, output and memory in large modules | Medium |
-| 12 | Skip `go mod edit -json` for workspace modules that cannot replace Mini; extends 4 | Workspace preparation, one subprocess per `use` module | Low |
-| 13 | Put the runtime import in the internal test package | One compile and one vet action per package without external tests | Low to medium |
 | 14 | Leave standard-library imports out of library discovery | A second `go list` in most invocations | Low |
 | 15 | Overlap the Orchestrion tool lookup with preparation | Seconds of serial `go tool -n` in Orchestrion modes | Low to medium |
 | 16 | Write and remove generated files concurrently | Serial file I/O proportional to package count | Low |
@@ -64,16 +61,15 @@ These costs occur per event, batch or flush in `internal/minitracer`,
 
 | Order | Change | Where it can help | Complexity |
 | --- | --- | --- | --- |
-| 20 | Generate trace and span IDs without `crypto/rand` | A system call per event, serialized across goroutines | Low |
 | 21 | Skip the common-metadata override scan when nothing is overridden | Map work for every event at each flush | Low |
 | 22 | Project common tags without cloning `Meta` | Allocations for SDK span copies and mixed batches | Medium |
 | 23 | Charge the shared common snapshot once per batch | Requests per binary; payload buffer reuse | Medium to high |
 | 24 | Store the event inside `Span` | One allocation per event | Medium |
 | 25 | Keep gzip compressors across garbage collections | 814 KB and 80 µs per Agentless batch | Low |
-| 26 | Remove small producer-side costs | Allocations, clock reads and lock hold time per event | Low |
+| 26 | Remove the remaining producer-side costs | Clock reads, lock hold time and context allocations per event | Low |
 | 27 | Encode straight into the payload buffer | A second copy of every payload byte | Low to medium |
 | 28 | Drain the final backlog in parallel | Events dropped behind a slow intake at close | Low to medium |
-| 29 | Reuse deferred-mode connections and cache the mode | TLS handshakes per checkpoint; an environment read per test | Low |
+| 29 | Reuse deferred-mode connections | TLS handshakes per checkpoint | Low |
 
 ### Per-test instrumentation
 
@@ -82,11 +78,7 @@ SDK's manual API objects.
 
 | Order | Change | Where it can help | Complexity |
 | --- | --- | --- | --- |
-| 30 | Compare coverage profiles by index; extends 8 | Milliseconds and megabytes per covered test | Low to medium |
-| 31 | Look up test metadata without a global lock; extends 3 | The most contended lock in parallel suites | Low |
 | 32 | Scope retry subtest-name cleanup to the attempt | Binary-wide scans under `testing`'s matcher lock | Medium to high |
-| 33 | Look up known tests in a set | Linear scans before any test starts | Low |
-| 34 | Build stack traces only when they are kept | 5 µs and 12.5 KB per repeated assertion failure | Low |
 | 35 | Stop rewriting the instrumentation map on every `T.Run` | A global write lock per subtest | Low |
 | 36 | Return the hook lease without allocating | One allocation per hook call | Low |
 | 37 | Look up modules and suites before building options | 5–6 allocations and two exclusive locks per test | Low |
@@ -102,18 +94,44 @@ package.
 
 | Order | Change | Where it can help | Complexity |
 | --- | --- | --- | --- |
-| 42 | Batch base-branch discovery; extends 5 | Up to seven serial network calls per binary | Low |
-| 43 | Skip the pull-request head fetch when the commit exists; extends 6 | A network fetch and five subprocesses per binary | Low |
-| 44 | Do not back off after the final HTTP attempt | 0.8 s per failed request | Low |
-| 45 | Drop the redundant flush before stop | A retry cycle, up to 10 s, when delivery fails | Low |
+| 42 | Share base-branch discovery between binaries; extends 5 | Repeated base-branch queries and fetches per binary | Medium to high |
 | 46 | Overlap telemetry round trips; extends 10 | One round trip at startup and one at exit | Medium |
-| 47 | Read the macOS version without `sw_vers` | A subprocess at every process start on macOS | Low |
 | 48 | Let read-cache waiters wait for a slow owner; relates to 9 | Two seconds and a duplicate request per waiter | Medium |
 | 49 | Stream read-cache expiry fields | Full JSON decoding before a cache miss's request | Low |
 | 50 | Keep idle connections during deferred startup | TLS handshakes on the startup critical path | Low to medium |
 | 51 | Store known tests per module in the read cache | Decoding and retaining the whole repository's tests | Medium to high |
-| 52 | Read the hostname for CI logs directly | Unused metadata probes, a subprocess and a goroutine | Low |
 | 53 | Remove small bootstrap costs | Log scans, CODEOWNERS serialization and build-info reads | Low |
+
+### Completed
+
+These items were implemented on 2026-10-10, together with the bugs found during
+the review. The results are medians of alternating baseline and candidate runs
+on the same loaded darwin/arm64 host, against local fixtures and receivers;
+the item sections give the details.
+
+| Item | Change | Measured result |
+| --- | --- | --- |
+| 11 | One `go list -deps` graph instead of per-package `Deps` | 2,000 packages: preparation 2.65 → 2.08 s, CPU 2.55 → 1.60 s, peak RSS 175 → 88 MB. Testify through a production helper: 106.8 → 87.0 ms, one `go list` less. 61 small packages: 92.1 → 98.9 ms |
+| 12 | `go mod edit -json` only for workspace modules that name Mini | 80-module workspace: 80 → 0 commands, preparation 1.34 → 0.17 s |
+| 13 | Runtime import in the internal test package | 61 packages, empty client cache: compiles 180 → 121, vets 120 → 61, CPU 52.9 → 51.2 s, wall 8.66 → 8.16 s |
+| 20 | Trace and span IDs from `math/rand/v2` | Root ID 268 → 19.4 ns, 518 → 1.4 ns with 18 goroutines; child 82 → 13.6 ns. `BenchmarkEventLifecycle` at `GOMAXPROCS=1`: −12% without gzip, −5% with it |
+| 26, first point | Unset hierarchy fields skip `ParseUint` | Text-only span metadata: 416 → 361 ns, 11 → 8 allocations |
+| 29, second point | The runtime client fixes the delivery mode | An atomic load per test instead of an environment read |
+| 30 | Per-test coverage compared by index, parsed without strings | 5,000 blocks: 4.99 → 1.62 ms, 81,140 → 365 allocations, 4.58 → 1.35 MB per covered test |
+| 31 | Test metadata in a `sync.Map` | 10,200 parallel subtests ×10: 0.81–0.89 → 0.66–0.71 s; lifecycle with 18 goroutines 372 → 161 ns; serial unchanged, one 48-byte allocation more per test |
+| 33 | Known tests indexed once for lists above 32 names | New test against 1,000 names: 0.93–0.97 µs → 41–48 ns; against 10,000: 7.5–8.8 µs → 28–29 ns |
+| 34 | Stack traces only when they are kept | Repeated `Errorf` with 16 frames: 5.4 µs, 15.5 KB, 40 allocations → 27 ns, none |
+| 42, first step | One exact `git ls-remote` for all missing base branches | GitHub over SSH with impacted tests: 6 → 1 network calls, test binary 4.60 → 1.49 s |
+| 43 | No pull-request head fetch when the commit is present | Depth-one GitHub clone: bootstrap 807 → 186 ms, test binary 1.34 → 0.81 s |
+| 44 | No backoff after the final HTTP attempt | Without an Agent: settings 1.508 → 0.706 s, whole `ddto test` 4.05 → 3.20 s |
+| 45 | One final delivery at exit | Refused connection: shutdown after session close 609.8 → 305.1 ms; a black-holed intake saves up to the 10 s flush timeout (estimated) |
+| 47 | macOS version from `sysctl`, OS metadata on first use | A process reading OS metadata: 29.4 → 16.2 ms |
+| 52 | CI log hostname from `os.Hostname()` | No metadata probes, `hostname -f` process or goroutine; goleak no longer sees it |
+
+Item 11 trades a few milliseconds in small modules, whose graph now lists their
+standard-library dependencies, for seconds and hundreds of megabytes in large
+ones. Item 13 recompiles internal test packages when Mini changes, because they
+now import the runtime; edit rebuilds are unchanged.
 
 ## 1. Span options as values
 
@@ -274,6 +292,8 @@ CPU microbenchmarks cannot establish that saving.
 
 ## 11. One dependency graph instead of per-package `Deps`
 
+**Status:** Done; see [Completed](#completed). The measurements below are from the review.
+
 The main query in `internal/runner/run.go:276` requests `Imports` and `Deps`
 for every selected package, so Go prints each package's whole transitive
 closure. The front-end decodes and keeps it through preparation only to answer
@@ -309,6 +329,9 @@ monorepo-wide run, and no change for small repositories.
 
 ## 12. Workspace modules that cannot replace Mini
 
+**Status:** Done; see [Completed](#completed). Modules are queried concurrently, and the
+results are applied in workspace order.
+
 This extends item 4. When a workspace neither requires nor replaces Mini,
 `internal/runner/workspace.go:325-370` copies every `use` module's file to
 `client-N.mod` and parses it with its own `go mod edit -json` (`:345`),
@@ -326,6 +349,9 @@ unparsable module file is then reported by the next Go command rather than by
 this one.
 
 ## 13. Runtime import in the internal test package
+
+**Status:** Done; see [Completed](#completed). The review of the initialization order
+found no regression.
 
 `internal/runner/run.go:438-455` writes `zz_dd_ci_visibility_test.go` as
 `package <name>_test` for every test package. A package without external test
@@ -439,6 +465,8 @@ milliseconds for large vendor trees; this was not measured end to end.
 
 ## 20. Trace and span IDs without `crypto/rand`
 
+**Status:** Done; see [Completed](#completed).
+
 A CPU profile of the CI-shaped `BenchmarkCommonMetadataLifecycle` at
 `GOMAXPROCS=1`, about 3.6–4.8 µs per event including background delivery,
 attributes 7.5% to `crypto/rand`, 8.8% to `eventSize`, 6.4% to
@@ -536,6 +564,8 @@ free list, like `Client.buffers`.
 
 ## 26. Producer-side small costs
 
+**Status:** The first point is done; the others remain.
+
 Each of these is a separate small change in `internal/minitracer`:
 
 - `span.go:364-366`: `strconv.ParseUint("")` allocates a `NumError`, 18 ns and
@@ -574,6 +604,9 @@ intake, the serial drain can exceed its budget and drop events. Use the
 
 ## 29. Deferred-mode connections and mode checks
 
+**Status:** The second point is done: the runtime client fixes the mode while it is
+active. The first point remains.
+
 - `internal/citransport/transport.go:153`: `CloseIdleAfterSend` closes
   connections after every send, so a drain worker that sends a second batch
   dials and negotiates TLS again. This matters for checkpoints with more than
@@ -584,6 +617,8 @@ intake, the serial drain can exceed its budget and drop events. Use the
   its mode when it starts; cache the value with it.
 
 ## 30. Per-test coverage processing
+
+**Status:** Done; see [Completed](#completed).
 
 This extends item 8 without depending on runtime coverage internals. For every
 covered test, `gotesting/coverage/test_coverage.go:664-731` parses both text
@@ -610,6 +645,8 @@ line. Preserve the covered-line sets, the sorted file order and the test file
 first. Only initial attempts are processed.
 
 ## 31. Test metadata without a global lock
+
+**Status:** Done with `sync.Map`; a 64-shard map measured the same. Item 3 remains.
 
 This extends item 3 with a smaller first step. Creating and deleting metadata
 in `gotesting/instrumentation.go:250-256` and `:330-358` takes the write lock of
@@ -644,6 +681,9 @@ suffixes, with `-count` above one, nested subtests and late parallel subtests.
 
 ## 33. Known tests as a set
 
+**Status:** Done; see [Completed](#completed). Lists of up to 32 names keep the linear
+scan.
+
 `isKnownTest` (`gotesting/testing.go:1194-1208`) scans the suite's known list,
 which includes subtest names, with `slices.Contains` (`:1200`). It runs for every
 top-level test during `M.Run` setup, before any test starts and including tests
@@ -656,6 +696,8 @@ Build a set per module and suite once, and reuse the result between the call
 sites. Preserve the `hasKnownData` result.
 
 ## 34. Stack traces only when they are kept
+
+**Status:** Done; see [Completed](#completed).
 
 `utils.GetStacktrace` is an argument of `CompareAndSwap` in
 `gotesting/instrumentation_orchestrion.go:46-52`, so it runs on every `Error*`
@@ -761,6 +803,9 @@ before the budget is used. It is not listed as an item.
 
 ## 42. Base-branch discovery
 
+**Status:** The batched `git ls-remote` is done; see [Completed](#completed). Sharing the
+base branch and diff between binaries remains.
+
 Against a fake Agent that answered every request after 100 ms, a binary served
 by the read cache spent its whole 102 ms settings phase waiting for
 `app-started`. The cache owner made two round trips at startup, settings
@@ -799,6 +844,9 @@ or in a file keyed by repository and HEAD, through a private channel:
 
 ## 43. Pull-request head commit
 
+**Status:** Done; see [Completed](#completed). Fetching once in the CLI remains part of
+item 6.
+
 This extends item 6. When a head commit is known and the repository is shallow
 (`civisibility/utils/environmentTags.go:350-364`, `civisibility/utils/git.go:377-428`),
 every binary runs these commands before settings: `rev-parse
@@ -822,6 +870,8 @@ reproduced.
 
 ## 44. No backoff after the final HTTP attempt
 
+**Status:** Done; see [Completed](#completed).
+
 `civisibility/utils/net/http.go:209-216` retries a request up to `MaxRetries`
 times, and every failure path in `internalSendRequest` sleeps with
 `exponentialBackoff` (`:323`, `:355`, `:363`, `:370`, `:381`, `:403`), also after
@@ -837,6 +887,9 @@ or the backend answers 5xx or 429, which is common for local runs without an
 Agent: a trivial package took 4.1 s. The same fix applies upstream.
 
 ## 45. Redundant flush before stop
+
+**Status:** Done; see [Completed](#completed). Stopping retries after a network failure
+at session close remains optional.
 
 Session close already flushes (`civisibility/integrations/manual_api_ddtestsession.go:228`),
 and exit then calls `tracer.Flush()` and `tracer.Stop()`
@@ -869,6 +922,8 @@ trips: `telemetry stop` took 216.8 ms after a 101 ms test-cycle flush.
 Keep `app-started` in its own request and keep the payload order.
 
 ## 47. macOS version without `sw_vers`
+
+**Status:** Done; see [Completed](#completed).
 
 `osinfo/osinfo_unix.go:30-38` runs `sw_vers -productVersion` in `init` on
 macOS, in every test binary, retry child and binary whose CI initialization
@@ -933,6 +988,8 @@ small repositories. SDK binaries share the cache directory, so the index needs
 its own key or version.
 
 ## 52. Hostname for CI logs
+
+**Status:** Done; see [Completed](#completed).
 
 With CI logs enabled, `logs.Initialize`
 (`civisibility/integrations/logs/logs.go:87`) calls `hostname.Get()`. The first

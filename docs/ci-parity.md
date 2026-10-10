@@ -164,18 +164,21 @@ maps only those known F-root owners to `.func1`/`.func1.1` in `testingF.go`.
 
 Mini corrections intentionally differ from the frozen SDK. Coverage includes
 code executed only in `t.Cleanup`, and duplicate Testify method names retain the
-client suite and source location. The SDK filters `test.command` with greedy
-patterns such as `(?si)-test.v=(.*)\s`, which also remove every argument after
-the first volatile flag. `go test` passes `-test.testlogfile` first for a
-cacheable run, so the SDK's command, and the automatic session name built from
-it, is then only the binary name. Mini removes only the volatile flags, so its
-command, the session resource built from it and the automatic session name
-keep the other arguments, such as `-test.paniconexit0 -test.timeout=10m0s`; an
-explicit `DD_TEST_SESSION_NAME` is unaffected. `TestTestCommandRemovesOnlyVolatileFlags` checks both filters,
-and the dd-trace-go main branch at `d27b94332308` still has the SDK's patterns. `TestMiniCoverageIncludesCleanup` and
+client suite and source location. `TestMiniCoverageIncludesCleanup` and
 `TestMiniTestifyDuplicateIdentity` assert those expected payloads directly;
 the differential comparator does not hide either difference. They run with the
 complete suite on every CI platform.
+
+The SDK filters `test.command` with greedy patterns such as
+`(?si)-test.v=(.*)\s`, which also remove every argument after the first
+volatile flag. `go test` passes `-test.testlogfile` first for a cacheable run,
+so the SDK's command, and the automatic session name built from it, is then
+only the binary name. Mini removes only the volatile flags, so its command, the
+session resource built from it and the automatic session name keep the other
+arguments, such as `-test.paniconexit0 -test.timeout=10m0s`. An explicit
+`DD_TEST_SESSION_NAME` is unaffected. `TestTestCommandRemovesOnlyVolatileFlags`
+checks both filters; the dd-trace-go main branch at `d27b94332308` still has
+the SDK's patterns.
 
 Mini counts only the tests, examples and fuzz seeds that `-test.run` and
 `-test.skip` let `M.Run` start. A suite or module whose other workloads are
