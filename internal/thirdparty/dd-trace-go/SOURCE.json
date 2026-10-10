@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "3dabf0197355730811773311e01c70d0de7bdc0d67e077275f070ad4042adbb6",
+      "sha256": "3d0c77a7e34f4ee02d3c0e2535c6701ba6ee7a9bff6edf9843426bf88e4d6929",
       "role": "local"
     },
     {
@@ -35,7 +35,7 @@
     },
     {
       "path": "TESTS.json",
-      "sha256": "63e1d178045b8459c55cbe3298a179a8632de18c1252bee46feee7400cc24420",
+      "sha256": "c6b8d0cb8b336e5e5fd7d8e2a6a42ee17ea5148f75d100c57c2a0bf4dcb84242",
       "role": "local"
     },
     {
@@ -985,10 +985,15 @@
     },
     {
       "path": "civisibility/utils/environmentTags.go",
-      "sha256": "00faa1deebe18e335ba4953f1e4412d82790841356db8c1701f424c899c50248",
+      "sha256": "54c1065359033f6f15053e88a65eb5d262f35004dd060d9a884962c9b54209ca",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/environmentTags.go",
       "source_sha256": "b9edfc59d95da35311eef551751a52a3e74a607d0cc9dd3229bfbd175519f428"
+    },
+    {
+      "path": "civisibility/utils/environmentTags_command_test.go",
+      "sha256": "492b96547040ea2b91925ae8421cf63b4086cf40909301f8584a33e597a0a9c3",
+      "role": "local"
     },
     {
       "path": "civisibility/utils/environmentTags_test.go",

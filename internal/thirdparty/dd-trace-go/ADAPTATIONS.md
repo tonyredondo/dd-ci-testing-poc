@@ -447,6 +447,30 @@ submodule is the directory git names in its `safe.directory` advice.
 Checks: `TestSafeDirectoryConfigAcceptsGitFiles` resolves the root from a
 nested directory of a repository, a linked worktree and a submodule.
 
+## Test command
+
+Upstream `createCITagsMap` in
+[`civisibility/utils/environmentTags.go`](civisibility/utils/environmentTags.go)
+joins the binary name and arguments with a trailing space and removes
+`(?si)-test.gocoverdir=(.*)\s`, `-test.v=(.*)\s` and `-test.testlogfile=(.*)\s`
+matches "to make the command more stable". The greedy `.*` runs to the last
+whitespace, so every argument after the first such flag was removed too. `go
+test` passes `-test.testlogfile` first for a cacheable run, which reduced
+`test.command`, the session resource that contains it and the automatic
+`test_session.name` to the binary name.
+
+`testCommand` removes only arguments that set those flags, in `-name=value` or
+`--name=value` form and without regard to case, as the patterns matched. Other
+arguments keep their order. Commands without such a flag, or with one only as
+the last argument, are unchanged. This is a deliberate difference from the
+pinned SDK, recorded in the [parity contract](../../../docs/ci-parity.md#comparison-contract);
+dd-trace-go main at `d27b94332308` still has the greedy patterns.
+
+Checks: `TestTestCommandRemovesOnlyVolatileFlags` compares both filters on
+`go test` argument lists; `integration/TestAlignMiniTestCommandsRequiresMiniForm`
+covers the Fuzz/Examples comparator's alignment of Mini's commands with the
+SDK's.
+
 ## Source metadata parsing
 
 [`civisibility/integrations/manual_api_sourcecache.go`](civisibility/integrations/manual_api_sourcecache.go)

@@ -133,6 +133,14 @@ Only declared differences are normalized:
   numeric values remain required. CI request counters are checked against each
   sender's requests because batching can differ. All other captured CI semantic
   counters compare exactly.
+- `test.command` keeps the arguments after `-test.v=`, `-test.gocoverdir=` and
+  `-test.testlogfile=` in Mini; only those flags are removed. The Fuzz/Examples
+  comparator replaces a Mini command that is absent from the SDK capture, in
+  `test.command` and the session resource, by the longest SDK command that is
+  its whole-argument prefix. That covers the fixture's child processes. For the
+  fixture's own invocation it requires Mini's exact form, derived from the known
+  arguments; a Mini command that keeps a volatile flag, or has no such prefix,
+  stays different and fails.
 - Relocated SDK library stack paths are canonicalized. The exact internal
   function/line pairs below account for inserted hooks and helpers. Testify's
   embedded panic stack uses the same mappings; its `Error Trace` lists only
@@ -156,7 +164,15 @@ maps only those known F-root owners to `.func1`/`.func1.1` in `testingF.go`.
 
 Mini corrections intentionally differ from the frozen SDK. Coverage includes
 code executed only in `t.Cleanup`, and duplicate Testify method names retain the
-client suite and source location. `TestMiniCoverageIncludesCleanup` and
+client suite and source location. The SDK filters `test.command` with greedy
+patterns such as `(?si)-test.v=(.*)\s`, which also remove every argument after
+the first volatile flag. `go test` passes `-test.testlogfile` first for a
+cacheable run, so the SDK's command, and the automatic session name built from
+it, is then only the binary name. Mini removes only the volatile flags, so its
+command, the session resource built from it and the automatic session name
+keep the other arguments, such as `-test.paniconexit0 -test.timeout=10m0s`; an
+explicit `DD_TEST_SESSION_NAME` is unaffected. `TestTestCommandRemovesOnlyVolatileFlags` checks both filters,
+and the dd-trace-go main branch at `d27b94332308` still has the SDK's patterns. `TestMiniCoverageIncludesCleanup` and
 `TestMiniTestifyDuplicateIdentity` assert those expected payloads directly;
 the differential comparator does not hide either difference. They run with the
 complete suite on every CI platform.

@@ -658,6 +658,14 @@
     {
       "path": "civisibility/utils/git_safe_directory_test.go",
       "purpose": "safe.directory names the checkout root of a repository, a linked worktree or a submodule, whose .git is a file."
+    },
+    {
+      "path": "civisibility/utils/environmentTags_command_test.go",
+      "purpose": "test.command removes only -test.gocoverdir, -test.v and -test.testlogfile arguments; the pinned SDK's greedy filters, kept as an oracle, also remove every later argument."
+    },
+    {
+      "path": "integration/test_command_test.go",
+      "purpose": "The Fuzz/Examples comparator aligns a Mini test.command with the longest SDK command that is its argument prefix, requires Mini's exact form for the fixture invocation and rejects retained volatile flags."
     }
   ],
   "local_delivery_checks": [
