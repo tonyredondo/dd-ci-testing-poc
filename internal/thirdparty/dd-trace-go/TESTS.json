@@ -690,6 +690,10 @@
     {
       "path": "integration/mini_wire_test.go",
       "purpose": "TestMiniFilteredTestsFinishSuiteBeforeSession: with tests excluded by -test.run, the selected tests' suite and module end before the session."
+    },
+    {
+      "path": "civisibility/integrations/gotesting/suite_counters_test.go",
+      "purpose": "Two modules' suites with the same file name keep separate counters and close independently."
     }
   ],
   "local_delivery_checks": [
@@ -769,7 +773,7 @@
           "source": "internal/civisibility/integrations/gotesting/testing_workloads_test.go",
           "destination": "internal/thirdparty/dd-trace-go/civisibility/integrations/gotesting/testing_workloads_test.go",
           "source_sha256": "143475d3970c0ded6bbe602dc79906669a4538e312d159e318348bc374b72791",
-          "adaptation": "Import relocation only; original assertions retained"
+          "adaptation": "Import relocation; suite counters are read and restored by module and suite (testSuiteCounterKey); original assertions retained"
         }
       ],
       "fixtures_manifest": "testdata/fuzzexamples/SOURCE.json",

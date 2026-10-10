@@ -270,7 +270,7 @@ func instrumentTestingTFuncWithSourceOptions(
 			}
 
 			addModulesCounters(moduleName, 1)
-			addSuitesCounters(suiteName, 1)
+			addSuitesCounters(moduleName, suiteName, 1)
 			if log.DebugEnabled() {
 				log.Debug("instrumentTestingTFunc: creating test span for %s", currentT.Name())
 			}
@@ -599,7 +599,7 @@ func instrumentTestingBFunc(pb *testing.B, name string, f func(*testing.B)) (str
 		addModulesCounters(moduleName, 1)
 
 		// Increment the test count in the suite.
-		addSuitesCounters(suiteName, 1)
+		addSuitesCounters(moduleName, suiteName, 1)
 
 		// Decrement level.
 		bpf := getBenchmarkPrivateFields(b)

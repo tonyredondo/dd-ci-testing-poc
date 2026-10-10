@@ -105,7 +105,7 @@ func (ddm *M) instrumentInternalFuzzTargets(targets *[]testing.InternalFuzzTarge
 		moduleName, suiteName := utils.GetModuleAndSuiteName(fn.Entry())
 		if claim.selectionOrAll().selectsFuzzTarget(target.Name) {
 			addModulesCounters(moduleName, 1)
-			addSuitesCounters(suiteName, 1)
+			addSuitesCounters(moduleName, suiteName, 1)
 		}
 		info := &testingFInfo{
 			originalFunc: target.Fn,

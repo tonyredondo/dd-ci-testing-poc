@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "60b08c891570c2f905bf7e51c6e8f0d7cd2496ca0bc913dbbcc78ef59831bed2",
+      "sha256": "8db0d074908d5a9ee873bdf44cfc44e2104c965d9a2ca4de7544ed71c374d462",
       "role": "local"
     },
     {
@@ -35,7 +35,7 @@
     },
     {
       "path": "TESTS.json",
-      "sha256": "4f479b05aa0916107107acbd16a2ad126b81132e73e55703ecedfb23b103eb09",
+      "sha256": "ed538cb39ab99fb22fc102e5dedd14c2e8278bc839d16c6cb4cf1d235064a72a",
       "role": "local"
     },
     {
@@ -487,7 +487,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/instrumentation_orchestrion.go",
-      "sha256": "cd1f3e46d2d33d0dd9a892d957a6aa7076a08e17f35d29025d75334f5c4b0d57",
+      "sha256": "26bce2e301d496e11ffc8ef05310eb4466e8e7bcd6dd6ce433bec3fb53072c54",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/instrumentation_orchestrion.go",
       "source_sha256": "e07e0e5d272cdf6148fea865f53b1f1f40dfe29b60b4c461bfe29a5dd52784b3"
@@ -527,7 +527,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/quarantine_process.go",
-      "sha256": "6048fcb814d0aee7ce613caef6ece3b958648fe2cd3d41989944a668d34b626e",
+      "sha256": "7db78cfa93c5361d2f665ff90929cff368a6b8b6933cc743ee86aab6c8d608c5",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/quarantine_process.go",
       "source_sha256": "127b790b31e406e5b1d4702ef09e0a7b37cfff06488f0f97b20fa987d67cd8e5"
@@ -731,7 +731,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/testing.go",
-      "sha256": "9b15a5ac9ac47b39e88326fa2645e2bce9f1f782d7eec6f3c1f849d46567bfad",
+      "sha256": "87be0779e44f6727c9eab9236731491c39a611bd468e1c5375500604b9a5a843",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testing.go",
       "source_sha256": "73324a56f1b1c581df8620a4f67a51743b198b2470d43f9b645425fff6a63646"
@@ -745,7 +745,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/testingExample.go",
-      "sha256": "0a9b0fbcf193823b4d00c4f12d10a180601a36e40fd5a4a1b386bf17e130a404",
+      "sha256": "7b58c782a4943238afb4576d1e23fb1db7acc773fbaa5c38e53b38ca3845cf17",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testingExample.go",
       "source_sha256": "6d2cd01ded4c3b39350762b2b9a07aecb2efa064f3ebf1b5e9e202d8bf3ebd5a"
@@ -759,7 +759,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/testingF.go",
-      "sha256": "0fe95822c4c39967d4bfdf02869d1571c7e88086aca4b40570cdb6993fb9ead5",
+      "sha256": "8c2822da56543f5a18e487f72b7cd0b8cfc8329010d1c7a022b35e2ef12a66e2",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testingF.go",
       "source_sha256": "7a62a0af9a53bd8fa7abccf320cf47ed62acc559268973c08c937a4e5bd31ab8"
@@ -780,7 +780,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/testing_workloads_test.go",
-      "sha256": "c43a7e9df16cd97b6da39abd83b3a0d5cea4005acebb620b983cf6291c5ef69c",
+      "sha256": "bbace6903cbca7a29076bd7c6a50793b6a479821ad7f92748e6f8069286e521b",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testing_workloads_test.go",
       "source_sha256": "143475d3970c0ded6bbe602dc79906669a4538e312d159e318348bc374b72791"
@@ -2083,6 +2083,11 @@
     {
       "path": "civisibility/integrations/gotesting/native_context_test.go",
       "sha256": "2d6c49c44f820720f2cd2b518032ea0c9c6614a3331c0461c470c4462170bf02",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/integrations/gotesting/suite_counters_test.go",
+      "sha256": "1e01818ee447660ab12a40b12c187403c60264a7091fe9a844c1b6ced93a4923",
       "role": "local"
     },
     {

@@ -59,8 +59,8 @@ var (
 	// suitesCountersMutex is a mutex to protect access to the suitesCounters map.
 	suitesCountersMutex sync.Mutex
 
-	// suitesCounters keeps track of the number of tests per suite.
-	suitesCounters = map[string]int{}
+	// suitesCounters keeps track of the number of tests per module and suite.
+	suitesCounters = map[testSuiteCounterKey]int{}
 
 	// numOfTestsSkipped keeps track of the number of tests skipped by ITR.
 	numOfTestsSkipped atomic.Uint64
@@ -654,7 +654,7 @@ func (ddm *M) instrumentInternalTests(internalTests *[]testing.InternalTest, wra
 		// suite and module close when their counts return to zero.
 		if claim.selectionOrAll().selects(test.Name) {
 			addModulesCounters(moduleName, 1)
-			addSuitesCounters(suiteName, 1)
+			addSuitesCounters(moduleName, suiteName, 1)
 		}
 
 		testInfos[idx] = testInfo
@@ -915,7 +915,7 @@ func (ddm *M) instrumentInternalBenchmarks(internalBenchmarks *[]testing.Interna
 		addModulesCounters(moduleName, 1)
 
 		// Increment the test count in the suite.
-		addSuitesCounters(suiteName, 1)
+		addSuitesCounters(moduleName, suiteName, 1)
 
 		benchmarkInfos[idx] = benchmarkInfo
 	}
@@ -1169,7 +1169,7 @@ func RunM(m *testing.M) int {
 // checkModuleAndSuite checks and closes the modules and suites if all tests are executed.
 func checkModuleAndSuite(module integrations.TestModule, suite integrations.TestSuite) {
 	// If all tests in a suite has been executed we can close the suite
-	if addSuitesCounters(suite.Name(), -1) <= 0 {
+	if addSuitesCounters(module.Name(), suite.Name(), -1) <= 0 {
 		suite.Close()
 	}
 
@@ -1179,12 +1179,19 @@ func checkModuleAndSuite(module integrations.TestModule, suite integrations.Test
 	}
 }
 
-// addSuitesCounters increments the suite counters for a given suite name.
-func addSuitesCounters(suiteName string, delta int) int {
+// testSuiteCounterKey identifies a suite within its module. Suite names are
+// file names, which several modules of one binary can share.
+type testSuiteCounterKey struct {
+	moduleName, suiteName string
+}
+
+// addSuitesCounters increments the counter of a module's suite.
+func addSuitesCounters(moduleName, suiteName string, delta int) int {
 	suitesCountersMutex.Lock()
 	defer suitesCountersMutex.Unlock()
-	nValue := suitesCounters[suiteName] + delta
-	suitesCounters[suiteName] = nValue
+	key := testSuiteCounterKey{moduleName: moduleName, suiteName: suiteName}
+	nValue := suitesCounters[key] + delta
+	suitesCounters[key] = nValue
 	return nValue
 }
 

@@ -59,7 +59,7 @@ func (ddm *M) instrumentInternalExamples(examples *[]testing.InternalExample, cl
 		moduleName, suiteName := utils.GetModuleAndSuiteName(fn.Entry())
 		if claim.selectionOrAll().selects(example.Name) {
 			addModulesCounters(moduleName, 1)
-			addSuitesCounters(suiteName, 1)
+			addSuitesCounters(moduleName, suiteName, 1)
 		}
 		info := &testingExampleInfo{
 			originalFunc: example.F,

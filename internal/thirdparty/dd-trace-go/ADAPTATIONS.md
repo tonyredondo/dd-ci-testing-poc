@@ -771,6 +771,15 @@ compares the copies with `flag.Parse`; `TestMiniFilteredTestsFinishSuiteBeforeSe
 checks that a suite with filtered tests ends before the session. Re-check
 testing's `match.go` when Go changes.
 
+The suite counters themselves are keyed by module and suite
+(`testSuiteCounterKey` in
+[`civisibility/integrations/gotesting/testing.go`](civisibility/integrations/gotesting/testing.go)).
+Upstream keys them by suite name only, which is a file's base name: two modules
+of one binary with a file of the same name, such as subtest closures in helper
+packages, shared a counter, so one of those suites closed only at exit.
+`TestSuiteCountersAreKeyedByModule` closes two same-named suites of different
+modules independently; the ported workload test counts by the same key.
+
 ## Lazy stack classification
 
 [`stacktrace/stacktrace.go`](stacktrace/stacktrace.go) constructs its immutable
