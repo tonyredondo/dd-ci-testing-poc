@@ -134,7 +134,9 @@ Only declared differences are normalized:
   sender's requests because batching can differ. All other captured CI semantic
   counters compare exactly.
 - `test.command` keeps the arguments after `-test.v=`, `-test.gocoverdir=` and
-  `-test.testlogfile=` in Mini; only those flags are removed. The Fuzz/Examples
+  `-test.testlogfile=` in Mini. Mini removes those flags and the other paths
+  that `go test` injects: `-test.coverprofile=`, `-test.outputdir=` and
+  `-test.fuzzcachedir=`. The Fuzz/Examples
   comparator replaces a Mini command that is absent from the SDK capture, in
   `test.command` and the session resource, by the longest SDK command that is
   its whole-argument prefix. That covers the fixture's child processes. For the

@@ -23,7 +23,7 @@ Set these variables in the environment of `ddto`, or of a compiled test binary:
 | `DD_TRACE_AGENT_URL` | Explicit Agent address, including supported Unix socket URLs. Without an override, host/port settings take precedence over the default socket, then `http://localhost:8126`. [Agent settings](../README.md#reporting-and-delivery) |
 | `DD_SERVICE` | Explicit test service. A nonempty value takes precedence over automatic naming. |
 | `DD_ENV`, `DD_VERSION`, `DD_TAGS` | Environment, service version and custom tags on CI events. |
-| `DD_TEST_SESSION_NAME` | Explicit session name, including an explicitly empty value. Otherwise use the CI job name plus test command, or the command alone. The test command is the binary name and its arguments without `-test.gocoverdir`, `-test.v` and `-test.testlogfile`; see the [difference from the SDK](ci-parity.md#comparison-contract). |
+| `DD_TEST_SESSION_NAME` | Explicit session name, including an explicitly empty value. Otherwise use the CI job name plus test command, or the command alone. The test command is the binary name and its arguments without `-test.v` and the paths that `go test` injects (`-test.gocoverdir`, `-test.testlogfile`, `-test.coverprofile`, `-test.outputdir` and `-test.fuzzcachedir`); see the [difference from the SDK](ci-parity.md#comparison-contract). |
 | `DD_GIT_REPOSITORY_URL`, `DD_GIT_COMMIT_SHA` | Override Git identity. Both are needed to fetch settings when the checkout/CI environment cannot supply them. |
 | `DD_TRACE_DEBUG` | Build and runtime diagnostics with phase and request timings. [Log guide](cli-debug.md) |
 | `DD_CIVISIBILITY_LOGS_ENABLED` | Enable CI log delivery. |

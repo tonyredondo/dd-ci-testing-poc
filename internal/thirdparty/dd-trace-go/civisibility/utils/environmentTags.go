@@ -367,9 +367,10 @@ func createCITagsMap() map[string]string {
 }
 
 // volatileTestFlags name the go test flags whose values change between runs of
-// the same command: the coverage directory, -test.v's output mode and the test
-// result cache's log file.
-var volatileTestFlags = []string{"test.gocoverdir=", "test.v=", "test.testlogfile="}
+// the same command: -test.v's output mode and the paths that go test injects,
+// the coverage directory and profile in its work directory, the result
+// cache's log file, the absolute output directory and the fuzz cache.
+var volatileTestFlags = []string{"test.gocoverdir=", "test.v=", "test.testlogfile=", "test.coverprofile=", "test.outputdir=", "test.fuzzcachedir="}
 
 // testCommand joins the binary name and its arguments without the volatile
 // flags, to make the command more stable. Upstream joins the arguments first

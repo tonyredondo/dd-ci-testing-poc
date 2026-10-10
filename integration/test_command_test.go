@@ -20,11 +20,11 @@ func sdkTestCommand(args []string) string {
 	return strings.TrimSpace(cmd)
 }
 
-// isVolatileTestArgument reports a -test.gocoverdir, -test.v or
-// -test.testlogfile argument with a value, which Mini removes.
+// isVolatileTestArgument reports a -test.v argument with a value, or one of
+// the paths go test injects, which Mini removes.
 func isVolatileTestArgument(arg string) bool {
 	name := strings.TrimPrefix(strings.TrimPrefix(arg, "-"), "-")
-	for _, prefix := range []string{"test.gocoverdir=", "test.v=", "test.testlogfile="} {
+	for _, prefix := range []string{"test.gocoverdir=", "test.v=", "test.testlogfile=", "test.coverprofile=", "test.outputdir=", "test.fuzzcachedir="} {
 		if strings.HasPrefix(arg, "-") && len(name) >= len(prefix) && strings.EqualFold(name[:len(prefix)], prefix) {
 			return true
 		}
@@ -47,8 +47,9 @@ func miniTestCommand(args []string) string {
 // comparison. The pinned SDK's greedy filters cut test.command at its first
 // volatile flag, while Mini removes only those flags. A Mini command absent
 // from the SDK capture is replaced, in test.command and the session resource,
-// by the longest SDK command that is its whole-argument prefix; any other
-// command stays exact and fails the comparison. Child processes started by
+// by the longest SDK command that, without Mini's volatile flags, is equal to
+// it or its whole-argument prefix; any other command stays exact and fails the
+// comparison. Child processes started by
 // the fixture are matched the same way. For the fixture's own invocation,
 // whose arguments are known, Mini's exact form must be present, so a Mini
 // that kept the SDK's form cannot pass unnoticed. A nil invocation, for a
@@ -87,7 +88,10 @@ func alignMiniTestCommands(sdkEvents, miniEvents []map[string]any, invocation []
 				}
 			}
 			for candidate := range sdkCommands {
-				if strings.HasPrefix(command, candidate+" ") && len(candidate) > len(replacement) {
+				// The SDK keeps the volatile flags that precede none of its
+				// filters, such as a final -test.fuzzcachedir; Mini removes them.
+				kept := miniTestCommand(strings.Fields(candidate))
+				if (kept == command || strings.HasPrefix(command, kept+" ")) && len(candidate) > len(replacement) {
 					replacement = candidate
 				}
 			}
@@ -121,9 +125,10 @@ func TestAlignMiniTestCommandsRequiresMiniForm(t *testing.T) {
 		t.Fatalf("Mini form %q, want %q", got, want)
 	}
 	sdk := []map[string]any{session("fixture.test -test.count=1"), session("fixture.test -test.run=^FuzzChild$"), session("fixture.test -test.run=^FuzzOther$ -test.timeout=15s")}
-	mini := []map[string]any{session("fixture.test -test.count=1 -test.run=^FuzzNative$"), session("fixture.test -test.run=^FuzzChild$ -test.parallel=1"), session("fixture.test -test.run=^FuzzOther$ -test.timeout=15s"), session("fixture.test -unrelated")}
+	sdk = append(sdk, session("fixture.test -test.run=^FuzzCache$ -test.fuzzcachedir=cache"))
+	mini := []map[string]any{session("fixture.test -test.count=1 -test.run=^FuzzNative$"), session("fixture.test -test.run=^FuzzChild$ -test.parallel=1"), session("fixture.test -test.run=^FuzzOther$ -test.timeout=15s"), session("fixture.test -unrelated"), session("fixture.test -test.run=^FuzzCache$")}
 	alignMiniTestCommands(sdk, mini, invocation)
-	for i, want := range []string{"fixture.test -test.count=1", "fixture.test -test.run=^FuzzChild$", "fixture.test -test.run=^FuzzOther$ -test.timeout=15s", "fixture.test -unrelated"} {
+	for i, want := range []string{"fixture.test -test.count=1", "fixture.test -test.run=^FuzzChild$", "fixture.test -test.run=^FuzzOther$ -test.timeout=15s", "fixture.test -unrelated", "fixture.test -test.run=^FuzzCache$ -test.fuzzcachedir=cache"} {
 		content := mini[i]["content"].(map[string]any)
 		if got := content["meta"].(map[string]any)["test.command"]; got != want {
 			t.Fatalf("event %d test.command = %q, want %q", i, got, want)

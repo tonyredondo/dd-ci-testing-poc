@@ -502,7 +502,12 @@ test` passes `-test.testlogfile` first for a cacheable run, which reduced
 `test_session.name` to the binary name.
 
 `testCommand` removes only arguments that set those flags, in `-name=value` or
-`--name=value` form and without regard to case, as the patterns matched. Other
+`--name=value` form and without regard to case, as the patterns matched. It
+also removes the other paths that `go test` injects and that change between
+runs or machines: `-test.coverprofile`, rewritten to a file in the work
+directory, the absolute `-test.outputdir` and `-test.fuzzcachedir`. Upstream
+never kept them, because they follow `-test.gocoverdir` or
+`-test.testlogfile`, or are only added with fuzzing or profiles. Other
 arguments keep their order. Commands without such a flag, or with one only as
 the last argument, are unchanged. This is a deliberate difference from the
 pinned SDK, recorded in the [parity contract](../../../docs/ci-parity.md#comparison-contract);
