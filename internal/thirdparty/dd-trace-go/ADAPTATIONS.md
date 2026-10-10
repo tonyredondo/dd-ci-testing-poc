@@ -700,6 +700,37 @@ Checks: `TestMatchKnownTestKeepsSDKResults` compares the upstream function,
 `TestMatchKnownTestConcurrentIndex` under `-race`, `BenchmarkMatchKnownTest`,
 and the EFD and known-test parity cases.
 
+## Error stacks captured once
+
+Only a test's first formatted error is kept, but upstream built its stack
+before the compare-and-swap that keeps it. Every `Error`, `Errorf`, `Fatal` or
+`Fatalf` call walked and formatted the stack, and `instrumentSetErrorInfo`
+captured another one that it then replaced with the formatted error's stack.
+A failing test with many assertions paid for a stack per assertion.
+
+`instrumentCaptureFormattedError` in
+[`civisibility/integrations/gotesting/instrumentation_orchestrion.go`](civisibility/integrations/gotesting/instrumentation_orchestrion.go)
+and `recordProcessRetryChildErrorInfo` in
+[`civisibility/integrations/gotesting/retry_process.go`](civisibility/integrations/gotesting/retry_process.go)
+now load the recorded error first and build a stack only when none is
+recorded. The compare-and-swap still decides between concurrent first errors.
+`instrumentSetErrorInfo` captures a stack only when no formatted error exists.
+Stacks are still captured in the same functions, so their skipped frames do
+not change, and no line moves in `instrumentation_orchestrion.go`, whose
+closures appear in compared error stacks.
+
+At 16 frames, a second or later formatted error took 5.4 µs, 15.5 KB and 40
+allocations; it now takes 27 ns and none (darwin/arm64). The first failure of a
+test saves one such capture in `instrumentSetErrorInfo`, and a process-retry
+child saves one per error call.
+
+Checks: `TestCaptureFormattedErrorKeepsFirstError`,
+`TestCaptureFormattedErrorConcurrentFirstWins` under `-race`,
+`TestRecordProcessRetryChildErrorInfoKeepsFirstError`,
+`TestSetErrorInfoCapturesStackOnlyWithoutFormattedError`,
+`BenchmarkCaptureFormattedErrorRepeated`, and the parity groups' error-stack
+comparisons.
+
 ## Lazy stack classification
 
 [`stacktrace/stacktrace.go`](stacktrace/stacktrace.go) constructs its immutable

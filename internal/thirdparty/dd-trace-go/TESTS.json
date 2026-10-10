@@ -644,6 +644,10 @@
     {
       "path": "civisibility/integrations/gotesting/known_tests_test.go",
       "purpose": "Indexed known-test lookups return the upstream results, including the known-data flag; a new response gets a new index; one lookup per wrapped test is reused; concurrent indexing under -race."
+    },
+    {
+      "path": "civisibility/integrations/gotesting/error_capture_test.go",
+      "purpose": "The first formatted error keeps its caller's stack, including concurrent first errors and process-retry owners; later errors and instrumentSetErrorInfo after a formatted error capture no stack."
     }
   ],
   "local_compatibility_checks": [
