@@ -674,6 +674,32 @@ Checks: `TestTestMetadataStoreKeepsMapSemantics`,
 `BenchmarkTestMetadataLifecycleParallel`, and the parity, retry and Testify
 integration groups.
 
+## Known-test lookups
+
+Upstream `isKnownTest` in
+[`civisibility/integrations/gotesting/testing.go`](civisibility/integrations/gotesting/testing.go)
+scans the suite's list of known names, which includes subtests, for every
+top-level test and benchmark while `M.Run` wraps them, before any test starts.
+Wrapping a test asks twice: once for the known-test tag and again for Early
+Flake Detection. A file with 1,000 tests and 10,000 known names compared about
+20 million strings.
+
+`matchKnownTest` keeps the scan for lists of up to 32 names. Longer lists are
+indexed once into a set, keyed by the list's backing array and length; a
+response is never changed after decoding, and a new response has new arrays.
+`commonInfo` keeps the result, so the second question reuses it. Results are
+unchanged, including the known-data flag: present but empty data, a missing
+module or a missing suite still report data without a match.
+
+Measured on darwin/arm64, looking up a new test: 0.93–0.97 µs with 1,000
+names and 7.5–8.8 µs with 10,000 become 41–48 ns and 28–29 ns; lists of ten
+names stay at about 25 ns. Building a 10,000-name set happens once per suite.
+
+Checks: `TestMatchKnownTestKeepsSDKResults` compares the upstream function,
+`TestMatchKnownTestIndexFollowsNewResponse`, `TestLookupKnownTestReusesResult`,
+`TestMatchKnownTestConcurrentIndex` under `-race`, `BenchmarkMatchKnownTest`,
+and the EFD and known-test parity cases.
+
 ## Lazy stack classification
 
 [`stacktrace/stacktrace.go`](stacktrace/stacktrace.go) constructs its immutable

@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "f66f7e92bf6f0b83e2f8b84b03db8f62b961db0fa6a6628935a039c0f7521c2a",
+      "sha256": "cb0cd63885604ddbcdd6143fc96c03fff6ac6c12a38430d4a148e83677d0e492",
       "role": "local"
     },
     {
@@ -35,7 +35,7 @@
     },
     {
       "path": "TESTS.json",
-      "sha256": "7a5bd7035d84760324a8da2863bff926851a5ff467a3e6d8f13de9952c00946b",
+      "sha256": "e42439c4df75e5568cba5cad7dc25b299ec847161ca0dfd977b1b8c6b43e6760",
       "role": "local"
     },
     {
@@ -509,6 +509,11 @@
       "source_sha256": "e7466cf422ad6c0af70c6419874e35dad6dabcaa729e05d7e9ecdad3d2683ae9"
     },
     {
+      "path": "civisibility/integrations/gotesting/known_tests_test.go",
+      "sha256": "6b0fcd744b5c2b6e4fb7db6dacbadc1f747c9fd5ad19364a2fb29173ae54556f",
+      "role": "local"
+    },
+    {
       "path": "civisibility/integrations/gotesting/quarantine_norace.go",
       "sha256": "fc14c68f67f0f51dd2253d8e62cda59aa771376ae90fca7edb1050ffc734c1c4",
       "role": "adapted",
@@ -721,7 +726,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/testing.go",
-      "sha256": "20f638a60e896a323666a277b8d46042e9a7ec18b6c6f06ffdf460ee9f1dd8b6",
+      "sha256": "fe64a815ce7a8a6f13964b8b5b6c255db879b9a2e03cbc7924f1e6293abf42ac",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testing.go",
       "source_sha256": "73324a56f1b1c581df8620a4f67a51743b198b2470d43f9b645425fff6a63646"

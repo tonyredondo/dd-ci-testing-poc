@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go"
@@ -132,6 +133,8 @@ type (
 		testName   string
 		identity   *testIdentity
 		sourceFunc *runtime.Func
+		// Known-test lookup, reused by later callers. Set while instrumenting.
+		knownTestChecked, knownTest, knownTestData bool
 	}
 
 	// testingTInfo holds information specific to tests.
@@ -1190,14 +1193,34 @@ func addModulesCounters(moduleName string, delta int) int {
 	return nValue
 }
 
-// isKnownTest checks if a test is a known test or a new one
+// isKnownTest checks if a test is a known test or a new one. The result is
+// kept in testInfo: wrapping a test asks once for the known-test tag and again
+// for Early Flake Detection.
 func isKnownTest(testInfo *commonInfo) (isKnown bool, hasKnownData bool) {
-	knownTestsData := integrations.GetKnownTests()
+	return testInfo.lookupKnownTest(integrations.GetKnownTests)
+}
+
+func (c *commonInfo) lookupKnownTest(knownTests func() *net.KnownTestsResponseData) (isKnown bool, hasKnownData bool) {
+	if !c.knownTestChecked {
+		c.knownTest, c.knownTestData = matchKnownTest(knownTests(), c.moduleName, c.suiteName, c.testName)
+		c.knownTestChecked = true
+	}
+	return c.knownTest, c.knownTestData
+}
+
+// matchKnownTest reports whether name is listed for its module and suite, and
+// whether there is any known-test data. The SDK scanned the suite's list for
+// every test; long lists are indexed once instead.
+func matchKnownTest(knownTestsData *net.KnownTestsResponseData, moduleName, suiteName, name string) (isKnown bool, hasKnownData bool) {
 	if knownTestsData != nil && len(knownTestsData.Tests) > 0 {
 		// Check if the test is a known test or a new one
-		if knownSuites, ok := knownTestsData.Tests[testInfo.moduleName]; ok {
-			if knownTests, ok := knownSuites[testInfo.suiteName]; ok {
-				return slices.Contains(knownTests, testInfo.testName), true
+		if knownSuites, ok := knownTestsData.Tests[moduleName]; ok {
+			if knownTests, ok := knownSuites[suiteName]; ok {
+				if len(knownTests) <= knownTestScanLimit {
+					return slices.Contains(knownTests, name), true
+				}
+				_, isKnown = knownTestSet(knownTests)[name]
+				return isKnown, true
 			}
 		}
 
@@ -1205,6 +1228,40 @@ func isKnownTest(testInfo *commonInfo) (isKnown bool, hasKnownData bool) {
 	}
 
 	return false, false
+}
+
+// knownTestScanLimit is the list length up to which a scan is cheaper than
+// building a set.
+const knownTestScanLimit = 32
+
+// knownTestSets indexes known-test lists by their backing array, which the
+// response never changes after decoding. A new response has new arrays.
+var knownTestSets sync.Map // knownTestListKey -> *knownTestNames
+
+type knownTestListKey struct {
+	first  *string
+	length int
+}
+
+type knownTestNames struct {
+	once  sync.Once
+	names map[string]struct{}
+}
+
+func knownTestSet(list []string) map[string]struct{} {
+	key := knownTestListKey{first: unsafe.SliceData(list), length: len(list)}
+	value, ok := knownTestSets.Load(key)
+	if !ok {
+		value, _ = knownTestSets.LoadOrStore(key, &knownTestNames{})
+	}
+	set := value.(*knownTestNames)
+	set.once.Do(func() {
+		set.names = make(map[string]struct{}, len(list))
+		for _, name := range list {
+			set.names[name] = struct{}{}
+		}
+	})
+	return set.names
 }
 
 // getTestManagementData retrieves the test management data for a test identity.

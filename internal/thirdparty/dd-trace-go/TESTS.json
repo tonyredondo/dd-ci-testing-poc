@@ -640,6 +640,10 @@
     {
       "path": "civisibility/integrations/gotesting/coverage/profile_diff_test.go",
       "purpose": "Ordered profile parsing and index/key subtraction return the upstream algorithm's blocks, covered files and bitmaps for generated and hand-written profiles; adapters run the ported coverage assertions unchanged."
+    },
+    {
+      "path": "civisibility/integrations/gotesting/known_tests_test.go",
+      "purpose": "Indexed known-test lookups return the upstream results, including the known-data flag; a new response gets a new index; one lookup per wrapped test is reused; concurrent indexing under -race."
     }
   ],
   "local_compatibility_checks": [
@@ -696,6 +700,9 @@
     {
       "path": "internal/thirdparty/dd-trace-go/civisibility/integrations/civisibility_exit_flush_test.go",
       "purpose": "Exit delivers an event finished after session close through Stop alone, with one delivery's attempts against a failing intake."
+    },
+    {
+      "purpose": "Map only Mini executeInternalTest.func1 testing.go:870 to SDK testing.go:864; other library locations and application frames stay strict."
     }
   ],
   "local_common_metadata_checks": [
