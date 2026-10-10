@@ -49,7 +49,14 @@ The same AST identifies `testing.parallelStop` for the optional shutdown hook;
 hook selection does not parse the sources again.
 
 [`PrepareRuntime`](../internal/runner/run.go) requests only the package fields
-it needs from a targeted `go list`. Testify discovery can add one metadata or
+it needs from a targeted `go list -deps`, which lists the named packages and
+each of their dependencies once. Reachability follows `Imports` through that
+graph. Go's per-package `Deps` field would repeat a package's complete closure
+for every named package: in a 2000-package fixture whose packages import 990
+others on average, that output was 56 MB, and dropping it reduced preparation
+from 2.65 to 2.08 s, peak memory from 175 to 88 MB and CPU from 2.55 to 1.60 s
+(medians of seven). A small module lists more records instead: about 7 ms more
+for 61 packages. Testify discovery can add one metadata or
 dependency query, as described below. Both queries decode JSON directly from
 Go's stdout. The front-end retains decoded package records without a second
 complete JSON buffer. It drains and waits for the subprocess even after malformed
@@ -95,15 +102,16 @@ The [Testify contract](testify.md) selects `-toolexec` from actual reachability,
 not the presence of a module requirement. Plain tests and assert-only targets
 omit it unless another selected integration needs it: Mini goleak, SDK guards
 and span copies, Orchestrion composition or coverage of rewritten `testing`
-sources. Known library reachability without unknown test imports uses
-`go list -find`; unknown test imports use `-deps`
-so external helpers remain covered. The selected-version/API check stays in
+sources. Libraries that the named packages import already appear in the
+package query, with their metadata; unknown test imports use `-deps`
+so external helpers remain covered. Only libraries absent from both, such as
+SDK packages that Orchestrion can add while compiling, use `go list -find`. The selected-version/API check stays in
 preparation, before a warm cache can skip the compiler. The dependency query
 excludes selected packages and dependency closures already inspected by the
 first query. Unknown test-only imports stay in the query, including standard
 packages outside those known closures and helpers in other modules. Runtime
 dependencies are not evidence of a client's test-helper graph. Suite reachability
-is checked before pruning, so a known suite still receives its metadata query
+is checked before pruning, so a known suite still receives its metadata
 and version validation.
 
 Unrelated tools dispatch without opening the plan. On Unix the CLI replaces

@@ -66,11 +66,13 @@ sequenceDiagram
     participant AST as Transformer
     participant Plan as Overlay files
     CLI->>CLI: Parse flags and apply activation default
-    CLI->>Go: Targeted go list for testing, runtime and client packages
-    Go-->>CLI: Package metadata and test imports
-    opt Library reachable or unknown test imports need resolution
-        CLI->>Go: go list -find for known libraries, otherwise -deps
-        Go-->>CLI: Testify and Mini goleak source and module metadata
+    CLI->>Go: go list -deps for testing, runtime and client packages
+    Go-->>CLI: Each package once: metadata, imports and test imports
+    opt Unknown test imports, or libraries outside that graph
+        CLI->>Go: go list -deps for test-only imports, otherwise -find
+        Go-->>CLI: Testify, Mini goleak and SDK source and module metadata
+    end
+    opt Library reachable
         CLI->>AST: Validate versions and APIs
         CLI->>AST: Prepare library entry hooks
         AST-->>CLI: Source edits, hooks and content fingerprints

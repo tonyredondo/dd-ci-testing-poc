@@ -27,9 +27,9 @@ type goPackage struct {
 	commandLine                        bool // Selected by the original package query, not dependency discovery.
 	Dir, Name, ImportPath              string
 	Standard                           bool
+	DepOnly                            bool // Listed by -deps only as a dependency of the named packages.
 	GoFiles, TestGoFiles, XTestGoFiles []string
 	Imports, TestImports, XTestImports []string
-	Deps                               []string
 	Module                             *struct {
 		Path, Version string
 		Main          bool
@@ -267,13 +267,17 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			return plan, e
 		}
 	}
+	// The package query lists the named packages and, with -deps, each of their
+	// dependencies once. Reachability follows Imports through that graph
+	// instead of each package's Deps, a complete closure per package that grows
+	// with the product of package count and dependency depth.
 	list := func(patterns ...string) (packages []goPackage, err error) {
 		phase := debug.start("resolve packages")
 		defer func() {
 			phase.finish(err)
 			debug.printf("package query patterns=%d resolved=%d", len(patterns), len(packages))
 		}()
-		listArgs := append([]string{"list", "-e", "-json=Dir,Name,ImportPath,Standard,GoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,Deps,Module,Error"}, opts.buildFlags...)
+		listArgs := append([]string{"list", "-e", "-json=Dir,Name,ImportPath,Standard,DepOnly,GoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,Module,Error"}, opts.buildFlags...)
 		listArgs = append(listArgs, patterns...)
 		cmd := exec.CommandContext(ctx, "go", listArgs...)
 		// Keep Env nil: os/exec then sets PWD to dir, so go list reports
@@ -297,37 +301,45 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			opts.buildFlags = append(opts.buildFlags, "-modfile="+plan.Modfile)
 		}
 	}
-	patterns := append(append([]string(nil), opts.packages...), "testing", runtimePackage)
-	var packages []goPackage
+	patterns := append([]string{"-deps"}, opts.packages...)
+	patterns = append(patterns, "testing", runtimePackage)
+	var listed []goPackage
 	if opts.mod == "mod" && !plan.moduleWorkspace {
 		// Resolve only native client imports, including test-only imports,
 		// before probing our injected runtime. Preserve native module updates.
 		_, e = list(append([]string{"-test", "-json=ImportPath,Error"}, opts.packages...)...)
 		if e == nil {
-			packages, e = list(append([]string{"-mod=readonly"}, patterns...)...)
+			listed, e = list(append([]string{"-mod=readonly"}, patterns...)...)
 		}
 	} else {
-		packages, e = list(patterns...)
+		listed, e = list(patterns...)
 	}
 	if e != nil {
 		return plan, e
 	}
-	for _, p := range packages {
-		if p.ImportPath == runtimePackage && p.Error != nil && plan.Modfile == "" {
+	for _, p := range listed {
+		if p.ImportPath == runtimePackage && !p.DepOnly && p.Error != nil && plan.Modfile == "" {
 			// The module does not require the runtime: provide it through a
 			// temporary go.mod instead of failing or editing the module.
 			if plan.Modfile, e = provideRuntime(ctx, dir, opts, runtime, temp, replacements, progress); e != nil {
 				return plan, fmt.Errorf("%s: %s\nddto could not provide it: %w", p.ImportPath, p.Error.Err, e)
 			}
 			opts.buildFlags = append(opts.buildFlags, "-modfile="+plan.Modfile)
-			if packages, e = list(patterns...); e != nil {
+			if listed, e = list(patterns...); e != nil {
 				return plan, e
 			}
 			break
 		}
 	}
-	validPackages := packages[:0]
-	for _, p := range packages {
+	graph := newPackageGraph(listed)
+	var packages []goPackage
+	dependencies := 0
+	for _, p := range listed {
+		if p.DepOnly {
+			// Dependency errors are Go's to report while building.
+			dependencies++
+			continue
+		}
 		if p.Error != nil {
 			if p.ImportPath == "testing" || p.ImportPath == runtimePackage {
 				return plan, fmt.Errorf("%s: %s", p.ImportPath, p.Error.Err)
@@ -336,9 +348,9 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			// and executes the remaining packages; invalid packages receive no hook.
 			continue
 		}
-		validPackages = append(validPackages, p)
+		packages = append(packages, p)
 	}
-	packages = validPackages
+	debug.printf("package graph named=%d dependencies=%d", len(listed)-dependencies, dependencies)
 	var native, selectedRuntime *goPackage
 	for i := range packages {
 		p := &packages[i]
@@ -391,7 +403,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		}
 		replacements[logical] = backing
 	}
-	libraries, sdkCI, e := resolveTestLibraries(ctx, dir, opts, packages)
+	libraries, sdkCI, e := resolveTestLibraries(ctx, dir, opts, packages, graph)
 	if e != nil {
 		return plan, e
 	}
@@ -438,10 +450,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	// test package: a new one would be another package to compile and vet.
 	// Packages that the runtime imports keep it in an external test package,
 	// the only test package that may import them back.
-	runtimeImports := make(map[string]bool, len(selectedRuntime.Deps))
-	for _, path := range selectedRuntime.Deps {
-		runtimeImports[path] = true
-	}
+	runtimeImports := graph.imported(selectedRuntime)
 	internalImports := 0
 	for _, p := range packages {
 		if p.ImportPath == "testing" || p.ImportPath == runtimePackage || len(p.TestGoFiles)+len(p.XTestGoFiles) == 0 {
