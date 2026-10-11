@@ -66,7 +66,7 @@ These costs occur once per `ddto` invocation or once per compiled package.
 | 17 | Start the package query alongside `go env` | One serial subprocess per invocation | Medium |
 | 18 | Parse fewer SDK sources, in parallel | Serial parsing when the SDK is reachable | Low |
 | 19 | Walk the vendor tree once | Two serial stat passes per vendored file | Medium |
-| 57 | Deliver events through the CLI; extends 5, 6, 9 and 10 | About 100 ms of every test binary's link and 5.6 MB per binary | High |
+| 57 | Deliver events through the CLI; extends 5, 6, 9 and 10 | Up to about 100 ms of link and 5.6 MB per test binary that does not use HTTP or TLS itself | High |
 
 ### Mini event client
 
@@ -476,8 +476,8 @@ about 20 ns per event.
 
 ## 28. Final drain in parallel
 
-After `Close` sets `closed` (`internal/minitracer/batch.go:137`), background
-senders exit and `drainLocked` (`:243-252`) sends the remaining batches one at a
+After `Close` sets `closed` (`internal/minitracer/batch.go:422`), background
+senders exit (`:137`) and `drainLocked` (`:243-252`) sends the remaining batches one at a
 time within one 10 s context. Only deferred mode uses parallel `drainWorker`s.
 The runtime flushes before it stops, while senders still help, so this mainly
 affects explicit clients and recovery after a failure backoff. With a slow
@@ -505,7 +505,7 @@ From the second attempt on, `gotesting/retry_attempt.go:151-201` walks
 created so far, to snapshot and delete the names below the test's prefix.
 `restore`, called from `retire`, walks it again. Both run under `matcher.mu`,
 which every `T.Run` in the binary also needs; `beginAttempt` is called from
-`retry_attempt_runner.go:116`. A 10-attempt group, such as EFD on a fast new
+`retry_attempt_runner.go:115`. A 10-attempt group, such as EFD on a fast new
 test, took 0.15 ms with 1,000 names, 1.0 ms with 10,000 and 8.8 ms with 100,000,
 blocking parallel `T.Run` calls throughout.
 
@@ -813,9 +813,13 @@ delivery. A one-test binary grows from 4.8 to 16.7 MB, and its link from 106 to
 `http.DefaultClient.Do` and `tls.Client` links in 210 ms and is 5.6 MB larger,
 so the HTTP and TLS stack accounts for about 104 ms of the 183 ms Mini adds per
 link. `encoding/json`, `go/parser`, and `compress/gzip` with `log/slog` add
-7–12 ms each. Every edit rebuild and every cold build links each affected test
-binary again: in a cold Gin build, the six links took 2.24 s of CPU, against
-1.78 s natively. The larger binary also starts about 0.9 ms slower.
+7–12 ms each. These figures come from an empty fixture and a standalone probe:
+a binary whose own code already uses HTTP or TLS, such as tests with
+`httptest.NewTLSServer`, keeps that stack, so measure the marginal saving on
+representative binaries. Every edit rebuild and every cold build links each
+affected test binary again: in a cold Gin build, the six links took 2.24 s of
+CPU, against 1.78 s natively. The larger binary also starts about 0.9 ms
+slower.
 
 For `ddto test` runs, test binaries could hand encoded batches to the CLI
 through an inherited pipe or a local socket. The CLI would deliver them over
@@ -832,11 +836,13 @@ interrupted.
 
 `gotesting/testing.go:727` calls `t.Helper()` for every instrumented test:
 about 0.7 µs and 185 bytes per test, measured with 2,000 empty tests run 15
-times, about 2% of Mini's per-test cost. It only changes where messages that
-Mini itself logs through `t` are attributed; the test's own `t.Log`, `t.Error`
-and `t.Fatal` calls never report the wrapper's frame. Drop it, or call it only
-on the paths where Mini logs through `t`. The SDK does the same, so record the
-adaptation.
+times, about 2% of Mini's per-test cost. It marks the wrapper as a helper, so
+it can also change where `testing` attributes the test's own messages: when a
+test function calls `t.Helper()` itself, `testing` looks past it, and the
+wrapper's frame is next. Before dropping it, or calling it only on the paths
+where Mini logs through `t`, compare the reported locations with native
+`go test` for such tests, for subtests and for retry attempts. The SDK does the
+same, so record the adaptation.
 
 ## Checked without a change
 
