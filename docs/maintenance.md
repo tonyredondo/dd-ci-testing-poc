@@ -341,9 +341,13 @@ once the worker closes its standard output, before `go test` can exit. Test
 processes open the state's files with `openUnlogged`, outside Go's test log.
 The worker links the SDK's HTTP client into `ddto`, and with it `globalconfig`,
 whose root-session variable `ddto` removes from its own environment at start.
-Stopping the worker, on a signal or after `gitWorkerExitWait`, does not stop a
-Git command it started, as a test process that exited during its own upload
-did not.
+`ddto` stops the worker, on a signal or after `--git-upload-timeout`, with a
+`stop` line: the worker's Git commands receive SIGTERM (killed after
+`gitStopDelay`), its requests stop through `RequestHandler.Context`, and the
+upload removes its pack files and records the stop. Keep every Git command of
+the worker on `newGitCommand` and every request on the handler, or a stopped
+worker would wait for them; `ddto` kills a worker that has not exited after
+`gitWorkerStopWait`.
 
 The worker owns the invocation's telemetry application. It must write
 `telemetry.json` before its Git record, send `app-started` only once a test

@@ -17,12 +17,19 @@ import (
 func TestRequestHandlerStopsWithContext(t *testing.T) {
 	var requests atomic.Int32
 	arrived := make(chan struct{}, 4)
+	// A request that the handler does not stop ends with the test, so that a
+	// failure reports instead of hanging in server.Close.
+	release := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
 		arrived <- struct{}{}
-		<-r.Context().Done()
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
 	}))
 	defer server.Close()
+	defer close(release)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	handler := &RequestHandler{Client: server.Client(), Context: ctx}

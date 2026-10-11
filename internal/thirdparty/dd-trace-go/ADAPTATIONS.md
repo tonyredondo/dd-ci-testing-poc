@@ -627,6 +627,22 @@ When go test takes every result from its cache, no process uses the state and
 the worker exits without changing the repository. The worker closes its
 standard output once it has written its results, or failed to, and ddto then
 writes any missing result, so no process waits for its timeouts.
+
+ddto writes `exited` to the worker once `go test` exits and waits for it at
+most `--git-upload-timeout` (default one minute), which also bounds the test
+processes' wait for `upload.json` through the record's `upload_wait_ms`. Then,
+or on a signal, it writes `stop` and a reason. The worker cancels the context
+that `SetGitCommandContext` (`utils/git_stop.go`) gives its Git commands, which
+receive SIGTERM, so that Git removes its lock files, and SIGKILL after three
+seconds; later commands fail at once. The same context is the worker's
+`RequestHandler.Context` (`utils/net/http.go`), which stops a request in
+flight, its retries and the waits between them; `rh.backoff` replaced the
+package-level `retryBackoff`, and the requests use `NewRequestWithContext`.
+The upload returns, `RemovePackFiles` removes its pack files, `upload.json`
+records the stop, and the worker logs it as telemetry and still sends
+`app-closing`. ddto kills only a worker that has not exited ten seconds after
+`stop`. Test processes, whose handler has no context and which never set the
+Git context, keep their behavior.
 Processes outside the worker's checkout, binaries run outside `ddto test`, the
 SDK runtime, Bazel's offline modes, `-c` and `-n`, and commands with a `-exec`
 program or a cross-compilation helper keep the per-process behavior.
@@ -653,7 +669,12 @@ Checks: `TestMiniGitStateHandoff`, `TestMiniGitStateUploadsOnce`,
 `TestHandedCLIGitStateNeedsUsedMark`, `TestCLIStateFilesLongPath`,
 `TestExtendedWindowsPath`,
 `TestGitWorkerRecordsMissingResults`,
-`TestGitWorkerRecordsResultsWhenOutputCloses` and `TestReceiveRemovesGitState`,
+`TestGitWorkerRecordsResultsWhenOutputCloses`, `TestRunStopsUploadOnRequest`,
+`TestGitCommandStopsWithInterrupt`, `TestRequestHandlerStopsWithContext`,
+`TestGitWorkerFinishStopsAfterUploadTimeout`,
+`TestGitWorkerFinishKillsAWorkerThatDoesNotStop`,
+`TestGitWorkerSignalStopsTheWorker`, `TestGitWorkerKeepsCIState`,
+`integration/TestMiniGitStateStopsUploadCleanly` and `TestReceiveRemovesGitState`,
 with the existing upload and impacted-tests tests in `integrations` and
 `impactedtests`.
 

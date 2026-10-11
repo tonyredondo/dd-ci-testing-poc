@@ -109,7 +109,14 @@ tests, computes the base commit and the modified files once; test processes
 wait for those results where they used to wait for their own work. When every
 result comes from Go's test cache, no test process starts and the worker
 neither changes the repository nor uploads. `ddto` waits for the worker before
-it exits, as test processes waited for their own uploads. The same exceptions
+it exits, as test processes waited for their own uploads, for at most
+`--git-upload-timeout` (one minute by default) after `go test` exits; test
+processes also wait at most that long for its result. Then, or on a signal,
+`ddto` stops the worker: it interrupts its Git command, so Git removes its lock
+files, stops its requests, removes its pack files, records the stopped upload
+and closes the telemetry application. Only a worker that does not stop within
+ten seconds is killed. `--keep-ci-state` keeps the shared state for debugging;
+see [CLI build diagnostics](cli-debug.md#keeping-the-ci-state). The same exceptions
 as for the job ID apply, and test processes outside the worker's checkout, or
 started outside `ddto test`, keep doing the work themselves.
 
