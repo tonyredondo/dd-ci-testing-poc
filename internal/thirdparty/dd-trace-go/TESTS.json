@@ -65,7 +65,7 @@
       "source": "internal/civisibility/utils/ci_providers_test.go",
       "destination": "internal/thirdparty/dd-trace-go/civisibility/utils/ci_providers_test.go",
       "source_sha256": "39195586239cc50133355bce01a908ccb75bc1618c282487cf7d1454e6c8c6db",
-      "adapted_sha256": "4c8ede94e9fe8cffd9afe30f7c0f88cf49c6faec332c861c38dbedb36134e6e8",
+      "adapted_sha256": "37b8daa3b16faf9504d7b17632f27b369464c8dc2ed624115771d071ac0e3975",
       "kind": "full",
       "adaptation": "Internal import relocation only"
     },

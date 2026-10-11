@@ -539,6 +539,30 @@ Build information cannot change while the process runs. Check:
 `TestBuildInfoMainModulePathReadOnce` requires the same path, read without
 allocating.
 
+## GitHub Actions job ID from ddto
+
+Without a numeric `JOB_CHECK_RUN_ID`, the SDK scans the runner's
+`Worker_*.log` files in every process that reports GitHub Actions metadata. It
+reads the newest file whole, up to 10 MB, then tries JSON and a regular
+expression. [`civisibility/utils/githubjob`](civisibility/utils/githubjob/githubjob.go)
+holds that scan, moved from `ci_providers.go` with exported names and a
+debug-function parameter, so that ddto can run it once per invocation without
+the CI metadata packages. ddto hands the result to Mini's test processes in
+`DDTO_GITHUB_JOB_ID`, and `goenv/restore` removes the variable before client
+code initializes.
+
+`getGithubActionsJobID` still reads `JOB_CHECK_RUN_ID` first. A handed value
+is the diagnostics result: an empty one means none, so the process does not
+scan again, and tests that disable the scan ignore it too. Processes that ddto
+did not start, the SDK runtime and binaries run outside `ddto test` scan as
+before. With a 2 MB Worker log, the scan took 0.44 ms and allocated 2.1 MB per
+process, and 0.62 ms with 31 logs; a handed value takes 31 ns. When upstream
+changes the scan, update `githubjob` and keep the precedence above.
+
+Checks: `TestGithubActionsJobIDFromDDTO`, `TestGithubActionsJobIDFromDiagnostics`,
+`TestHandGitHubJobID`, `TestReceiveRemovesHandedValues` and
+`TestMiniGitHubJobIDHandoff`.
+
 ## Testify method names
 
 [`civisibility/integrations/gotesting/testify.go`](civisibility/integrations/gotesting/testify.go)

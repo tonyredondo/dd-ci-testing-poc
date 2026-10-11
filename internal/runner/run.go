@@ -627,6 +627,7 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 		// Native go test handles -C, help and file mode itself.
 		return runGo(ctx, cwd, append([]string{"test"}, args...), nil, signals, stdin, stdout, stderr)
 	}
+	gitHubJobID := handGitHubJobID(runtime, debug)
 	plan, interrupted, err := prepareInterruptibly(ctx, dir, opts, runtime, signals, stderr)
 	if err == nil {
 		defer func() {
@@ -698,6 +699,10 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 		if plan.moduleWorkspace {
 			env = append(env, "GOFLAGS="+plan.workspaceGoFlags)
 		}
+	}
+	if handoff := gitHubJobID(); handoff != nil {
+		env = append(env, handoff...)
+		debug.printf("github job id handed found=%t", !strings.HasSuffix(handoff[0], "="))
 	}
 	if plan.launcher != nil {
 		ctx = context.WithValue(ctx, goLauncherKey{}, *plan.launcher)

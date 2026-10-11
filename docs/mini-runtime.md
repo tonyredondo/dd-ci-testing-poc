@@ -83,6 +83,13 @@ commands through `os/exec`, including dependencies that do not import `testing`.
 those dependencies, see the same module, workspace and flags as under native
 `go test`.
 
+On GitHub Actions, without a numeric `JOB_CHECK_RUN_ID`, each test process
+would read the runner's `Worker_*.log` files to find the job ID. `ddto` reads
+them once, while it prepares the build, and hands the result to Mini's test
+processes in `DDTO_GITHUB_JOB_ID`. The same restore package removes that
+variable before any client package initializes; an empty value means the files
+name no job, so the process does not read them again.
+
 A `go test -exec` program, or the `go_$GOOS_$GOARCH_exec` helper that Go uses
 when cross-compiling, starts before the test binary. `ddto` runs it through
 `ddto test-exec`, which restores the caller's values first; Go already

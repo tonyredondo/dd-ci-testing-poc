@@ -316,7 +316,9 @@ Temporary workspace settings belong to ddto's `go test` command and the build
 tools it runs. List every Go environment variable that preparation replaces in
 `goenv.Settings`, and save it with `goenv.Save`. Only the test runtime may import
 `internal/goenv/restore`; the CLI and its tool helpers import `goenv`, which
-restores nothing on its own. Both packages must keep importing only `syscall`:
+restores nothing on its own. Values that the CLI computes once for test
+processes, such as `GitHubJobIDHandoff`, are removed by `goenv.Receive`, which
+only the restore package calls: `ddto test-exec` must pass them on. Both packages must keep importing only `syscall`:
 their tests check that restoration initializes before `os` and before an earlier
 dependency. Vendor workspaces are content-addressed: bump
 `vendorWorkspaceLayout` in `internal/runner/vendor.go` whenever their stored
