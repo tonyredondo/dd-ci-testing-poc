@@ -1077,8 +1077,11 @@ SDK; the package does not carry Unicode compatibility tables. Pattern and
 matching limits apply per segment. File decoding accepts BOMs and common line
 endings separately from the UTF-8 parser.
 
-Results have private immutable state. Owner lists are deduplicated once and
-tags are prepared with each result. File and directory patterns share compiled
+Results have private immutable state. Owner lists are deduplicated once. A
+result encodes its tag on first use, because most rules never match a test's
+file: this took about 30% of parsing time, and 2,000 rules now parse in 1.35 ms
+instead of 2.09 ms (`BenchmarkParse`). `TestOwnershipTagOnFirstUse` checks the
+laziness and concurrent first readers. File and directory patterns share compiled
 tokens, ASCII literals use string equality, and rooted literal prefixes are
 checked once before wildcard matching. A section without exclusions stops at
 its winning rule. Sections with exclusions retain the scan needed for sticky
