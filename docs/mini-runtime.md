@@ -287,6 +287,18 @@ Cleanup-only coverage and duplicate Testify method identity also have direct
 Mini regression tests. The [comparison contract](ci-parity.md#comparison-contract)
 records these deliberate differences and its normalization rules.
 
+With `-race`, `ddto` overlays Mini's sources with copies that mark each
+function declaration `//go:norace`, so the race detector does not instrument
+Mini's own memory accesses: with 2,000 empty tests, about 22 µs less per test.
+Client code and `testing` stay instrumented, and Mini's locks, channels and
+atomics still order client accesses, so client races are reported as before.
+Races inside Mini's functions are not; function literals cannot be annotated
+and stay instrumented. Mini's own tests keep full instrumentation, with
+`go test -race` or when the named packages belong to Mini. A `/*line*/`
+directive keeps every source position. Compiling Mini with `-race=false` would
+remove more, but the compiler would then make Mini's atomics invisible to the
+detector, which would report races that do not exist.
+
 The [validation guide](validation.md) lists loopback wire checks, imported SDK
 assertions, concurrency and platform coverage. Current workflow results are
 evidence for their exact inputs. Live intake/UI acceptance, real Bazel execution
