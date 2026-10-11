@@ -97,7 +97,7 @@ func init() { out, _ := exec.Command("go", "list", "-m").Output(); InitMain = st
 import ("fmt";"os";"os/exec";"strings";"testing";"example.com/environmenthelper")
 func TestEnvironment(t *testing.T) {
  fmt.Printf("ENV INIT_MAIN=%q\n", environmenthelper.InitMain)
- for _, name := range []string{"GOWORK", "GOFLAGS", "DDTO_ORIGINAL_GOWORK", "DDTO_ORIGINAL_GOFLAGS", "_DD_ROOT_GO_SESSION_ID"} {
+ for _, name := range []string{"GOWORK", "GOFLAGS", "DDTO_ORIGINAL_GOWORK", "DDTO_ORIGINAL_GOFLAGS"} {
   value, ok := os.LookupEnv(name)
   fmt.Printf("ENV %s=%t:%q\n", name, ok, value)
  }

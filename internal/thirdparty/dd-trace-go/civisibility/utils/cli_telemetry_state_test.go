@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -134,5 +135,10 @@ func TestCLIStateFilesLongPath(t *testing.T) {
 	mark := filepath.Join(dir, CLIGitUsedFile)
 	if err := createUnlogged(mark); err != nil || !existsUnlogged(mark) {
 		t.Fatalf("mark: %v", err)
+	}
+	if runtime.GOOS == "windows" {
+		if prefixed := windowsLongPath(mark); !strings.HasPrefix(prefixed, `\\?\`) {
+			t.Fatalf("long path %q opened without the prefix", prefixed)
+		}
 	}
 }

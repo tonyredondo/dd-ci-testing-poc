@@ -590,8 +590,8 @@ initializes.
   opens the state's files with `syscall.Open`, so that the reads and writes of
   test processes stay out of Go's test log: with the state directory in the
   module, as with `TMPDIR` inside it, `go test` would otherwise check files that
-  change on every run and cache no result. On Windows, a path of 248
-  characters or more goes through `os`, which adds the long-path prefix.
+  change on every run and cache no result. On Windows, it adds the long-path
+  prefix to an absolute path of 248 characters or more, as `os` does.
 - `CollectCLIGitRecord` changes nothing in the repository: `fetchCommitData`
   (`git.go`) became `readCommitData(sha, allowFetch)`, and without
   `allowFetch` it reports a CI head commit missing from a shallow clone
@@ -687,9 +687,11 @@ ID, one `app-started` and one `app-closing`.
   numbers. A test process records that fallback, and each undelivered
   request, in a `telemetry-failure-*` file, which the owner reports even when
   it happened in the test process's final request. The owner logs its own
-  fallback; it takes the number of `app-closing` before `StopApp` takes the
-  final data, so that a fallback then is logged in that request. The
-  sequence's files stay out of Go's test log, like the Git state's.
+  fallback. It takes the number of its final flush's first request before
+  `StopApp` takes the final data, so that a fallback then is logged in that
+  request; a fallback for a later request of that flush, sent only when an
+  earlier request was undelivered, goes unreported. The sequence's files stay
+  out of Go's test log, like the Git state's.
 - In `civisibility/utils/net/client.go`, the telemetry start function takes
   the owner, if any. A process whose state ddto handed reports the handed
   application and registers no product or configuration: the owner's

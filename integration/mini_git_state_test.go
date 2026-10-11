@@ -389,8 +389,9 @@ func TestMiniGitStateCacheWithTemporaryDirectoryInModule(t *testing.T) {
 		}
 	}))
 	defer server.Close()
+	// Windows reads TMP and TEMP.
 	env := testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL,
-		"DD_API_KEY=fixture", "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=true", "DD_GIT_REPOSITORY_URL=", "DD_GIT_COMMIT_SHA=", "TMPDIR="+temp)
+		"DD_API_KEY=fixture", "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=true", "DD_GIT_REPOSITORY_URL=", "DD_GIT_COMMIT_SHA=", "TMPDIR="+temp, "TMP="+temp, "TEMP="+temp)
 	run := func() string {
 		t.Helper()
 		out, stderr, code := command(t, dir, env, driver, "test", "--runtime=mini", "./slow")

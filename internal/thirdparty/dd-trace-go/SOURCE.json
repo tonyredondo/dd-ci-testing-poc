@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "e1a588f35f8e1b684e03c3d4a18079ac0e684d511d8f941139a1f8ac4fe649b8",
+      "sha256": "601cfefa1024b5784a6447a21cde78929251285d5e94abf384d44869742303e7",
       "role": "local"
     },
     {
@@ -2162,7 +2162,7 @@
     },
     {
       "path": "civisibility/utils/cli_telemetry_state_test.go",
-      "sha256": "14f7622d70e148b9a34c130ed39438e08eb7664b1f3fd98620c0ab1612a60978",
+      "sha256": "a4b098dcc7148edd9489351beccdb5e79eae72b8f94819f46e4074df65d89377",
       "role": "local"
     },
     {
@@ -2187,7 +2187,7 @@
     },
     {
       "path": "civisibility/utils/cli_state_files.go",
-      "sha256": "33dd3318442b41cbbef68901a554c06bcf002b5f4bbffbe2801d13ec9470c215",
+      "sha256": "92dc8302683b5aeef31eb1853920f19d04e7d8e858885c66f4d617e2a48543fc",
       "role": "local"
     },
     {

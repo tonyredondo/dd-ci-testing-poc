@@ -5,7 +5,9 @@ package utils
 import (
 	"io/fs"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 )
 
@@ -15,20 +17,26 @@ import (
 // go test would check those files, which change on every run, and would cache
 // no result.
 func openUnlogged(name string, flag int, perm uint32) (*os.File, error) {
-	// On Windows, os opens a long path with the \\?\ prefix, which
-	// syscall.Open does not add; such a path seldom lies in a module.
-	if runtime.GOOS == "windows" && len(name) >= windowsLongPath {
-		return os.OpenFile(name, flag, os.FileMode(perm))
-	}
-	fd, err := syscall.Open(name, flag|syscall.O_CLOEXEC, perm)
+	fd, err := syscall.Open(windowsLongPath(name), flag|syscall.O_CLOEXEC, perm)
 	if err != nil {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 	}
 	return os.NewFile(uintptr(fd), name), nil
 }
 
-// windowsLongPath is the length from which os prefixes a Windows path.
-const windowsLongPath = 248
+// windowsLongPath adds the prefix with which Windows opens an absolute path
+// of 248 characters or more, as os does and syscall.Open does not. Other
+// paths, and other systems, keep name.
+func windowsLongPath(name string) string {
+	if runtime.GOOS != "windows" || len(name) < 248 || strings.HasPrefix(name, `\\?\`) || !filepath.IsAbs(name) {
+		return name
+	}
+	name = filepath.Clean(name)
+	if strings.HasPrefix(name, `\\`) {
+		return `\\?\UNC\` + name[2:]
+	}
+	return `\\?\` + name
+}
 
 // createUnlogged creates name, which must not exist, without recording it in
 // Go's test log.
