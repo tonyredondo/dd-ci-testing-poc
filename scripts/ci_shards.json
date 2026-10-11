@@ -20,6 +20,8 @@
       "TestMiniBazelOfflineAndPayloadFiles",
       "TestMiniCLIActivation",
       "TestMiniCLIRuntimeSelectionAndSourceRange",
+      "TestMiniCLIStateRequestsAhead",
+      "TestMiniCLIStateSharedRequests",
       "TestMiniCLITelemetry",
       "TestMiniCLIWithoutSDK",
       "TestMiniChdirSymlinkWithUserTool",
@@ -195,6 +197,7 @@
   "platform_tests": {
     "linux": {
       "cli": [
+        "TestMiniCLIStateGivesModuleToCoverage",
         "TestMiniGitWorkerStopsOnInterrupt"
       ],
       "parity": [
@@ -203,6 +206,7 @@
     },
     "darwin": {
       "cli": [
+        "TestMiniCLIStateGivesModuleToCoverage",
         "TestMiniGitWorkerStopsOnInterrupt"
       ],
       "parity": [

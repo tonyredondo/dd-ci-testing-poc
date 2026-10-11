@@ -223,14 +223,14 @@ func (w *gitWorker) stoppedAt() time.Time {
 // Otherwise the worker stops and each test process reads Git, and reports
 // its telemetry, as before. goVersion is the test processes' Go version,
 // which the worker's telemetry application reports.
-func (w *gitWorker) handOff(testDirs []string, launcher bool, goVersion string) []string {
+func (w *gitWorker) handOff(tests utils.CLITests, launcher bool, goVersion string) []string {
 	if w == nil {
 		return nil
 	}
 	record, ready := w.record(gitRecordWait)
 	matched := false
-	for _, dir := range testDirs {
-		if ready && utils.SameCheckout(dir, record.GitFolder) {
+	for _, p := range tests.Packages {
+		if ready && utils.SameCheckout(p.Dir, record.GitFolder) {
 			matched = true
 			break
 		}
@@ -240,6 +240,11 @@ func (w *gitWorker) handOff(testDirs []string, launcher bool, goVersion string) 
 	if !matched || launcher {
 		w.closeInput()
 		return nil
+	}
+	// The worker requests for the test processes, and they find their
+	// modules, with this description; without it, they work as before.
+	if err := utils.WriteCLIGitStateFile(w.state, utils.CLITestsFile, tests); err != nil {
+		w.debug.printf("git worker test description not written: %v", err)
 	}
 	w.proceeded.Store(true)
 	if err := w.send(cligit.Proceed + " " + goVersion); err != nil {

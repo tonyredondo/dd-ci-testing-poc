@@ -129,6 +129,18 @@ exits. It also logs, as telemetry, its failures and the requests that test
 processes could not deliver. A run whose results all come from the cache
 sends no telemetry.
 
+While `go test` builds, the worker also requests what each test process
+requests before its first test: the settings and, as they enable them, the
+known tests, skippable tests and test management data, with the test
+processes' Go version and architecture and for each service that their
+packages report. The read cache, whose local scope is the invocation for the
+worker and the test processes, hands them the responses, so the first test
+starts without waiting for the network. A test process whose request differs
+makes it itself. `ddto` also hands each test package's module to the test
+processes, which then start no `go list` for per-test coverage, LCOV reports
+or backfill. A run whose results all come from the cache still sends the
+settings request, as it searches commits, and `go test`'s exit cancels it.
+
 A `go test -exec` program, or the `go_$GOOS_$GOARCH_exec` helper that Go uses
 when cross-compiling, starts before the test binary. `ddto` runs it through
 `ddto test-exec`, which restores the caller's values first; Go already

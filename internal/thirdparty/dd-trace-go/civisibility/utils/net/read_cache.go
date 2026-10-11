@@ -45,6 +45,9 @@ const (
 	readCacheScopeCIMedium = "ci_medium"
 	// readCacheScopeCIStrong scopes CI runs by provider and stable job id.
 	readCacheScopeCIStrong = "ci_strong"
+	// readCacheScopeCLI scopes unidentified local runs by ddto's invocation,
+	// whose Git worker and test processes have different parents.
+	readCacheScopeCLI = "cli"
 
 	// readCacheEndpointSettings names the settings cache endpoint.
 	readCacheEndpointSettings = "settings"
@@ -231,6 +234,17 @@ func newReadCacheScopeIdentity(ciTags map[string]string) readCacheScopeIdentity 
 
 	values := []readCacheIdentityValue{{Name: "parent_pid", Value: strconv.Itoa(readCacheParentPID())}}
 	return newReadCacheScopeIdentityFromValues(readCacheScopeLocal, time.Minute, values)
+}
+
+// cliReadCacheScopeIdentity returns, for a local run, the scope of ddto's
+// invocation whose state is in dir: its Git worker requests ahead for the test
+// processes, which have another parent. CI scopes already include both.
+func cliReadCacheScopeIdentity(identity readCacheScopeIdentity, dir string) readCacheScopeIdentity {
+	if identity.Kind != readCacheScopeLocal || dir == "" {
+		return identity
+	}
+	values := []readCacheIdentityValue{{Name: "cli_state", Value: dir}}
+	return newReadCacheScopeIdentityFromValues(readCacheScopeCLI, identity.TTL, values)
 }
 
 func newReadCacheScopeIdentityFromValues(kind string, ttl time.Duration, values []readCacheIdentityValue) readCacheScopeIdentity {

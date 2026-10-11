@@ -16,6 +16,7 @@ import (
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/goenv"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/instrument"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
@@ -31,9 +32,9 @@ type goPackage struct {
 	GoFiles, TestGoFiles, XTestGoFiles []string
 	Imports, TestImports, XTestImports []string
 	Module                             *struct {
-		Path, Version string
-		Main          bool
-		Replace       *struct{ Path, Dir, Version string }
+		Path, Version, Dir string
+		Main               bool
+		Replace            *struct{ Path, Dir, Version string }
 	}
 	Error *struct{ Err string }
 }
@@ -74,8 +75,9 @@ type Plan struct {
 	// testLauncher reports that a -exec program or Go's cross-compilation
 	// helper starts the test binaries, and so sees their environment first.
 	testLauncher bool
-	// testDirs are the directories of the packages that have tests.
-	testDirs []string
+	// tests describes the test binaries and the packages that have tests,
+	// with their modules, for the Git worker and the test processes.
+	tests utils.CLITests
 	// goVersion is the selected toolchain's version, as go env reports it.
 	goVersion string
 }
@@ -214,6 +216,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	}
 	plan.testLauncher = opts.exec != "" || opts.environment.GOOS != opts.environment.GOHOSTOS || opts.environment.GOARCH != opts.environment.GOHOSTARCH
 	plan.goVersion = opts.environment.GOVERSION
+	plan.tests.GOARCH = opts.environment.GOARCH
 	debug.printf("toolchain=%q", opts.environment.GOVERSION)
 	if runtime == Mini {
 		if work := workspaceFile(dir); work != "" {
@@ -483,7 +486,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			return plan, e
 		}
 		plan.TestPackages++
-		plan.testDirs = append(plan.testDirs, p.Dir)
+		plan.tests.Packages = append(plan.tests.Packages, utils.CLITestPackage{Dir: p.Dir, ModulePath: p.Module.Path, ModuleDir: p.Module.Dir})
 	}
 	debug.printf("runtime imports internal_test_packages=%d external_test_packages=%d", internalImports, plan.TestPackages-internalImports)
 	testifyPhase := debug.start("instrument testify")
@@ -726,7 +729,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		env = append(env, handoff...)
 		debug.printf("github job id handed found=%t", !strings.HasSuffix(handoff[0], "="))
 	}
-	env = append(env, gitWorker.handOff(plan.testDirs, plan.testLauncher, plan.goVersion)...)
+	env = append(env, gitWorker.handOff(plan.tests, plan.testLauncher, plan.goVersion)...)
 	if plan.launcher != nil {
 		ctx = context.WithValue(ctx, goLauncherKey{}, *plan.launcher)
 	}

@@ -260,8 +260,17 @@ func resolveModuleInfo() {
 		return
 	}
 	moduleInfoSource.pending = false
+	// ddto's state describes the module of each test package that it runs.
+	if path, dir, ok := cliModuleInfo(moduleInfoSource.dir); ok {
+		modulePath, moduleDir = path, dir
+		return
+	}
 	modulePath, moduleDir = listModuleInfo(moduleInfoSource.dir, moduleInfoSource.env, moduleInfoSource.goPath)
 }
+
+// cliModuleInfo returns the module of the test package in dir from ddto's
+// state; tests replace it.
+var cliModuleInfo = utils.CLITestPackageModule
 
 // listModuleInfo returns the module path and directory that go list reports
 // for the package in dir. Tests replace it.

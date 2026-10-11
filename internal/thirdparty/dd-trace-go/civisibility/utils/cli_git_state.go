@@ -290,6 +290,8 @@ func FetchCLIHeadCommit() {
 func ResetHandedCLIGitStateForTesting() {
 	cliGitStateOnce = sync.Once{}
 	cliGitStateDir, cliGitRecord, cliGitStateOwned = "", nil, false
+	cliTestsOnce = sync.Once{}
+	cliTests = nil
 }
 
 // SameCheckout reports whether dir lies in the checkout whose .git entry is

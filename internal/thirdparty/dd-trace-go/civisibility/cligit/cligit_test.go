@@ -4,11 +4,15 @@ package cligit
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -634,4 +638,223 @@ func TestRunStopsOnInterrupt(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = cli.Close()
+}
+
+// featureFake records the requests that the worker makes for the test
+// processes; with ctx, its settings request returns only once ctx is done.
+type featureFake struct {
+	settings net.SettingsResponseData
+	ctx      context.Context
+	finished atomic.Bool
+	mu       sync.Mutex
+	calls    []string
+}
+
+func (f *featureFake) record(name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, name)
+}
+
+func (f *featureFake) requests() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	calls := append([]string(nil), f.calls...)
+	slices.Sort(calls)
+	return calls
+}
+
+func (f *featureFake) GetSettings() (*net.SettingsResponseData, error) {
+	f.record("settings")
+	if f.ctx != nil {
+		<-f.ctx.Done()
+		time.Sleep(100 * time.Millisecond)
+		f.finished.Store(true)
+		return nil, f.ctx.Err()
+	}
+	settings := f.settings
+	return &settings, nil
+}
+
+func (f *featureFake) GetKnownTests() (*net.KnownTestsResponseData, error) {
+	f.record("known")
+	return &net.KnownTestsResponseData{}, nil
+}
+
+func (f *featureFake) GetSkippableTests() (*net.SkippableTestsResponse, error) {
+	f.record("skippable")
+	return &net.SkippableTestsResponse{}, nil
+}
+
+func (f *featureFake) GetTestManagementTests() (*net.TestManagementTestsResponseDataModules, error) {
+	f.record("management")
+	return &net.TestManagementTestsResponseDataModules{}, nil
+}
+
+// While go test builds, before any test process uses the state, the worker
+// requests what the test processes request before their first test, for each
+// of their services, as the settings and the environment decide.
+func TestRunRequestsAheadForTestProcesses(t *testing.T) {
+	gitRepository(t)
+	t.Cleanup(utils.ResetHandedCLIGitStateForTesting)
+	original, originalClients, originalView := newClient, testProcessClients, asTestProcesses
+	newClient = func(context.Context, string, string) (client, appTelemetry) { return &fakeClient{}, nil }
+	t.Cleanup(func() { newClient, testProcessClients, asTestProcesses = original, originalClients, originalView })
+	enabled := net.SettingsResponseData{KnownTestsEnabled: true, TestsSkipping: true}
+	enabled.TestManagement.Enabled = true
+	for _, tc := range []struct {
+		name       string
+		settings   net.SettingsResponseData
+		management string
+		want       []string
+	}{
+		{"all enabled", enabled, "", []string{"known", "management", "settings", "skippable"}},
+		{"test management disabled by the environment", enabled, "false", []string{"known", "settings", "skippable"}},
+		{"settings that require Git", net.SettingsResponseData{RequireGit: true, KnownTestsEnabled: true}, "", []string{"settings"}},
+		{"nothing enabled", net.SettingsResponseData{}, "", []string{"settings"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(constants.CIVisibilityTestManagementEnabledEnvironmentVariable, tc.management)
+			if tc.management == "" {
+				if err := os.Unsetenv(constants.CIVisibilityTestManagementEnabledEnvironmentVariable); err != nil {
+					t.Fatal(err)
+				}
+			}
+			utils.ResetHandedCLIGitStateForTesting()
+			services := []*featureFake{{settings: tc.settings}, {settings: tc.settings}}
+			var version, viewVersion string
+			var described *utils.CLITests
+			testProcessClients = func(_ client, goVersion string, tests *utils.CLITests) []featureClient {
+				version, described = goVersion, tests
+				return []featureClient{services[0], services[1]}
+			}
+			// The worker's own requests are the test processes' too.
+			view := &fakeClient{}
+			asTestProcesses = func(_ client, goVersion string, _ *utils.CLITests) client {
+				viewVersion = goVersion
+				return view
+			}
+			dir := t.TempDir()
+			// ddto describes the test processes before it tells the worker
+			// to proceed.
+			if err := utils.WriteCLIGitStateFile(dir, utils.CLITestsFile, utils.CLITests{GOARCH: "arm64", Packages: []utils.CLITestPackage{{Dir: "/pkg"}}}); err != nil {
+				t.Fatal(err)
+			}
+			input, cli := io.Pipe()
+			defer cli.Close()
+			done := make(chan error, 1)
+			go func() { done <- Run(dir, "", time.Minute, input, newResults(), nil) }()
+			if _, err := io.WriteString(cli, Proceed+" go1.99.0\n"); err != nil {
+				t.Fatal(err)
+			}
+			searched := func() bool {
+				searches, _ := view.counts()
+				return searches == 1
+			}
+			for deadline := time.Now().Add(30 * time.Second); len(services[0].requests()) < len(tc.want) || len(services[1].requests()) < len(tc.want) || !searched(); time.Sleep(time.Millisecond) {
+				if time.Now().After(deadline) {
+					t.Fatalf("requests before any test process: %v %v, searched %t", services[0].requests(), services[1].requests(), searched())
+				}
+			}
+			if _, err := io.WriteString(cli, Exited+"\n"); err != nil {
+				t.Fatal(err)
+			}
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+			for _, service := range services {
+				if got := service.requests(); !slices.Equal(got, tc.want) {
+					t.Fatalf("requests %v, want %v", got, tc.want)
+				}
+			}
+			if version != "go1.99.0" || described == nil || described.GOARCH != "arm64" || len(described.Packages) != 1 {
+				t.Fatalf("requested for %q and %+v", version, described)
+			}
+			if searches, _ := view.counts(); viewVersion != "go1.99.0" || searches != 1 {
+				t.Fatalf("the worker searched %d times as the test processes of %q", searches, viewVersion)
+			}
+		})
+	}
+}
+
+// A worker that no test process used cancels the requests that it made ahead
+// and waits for them, as for its commit search.
+func TestRunWaitsForItsStoppedRequests(t *testing.T) {
+	gitRepository(t)
+	t.Cleanup(utils.ResetHandedCLIGitStateForTesting)
+	original, originalClients := newClient, testProcessClients
+	contexts := make(chan context.Context, 1)
+	newClient = func(ctx context.Context, _, _ string) (client, appTelemetry) {
+		contexts <- ctx
+		return &fakeClient{}, nil
+	}
+	request := &featureFake{}
+	testProcessClients = func(client, string, *utils.CLITests) []featureClient { return []featureClient{request} }
+	t.Cleanup(func() { newClient, testProcessClients = original, originalClients })
+	input, cli := io.Pipe()
+	defer cli.Close()
+	done := make(chan error, 1)
+	go func() { done <- Run(t.TempDir(), "", time.Minute, input, newResults(), nil) }()
+	request.ctx = <-contexts
+	if _, err := io.WriteString(cli, Proceed+" go1.99.0\n"+Exited+"\n"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the worker kept waiting for requests that no one needs")
+	}
+	if !request.finished.Load() {
+		t.Fatal("the worker exited before its stopped requests")
+	}
+}
+
+// The worker requests its own settings, and those of the test processes, with
+// the test processes' Go version and architecture, not its own: then they are
+// one request, which the test processes find in the read cache.
+func TestWorkerRequestsAsTestProcesses(t *testing.T) {
+	var mu sync.Mutex
+	var requests []map[string]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Data struct {
+				Attributes struct {
+					Configurations map[string]string `json:"configurations"`
+				} `json:"attributes"`
+			} `json:"data"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		requests = append(requests, body.Data.Attributes.Configurations)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":{"id":"poc","type":"ci_app_test_service_libraries_settings","attributes":{}}}`)
+	}))
+	defer server.Close()
+	t.Setenv(constants.CIVisibilityAgentlessEnabledEnvironmentVariable, "false")
+	t.Setenv("DD_TRACE_AGENT_URL", server.URL)
+	t.Setenv("DD_SERVICE", "poc")
+	net.SetReadCacheHooksForTesting(t.TempDir(), time.Now, os.Getpid, func() int { return 1 }, time.Sleep)
+	t.Cleanup(net.ResetReadCacheHooksForTesting)
+	c, _ := net.NewCLIClient(context.Background(), t.TempDir(), "")
+	if c == nil {
+		t.Fatal("no client")
+	}
+	tests := &utils.CLITests{GOARCH: "arm64", Packages: []utils.CLITestPackage{{Dir: t.TempDir()}}}
+	if _, err := asTestProcesses(c, "go1.99.0", tests).GetSettings(); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range testProcessClients(c, "go1.99.0", tests) {
+		if _, err := tc.GetSettings(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(requests) != 1 || requests[0]["runtime.version"] != "go1.99.0" || requests[0]["os.architecture"] != "arm64" {
+		t.Fatalf("settings requests %v", requests)
+	}
 }

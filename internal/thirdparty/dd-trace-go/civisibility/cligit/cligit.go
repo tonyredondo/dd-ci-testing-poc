@@ -53,6 +53,15 @@ type client interface {
 	GetSettings() (*net.SettingsResponseData, error)
 }
 
+// featureClient requests the settings and the data that they enable, as a
+// test process does before its first test.
+type featureClient interface {
+	GetSettings() (*net.SettingsResponseData, error)
+	GetKnownTests() (*net.KnownTestsResponseData, error)
+	GetSkippableTests() (*net.SkippableTestsResponse, error)
+	GetTestManagementTests() (*net.TestManagementTestsResponseDataModules, error)
+}
+
 // appTelemetry is the invocation's telemetry application, which the worker
 // owns: see net.CLITelemetry.
 type appTelemetry interface {
@@ -75,13 +84,14 @@ var newClient = func(ctx context.Context, dir, runtimeID string) (client, appTel
 }
 
 // Run writes the checkout's Git record to dir, then waits for the CLI. Once
-// told to proceed, it compares the local commits with the backend's while go
-// test builds, a read-only request. Once a test process uses the state, it
-// starts the invocation's telemetry application, which the test processes
-// that use the state report under, and uploads the missing commits, as each
-// test process would, and records the end of the upload; meanwhile it
-// requests the settings, and if they enable impacted tests it records the
-// base commit and modified files. It closes results once it has written them,
+// told to proceed, while go test builds, it compares the local commits with
+// the backend's and requests what the test processes described in dir request
+// before their first test, as they would, all read-only requests. Once a test
+// process uses the state, it starts the invocation's telemetry application,
+// which the test processes that use the state report under, and uploads the
+// missing commits, as each test process would, and records the end of the
+// upload; if the settings enable impacted tests it then records the base
+// commit and modified files. It closes results once it has written them,
 // or failed to, so that ddto records any missing result for the test
 // processes waiting for it. It closes the telemetry application after go test
 // exits. When go test exits without running a test process that uses the
@@ -117,15 +127,20 @@ func Run(dir, runtimeID string, uploadWait time.Duration, input io.Reader, resul
 	if !ok {
 		return nil
 	}
+	tests := utils.HandedCLITests()
+	c = asTestProcesses(c, goVersion, tests)
 	uploadEnabled := infra.BoolEnv(constants.CIVisibilityGitUploadEnabledEnvironmentVariable, true)
 	search := searchAhead(c, uploadEnabled)
+	requests := requestAhead(testProcessClients(c, goVersion, tests))
 	if !waitUsed(ctx, dir, cli.exited) {
-		// No test process needs the search any more. Its git commands end,
-		// interrupted or killed, only while this process runs.
+		// No test process needs the search or the requests any more. The
+		// search's git commands end, interrupted or killed, only while this
+		// process runs.
 		cancel()
 		if search != nil {
 			_, _ = search()
 		}
+		requests()
 		return nil
 	}
 	utils.FetchCLIHeadCommit()
@@ -141,7 +156,14 @@ func Run(dir, runtimeID string, uploadWait time.Duration, input io.Reader, resul
 			app.Stop()
 		}()
 	}
-	// Test processes request the settings while they upload.
+	// The requests made ahead end before the application closes, with their
+	// metrics; they ended long before, unless go test was quicker.
+	defer func() {
+		cancel()
+		requests()
+	}()
+	// Test processes request the settings while they upload; the read cache
+	// usually has them from the requests made ahead.
 	settings := make(chan settingsResult, 1)
 	if c != nil {
 		go func() {
@@ -300,6 +322,83 @@ func reportTestProcessFailures(dir string) {
 type settingsResult struct {
 	response *net.SettingsResponseData
 	err      error
+}
+
+// asTestProcesses returns c requesting as the test processes do, with their
+// Go version and architecture, so that its settings request is theirs; tests
+// replace it.
+var asTestProcesses = func(c client, goVersion string, tests *utils.CLITests) client {
+	nc, ok := c.(net.Client)
+	if !ok {
+		return c
+	}
+	goarch := ""
+	if tests != nil {
+		goarch = tests.GOARCH
+	}
+	if clients := net.CLITestProcessClients(nc, goVersion, goarch, nil); len(clients) == 1 {
+		if tc, ok := clients[0].(client); ok {
+			return tc
+		}
+	}
+	return c
+}
+
+// testProcessClients returns clients that request as the test processes of
+// tests' packages do, one per service that they report; tests replace it.
+var testProcessClients = func(c client, goVersion string, tests *utils.CLITests) []featureClient {
+	nc, ok := c.(net.Client)
+	if !ok {
+		return nil
+	}
+	goarch, dirs := "", []string(nil)
+	if tests != nil {
+		goarch = tests.GOARCH
+		for _, p := range tests.Packages {
+			dirs = append(dirs, p.Dir)
+		}
+	}
+	var clients []featureClient
+	for _, tc := range net.CLITestProcessClients(nc, goVersion, goarch, dirs) {
+		clients = append(clients, tc)
+	}
+	return clients
+}
+
+// requestAhead requests, while go test builds, what the test processes request
+// before their first test: the settings, and the known tests, skippable tests
+// and test management data that the settings enable. The read cache shares
+// the responses with the test processes; one whose request differs requests
+// for itself, as before. The returned function waits for the requests.
+func requestAhead(clients []featureClient) func() {
+	var wg sync.WaitGroup
+	for _, c := range clients {
+		wg.Go(func() { requestFeatures(c) })
+	}
+	return wg.Wait
+}
+
+// requestFeatures requests what one test process would, deciding as
+// ensureAdditionalFeaturesInitialization does. Test processes request again,
+// and report, what fails here.
+func requestFeatures(c featureClient) {
+	settings, err := c.GetSettings()
+	if err != nil || settings == nil || settings.RequireGit {
+		// Settings that require Git change after the upload, which waits
+		// for a test process.
+		return
+	}
+	var wg sync.WaitGroup
+	if settings.KnownTestsEnabled {
+		wg.Go(func() { _, _ = c.GetKnownTests() })
+	}
+	if settings.TestsSkipping {
+		wg.Go(func() { _, _ = c.GetSkippableTests() })
+	}
+	if settings.TestManagement.Enabled && infra.BoolEnv(constants.CIVisibilityTestManagementEnabledEnvironmentVariable, true) {
+		wg.Go(func() { _, _ = c.GetTestManagementTests() })
+	}
+	wg.Wait()
 }
 
 // searchAhead starts the upload's first commit search; the returned function
