@@ -407,7 +407,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		}
 		replacements[logical] = backing
 	}
-	libraries, sdkCI, e := resolveTestLibraries(ctx, dir, opts, packages, graph)
+	libraries, sdkCI, testsUseMini, e := resolveTestLibraries(ctx, dir, opts, packages, graph)
 	if e != nil {
 		return plan, e
 	}
@@ -529,7 +529,9 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			plan.compilerCache = append(plan.compilerCache, flag)
 		}
 	}
-	if plan.mini && opts.race {
+	// Tests that import Mini through a helper outside the package graph keep
+	// it instrumented, as noraceOverlay does for the packages in the graph.
+	if plan.mini && opts.race && !testsUseMini {
 		racePhase := debug.start("race annotations")
 		files := noraceOverlay(listed, replacements, temp)
 		racePhase.finish(nil)
