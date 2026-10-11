@@ -441,17 +441,31 @@ func TestRunStopsDuringRecordCollection(t *testing.T) {
 		return utils.CLIGitRecord{}
 	}
 	t.Cleanup(func() { collectRecord = original })
-	for _, input := range []string{Stop + " timeout\n", ""} {
+	// The input stays open after a line, as ddto keeps it while it waits.
+	for _, input := range []struct {
+		lines string
+		end   bool
+	}{{Stop + " timeout\n", false}, {Exited + "\n", false}, {"", true}} {
 		dir := t.TempDir()
+		reader, writer := io.Pipe()
+		t.Cleanup(func() { writer.Close() })
+		go func() {
+			if input.lines != "" {
+				_, _ = io.WriteString(writer, input.lines)
+			}
+			if input.end {
+				writer.Close()
+			}
+		}()
 		done := make(chan error, 1)
-		go func() { done <- Run(dir, "", time.Minute, strings.NewReader(input), newResults(), nil) }()
+		go func() { done <- Run(dir, "", time.Minute, reader, newResults(), nil) }()
 		select {
 		case err := <-done:
 			if err != nil {
 				t.Fatal(err)
 			}
 		case <-time.After(30 * time.Second):
-			t.Fatalf("input %q did not stop the record collection", input)
+			t.Fatalf("input %+v did not stop the record collection", input)
 		}
 		if _, err := os.Stat(filepath.Join(dir, utils.CLIGitRecordFile)); !os.IsNotExist(err) {
 			t.Fatalf("a stopped worker wrote its record: %v", err)

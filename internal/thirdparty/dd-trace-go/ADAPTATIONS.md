@@ -644,7 +644,8 @@ records the stop, and the worker logs it as telemetry and still sends
 `app-closing`. ddto kills only a worker that has not exited ten seconds after
 `stop`. The worker reads its input from its start, before its first Git
 command: the input ending before `exited` stops it too, and `exited` before
-`proceed`, as when ddto's preparation fails, ends it at once. The signals that
+`proceed`, as when ddto's preparation fails, stops it at once, even during
+its first Git commands. The signals that
 ddto forwards to go test also reach the worker from the terminal, and the
 worker handles them as a `stop` with reason `signal`. Test processes, whose handler has no context and which never set the
 Git context, keep their behavior.

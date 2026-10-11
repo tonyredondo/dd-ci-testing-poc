@@ -192,6 +192,11 @@ func listen(reader *bufio.Reader, stop context.CancelFunc) *cliInput {
 				in.proceed <- value
 			case verb == Exited && !exited:
 				exited = true
+				if !proceeded {
+					// go test exited without the state, as when preparation
+					// failed: nothing needs the worker's first git commands.
+					stop()
+				}
 				close(in.exited)
 			case verb == Stop:
 				in.stopped(value)

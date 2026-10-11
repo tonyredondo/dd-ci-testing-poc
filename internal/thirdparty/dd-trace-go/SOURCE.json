@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "bafd76d1d57a1ca5449ed50935c8c47bcc9b73937af5680457e3dc400bf512bd",
+      "sha256": "032bf4bc772a64c8ae9cfaaa1cc30c4535a842ea428c68410ba66357871a41af",
       "role": "local"
     },
     {
@@ -2132,7 +2132,7 @@
     },
     {
       "path": "civisibility/cligit/cligit.go",
-      "sha256": "bbe01317a6f5f740db2aa37db6e2259f4fd482a75aeab46bbe53c724483d02f9",
+      "sha256": "bb8a21eda24e77de6f8da2edc6f0626933b054f003f3eb35518462440ba56a67",
       "role": "local"
     },
     {
@@ -2142,7 +2142,7 @@
     },
     {
       "path": "civisibility/cligit/cligit_test.go",
-      "sha256": "3ba250af47b1806da7bb0a5a8c78c5475871552f2d1f919fec3bdee97735cdf8",
+      "sha256": "e1293da06a10e15bba3b870e2e91bd507f16a34b29c9ce8da241ad445511be28",
       "role": "local"
     },
     {
