@@ -331,6 +331,12 @@ that changes the repository may run before a test process marks the state
 worker or by `recordMissingResults`, before `go test` can exit. The worker
 links the SDK's HTTP client into `ddto`.
 
+The worker owns the invocation's telemetry application. It must write
+`telemetry.json` before its Git record, send `app-started` only once a test
+process uses the state, and send `app-closing` only after `go test` exits, so
+that no test process sends after it. Every process that reports the
+application takes its `seq_id` from `seq/`.
+
 With `-race`, `noraceOverlay` in `internal/runner/norace.go` gives a client's
 build copies of Mini's sources that mark each function `//go:norace`. The
 copies must keep every token and position of their sources:

@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "d33fbff74e8d866f67e921af49342174fdb3782b65e4c12b5771dfb63ff74dfe",
+      "sha256": "7c2975d97c8580759524f67fec02adba7bb6e73f87643d32d35345726cfd4968",
       "role": "local"
     },
     {
@@ -225,7 +225,7 @@
     },
     {
       "path": "civisibility/integrations/civisibility_features.go",
-      "sha256": "baefc64b9460825b054918cc4ae04f7479031d4b711e012695ac8495a16d3603",
+      "sha256": "196dbfcd6412ef1d95ad8e6242e2a9203a84fe03df1697ae74a691c6d93bbd72",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/civisibility_features.go",
       "source_sha256": "08c2f82bfc944754d4c7870cfd0c0fc5c4d257edcdea844f00a89bd9cc88f5d8"
@@ -1150,7 +1150,7 @@
     },
     {
       "path": "civisibility/utils/net/client.go",
-      "sha256": "4ea8baffc229d2ebcea4613c11f722b481558bc78c1d9b5ce36e31b9bf27cb24",
+      "sha256": "9ec77e7a4833137671936b18b368889d2ec098cfa1ea35fa15f61aae608e938e",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/net/client.go",
       "source_sha256": "bae03f2398dd7c75141e1b6b8f07e89676eb39e0884ab88b9af95211e797ec8b"
@@ -1737,14 +1737,14 @@
     },
     {
       "path": "telemetry/client.go",
-      "sha256": "e477f93df9787adacb259cbd5c3a0db4644df778cd2dcb14a60fee0de1d8310b",
+      "sha256": "f5859be2c88769373e56377818db4c5969cc4f578665c7892d4fe37d933a9b63",
       "role": "adapted",
       "source_path": "internal/telemetry/client.go",
       "source_sha256": "98c09ac5c1927c95161fdb0959c173364366dc6edcecfcedef907ecf4a125fc6"
     },
     {
       "path": "telemetry/client_config.go",
-      "sha256": "5fecf76534f30524a4240185e7562018f7a0f9dae559443cd8b435bee1204594",
+      "sha256": "716b86807ee6c6ed22813dc6b6872ddfc01835496c1b222ca8b2f76fa91267c3",
       "role": "adapted",
       "source_path": "internal/telemetry/client_config.go",
       "source_sha256": "b8659fa40a98656b9f46d994c47fe72ea40327dbaec70beb5e49f1494dc3d20d"
@@ -1983,7 +1983,7 @@
     },
     {
       "path": "telemetry/internal/writer.go",
-      "sha256": "fec02d3c5ddece8112862b769945ea2330b95d7ba1ca8df350c689ba63fe7532",
+      "sha256": "5314e8d7a890296ba257cc526b44208a49c523b5a4088d027b52d08a8f587519",
       "role": "adapted",
       "source_path": "internal/telemetry/internal/writer.go",
       "source_sha256": "d13665bb661561f291036ffc215a65845716f0a9e904d31c69067f787474afe5"
@@ -2132,7 +2132,7 @@
     },
     {
       "path": "civisibility/cligit/cligit.go",
-      "sha256": "18c1bd700ee71ed9d4232811104c154787ebdcbd2b1bd92bd93287b7be47792e",
+      "sha256": "b7a619664a79a4aab61d4f396ffde5e700e3350e54f5e1e597c99ed97dee413b",
       "role": "local"
     },
     {
@@ -2142,7 +2142,7 @@
     },
     {
       "path": "civisibility/cligit/cligit_test.go",
-      "sha256": "3ed2d87f1ee64c6d09435b422579e92d77f01e15f2d77122d02d7a35310293ea",
+      "sha256": "187d1251eac7e8ad02033375587cf982687e1962147c42b38c5810a65a8af875",
       "role": "local"
     },
     {
@@ -2152,7 +2152,32 @@
     },
     {
       "path": "civisibility/utils/impactedtests/cli_state.go",
-      "sha256": "afd8a464fed81a935867c84ec0755eefea6469afe3b6950a618933ad22afe9a2",
+      "sha256": "f8245ad6f6015f739700b6dd40be99aa4b7626a4264544305756e5f33a1bd4bd",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/utils/cli_telemetry_state.go",
+      "sha256": "ca610443c71b47a49e9775edc4e0af2678048eba320742f2a8917e8f6aa9d775",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/utils/cli_telemetry_state_test.go",
+      "sha256": "4611dd2419755db55eb85aa363c2504e3266b782027bdb61f13b37fff933bcc3",
+      "role": "local"
+    },
+    {
+      "path": "telemetry/internal/shared.go",
+      "sha256": "ca1390d8e69b94367effdc99b73c109e83698615aa2348a41c52b42aedaebacf",
+      "role": "local"
+    },
+    {
+      "path": "telemetry/shared.go",
+      "sha256": "ec70541eab7ce25d0c85c52301289434cc4d19da0c8239bc142bf27a82d8fa39",
+      "role": "local"
+    },
+    {
+      "path": "telemetry/shared_test.go",
+      "sha256": "3c4a205fe410ec4ce31687d1e0897f03008f06515e1b04c0f86ef3148be6f819",
       "role": "local"
     }
   ],

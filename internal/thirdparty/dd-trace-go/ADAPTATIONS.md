@@ -592,7 +592,7 @@ initializes.
 - The upload's steps moved from `integrations/civisibility_features.go` to
   [`civisibility/utils/gitupload`](civisibility/utils/gitupload/gitupload.go),
   unchanged except for exported names; `integrations` keeps thin wrappers and
-  its test seams. `net.NewClientWithoutTelemetry` creates the worker's client.
+  its test seams. `net.NewCLIClient` creates the worker's client.
 - `ensureSettingsInitialization` waits for `upload.json` instead of uploading
   when the state is handed, and closes the same upload channel, so the
   `RequireGit` and impacted-tests waits are unchanged. It no longer waits for
@@ -613,16 +613,88 @@ Processes outside the worker's checkout, binaries run outside `ddto test`, the
 SDK runtime, Bazel's offline modes, `-c` and `-n`, and commands with a `-exec`
 program or a cross-compilation helper keep the per-process behavior.
 
-Telemetry differs: test processes that use the state no longer count the Git
-commands and repository requests that the worker made, and the worker reports
-no telemetry. With 8 packages against a local fake Agent, a `ddto test` run
-made one commit search and one upload instead of eight each, and took 0.47
-instead of 0.62 s; each test process's bootstrap dropped from 12 to 5 ms.
+Test processes that use the state no longer count the Git commands and
+repository requests that the worker made; the worker reports them, see
+[Telemetry from ddto's CLI](#telemetry-from-ddtos-cli). With 8 packages
+against a local fake Agent, a `ddto test` run made one commit search and one
+upload instead of eight each, and took 0.47 instead of 0.62 s; each test
+process's bootstrap dropped from 12 to 5 ms.
 
 Checks: `TestMiniGitStateHandoff`, `TestMiniGitStateUploadsOnce`,
 `TestMiniGitStateImpactedTests`, `TestRunUploadsOnlyWhenTold`,
 `TestGitWorkerRecordsMissingResults` and `TestReceiveRemovesGitState`, with the
 existing upload and impacted-tests tests in `integrations` and `impactedtests`.
+
+## Telemetry from ddto's CLI
+
+ddto's Git worker owns the telemetry application of an invocation. The test
+processes that use its state report under that application instead of
+starting their own, so an invocation is one application, with ddto's runtime
+ID, one `app-started` and one `app-closing`.
+
+- [`telemetry/shared.go`](telemetry/shared.go) and
+  [`telemetry/internal/shared.go`](telemetry/internal/shared.go) define
+  `SharedApp`: the runtime ID, root session, application and host that a
+  request reports. With `ClientConfig.Shared`, the writer
+  (`telemetry/internal/writer.go`) puts them in the body and in the
+  `DD-Session-ID` and `DD-Root-Session-ID` headers, and `SharedSeqID` numbers
+  the requests instead of the writer's counter. A process that reports
+  another's application fills in its own Go version.
+- In `telemetry/client.go`, only the owner (`SharedOwner`) sends `app-started`
+  and `app-closing`. Another process's client registers no product or
+  configuration source, sends nothing at startup and adds no `app-closing`; it
+  sends its metrics and logs at its periodic and final flushes. The owner's
+  startup sends `app-started` alone and leaves its other data in its sources,
+  so that it leaves with `app-closing` in one request. `SendFailed` reports
+  each undelivered request.
+- [`civisibility/utils/cli_telemetry_state.go`](civisibility/utils/cli_telemetry_state.go)
+  records the application in `telemetry.json` and numbers the requests of all
+  its processes. A number is a file in `seq/` that one process creates
+  exclusively. Each process takes the number after the highest one that
+  exists, found by a galloping search, so the numbers are 1 to n without
+  repeats and a later request has a higher number. The owner reserves 1 for
+  `app-started`. If the directory cannot be used, a process continues its own
+  numbers and logs it once. A test process records each undelivered request in
+  a `telemetry-failure-*` file.
+- In `civisibility/utils/net/client.go`, the telemetry start function takes
+  the owner, if any. A process whose state ddto handed reports the handed
+  application and registers no product or configuration: the owner's
+  `app-started` carries them. `NewCLIClient` creates the worker's client and
+  writes `telemetry.json` under ddto's runtime ID before the worker writes its
+  Git record, which ddto waits for before it hands the state over.
+- The worker ([`civisibility/cligit`](civisibility/cligit/cligit.go)) starts the
+  application when a test process marks the state `used`, with the Go version
+  that ddto read from `go env`. It closes it after `go test` exits, once it has
+  logged the test processes' undelivered requests. It also logs the failures
+  of its own work as telemetry: the upload, the settings request, the
+  impacted-tests state and writing a result. Test processes log a missing or
+  invalid application, an unusable sequence, and a missing upload or
+  impacted-tests result. Messages are constant; tags hold only a reason, a
+  file name or a status code.
+
+Processes without a handoff, as for the Git state, report their own
+application as before. A fully cached run sends no telemetry, as before. The
+application's service and environment are the worker's, so test processes no
+longer report a service per package, as `DD_CIVISIBILITY_SERVICE_FROM_CODEOWNERS`
+selects for their events, in the telemetry configuration.
+
+With 8 packages against a local fake Agent, a run made 10 telemetry requests
+instead of 23: one per test process and two from the worker, instead of
+`app-started` and two requests at exit per test process. With 100 ms per
+request and `-p 2`, the run took 1.91 instead of 2.52 s; with all 8 test
+processes in parallel, the run took the same time, because the worker's
+`app-closing` follows the last test process.
+
+When updating `telemetry`, keep the shared identity in `newBody` and
+`preBakeRequest`, the external sequence in `setPayloadToBody`, and the
+`sharedChild` checks in `AppStart`, `AppStop`, `flushStartup` and the data
+sources.
+
+Checks: `TestSharedAppReportsOwnerIdentity`, `TestSharedAppRequiresSequence`,
+`TestCLITelemetrySequenceAcrossProcesses`, `TestCLITelemetryFailures`,
+`TestRunOwnsTelemetryApplication` and `integration/TestMiniCLITelemetry`, which
+checks one application, sequential `seq_id`s, the worker's Git metrics, no
+telemetry from a cached run, reported failures and a binary run alone.
 
 ## Testify method names
 
