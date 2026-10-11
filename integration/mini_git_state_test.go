@@ -179,3 +179,100 @@ func TestMiniGitStateUploadsOnce(t *testing.T) {
 		t.Fatalf("two test processes: %v", requests)
 	}
 }
+
+// runImpactedCase runs bin's TestPass against settings that enable impacted
+// tests and returns TestPass's test.is_modified tag.
+func runImpactedCase(t *testing.T, dir, bin string, env []string) string {
+	t.Helper()
+	c := &miniWireCapture{}
+	c.profile = "impacted"
+	server := httptest.NewServer(http.HandlerFunc(c.handler))
+	defer server.Close()
+	scratch := t.TempDir()
+	env = append(testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL,
+		"DD_API_KEY=fixture", "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=true", "TMPDIR="+scratch, "XDG_CACHE_HOME="+scratch), env...)
+	if out, stderr, code := command(t, dir, env, bin, "-test.run=^TestPass$"); code != 0 {
+		t.Fatalf("fixture: %d %s %s", code, out, stderr)
+	}
+	if len(c.failures) > 0 {
+		t.Fatal(c.failures)
+	}
+	for _, event := range c.events {
+		content, _ := event["content"].(map[string]any)
+		meta, _ := content["meta"].(map[string]any)
+		if event["type"] == "test" && meta["test.name"] == "TestPass" {
+			modified, _ := meta["test.is_modified"].(string)
+			return modified
+		}
+	}
+	t.Fatalf("no TestPass event: %v", c.events)
+	return ""
+}
+
+// ddto's Git worker discovers the base branch and computes the diff once; a
+// test process that receives its state marks the same tests as modified
+// without running that Git work.
+func TestMiniGitStateImpactedTests(t *testing.T) {
+	dir, driver, bin := gitStateFixture(t)
+	remote := t.TempDir()
+	git := func(dir string, args ...string) {
+		t.Helper()
+		args = append([]string{"-c", "user.name=Impacted", "-c", "user.email=impacted@example.invalid", "-c", "commit.gpgsign=false"}, args...)
+		if out, stderr, code := command(t, dir, testEnv(), "git", args...); code != 0 {
+			t.Fatalf("git %v: %s %s", args, out, stderr)
+		}
+	}
+	git(remote, "init", "--bare", "--initial-branch=main")
+	git(dir, "remote", "set-url", "origin", remote)
+	git(dir, "push", "origin", "main")
+	git(dir, "checkout", "-b", "feature")
+	sample := filepath.Join(dir, "sample_test.go")
+	body, err := os.ReadFile(sample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := "func TestPass(t *testing.T) {"
+	if !strings.Contains(string(body), marker) {
+		t.Fatalf("TestPass not found in the fixture")
+	}
+	body = []byte(strings.Replace(string(body), marker, marker+"\n\t_ = \"modified on the feature branch\"", 1))
+	if err := os.WriteFile(sample, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(dir, "commit", "-am", "Modify TestPass")
+	bin = filepath.Join(t.TempDir(), executableName("impacted.test"))
+	if out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false"), driver, "test", "--runtime=mini", "-c", "-o", bin, "."); code != 0 {
+		t.Fatalf("compile: %d %s %s", code, out, stderr)
+	}
+	fromGit := []string{"DD_GIT_REPOSITORY_URL=", "DD_GIT_COMMIT_SHA="}
+
+	trace := filepath.Join(t.TempDir(), "git-trace.log")
+	if modified := runImpactedCase(t, dir, bin, append(fromGit, "GIT_TRACE="+trace)); modified != "true" {
+		t.Fatalf("baseline TestPass modified=%q", modified)
+	}
+	if commands := gitCommands(t, trace); !strings.Contains(commands, " diff ") {
+		t.Fatalf("baseline computed no diff:\n%s", commands)
+	}
+
+	// The worker needs the same settings as the test process.
+	c := &miniWireCapture{}
+	c.profile = "impacted"
+	server := httptest.NewServer(http.HandlerFunc(c.handler))
+	defer server.Close()
+	workerEnv := append(append([]string(nil), fromGit...), "DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true",
+		"DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_API_KEY=fixture", "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=true")
+	state := runGitWorker(t, dir, driver, "proceed\n", workerEnv...)
+	if _, err := os.Stat(filepath.Join(state, "impacted.json")); err != nil {
+		t.Fatalf("worker wrote no impacted-tests state: %v", err)
+	}
+	handedTrace := filepath.Join(t.TempDir(), "git-trace.log")
+	if modified := runImpactedCase(t, dir, bin, append(fromGit, "GIT_TRACE="+handedTrace, "DDTO_GIT_STATE="+state)); modified != "true" {
+		t.Fatalf("handed TestPass modified=%q", modified)
+	}
+	commands := gitCommands(t, handedTrace)
+	for _, work := range []string{" diff ", "show-ref", "ls-remote --heads", "merge-base", "pack-objects"} {
+		if strings.Contains(commands, work) {
+			t.Errorf("test process ran %q with handed state:\n%s", strings.TrimSpace(work), commands)
+		}
+	}
+}

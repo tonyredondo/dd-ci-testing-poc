@@ -14,6 +14,7 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/cligit"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/envconfig"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/impactedtests"
 )
 
 // gitWorkerCommand is ddto's private entry point for the Git worker.
@@ -124,6 +125,10 @@ func (w *gitWorker) recordMissingResults() {
 	if utils.ReadCLIGitStateFile(w.state, utils.CLIGitUploadFile, &upload) != nil {
 		w.debug.printf("git worker exited without an upload result")
 		_ = utils.WriteCLIGitStateFile(w.state, utils.CLIGitUploadFile, utils.CLIGitUpload{Error: "ddto git worker exited"})
+	}
+	var state impactedtests.CLIState
+	if utils.ReadCLIGitStateFile(w.state, utils.CLIGitImpactedFile, &state) != nil {
+		_ = utils.WriteCLIGitStateFile(w.state, utils.CLIGitImpactedFile, impactedtests.CLIState{Reason: "ddto git worker exited"})
 	}
 }
 

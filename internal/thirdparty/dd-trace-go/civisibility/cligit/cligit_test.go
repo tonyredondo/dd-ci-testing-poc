@@ -11,10 +11,19 @@ import (
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/gitupload"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/impactedtests"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/net"
 )
 
-type fakeClient struct{ searches, uploads int }
+type fakeClient struct {
+	searches, uploads, settings int
+	impacted                    bool
+}
+
+func (c *fakeClient) GetSettings() (*net.SettingsResponseData, error) {
+	c.settings++
+	return &net.SettingsResponseData{ImpactedTestsEnabled: c.impacted}, nil
+}
 
 func (c *fakeClient) GetCommits([]string) ([]string, error) { c.searches++; return nil, nil }
 func (c *fakeClient) SendPackFiles(string, []string) (int64, error) {
@@ -37,9 +46,9 @@ func gitRepository(t *testing.T) {
 func TestRunUploadsOnlyWhenTold(t *testing.T) {
 	gitRepository(t)
 	t.Cleanup(utils.ResetHandedCLIGitStateForTesting)
-	client := &fakeClient{}
+	fake := &fakeClient{}
 	original := newClient
-	newClient = func() gitupload.Client { return client }
+	newClient = func() client { return fake }
 	t.Cleanup(func() { newClient = original })
 
 	stopped := t.TempDir()
@@ -50,8 +59,8 @@ func TestRunUploadsOnlyWhenTold(t *testing.T) {
 	if err := utils.ReadCLIGitStateFile(stopped, utils.CLIGitRecordFile, &record); err != nil || record.Commit.Sha == "" {
 		t.Fatalf("record %+v, %v", record, err)
 	}
-	if _, err := os.Stat(filepath.Join(stopped, utils.CLIGitUploadFile)); !os.IsNotExist(err) || client.searches != 0 {
-		t.Fatalf("worker without a go-ahead uploaded: %v, %+v", err, client)
+	if _, err := os.Stat(filepath.Join(stopped, utils.CLIGitUploadFile)); !os.IsNotExist(err) || fake.searches != 0 {
+		t.Fatalf("worker without a go-ahead uploaded: %v, %+v", err, fake)
 	}
 
 	utils.ResetHandedCLIGitStateForTesting()
@@ -63,8 +72,23 @@ func TestRunUploadsOnlyWhenTold(t *testing.T) {
 	if err := utils.ReadCLIGitStateFile(proceeded, utils.CLIGitUploadFile, &upload); err != nil || upload.Bytes != 42 || upload.Error != "" {
 		t.Fatalf("upload %+v, %v", upload, err)
 	}
-	if client.searches != 1 || client.uploads != 1 {
-		t.Fatalf("requests %+v", client)
+	if fake.searches != 1 || fake.uploads != 1 {
+		t.Fatalf("requests %+v", fake)
+	}
+	var state impactedtests.CLIState
+	if err := utils.ReadCLIGitStateFile(proceeded, utils.CLIGitImpactedFile, &state); err != nil || state.Computed || state.Reason == "" {
+		t.Fatalf("impacted tests disabled by the settings: %+v, %v", state, err)
+	}
+
+	// With impacted tests enabled, the worker computes the analyzer's input.
+	utils.ResetHandedCLIGitStateForTesting()
+	fake.impacted = true
+	enabled := t.TempDir()
+	if err := Run(enabled, strings.NewReader(Proceed+"\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := utils.ReadCLIGitStateFile(enabled, utils.CLIGitImpactedFile, &state); err != nil || !state.Computed || state.CurrentCommit == "" {
+		t.Fatalf("impacted tests enabled: %+v, %v", state, err)
 	}
 
 	utils.ResetHandedCLIGitStateForTesting()
@@ -73,7 +97,7 @@ func TestRunUploadsOnlyWhenTold(t *testing.T) {
 	if err := Run(disabled, strings.NewReader(Proceed+"\n")); err != nil {
 		t.Fatal(err)
 	}
-	if err := utils.ReadCLIGitStateFile(disabled, utils.CLIGitUploadFile, &upload); err != nil || upload.Error == "" || client.searches != 1 {
-		t.Fatalf("disabled upload %+v, %v, %+v", upload, err, client)
+	if err := utils.ReadCLIGitStateFile(disabled, utils.CLIGitUploadFile, &upload); err != nil || upload.Error == "" || fake.searches != 2 {
+		t.Fatalf("disabled upload %+v, %v, %+v", upload, err, fake)
 	}
 }

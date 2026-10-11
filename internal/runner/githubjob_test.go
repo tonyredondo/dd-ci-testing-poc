@@ -9,6 +9,7 @@ import (
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/goenv"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/impactedtests"
 )
 
 func TestHandGitHubJobID(t *testing.T) {
@@ -85,6 +86,10 @@ func TestGitWorkerRecordsMissingResults(t *testing.T) {
 	var upload utils.CLIGitUpload
 	if err := utils.ReadCLIGitStateFile(state, utils.CLIGitUploadFile, &upload); err != nil || upload.Error == "" {
 		t.Fatalf("upload %+v, %v", upload, err)
+	}
+	var impacted impactedtests.CLIState
+	if err := utils.ReadCLIGitStateFile(state, utils.CLIGitImpactedFile, &impacted); err != nil || impacted.Computed || impacted.Reason == "" {
+		t.Fatalf("impacted %+v, %v", impacted, err)
 	}
 	if err := utils.WriteCLIGitStateFile(state, utils.CLIGitUploadFile, utils.CLIGitUpload{Bytes: 7}); err != nil {
 		t.Fatal(err)
