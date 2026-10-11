@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -316,5 +317,90 @@ func TestMiniGitStateImpactedTests(t *testing.T) {
 		if strings.Contains(commands, work) {
 			t.Errorf("test process ran %q with handed state:\n%s", strings.TrimSpace(work), commands)
 		}
+	}
+}
+
+// With deferred delivery, a test process that receives the worker's state
+// waits for the worker's upload before it admits tests, as it waits for its
+// own upload.
+func TestMiniGitStateDeferredWaitsForUpload(t *testing.T) {
+	dir, driver, bin := gitStateFixture(t)
+	state := runGitWorker(t, dir, driver, "")
+	c := &miniWireCapture{}
+	server := httptest.NewServer(http.HandlerFunc(c.handler))
+	defer server.Close()
+	env := testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL,
+		"DD_API_KEY=fixture", "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=true", "DD_CIVISIBILITY_DEFERRED_DELIVERY=true", "DD_TRACE_DEBUG=true",
+		"DDTO_GIT_STATE="+state, "TMPDIR="+t.TempDir())
+	// The worker ends its upload after the test process has started.
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		temp := filepath.Join(state, "upload.json.tmp")
+		if err := os.WriteFile(temp, []byte(`{"bytes":7}`), 0600); err == nil {
+			_ = os.Rename(temp, filepath.Join(state, "upload.json"))
+		}
+	}()
+	var out bytes.Buffer
+	cmd := exec.Command(bin, "-test.v", "-test.run=^TestPass$")
+	cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = dir, env, &out, &out
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("fixture: %v\n%s", err, out.String())
+	}
+	text := out.String()
+	uploaded, admitted := strings.Index(text, "CLI uploaded 7 bytes"), strings.Index(text, "=== RUN   TestPass")
+	if uploaded < 0 || admitted < 0 || uploaded > admitted {
+		t.Fatalf("upload at %d, TestPass at %d:\n%s", uploaded, admitted, text)
+	}
+}
+
+// Test processes read the worker's state while tests run without entering
+// Go's test log, so results stay cacheable when the state directory lies in
+// the module, as with TMPDIR inside it.
+func TestMiniGitStateCacheWithTemporaryDirectoryInModule(t *testing.T) {
+	dir, driver, _ := gitStateFixture(t)
+	slow := filepath.Join(dir, "slow")
+	if err := os.MkdirAll(slow, 0700); err != nil {
+		t.Fatal(err)
+	}
+	slowTest := filepath.Join(slow, "slow_test.go")
+	// The test runs while the worker's upload ends.
+	if err := os.WriteFile(slowTest, []byte("package slow\n\nimport (\n\t\"testing\"\n\t\"time\"\n)\n\nfunc TestSlow(t *testing.T) { time.Sleep(1500 * time.Millisecond) }\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(slowTest, old, old); err != nil {
+		t.Fatal(err)
+	}
+	temp := filepath.Join(dir, ".tmp")
+	if err := os.Mkdir(temp, 0700); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/setting"):
+			fmt.Fprint(w, `{"data":{"id":"poc","type":"ci_app_test_service_libraries_settings","attributes":{"require_git":false,"impacted_tests_enabled":false,"early_flake_detection":{"enabled":false},"test_management":{"enabled":false}}}}`)
+		case strings.HasSuffix(r.URL.Path, "/packfile"):
+			time.Sleep(500 * time.Millisecond)
+			w.WriteHeader(http.StatusAccepted)
+		default:
+			fmt.Fprint(w, `{"data":[]}`)
+		}
+	}))
+	defer server.Close()
+	env := testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL,
+		"DD_API_KEY=fixture", "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=true", "DD_GIT_REPOSITORY_URL=", "DD_GIT_COMMIT_SHA=", "TMPDIR="+temp)
+	run := func() string {
+		t.Helper()
+		out, stderr, code := command(t, dir, env, driver, "test", "--runtime=mini", "./slow")
+		if code != 0 {
+			t.Fatalf("ddto test: %d %s %s", code, out, stderr)
+		}
+		return out
+	}
+	run()
+	if out := run(); !strings.Contains(out, "(cached)") {
+		t.Fatalf("second run was not cached:\n%s", out)
 	}
 }

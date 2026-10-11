@@ -583,9 +583,19 @@ initializes.
   defines the record (`git.json`), the upload and impacted-tests results
   (`upload.json`, `impacted.json`), the `used` mark and atomic writes.
   `HandedCLIGitState` accepts the state only when the process's `.git` entry,
-  found as `getParentGitFolder` finds it, is the same file as the worker's.
-  Commit dates are Unix seconds, so each process formats them in its own
-  location as after `git log`.
+  found as `getParentGitFolder` finds it, is the same file as the worker's,
+  and it can mark the state `used`. Commit dates are Unix seconds, so each
+  process formats them in its own location as after `git log`.
+  [`civisibility/utils/cli_state_files.go`](civisibility/utils/cli_state_files.go)
+  opens the state's files with `syscall.Open`, so that the reads and writes of
+  test processes stay out of Go's test log: with the state directory in the
+  module, as with `TMPDIR` inside it, `go test` would otherwise check files that
+  change on every run and cache no result.
+- `CollectCLIGitRecord` changes nothing in the repository: `fetchCommitData`
+  (`git.go`) became `readCommitData(sha, allowFetch)`, and without
+  `allowFetch` it reports a CI head commit missing from a shallow clone
+  instead of fetching it. The record then leaves the head commit out, and test
+  processes fetch it as before.
 - `createCITagsMap` (`environmentTags.go`) takes `getLocalGitData`'s and,
   for the same head commit, `fetchCommitData`'s results from the record; the
   CI provider's tags keep their precedence.
@@ -595,8 +605,10 @@ initializes.
   its test seams. `net.NewCLIClient` creates the worker's client.
 - `ensureSettingsInitialization` waits for `upload.json` instead of uploading
   when the state is handed, and closes the same upload channel, so the
-  `RequireGit` and impacted-tests waits are unchanged. It no longer waits for
-  the upload at exit: ddto waits for its worker before exiting.
+  `RequireGit` and impacted-tests waits are unchanged. Deferred delivery waits
+  before admitting tests, as for its own upload; ordinary mode waits in the
+  background. It no longer waits for the upload at exit: ddto waits for its
+  worker before exiting.
 - `NewImpactedTestAnalyzer` (`impactedtests`) builds the analyzer from
   `impacted.json` when the worker computed it for the process's current
   commit and pull-request base; otherwise it computes as before
@@ -607,8 +619,9 @@ backend's commits while go test builds, a read-only request, but unshallows,
 packs and uploads only after a test process marks the state `used`, and then
 requests the settings as test processes do, concurrently with the upload.
 When go test takes every result from its cache, no process uses the state and
-the worker exits without changing the repository. ddto writes the missing
-results if the worker exits early, so no process waits for its timeouts.
+the worker exits without changing the repository. The worker closes its
+standard output once it has written its results, or failed to, and ddto then
+writes any missing result, so no process waits for its timeouts.
 Processes outside the worker's checkout, binaries run outside `ddto test`, the
 SDK runtime, Bazel's offline modes, `-c` and `-n`, and commands with a `-exec`
 program or a cross-compilation helper keep the per-process behavior.
@@ -620,10 +633,22 @@ against a local fake Agent, a `ddto test` run made one commit search and one
 upload instead of eight each, and took 0.47 instead of 0.62 s; each test
 process's bootstrap dropped from 12 to 5 ms.
 
+`globalconfig.go` records whether a process started its root session, which
+it hands to child processes in `_DD_ROOT_GO_SESSION_ID`. Linking the worker
+gives ddto that package, so `ddto`'s `main` calls `KeepCallerEnvironment` to
+remove the variable it set, and hands its session only to the worker
+(`RootSessionEnv`): go test, `-exec` programs and test processes see the
+caller's environment.
+
 Checks: `TestMiniGitStateHandoff`, `TestMiniGitStateUploadsOnce`,
-`TestMiniGitStateImpactedTests`, `TestRunUploadsOnlyWhenTold`,
-`TestGitWorkerRecordsMissingResults` and `TestReceiveRemovesGitState`, with the
-existing upload and impacted-tests tests in `integrations` and `impactedtests`.
+`TestMiniGitStateImpactedTests`, `TestMiniGitStateDeferredWaitsForUpload`,
+`TestMiniGitStateCacheWithTemporaryDirectoryInModule`,
+`TestMiniExecWrapperSeesCallerEnvironment`, `TestRunUploadsOnlyWhenTold`,
+`TestRunClosesResultsOnWriteFailure`, `TestCollectCLIGitRecordDoesNotFetch`,
+`TestHandedCLIGitStateNeedsUsedMark`, `TestGitWorkerRecordsMissingResults`,
+`TestGitWorkerRecordsResultsWhenOutputCloses` and `TestReceiveRemovesGitState`,
+with the existing upload and impacted-tests tests in `integrations` and
+`impactedtests`.
 
 ## Telemetry from ddto's CLI
 
@@ -654,8 +679,11 @@ ID, one `app-started` and one `app-closing`.
   exists, found by a galloping search, so the numbers are 1 to n without
   repeats and a later request has a higher number. The owner reserves 1 for
   `app-started`. If the directory cannot be used, a process continues its own
-  numbers and logs it once. A test process records each undelivered request in
-  a `telemetry-failure-*` file.
+  numbers. A test process records that fallback, and each undelivered
+  request, in a `telemetry-failure-*` file, which the owner reports even when
+  it happened in the test process's final request; the owner logs its own
+  fallback, which goes unreported in its final request. The sequence's files
+  stay out of Go's test log, like the Git state's.
 - In `civisibility/utils/net/client.go`, the telemetry start function takes
   the owner, if any. A process whose state ddto handed reports the handed
   application and registers no product or configuration: the owner's
@@ -667,10 +695,11 @@ ID, one `app-started` and one `app-closing`.
   that ddto read from `go env`. It closes it after `go test` exits, once it has
   logged the test processes' undelivered requests. It also logs the failures
   of its own work as telemetry: the upload, the settings request, the
-  impacted-tests state and writing a result. Test processes log a missing or
-  invalid application, an unusable sequence, and a missing upload or
-  impacted-tests result. Messages are constant; tags hold only a reason, a
-  file name or a status code.
+  impacted-tests state and writing a result. A failed write closes its results
+  at once, but `app-closing` still waits for `go test` to exit. Test processes
+  log a missing or invalid application, a state that they could not mark used,
+  and a missing upload or impacted-tests result. Messages are constant; tags
+  hold only a reason, a file name or a status code.
 
 Processes without a handoff, as for the Git state, report their own
 application as before. A fully cached run sends no telemetry, as before. The

@@ -33,6 +33,8 @@
       "TestMiniFixtureRuntimeImportLineEndings",
       "TestMiniGitHubJobIDHandoff",
       "TestMiniGitHubJobIDNotHandedThroughExec",
+      "TestMiniGitStateCacheWithTemporaryDirectoryInModule",
+      "TestMiniGitStateDeferredWaitsForUpload",
       "TestMiniGitStateHandoff",
       "TestMiniGitStateImpactedTests",
       "TestMiniGitStateUploadsOnce",
