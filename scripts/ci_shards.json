@@ -39,7 +39,6 @@
       "TestMiniGitStateImpactedTests",
       "TestMiniGitStateStopsUploadCleanly",
       "TestMiniGitStateUploadsOnce",
-      "TestMiniGitWorkerStopsOnInterrupt",
       "TestMiniGoleakAbsoluteTargetRetainsCompilerFlags",
       "TestMiniGoleakForkReplacement",
       "TestMiniGoleakIntegration",
@@ -195,11 +194,17 @@
   },
   "platform_tests": {
     "linux": {
+      "cli": [
+        "TestMiniGitWorkerStopsOnInterrupt"
+      ],
       "parity": [
         "TestCIVisibilityUnixAgent"
       ]
     },
     "darwin": {
+      "cli": [
+        "TestMiniGitWorkerStopsOnInterrupt"
+      ],
       "parity": [
         "TestCIVisibilityUnixAgent"
       ]
