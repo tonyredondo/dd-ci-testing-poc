@@ -326,7 +326,8 @@ With `-race`, `noraceOverlay` in `internal/runner/norace.go` gives a client's
 build copies of Mini's sources that mark each function `//go:norace`. The
 copies must keep every token and position of their sources:
 `TestNoraceSourcePreservesPositions` checks each Mini runtime file, and
-`TestMiniRaceInstrumentsClientOnly` checks a built binary. Because `ddto test
+`TestMiniRaceInstrumentsClientOnly` checks a built binary. Clients that import
+Mini keep it instrumented (`TestMiniRaceKeepsMiniInstrumentedForAPIClients`). Because `ddto test
 -race` no longer race-checks Mini's own code, keep running Mini's unit tests
 with `go test -race`. Vendor workspaces are content-addressed: bump
 `vendorWorkspaceLayout` in `internal/runner/vendor.go` whenever their stored

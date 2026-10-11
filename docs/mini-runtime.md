@@ -297,7 +297,10 @@ Client code and `testing` stay instrumented, and Mini's locks, channels and
 atomics still order client accesses, so client races are reported as before.
 Races inside Mini's functions are not; function literals cannot be annotated
 and stay instrumented. Mini packages that `-coverpkg` covers also stay
-instrumented, because Go's cover tool reads their original sources. Mini's own tests keep full instrumentation, with
+instrumented, because Go's cover tool reads their original sources. When
+client code imports Mini's packages, as tests that use `testopt` do, Mini keeps
+full instrumentation: memory that the client passes to Mini's API, such as a
+pointer tag value, stays checked as under `go test -race`. Mini's own tests keep full instrumentation, with
 `go test -race` or when the named packages belong to Mini. A `/*line*/`
 directive keeps every source position. Compiling Mini with `-race=false` would
 remove more, but the compiler would then make Mini's atomics invisible to the

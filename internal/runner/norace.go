@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -272,14 +273,26 @@ func (l *noraceLexer) signature() (body, ok bool) {
 }
 
 // noraceOverlay adds annotated copies of the selected Mini's sources to the
-// overlay, starting from any replacement that the overlay already holds. When
-// the named packages include Mini's own, Mini keeps full instrumentation, so
-// its tests still check it. A file that cannot be read or copied keeps its
+// overlay, starting from any replacement that the overlay already holds. Mini
+// keeps full instrumentation when the named packages include Mini's own, so
+// its tests still check it, and when client code imports Mini: memory that the
+// client passes to Mini's API, such as a pointer tag value, must stay checked
+// as under go test. A file that cannot be read or copied keeps its
 // instrumentation.
 func noraceOverlay(listed []goPackage, replacements map[string]string, temp string) int {
 	for _, p := range listed {
-		if !p.DepOnly && p.ImportPath != miniPackage && p.Module != nil && p.Module.Path == miniModule {
-			return 0
+		if p.Module != nil && p.Module.Path == miniModule {
+			if !p.DepOnly && p.ImportPath != miniPackage {
+				return 0
+			}
+			continue
+		}
+		for _, imports := range [][]string{p.Imports, p.TestImports, p.XTestImports} {
+			for _, path := range imports {
+				if path == miniModule || strings.HasPrefix(path, miniModule+"/") {
+					return 0
+				}
+			}
 		}
 	}
 	type source struct{ logical, actual, backing string }

@@ -226,6 +226,17 @@ func TestNoraceOverlay(t *testing.T) {
 	if files := noraceOverlay(tested, replacements, filepath.Join(dir, "plan")); files != 0 || len(replacements) != 2 {
 		t.Fatalf("annotated %d files of Mini's tests: %v", files, replacements)
 	}
+	// So does Mini's API when a client calls it.
+	for _, client := range []goPackage{
+		{ImportPath: "client", Imports: []string{miniModule + "/propagation"}},
+		{ImportPath: "client", TestImports: []string{miniPackage}},
+		{ImportPath: "client", XTestImports: []string{miniModule}},
+	} {
+		uses := append([]goPackage{client}, listed[1:]...)
+		if files := noraceOverlay(uses, replacements, filepath.Join(dir, "plan")); files != 0 || len(replacements) != 2 {
+			t.Fatalf("annotated %d files for a client of Mini's API: %v", files, replacements)
+		}
+	}
 	if files := noraceOverlay(listed, replacements, filepath.Join(dir, "plan")); files != 3 {
 		t.Fatalf("annotated %d files: %v", files, replacements)
 	}

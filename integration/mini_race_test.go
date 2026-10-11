@@ -74,3 +74,47 @@ func TestClientDataRace(t *testing.T) {
 		}
 	}
 }
+
+// A client that calls Mini's API keeps Mini instrumented: a race on memory it
+// passes to Mini, here read by Span.SetTag, is reported as under go test.
+func TestMiniRaceKeepsMiniInstrumentedForAPIClients(t *testing.T) {
+	dir, driver := prepareMiniFixture(t)
+	source := `package fixture_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/testopt"
+)
+
+func TestRaceThroughMiniAPI(t *testing.T) {
+	client, err := testopt.New(testopt.Config{Transport: testopt.TransportConfig{Endpoint: "http://127.0.0.1:9"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	span, _ := client.StartSpan(context.Background(), "race")
+	shared := 0
+	done := make(chan struct{})
+	go func() {
+		shared++
+		close(done)
+	}()
+	span.SetTag("shared", &shared)
+	<-done
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "api_race_test.go"), []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), executableName("api-race.test"))
+	out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false"), driver, "test", "--runtime=mini", "-race", "-c", "-o", bin, ".")
+	if code != 0 {
+		t.Fatalf("compile: %d %s %s", code, out, stderr)
+	}
+	got := execute(t, dir, bin, []string{"-test.run=^TestRaceThroughMiniAPI$"}, false, false)
+	report := got.out + got.stderr
+	if got.code == 0 || !strings.Contains(report, "WARNING: DATA RACE") || !strings.Contains(report, "internal/minitracer") {
+		t.Fatalf("race through Mini's API not reported: %d %s", got.code, report)
+	}
+}
