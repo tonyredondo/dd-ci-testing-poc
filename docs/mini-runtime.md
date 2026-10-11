@@ -87,8 +87,9 @@ On GitHub Actions, without a numeric `JOB_CHECK_RUN_ID`, each test process
 would read the runner's `Worker_*.log` files to find the job ID. `ddto` reads
 them once, while it prepares the build, and hands the result to Mini's test
 processes in `DDTO_GITHUB_JOB_ID`. The same restore package removes that
-variable before any client package initializes; an empty value means the files
-name no job, so the process does not read them again. With a `-exec` program or
+variable as it restores `GOWORK` and `GOFLAGS`, before `os` initializes, so
+client code that reads the environment through `os` never sees it; an empty
+value means the files name no job, so the process does not read them again. With a `-exec` program or
 a cross-compilation helper, which would see the variable before the test
 binary, `ddto` hands nothing and each process reads the files itself, as it
 does when the scan is still running a second after preparation.

@@ -9,7 +9,7 @@ import (
 )
 
 // ddto reads the GitHub Actions job ID once and hands it to each test process,
-// which removes the variable before any client code runs.
+// which removes the variable before os initializes, so tests never see it.
 func TestMiniGitHubJobIDHandoff(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
 	source := `package fixture_test

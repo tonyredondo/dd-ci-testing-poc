@@ -55,9 +55,9 @@ var gitHubJobID struct {
 }
 
 // Receive removes the values that ddto hands to test processes from the
-// environment, so that client code never sees them, and keeps them for the
-// test runtime. Only goenv/restore calls it: helpers such as test-exec pass
-// the values on to the test process.
+// environment and keeps them for the test runtime. Only goenv/restore calls
+// it, so it runs before os initializes, like Restore; helpers such as
+// test-exec pass the values on to the test process.
 func Receive() {
 	gitHubJobID.value, gitHubJobID.handed = syscall.Getenv(GitHubJobIDHandoff)
 	if gitHubJobID.handed {

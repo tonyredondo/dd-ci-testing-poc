@@ -548,8 +548,8 @@ expression. [`civisibility/utils/githubjob`](civisibility/utils/githubjob/github
 holds that scan, moved from `ci_providers.go` with exported names and a
 debug-function parameter, so that ddto can run it once per invocation without
 the CI metadata packages. ddto hands the result to Mini's test processes in
-`DDTO_GITHUB_JOB_ID`, and `goenv/restore` removes the variable before client
-code initializes. With a `-exec` program or a cross-compilation helper, which
+`DDTO_GITHUB_JOB_ID`, and `goenv/restore` removes the variable before `os`
+initializes, as it restores the caller's Go settings. With a `-exec` program or a cross-compilation helper, which
 would see the variable first, ddto hands nothing; it also stops waiting for a
 scan that is still running a second after preparation. The scan now skips
 Worker logs that are not regular files: reading a FIFO could block.
