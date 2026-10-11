@@ -148,7 +148,8 @@ Execution metadata lives in a `sync.Map` keyed by the testing object
 (`gotesting/instrumentation.go`), which replaced a map behind one `RWMutex`.
 Coverage shutdown markers and two Testify lookups use more maps keyed by tests.
 Private `testing` fields are read through offsets computed by reflection
-(`reflection_offsets.go`), and retries copy them by name. Measured on
+(`reflection_offsets.go`), and retries copy them through the same offsets
+(`retry_attempt.go:231-234`). Measured on
 Linux/amd64 at `44c7fd8`, before the `sync.Map`: a metadata lookup took 12 ns
 alone and 28 ns with eight goroutines; creating and deleting an entry took
 215 ns and one allocation. Reading the private fields through offsets takes
@@ -293,8 +294,8 @@ preparation took 132–148 ms, against about 56 ms without the query. In an
 367 ms.
 
 Leave standard-library paths out of the request, using Go's rule: the first
-path element has no dot and `$GOROOT/src/<path>` exists, with `GOROOT` taken
-from the parent of `testing`'s directory. External helpers and unknown imports
+path element has no dot and `$GOROOT/src/<path>` exists, where `$GOROOT/src` is
+the parent of `testing`'s directory. External helpers and unknown imports
 from other modules stay in the query. Merging the query into the main one with
 `-test` is not a general improvement: dd-go took 23.7 s merged, against 17.1 s
 plus 0.83 s with separate queries.
