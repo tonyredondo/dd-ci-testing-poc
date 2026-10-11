@@ -163,6 +163,8 @@ func (w *gitWorker) finish(timeout time.Duration) {
 		return
 	}
 	_ = w.input.Close()
+	waited := time.Now()
+	defer func() { w.debug.printf("git worker finish waited=%s", time.Since(waited).Round(time.Millisecond)) }()
 	select {
 	case <-w.exited:
 	case <-time.After(timeout):

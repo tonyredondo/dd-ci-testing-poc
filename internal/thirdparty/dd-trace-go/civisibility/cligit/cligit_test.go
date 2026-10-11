@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
@@ -16,19 +17,36 @@ import (
 )
 
 type fakeClient struct {
+	mu                          sync.Mutex
 	searches, uploads, settings int
 	impacted                    bool
 }
 
 func (c *fakeClient) GetSettings() (*net.SettingsResponseData, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.settings++
 	return &net.SettingsResponseData{ImpactedTestsEnabled: c.impacted}, nil
 }
 
-func (c *fakeClient) GetCommits([]string) ([]string, error) { c.searches++; return nil, nil }
+func (c *fakeClient) GetCommits([]string) ([]string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.searches++
+	return nil, nil
+}
+
 func (c *fakeClient) SendPackFiles(string, []string) (int64, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.uploads++
 	return 42, nil
+}
+
+func (c *fakeClient) counts() (searches, uploads int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.searches, c.uploads
 }
 
 // usedState returns a state directory that a test process has used.
@@ -69,19 +87,29 @@ func TestRunUploadsOnlyWhenTold(t *testing.T) {
 	if err := utils.ReadCLIGitStateFile(stopped, utils.CLIGitRecordFile, &record); err != nil || record.Commit.Sha == "" {
 		t.Fatalf("record %+v, %v", record, err)
 	}
-	if _, err := os.Stat(filepath.Join(stopped, utils.CLIGitUploadFile)); !os.IsNotExist(err) || fake.searches != 0 {
-		t.Fatalf("worker without a go-ahead uploaded: %v, %+v", err, fake)
+	if searches, _ := fake.counts(); searches != 0 {
+		t.Fatalf("worker without a go-ahead searched %d times", searches)
+	}
+	if _, err := os.Stat(filepath.Join(stopped, utils.CLIGitUploadFile)); !os.IsNotExist(err) {
+		t.Fatalf("worker without a go-ahead recorded an upload: %v", err)
 	}
 
 	utils.ResetHandedCLIGitStateForTesting()
-	// Told to proceed, a worker that no test process used does not upload.
+	// Told to proceed, a worker that no test process used searches ahead,
+	// a read-only request, but does not upload.
+	unusedClient := &fakeClient{}
+	newClient = func() client { return unusedClient }
 	unused := t.TempDir()
 	if err := Run(unused, strings.NewReader(Proceed+"\n")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(unused, utils.CLIGitUploadFile)); !os.IsNotExist(err) || fake.searches != 0 {
-		t.Fatalf("unused worker uploaded: %v, %+v", err, fake)
+	if _, err := os.Stat(filepath.Join(unused, utils.CLIGitUploadFile)); !os.IsNotExist(err) {
+		t.Fatalf("unused worker recorded an upload: %v", err)
 	}
+	if _, uploads := unusedClient.counts(); uploads != 0 {
+		t.Fatalf("unused worker uploaded %d pack files", uploads)
+	}
+	newClient = func() client { return fake }
 
 	utils.ResetHandedCLIGitStateForTesting()
 	proceeded := usedState(t)
@@ -92,8 +120,8 @@ func TestRunUploadsOnlyWhenTold(t *testing.T) {
 	if err := utils.ReadCLIGitStateFile(proceeded, utils.CLIGitUploadFile, &upload); err != nil || upload.Bytes != 42 || upload.Error != "" {
 		t.Fatalf("upload %+v, %v", upload, err)
 	}
-	if fake.searches != 1 || fake.uploads != 1 {
-		t.Fatalf("requests %+v", fake)
+	if searches, uploads := fake.counts(); searches != 1 || uploads != 1 {
+		t.Fatalf("searches %d, uploads %d", searches, uploads)
 	}
 	var state impactedtests.CLIState
 	if err := utils.ReadCLIGitStateFile(proceeded, utils.CLIGitImpactedFile, &state); err != nil || state.Computed || state.Reason == "" {
@@ -117,7 +145,10 @@ func TestRunUploadsOnlyWhenTold(t *testing.T) {
 	if err := Run(disabled, strings.NewReader(Proceed+"\n")); err != nil {
 		t.Fatal(err)
 	}
-	if err := utils.ReadCLIGitStateFile(disabled, utils.CLIGitUploadFile, &upload); err != nil || upload.Error == "" || fake.searches != 2 {
-		t.Fatalf("disabled upload %+v, %v, %+v", upload, err, fake)
+	if searches, _ := fake.counts(); searches != 2 {
+		t.Fatalf("disabled upload searched: %d", searches)
+	}
+	if err := utils.ReadCLIGitStateFile(disabled, utils.CLIGitUploadFile, &upload); err != nil || upload.Error == "" {
+		t.Fatalf("disabled upload %+v, %v", upload, err)
 	}
 }

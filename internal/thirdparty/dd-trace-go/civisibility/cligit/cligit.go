@@ -46,12 +46,14 @@ var newClient = func() client {
 }
 
 // Run writes the checkout's Git record to dir, then waits for the CLI. Once
-// told to proceed, and once a test process uses the state, it uploads the
-// repository's missing commits, as each test process would, and records the
-// end of the upload. Then, if the settings enable impacted tests, it records
-// the base commit and modified files. When go test exits without running a
-// test process that uses the state, as when every result comes from its
-// cache, the worker exits without network or repository work.
+// told to proceed, it compares the local commits with the backend's while go
+// test builds, a read-only request. Once a test process uses the state, it
+// uploads the missing commits, as each test process would, and records the
+// end of the upload; meanwhile it requests the settings, and if they enable
+// impacted tests it records the base commit and modified files. When go test
+// exits without running a test process that uses the state, as when every
+// result comes from its cache, the worker exits without changing the
+// repository or uploading.
 func Run(dir string, input io.Reader) error {
 	if infra.BoolEnv("DD_TRACE_DEBUG", false) {
 		log.SetLevel(log.LevelDebug)
@@ -63,27 +65,71 @@ func Run(dir string, input io.Reader) error {
 	utils.UseCLIGitState(dir, record)
 	reader := bufio.NewReader(input)
 	line, _ := reader.ReadString('\n')
-	if line != Proceed+"\n" || !waitUsed(dir, reader) {
+	if line != Proceed+"\n" {
 		return nil
 	}
 	c := newClient()
-	uploaded := upload(c)
+	uploadEnabled := infra.BoolEnv(constants.CIVisibilityGitUploadEnabledEnvironmentVariable, true)
+	search := searchAhead(c, uploadEnabled)
+	if !waitUsed(dir, reader) {
+		return nil
+	}
+	// Test processes request the settings while they upload.
+	settings := make(chan settingsResult, 1)
+	if c != nil {
+		go func() {
+			response, err := c.GetSettings()
+			settings <- settingsResult{response, err}
+		}()
+	}
+	uploaded := upload(c, uploadEnabled, search)
 	if err := utils.WriteCLIGitStateFile(dir, utils.CLIGitUploadFile, uploaded); err != nil {
 		return err
 	}
-	return utils.WriteCLIGitStateFile(dir, utils.CLIGitImpactedFile, impacted(c, uploaded))
+	return utils.WriteCLIGitStateFile(dir, utils.CLIGitImpactedFile, impacted(c, uploaded, settings))
 }
 
-// upload runs the test processes' repository upload. Test processes that
-// disable it do not wait for this result.
-func upload(c client) utils.CLIGitUpload {
-	if !infra.BoolEnv(constants.CIVisibilityGitUploadEnabledEnvironmentVariable, true) {
+type settingsResult struct {
+	response *net.SettingsResponseData
+	err      error
+}
+
+// searchAhead starts the upload's first commit search; the returned function
+// waits for it.
+func searchAhead(c client, uploadEnabled bool) func() (*gitupload.SearchCommitsResponse, error) {
+	if c == nil || !uploadEnabled {
+		return nil
+	}
+	var response *gitupload.SearchCommitsResponse
+	var err error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		response, err = gitupload.SearchCommits(c)
+	}()
+	return func() (*gitupload.SearchCommitsResponse, error) {
+		<-done
+		return response, err
+	}
+}
+
+// upload runs the test processes' repository upload, starting from the
+// commit search made ahead. Test processes that disable it do not wait for
+// this result.
+func upload(c client, uploadEnabled bool, search func() (*gitupload.SearchCommitsResponse, error)) utils.CLIGitUpload {
+	if !uploadEnabled {
 		return utils.CLIGitUpload{Error: "repository upload disabled"}
 	}
 	if c == nil {
 		return utils.CLIGitUpload{Error: errors.New("no CI Visibility client").Error()}
 	}
-	bytes, err := gitupload.Upload(gitupload.ClientHooks(c))
+	hooks := gitupload.ClientHooks(c)
+	repeat := hooks.GetSearchCommits
+	hooks.GetSearchCommits = func() (*gitupload.SearchCommitsResponse, error) {
+		hooks.GetSearchCommits = repeat
+		return search()
+	}
+	bytes, err := gitupload.Upload(hooks)
 	if err != nil {
 		log.Error("civisibility: error uploading repository changes: %s", err.Error())
 		return utils.CLIGitUpload{Bytes: bytes, Error: err.Error()}
@@ -95,18 +141,19 @@ func upload(c client) utils.CLIGitUpload {
 // impacted computes the impacted-tests state when the settings enable it, as
 // a test process does after the upload: the base branch discovery and the diff
 // then need the history that the upload may have fetched.
-func impacted(c client, uploaded utils.CLIGitUpload) impactedtests.CLIState {
+func impacted(c client, uploaded utils.CLIGitUpload, settings <-chan settingsResult) impactedtests.CLIState {
 	if c == nil {
 		return impactedtests.CLIState{Reason: "no CI Visibility client"}
 	}
-	settings, err := c.GetSettings()
-	if err == nil && settings != nil && settings.RequireGit && uploaded.Error == "" {
-		settings, err = c.GetSettings()
+	result := <-settings
+	response, err := result.response, result.err
+	if err == nil && response != nil && response.RequireGit && uploaded.Error == "" {
+		response, err = c.GetSettings()
 	}
 	switch {
 	case err != nil:
 		return impactedtests.CLIState{Reason: "settings: " + err.Error()}
-	case settings == nil || !settings.ImpactedTestsEnabled:
+	case response == nil || !response.ImpactedTestsEnabled:
 		return impactedtests.CLIState{Reason: "impacted tests disabled by the settings"}
 	case !infra.BoolEnv(constants.CIVisibilityImpactedTestsDetectionEnabled, true):
 		return impactedtests.CLIState{Reason: "impacted tests disabled by the environment"}
@@ -133,7 +180,7 @@ func waitUsed(dir string, input io.Reader) bool {
 			_, err := os.Stat(used)
 			return err == nil
 		case <-time.After(delay):
-			delay = min(2*delay, 50*time.Millisecond)
+			delay = min(2*delay, 5*time.Millisecond)
 		}
 	}
 }

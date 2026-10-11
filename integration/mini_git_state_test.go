@@ -198,7 +198,8 @@ func TestMiniGitStateUploadsOnce(t *testing.T) {
 	}
 	clear(requests)
 	mu.Unlock()
-	// With every result cached, no test process uses the state: no upload.
+	// With every result cached, no test process uses the state: the worker
+	// may search ahead, a read-only request, but packs and uploads nothing.
 	// The fixture's own tests are not cacheable; sub's are.
 	run("./sub")
 	mu.Lock()
@@ -209,7 +210,7 @@ func TestMiniGitStateUploadsOnce(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(requests) != 0 {
+	if requests["packfile"] != 0 || requests["search_commits"] > 1 {
 		t.Fatalf("cached run: %v", requests)
 	}
 }
