@@ -51,3 +51,46 @@ func TestHandoffHidden(t *testing.T) {
 		}
 	}
 }
+
+// A -exec program starts before the test binary could remove a handed value,
+// so ddto hands none and the program sees the caller's environment.
+func TestMiniGitHubJobIDNotHandedThroughExec(t *testing.T) {
+	dir, driver := prepareMiniFixture(t)
+	launcherDir := t.TempDir()
+	launcherSource := `package main
+
+import (
+	"os"
+	"os/exec"
+)
+
+func main() {
+	if value, ok := os.LookupEnv("DDTO_GITHUB_JOB_ID"); ok {
+		os.Stderr.WriteString("launcher sees DDTO_GITHUB_JOB_ID=" + value + "\n")
+		os.Exit(3)
+	}
+	cmd := exec.Command(os.Args[1], os.Args[2:]...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		if exit, ok := err.(*exec.ExitError); ok {
+			os.Exit(exit.ExitCode())
+		}
+		os.Exit(1)
+	}
+}
+`
+	for name, content := range map[string]string{"go.mod": "module launcher\n\ngo 1.25\n", "main.go": launcherSource} {
+		if err := os.WriteFile(filepath.Join(launcherDir, name), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	launcher := filepath.Join(launcherDir, executableName("launcher"))
+	if out, stderr, code := command(t, launcherDir, testEnv(), "go", "build", "-o", launcher, "."); code != 0 {
+		t.Fatalf("build launcher: %d %s %s", code, out, stderr)
+	}
+	env := testEnv("DD_CIVISIBILITY_ENABLED=false", "GITHUB_SHA=0123456789abcdef0123456789abcdef01234567", "JOB_CHECK_RUN_ID=")
+	out, stderr, code := command(t, dir, env, driver, "test", "--runtime=mini", "-count=1", "-exec", launcher, "-run=^TestPass$", ".")
+	if code != 0 {
+		t.Fatalf("-exec run: %d %s %s", code, out, stderr)
+	}
+}

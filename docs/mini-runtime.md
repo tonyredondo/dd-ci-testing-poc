@@ -88,7 +88,10 @@ would read the runner's `Worker_*.log` files to find the job ID. `ddto` reads
 them once, while it prepares the build, and hands the result to Mini's test
 processes in `DDTO_GITHUB_JOB_ID`. The same restore package removes that
 variable before any client package initializes; an empty value means the files
-name no job, so the process does not read them again.
+name no job, so the process does not read them again. With a `-exec` program or
+a cross-compilation helper, which would see the variable before the test
+binary, `ddto` hands nothing and each process reads the files itself, as it
+does when the scan is still running a second after preparation.
 
 A `go test -exec` program, or the `go_$GOOS_$GOARCH_exec` helper that Go uses
 when cross-compiling, starts before the test binary. `ddto` runs it through
@@ -293,7 +296,8 @@ Mini's own memory accesses: with 2,000 empty tests, about 22 µs less per test.
 Client code and `testing` stay instrumented, and Mini's locks, channels and
 atomics still order client accesses, so client races are reported as before.
 Races inside Mini's functions are not; function literals cannot be annotated
-and stay instrumented. Mini's own tests keep full instrumentation, with
+and stay instrumented. Mini packages that `-coverpkg` covers also stay
+instrumented, because Go's cover tool reads their original sources. Mini's own tests keep full instrumentation, with
 `go test -race` or when the named packages belong to Mini. A `/*line*/`
 directive keeps every source position. Compiling Mini with `-race=false` would
 remove more, but the compiler would then make Mini's atomics invisible to the

@@ -549,7 +549,10 @@ holds that scan, moved from `ci_providers.go` with exported names and a
 debug-function parameter, so that ddto can run it once per invocation without
 the CI metadata packages. ddto hands the result to Mini's test processes in
 `DDTO_GITHUB_JOB_ID`, and `goenv/restore` removes the variable before client
-code initializes.
+code initializes. With a `-exec` program or a cross-compilation helper, which
+would see the variable first, ddto hands nothing; it also stops waiting for a
+scan that is still running a second after preparation. The scan now skips
+Worker logs that are not regular files: reading a FIFO could block.
 
 `getGithubActionsJobID` still reads `JOB_CHECK_RUN_ID` first. A handed value
 is the diagnostics result: an empty one means none, so the process does not
@@ -560,8 +563,10 @@ process, and 0.62 ms with 31 logs; a handed value takes 31 ns. When upstream
 changes the scan, update `githubjob` and keep the precedence above.
 
 Checks: `TestGithubActionsJobIDFromDDTO`, `TestGithubActionsJobIDFromDiagnostics`,
-`TestHandGitHubJobID`, `TestReceiveRemovesHandedValues` and
-`TestMiniGitHubJobIDHandoff`.
+`TestFromDiagnosticsSkipsNonRegularFiles`, `TestHandGitHubJobID`,
+`TestHandGitHubJobIDDoesNotWaitForAStalledScan`,
+`TestReceiveRemovesHandedValues`, `TestMiniGitHubJobIDHandoff` and
+`TestMiniGitHubJobIDNotHandedThroughExec`.
 
 ## Testify method names
 

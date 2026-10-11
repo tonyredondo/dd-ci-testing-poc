@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/goenv"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/githubjob"
@@ -11,6 +12,11 @@ import (
 
 // gitHubDiagnosticsDirs are the runner directories that hold Worker logs.
 var gitHubDiagnosticsDirs = githubjob.DiagnosticsDirs
+
+// gitHubJobIDWait bounds the wait for the scan once preparation is done. When
+// the scan is later, as on a stalled filesystem, each test process scans for
+// itself, as without ddto.
+var gitHubJobIDWait = time.Second
 
 // handGitHubJobID starts reading the GitHub Actions job ID for Mini's test
 // processes, each of which would otherwise scan the runner's diagnostics
@@ -27,6 +33,12 @@ func handGitHubJobID(runtime Runtime, debug *cliDebug) func() []string {
 		found <- id
 	}()
 	return sync.OnceValue(func() []string {
-		return []string{goenv.GitHubJobIDHandoff + "=" + <-found}
+		select {
+		case id := <-found:
+			return []string{goenv.GitHubJobIDHandoff + "=" + id}
+		case <-time.After(gitHubJobIDWait):
+			debug.printf("github job id scan unfinished; test processes scan instead")
+			return nil
+		}
 	})
 }

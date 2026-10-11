@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/goenv"
 )
@@ -42,5 +43,29 @@ func TestHandGitHubJobID(t *testing.T) {
 	os.Unsetenv("GITHUB_SHA")
 	if got := handGitHubJobID(Mini, nil)(); got != nil {
 		t.Fatalf("outside GitHub Actions: %q", got)
+	}
+}
+
+// A scan that outlasts preparation does not hold up go test: the test
+// processes scan for themselves.
+func TestHandGitHubJobIDDoesNotWaitForAStalledScan(t *testing.T) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	originalDirs, originalWait := gitHubDiagnosticsDirs, gitHubJobIDWait
+	gitHubDiagnosticsDirs = func() []string {
+		<-release
+		return nil
+	}
+	gitHubJobIDWait = 50 * time.Millisecond
+	t.Cleanup(func() { gitHubDiagnosticsDirs, gitHubJobIDWait = originalDirs, originalWait })
+	t.Setenv("JOB_CHECK_RUN_ID", "")
+	t.Setenv("GITHUB_SHA", "0123456789abcdef")
+
+	started := time.Now()
+	if got := handGitHubJobID(Mini, nil)(); got != nil {
+		t.Fatalf("stalled scan handed %q", got)
+	}
+	if elapsed := time.Since(started); elapsed > 5*time.Second {
+		t.Fatalf("waited %s", elapsed)
 	}
 }

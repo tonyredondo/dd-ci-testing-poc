@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "da415b13078c983b62e99a79f439cefcfb2a2f550e6fa6182593901f45540b3a",
+      "sha256": "caadbfcb6475624f13136020d0a7816416139eaa90c265dba5a1919d2c1f949d",
       "role": "local"
     },
     {
@@ -2112,7 +2112,22 @@
     },
     {
       "path": "civisibility/utils/githubjob/githubjob.go",
-      "sha256": "e87e93a10b34db2cf54a2671a25699a6288273a10dba20ef9dfd1c48519a8703",
+      "sha256": "b3d5a168b7794ec5b2dfb0ad228d9e9d8db8f72fa803beca29106e089c6b554c",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/utils/githubjob/fifo_other_test.go",
+      "sha256": "8a44c411e06f930e62be9c867068ed37a52320fce380399da3bce0be8141a07b",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/utils/githubjob/fifo_unix_test.go",
+      "sha256": "e11f0730c0c0476a88625d385b0f32b64f0aa47d35c1d03270bf8628eadbd3e6",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/utils/githubjob/githubjob_test.go",
+      "sha256": "0065b70a085fc439f3561fb36a1d62708c94ed7a0af0c2e6ec1d0ef18269e16a",
       "role": "local"
     }
   ],

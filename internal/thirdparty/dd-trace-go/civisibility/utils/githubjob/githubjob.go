@@ -152,6 +152,11 @@ func fromFile(path string, debugf func(format string, args ...any)) (string, boo
 		debugf("civisibility: skipping oversized diagnostics file %s (%d bytes)", path, info.Size())
 		return "", false
 	}
+	// Reading a FIFO or device could block indefinitely.
+	if !info.Mode().IsRegular() {
+		debugf("civisibility: skipping non-regular diagnostics file %s", path)
+		return "", false
+	}
 
 	// Read file content
 	content, err := os.ReadFile(path)

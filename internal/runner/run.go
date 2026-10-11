@@ -71,6 +71,9 @@ type Plan struct {
 	// with; execWrapper restores the caller's Go settings before a -exec program.
 	execHelper  string
 	execWrapper string
+	// testLauncher reports that a -exec program or Go's cross-compilation
+	// helper starts the test binaries, and so sees their environment first.
+	testLauncher bool
 }
 
 // savedEnvironment records the caller's values of the Go settings that go test
@@ -205,6 +208,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	if !supportsGoToolchain(opts.environment.GOVERSION) {
 		return plan, fmt.Errorf("ddto requires Go 1.25 or newer; selected toolchain is %q", opts.environment.GOVERSION)
 	}
+	plan.testLauncher = opts.exec != "" || opts.environment.GOOS != opts.environment.GOHOSTOS || opts.environment.GOARCH != opts.environment.GOHOSTARCH
 	debug.printf("toolchain=%q", opts.environment.GOVERSION)
 	if runtime == Mini {
 		if work := workspaceFile(dir); work != "" {
@@ -700,7 +704,9 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 			env = append(env, "GOFLAGS="+plan.workspaceGoFlags)
 		}
 	}
-	if handoff := gitHubJobID(); handoff != nil {
+	// A launcher would see the handed value before the test binary removes
+	// it; with one, each test process scans for itself.
+	if handoff := gitHubJobID(); handoff != nil && !plan.testLauncher {
 		env = append(env, handoff...)
 		debug.printf("github job id handed found=%t", !strings.HasSuffix(handoff[0], "="))
 	}
