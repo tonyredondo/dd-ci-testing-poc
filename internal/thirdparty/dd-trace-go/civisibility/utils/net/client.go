@@ -6,6 +6,7 @@
 package net
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"math"
@@ -319,15 +320,20 @@ type CLITelemetry struct {
 	start func(*cliTelemetryOwner)
 }
 
-// NewCLIClient creates the client of ddto's Git worker. Unless telemetry is
-// disabled, it also records the invocation's telemetry application under
-// runtimeID in the state directory dir, before any test process starts.
-func NewCLIClient(dir, runtimeID string) (Client, *CLITelemetry) {
+// NewCLIClient creates the client of ddto's Git worker, whose requests stop
+// when ctx is done. Unless telemetry is disabled, it also records the
+// invocation's telemetry application under runtimeID in the state directory
+// dir, before any test process starts; telemetry requests do not stop with ctx.
+func NewCLIClient(ctx context.Context, dir, runtimeID string) (Client, *CLITelemetry) {
 	c, start := newClientWithServiceNameAndSubdomain("", "api")
-	if c == nil || start == nil || runtimeID == "" {
-		return c, nil
+	if c == nil {
+		return nil, nil
 	}
 	cc := c.(*client)
+	cc.handler = &RequestHandler{Client: cc.handler.Client, Context: ctx}
+	if start == nil || runtimeID == "" {
+		return c, nil
+	}
 	app := telemetry.NewSharedApp(runtimeID, cc.serviceName, cc.environment, env.Get("DD_VERSION"))
 	sequence, err := utils.WriteCLITelemetry(dir, app)
 	if err != nil {

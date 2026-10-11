@@ -1,7 +1,9 @@
 package integration
 
 import (
+	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -34,8 +36,8 @@ func gitStateFixture(t *testing.T) (string, string, string) {
 }
 
 // runGitWorker runs ddto's Git worker in dir and returns its state directory.
-// input is what the CLI would write to it; empty input stops the worker after
-// the Git record.
+// input is what the CLI would write to it before go test exits; empty input
+// stops the worker after the Git record.
 func runGitWorker(t *testing.T, dir, driver, input string, env ...string) string {
 	t.Helper()
 	state := t.TempDir()
@@ -48,6 +50,10 @@ func runGitWorker(t *testing.T, dir, driver, input string, env ...string) string
 	cmd := exec.Command(driver, "ci-git-worker", state)
 	cmd.Dir = dir
 	cmd.Env = append(testEnv(env...), "PWD="+dir)
+	if input != "" {
+		// go test has exited: the worker finishes its work, then exits.
+		input += "exited\n"
+	}
 	cmd.Stdin = strings.NewReader(input)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git worker: %v %s", err, out)
@@ -350,6 +356,36 @@ func TestMiniGitStateDeferredWaitsForUpload(t *testing.T) {
 	if uploaded < 0 || admitted < 0 || uploaded > admitted {
 		t.Fatalf("upload at %d, TestPass at %d:\n%s", uploaded, admitted, text)
 	}
+
+	// The wait ends after ddto's --git-upload-timeout, which the record hands
+	// to test processes, when the upload never ends.
+	unfinished := runGitWorker(t, dir, driver, "")
+	recordPath := filepath.Join(unfinished, "git.json")
+	data, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record map[string]any
+	if err := json.Unmarshal(data, &record); err != nil {
+		t.Fatal(err)
+	}
+	record["upload_wait_ms"] = 300
+	if data, err = json.Marshal(record); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(recordPath, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	cmd = exec.Command(bin, "-test.v", "-test.run=^TestPass$")
+	cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = dir, append(env, "DDTO_GIT_STATE="+unfinished), &out, &out
+	started := time.Now()
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("fixture: %v\n%s", err, out.String())
+	}
+	if elapsed := time.Since(started); elapsed > 30*time.Second || !strings.Contains(out.String(), "CLI repository upload result unavailable") {
+		t.Fatalf("waited %s for an unfinished upload:\n%s", elapsed, out.String())
+	}
 }
 
 // Test processes read the worker's state while tests run without entering
@@ -402,5 +438,105 @@ func TestMiniGitStateCacheWithTemporaryDirectoryInModule(t *testing.T) {
 	run()
 	if out := run(); !strings.Contains(out, "(cached)") {
 		t.Fatalf("second run was not cached:\n%s", out)
+	}
+}
+
+// When the upload outlasts --git-upload-timeout after go test, ddto stops the
+// worker: it stops its request, removes its pack files, records the stopped
+// upload and closes the telemetry application, and ddto exits with go test's
+// result. --keep-ci-state keeps that state for debugging.
+func TestMiniGitStateStopsUploadCleanly(t *testing.T) {
+	dir, driver, _ := gitStateFixture(t)
+	agent := &telemetryAgent{}
+	sending := make(chan struct{}, 1)
+	server := newServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/packfile") {
+			_, _ = io.Copy(io.Discard, r.Body)
+			select {
+			case sending <- struct{}{}:
+			default:
+			}
+			<-r.Context().Done()
+			return
+		}
+		agent.handler(w, r)
+	}))
+	defer server.Close()
+	temp := t.TempDir()
+	env := testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=false", "DD_TRACE_AGENT_URL="+server.URL,
+		"DD_INSTRUMENTATION_TELEMETRY_ENABLED=true", "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=true", "DD_GIT_REPOSITORY_URL=", "DD_GIT_COMMIT_SHA=",
+		"TMPDIR="+temp, "TMP="+temp, "TEMP="+temp)
+	archive := filepath.Join(t.TempDir(), "ci-state.zip")
+	out, stderr, code, wall := commandWithTiming(t, dir, env, driver, "test", "--runtime=mini", "--git-upload-timeout=1s", "--keep-ci-state="+archive, "-run=^TestPass$", ".")
+	if code != 0 {
+		t.Fatalf("ddto test: %d %s %s", code, out, stderr)
+	}
+	select {
+	case <-sending:
+	default:
+		t.Fatal("the upload never sent its pack file")
+	}
+	if wall > 30*time.Second {
+		t.Fatalf("ddto waited %s for a stopped upload", wall)
+	}
+	if !strings.Contains(stderr, "archived the CI state in "+archive) {
+		t.Fatalf("stderr %q", stderr)
+	}
+	files := map[string][]byte{}
+	reader, err := zip.OpenReader(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range reader.File {
+		content, err := file.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[file.Name], _ = io.ReadAll(content)
+		_ = content.Close()
+	}
+	_ = reader.Close()
+	var summary struct {
+		Worker     string `json:"worker"`
+		StopReason string `json:"stop_reason"`
+	}
+	if err := json.Unmarshal(files["ddto.json"], &summary); err != nil || summary.Worker != "stopped" || summary.StopReason != "timeout" {
+		t.Fatalf("ddto.json %s, %v", files["ddto.json"], err)
+	}
+	var upload struct{ Error string }
+	if err := json.Unmarshal(files["upload.json"], &upload); err != nil || upload.Error != "ddto stopped the repository upload: timeout" {
+		t.Fatalf("upload.json %s, %v", files["upload.json"], err)
+	}
+	for _, name := range []string{"git.json", "telemetry.json", "used", "worker.log"} {
+		if _, ok := files[name]; !ok {
+			t.Errorf("the kept state lacks %s", name)
+		}
+	}
+	for _, place := range []string{temp, filepath.Join(dir, ".git")} {
+		entries, err := os.ReadDir(place)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), ".dd-pack-objects") {
+				t.Errorf("the stopped upload left %s in %s", entry.Name(), place)
+			}
+		}
+	}
+	s := summarizeTelemetry(t, agent.take())
+	if len(s.closings) != 1 || s.logs["civisibility: CLI repository upload stopped|reason:timeout"] == 0 {
+		t.Fatalf("telemetry closings %v, logs %v", s.closings, s.logs)
+	}
+
+	// Without an archive, ddto keeps the state where it is and says where.
+	_, stderr, code = command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=false", "DD_TRACE_AGENT_URL="+server.URL,
+		"DD_GIT_REPOSITORY_URL=", "DD_GIT_COMMIT_SHA=", "TMPDIR="+temp, "TMP="+temp, "TEMP="+temp), driver, "test", "--runtime=mini", "--keep-ci-state", "-run=^TestPass$", ".")
+	_, kept, found := strings.Cut(stderr, "kept the CI state in ")
+	kept = strings.TrimSpace(strings.SplitN(kept, "\n", 2)[0])
+	if code != 0 || !found {
+		t.Fatalf("ddto test --keep-ci-state: %d %s", code, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(kept, "git.json")); err != nil {
+		t.Fatalf("kept state %s: %v", kept, err)
 	}
 }

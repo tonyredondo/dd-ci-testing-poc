@@ -20,7 +20,7 @@ func main() {
 		os.Exit(runner.ExecWithCallerEnvironment(os.Args[2:]))
 	}
 	// The Git worker that ddto test starts once per invocation.
-	if (len(os.Args) == 3 || len(os.Args) == 4) && os.Args[1] == "ci-git-worker" {
+	if len(os.Args) >= 3 && len(os.Args) <= 5 && os.Args[1] == "ci-git-worker" {
 		os.Exit(runner.RunGitWorker(context.Background(), os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	}
 	if len(os.Args) >= 5 && os.Args[1] == "tool-overlay" {
@@ -47,10 +47,10 @@ func main() {
 		goTool = true
 		args = args[5:]
 	default:
-		fmt.Fprintln(os.Stderr, "usage: ddto [orchestrion go | go tool orchestrion go] test [--runtime=mini|sdk] [go test flags] [packages] (default: mini)")
+		fmt.Fprintln(os.Stderr, "usage: ddto [orchestrion go | go tool orchestrion go] test [--runtime=mini|sdk] [--git-upload-timeout=1m] [--keep-ci-state[=file.zip]] [go test flags] [packages] (default: mini)")
 		os.Exit(2)
 	}
-	runtime, args, err := runner.ParseRuntimeArgs(args)
+	cli, args, err := runner.ParseCLIArgs(args)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR:", err)
 		os.Exit(2)
@@ -63,8 +63,8 @@ func main() {
 		}
 	}
 	if orchestrion {
-		runner.Exit(runner.RunOrchestrion(context.Background(), args, runtime, goTool, os.Stdin, os.Stdout, os.Stderr))
+		runner.Exit(runner.RunOrchestrion(context.Background(), args, cli, goTool, os.Stdin, os.Stdout, os.Stderr))
 		return
 	}
-	runner.Exit(runner.RunRuntime(context.Background(), args, runtime, os.Stdin, os.Stdout, os.Stderr))
+	runner.Exit(runner.RunRuntime(context.Background(), args, cli, os.Stdin, os.Stdout, os.Stderr))
 }

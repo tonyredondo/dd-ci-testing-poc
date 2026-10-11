@@ -1,11 +1,16 @@
 package runner
 
 import (
+	"archive/zip"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -16,6 +21,7 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/impactedtests"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/globalconfig"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
 // gitWorkerCommand is ddto's private entry point for the Git worker.
@@ -25,26 +31,59 @@ const gitWorkerCommand = "ci-git-worker"
 // once preparation is done; test processes then read Git themselves.
 var gitRecordWait = time.Second
 
-// gitWorkerExitWait bounds the wait for the worker after go test exits, as a
-// test process waits for its own repository upload before exiting.
-var gitWorkerExitWait = time.Minute
+// gitWorkerStopWait bounds how long a stopped worker takes to stop its git
+// commands and requests, record what it did not finish and close the
+// telemetry application; ddto then kills it.
+var gitWorkerStopWait = 10 * time.Second
+
+// Files that --keep-ci-state adds to the state.
+const (
+	ciStateWorkerLog = "worker.log"
+	ciStateSummary   = "ddto.json"
+)
 
 // gitWorker runs, once per invocation, the Git work that every Mini test
 // process of the invocation's checkout would repeat: see package cligit.
 type gitWorker struct {
 	state     string
 	cmd       *exec.Cmd
-	input     io.WriteCloser
 	exited    chan struct{}
 	debug     *cliDebug
 	proceeded atomic.Bool
+
+	inputMu     sync.Mutex
+	input       io.WriteCloser
+	inputClosed bool
+	stopReason  atomic.Pointer[string]
+
+	uploadTimeout time.Duration
+	stderr        io.Writer
+	keep          bool
+	keepZip       string
+	log           *os.File
+	summary       ciStateSummaryFile
+}
+
+// ciStateSummaryFile records ddto's view of the worker, in ddto.json.
+type ciStateSummaryFile struct {
+	GoVersion       string `json:"go_version,omitempty"`
+	RecordReady     bool   `json:"record_ready"`
+	CheckoutMatched bool   `json:"checkout_matched"`
+	Launcher        bool   `json:"launcher"`
+	Handed          bool   `json:"handed"`
+	UploadTimeout   string `json:"upload_timeout"`
+	// Worker is how the worker ended: exited, stopped or killed.
+	Worker     string `json:"worker"`
+	StopReason string `json:"stop_reason,omitempty"`
+	// Waited is how long ddto waited for the worker after go test exited.
+	Waited string `json:"waited_after_go_test"`
 }
 
 // startGitWorker starts the worker in dir while ddto prepares the build, if
 // test processes would read Git: the Mini runtime with CI Visibility enabled,
 // outside Bazel's offline modes, in a command that runs test binaries.
-func startGitWorker(runtime Runtime, opts options, dir string, debug *cliDebug, stderr io.Writer) *gitWorker {
-	if runtime != Mini || opts.compileOnly || opts.printOnly {
+func startGitWorker(cli CLIOptions, opts options, dir string, debug *cliDebug, stderr io.Writer) *gitWorker {
+	if cli.Runtime != Mini || opts.compileOnly || opts.printOnly {
 		return nil
 	}
 	if mode, _ := envconfig.FromEnv(); !envconfig.Enabled(mode) {
@@ -65,18 +104,30 @@ func startGitWorker(runtime Runtime, opts options, dir string, debug *cliDebug, 
 	// and root session: the invocation is one application. The root session
 	// reaches only the worker; ddto passes its caller's environment to go
 	// test unchanged.
-	cmd := exec.Command(executable, gitWorkerCommand, state, globalconfig.RuntimeID())
+	cmd := exec.Command(executable, gitWorkerCommand, state, globalconfig.RuntimeID(), cli.GitUploadTimeout.String())
 	// Test processes run in their package directories with PWD set; the
 	// worker runs in the invocation's directory, with the same environment.
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "PWD="+dir, globalconfig.RootSessionEnv())
 	cmd.Stderr = stderr
+	var log *os.File
+	if cli.KeepCIState {
+		if log, err = os.Create(filepath.Join(state, ciStateWorkerLog)); err == nil {
+			cmd.Stderr = io.MultiWriter(stderr, log)
+		}
+	}
 	w, err := launchGitWorker(cmd, state, debug)
 	if err != nil {
 		debug.printf("git worker start failed: %v", err)
+		if log != nil {
+			_ = log.Close()
+		}
 		_ = os.RemoveAll(state)
 		return nil
 	}
+	w.uploadTimeout, w.stderr, w.log = cli.GitUploadTimeout, stderr, log
+	w.keep, w.keepZip = cli.KeepCIState, cli.KeepCIStateZip
+	w.summary.UploadTimeout = cli.GitUploadTimeout.String()
 	return w
 }
 
@@ -116,6 +167,37 @@ func launchGitWorker(cmd *exec.Cmd, state string, debug *cliDebug) (*gitWorker, 
 	return w, nil
 }
 
+// send writes a line to the worker, unless its input is closed.
+func (w *gitWorker) send(line string) error {
+	w.inputMu.Lock()
+	defer w.inputMu.Unlock()
+	if w.inputClosed {
+		return os.ErrClosed
+	}
+	_, err := io.WriteString(w.input, line+"\n")
+	return err
+}
+
+// closeInput closes the worker's input; before Exited, that stops it.
+func (w *gitWorker) closeInput() {
+	w.inputMu.Lock()
+	defer w.inputMu.Unlock()
+	if !w.inputClosed {
+		w.inputClosed = true
+		_ = w.input.Close()
+	}
+}
+
+// stop asks the worker to stop its work, once: it stops its git commands and
+// requests, removes its pack files, records what it did not finish and
+// closes the telemetry application.
+func (w *gitWorker) stop(reason string) {
+	if w.stopReason.CompareAndSwap(nil, &reason) {
+		w.debug.printf("git worker stop reason=%s", reason)
+		_ = w.send(cligit.Stop + " " + reason)
+	}
+}
+
 // handOff decides whether test processes receive the worker's state, and
 // returns the environment entries for go test. The state is handed when the
 // record is ready in time and belongs to the checkout of a test package, and
@@ -136,16 +218,18 @@ func (w *gitWorker) handOff(testDirs []string, launcher bool, goVersion string) 
 		}
 	}
 	w.debug.printf("git worker record_ready=%t checkout_matched=%t launcher=%t", ready, matched, launcher)
+	w.summary.GoVersion, w.summary.RecordReady, w.summary.CheckoutMatched, w.summary.Launcher = goVersion, ready, matched, launcher
 	if !matched || launcher {
-		_ = w.input.Close()
+		w.closeInput()
 		return nil
 	}
 	w.proceeded.Store(true)
-	if _, err := fmt.Fprintln(w.input, cligit.Proceed, goVersion); err != nil {
-		_ = w.input.Close()
+	if err := w.send(cligit.Proceed + " " + goVersion); err != nil {
+		w.closeInput()
 		return nil
 	}
-	// The input stays open: closing it tells the worker that go test exited.
+	w.summary.Handed = true
+	// The input stays open: finish writes Exited once go test exits.
 	return []string{goenv.GitStateHandoff + "=" + w.state}
 }
 
@@ -188,30 +272,149 @@ func (w *gitWorker) record(timeout time.Duration) (utils.CLIGitRecord, bool) {
 	}
 }
 
-// finish waits for the worker, at most timeout, and removes its state. It
-// runs after go test has exited, so no test process reads the state any more.
-// Closing the input lets a worker that no test process used exit without
-// uploading; one that was used finishes its upload first.
-func (w *gitWorker) finish(timeout time.Duration) {
+// waitExit waits up to timeout for the worker to exit.
+func (w *gitWorker) waitExit(timeout time.Duration) bool {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-w.exited:
+		return true
+	case <-timer.C:
+		return false
+	}
+}
+
+// finish runs after go test has exited, so no test process reads the state
+// any more. It tells the worker, which exits at once if no test process used
+// the state; one that was used finishes its upload first, for at most the
+// upload timeout, as a test process waited for its own upload at exit. ddto
+// then stops the worker, which ends its work without leaving pack files or
+// lock files behind and closes the telemetry application; only a worker that
+// does not stop within gitWorkerStopWait is killed. finish then removes the
+// state, or keeps it with --keep-ci-state.
+func (w *gitWorker) finish() {
 	if w == nil {
 		return
 	}
-	_ = w.input.Close()
 	waited := time.Now()
-	defer func() { w.debug.printf("git worker finish waited=%s", time.Since(waited).Round(time.Millisecond)) }()
-	select {
-	case <-w.exited:
-	case <-time.After(timeout):
-		w.debug.printf("git worker still running after %s; stopping it", timeout)
-		_ = w.cmd.Process.Kill()
-		<-w.exited
+	_ = w.send(cligit.Exited)
+	wait := w.uploadTimeout
+	if w.stopReason.Load() != nil {
+		wait = gitWorkerStopWait
+	}
+	outcome := "exited"
+	if !w.waitExit(wait) {
+		w.debug.printf("git worker still running %s after go test", wait)
+		w.stop("timeout")
+		outcome = "stopped"
+		if !w.waitExit(gitWorkerStopWait) {
+			w.debug.printf("git worker did not stop within %s; killing it", gitWorkerStopWait)
+			_ = w.cmd.Process.Kill()
+			<-w.exited
+			outcome = "killed"
+		}
+	} else if w.stopReason.Load() != nil {
+		outcome = "stopped"
+	}
+	w.closeInput()
+	elapsed := time.Since(waited)
+	w.debug.printf("git worker finish waited=%s worker=%s", elapsed.Round(time.Millisecond), outcome)
+	w.summary.Worker, w.summary.Waited = outcome, elapsed.Round(time.Millisecond).String()
+	if reason := w.stopReason.Load(); reason != nil {
+		w.summary.StopReason = *reason
+	}
+	w.release()
+}
+
+// release removes the state or, with --keep-ci-state, keeps it with ddto's
+// summary and the worker's log, as a directory or a zip archive.
+func (w *gitWorker) release() {
+	if w.log != nil {
+		_ = w.log.Close()
+	}
+	if !w.keep {
+		_ = os.RemoveAll(w.state)
+		return
+	}
+	if data, err := json.MarshalIndent(w.summary, "", "  "); err == nil {
+		_ = os.WriteFile(filepath.Join(w.state, ciStateSummary), append(data, '\n'), 0o600)
+	}
+	if w.keepZip == "" {
+		fmt.Fprintln(w.stderr, version.BuildLogPrefix+" INFO: kept the CI state in "+w.state)
+		return
+	}
+	if err := zipDirectory(w.state, w.keepZip); err != nil {
+		fmt.Fprintln(w.stderr, version.BuildLogPrefix+" WARN: could not archive the CI state: "+err.Error()+"; kept it in "+w.state)
+		return
 	}
 	_ = os.RemoveAll(w.state)
+	fmt.Fprintln(w.stderr, version.BuildLogPrefix+" INFO: archived the CI state in "+w.keepZip)
+}
+
+// zipDirectory archives dir's files and directories, with paths relative to
+// dir, in a new zip file at path.
+func zipDirectory(dir, path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	temp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	archive := zip.NewWriter(temp)
+	err = filepath.WalkDir(dir, func(file string, entry fs.DirEntry, err error) error {
+		if err != nil || file == dir {
+			return err
+		}
+		name, err := filepath.Rel(dir, file)
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+		header.Name = filepath.ToSlash(name)
+		if entry.IsDir() {
+			header.Name += "/"
+			_, err = archive.CreateHeader(header)
+			return err
+		}
+		header.Method = zip.Deflate
+		writer, err := archive.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+		source, err := os.Open(file)
+		if err != nil {
+			return err
+		}
+		defer source.Close()
+		_, err = io.Copy(writer, source)
+		return err
+	})
+	if closeErr := archive.Close(); err == nil {
+		err = closeErr
+	}
+	if closeErr := temp.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Rename(temp.Name(), path)
+	}
+	if err != nil {
+		_ = os.Remove(temp.Name())
+	}
+	return err
 }
 
 // relaySignals forwards each signal to go test through the returned channel
-// and stops the worker, whose work only saves time: test processes wait for
-// its results, and an interrupted command should not wait for an upload.
+// and stops the worker, which ends its work as finish describes: an
+// interrupted command should not wait for an upload.
 func (w *gitWorker) relaySignals(signals <-chan os.Signal) <-chan os.Signal {
 	if w == nil {
 		return signals
@@ -219,7 +422,7 @@ func (w *gitWorker) relaySignals(signals <-chan os.Signal) <-chan os.Signal {
 	relayed := make(chan os.Signal, cap(signals))
 	go func() {
 		for s := range signals {
-			_ = w.cmd.Process.Kill()
+			w.stop("signal")
 			relayed <- s
 		}
 	}()
@@ -228,14 +431,23 @@ func (w *gitWorker) relaySignals(signals <-chan os.Signal) <-chan os.Signal {
 
 // RunGitWorker is ddto's private Git worker entry point. Its arguments are
 // the state directory and, optionally, the runtime ID of the invocation's
-// telemetry application; without it the worker owns no telemetry. It closes
-// results once it has written them.
+// telemetry application, without which the worker owns no telemetry, and the
+// upload timeout that test processes wait for. It closes results once it has
+// written them.
 func RunGitWorker(_ context.Context, args []string, stdin io.Reader, results io.Closer, stderr io.Writer) int {
-	state, runtimeID := args[0], ""
+	state, runtimeID, uploadWait := args[0], "", defaultGitUploadTimeout
 	if len(args) > 1 {
 		runtimeID = args[1]
 	}
-	if err := cligit.Run(state, runtimeID, stdin, results); err != nil {
+	if len(args) > 2 {
+		wait, err := time.ParseDuration(args[2])
+		if err != nil {
+			fmt.Fprintln(stderr, "ddto git worker:", err)
+			return 2
+		}
+		uploadWait = wait
+	}
+	if err := cligit.Run(state, runtimeID, uploadWait, stdin, results); err != nil {
 		fmt.Fprintln(stderr, "ddto git worker:", err)
 		return 1
 	}

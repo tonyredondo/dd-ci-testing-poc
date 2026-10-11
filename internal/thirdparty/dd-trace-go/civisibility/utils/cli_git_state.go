@@ -70,6 +70,14 @@ type CLIGitRecord struct {
 	HeadCommit string       `json:"head_commit,omitempty"`
 	Head       CLIGitCommit `json:"head"`
 	HeadError  string       `json:"head_error,omitempty"`
+	// UploadWaitMs is how long test processes wait for upload.json: ddto's
+	// --git-upload-timeout, which also bounds its own wait after go test.
+	UploadWaitMs int64 `json:"upload_wait_ms"`
+}
+
+// UploadWait is how long a test process waits for the worker's upload.
+func (r *CLIGitRecord) UploadWait() time.Duration {
+	return time.Duration(r.UploadWaitMs) * time.Millisecond
 }
 
 func newCLIGitCommit(data localCommitData) CLIGitCommit {

@@ -103,11 +103,6 @@ var (
 
 	// sendObjectsPackFileFunc allows tests to inspect the upload request without creating or sending real pack files.
 	sendObjectsPackFileFunc = sendObjectsPackFile
-
-	// cliUploadWait bounds the wait for ddto's upload result. The CLI records a
-	// result even when its worker stops, so this only ends a wait that the
-	// settings and impacted-tests timeouts have already given up on.
-	cliUploadWait = 2 * time.Minute
 )
 
 // ensureSettingsInitialization performs the one-time settings bootstrap, including any git upload work required before a final settings read.
@@ -141,10 +136,11 @@ func ensureSettingsInitialization(serviceName string) {
 			testOptimizationMode.ManifestEnabled, testOptimizationMode.PayloadFilesEnabled, bazel.TestOptimizationPathForLog(testOptimizationMode.ManifestPath), testOptimizationMode.PayloadsRoot, gitUploadEnabled, uploadEnabled)
 		// ddto's Git worker uploads once for every test process of this
 		// checkout; the CLI waits for it before exiting.
-		cliUploadState := ""
+		cliUploadState, cliUploadWait := "", time.Duration(0)
 		if uploadEnabled {
 			if dir, record := utils.HandedCLIGitState(); record != nil {
-				cliUploadState = dir
+				// ddto's --git-upload-timeout bounds every wait for its upload.
+				cliUploadState, cliUploadWait = dir, record.UploadWait()
 			}
 		}
 		if cliUploadState != "" {

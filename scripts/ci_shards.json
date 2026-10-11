@@ -37,6 +37,7 @@
       "TestMiniGitStateDeferredWaitsForUpload",
       "TestMiniGitStateHandoff",
       "TestMiniGitStateImpactedTests",
+      "TestMiniGitStateStopsUploadCleanly",
       "TestMiniGitStateUploadsOnce",
       "TestMiniGoleakAbsoluteTargetRetainsCompilerFlags",
       "TestMiniGoleakForkReplacement",

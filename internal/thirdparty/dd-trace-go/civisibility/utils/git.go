@@ -211,7 +211,7 @@ func execGit(commandType telemetry.CommandType, args ...string) (val []byte, err
 	}
 
 	cmdArgs := append(append([]string(nil), gitExecutableArgs...), args...)
-	return exec.Command(gitExecutable, cmdArgs...).CombinedOutput()
+	return newGitCommand(cmdArgs).CombinedOutput()
 }
 
 // execGitString executes a Git command with the given arguments and returns the output as a string.
@@ -274,7 +274,7 @@ func execGitStringWithInput(commandType telemetry.CommandType, input string, arg
 	}
 
 	cmdArgs := append(append([]string(nil), gitExecutableArgs...), args...)
-	cmd := exec.Command(gitExecutable, cmdArgs...)
+	cmd := newGitCommand(cmdArgs)
 	cmd.Stdin = strings.NewReader(input)
 	out, err := cmd.CombinedOutput()
 	strOut := strings.TrimSpace(strings.Trim(string(out), "\n"))
