@@ -529,6 +529,16 @@ If upstream adds semantic identifier inspection, reassess this flag. Preserve
 the source-cache tests for named functions, adjacent literals, missing/invalid
 files and ITR comments, and the CI matrix's source/coverage comparisons.
 
+## Build information read once
+
+[`civisibility/utils/source_paths.go`](civisibility/utils/source_paths.go)
+reads the binary's main module path once, with `sync.OnceValue`. The SDK called
+`debug.ReadBuildInfo` for every distinct test function, including those with
+absolute source paths, and each call parses the binary's whole dependency list.
+Build information cannot change while the process runs. Check:
+`TestBuildInfoMainModulePathReadOnce` requires the same path, read without
+allocating.
+
 ## Testify method names
 
 [`civisibility/integrations/gotesting/testify.go`](civisibility/integrations/gotesting/testify.go)
