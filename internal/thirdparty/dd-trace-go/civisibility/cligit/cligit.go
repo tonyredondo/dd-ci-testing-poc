@@ -99,6 +99,7 @@ func Run(dir, runtimeID string, input io.Reader, results io.Closer) error {
 	if !waitUsed(dir, exited) {
 		return nil
 	}
+	utils.FetchCLIHeadCommit()
 	if app != nil {
 		started := make(chan struct{})
 		go func() {

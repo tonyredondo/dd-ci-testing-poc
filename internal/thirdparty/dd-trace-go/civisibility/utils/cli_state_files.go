@@ -5,6 +5,7 @@ package utils
 import (
 	"io/fs"
 	"os"
+	"runtime"
 	"syscall"
 )
 
@@ -14,12 +15,20 @@ import (
 // go test would check those files, which change on every run, and would cache
 // no result.
 func openUnlogged(name string, flag int, perm uint32) (*os.File, error) {
+	// On Windows, os opens a long path with the \\?\ prefix, which
+	// syscall.Open does not add; such a path seldom lies in a module.
+	if runtime.GOOS == "windows" && len(name) >= windowsLongPath {
+		return os.OpenFile(name, flag, os.FileMode(perm))
+	}
 	fd, err := syscall.Open(name, flag|syscall.O_CLOEXEC, perm)
 	if err != nil {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 	}
 	return os.NewFile(uintptr(fd), name), nil
 }
+
+// windowsLongPath is the length from which os prefixes a Windows path.
+const windowsLongPath = 248
 
 // createUnlogged creates name, which must not exist, without recording it in
 // Go's test log.

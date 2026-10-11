@@ -21,14 +21,18 @@ var cfg = newConfig()
 type config struct {
 	runtimeID, rootSessionID string
 	// startedSession is set when this process started its root session, and
-	// set rootSessionIDEnvVar for its child processes.
+	// set rootSessionIDEnvVar for its child processes; callerValue and
+	// callerSet are the variable as the process received it.
 	startedSession bool
+	callerValue    string
+	callerSet      bool
 }
 
 func newConfig() *config {
 	id := newRuntimeID()
+	value, set := os.LookupEnv(rootSessionIDEnvVar)
 	started := env.Get(rootSessionIDEnvVar) == ""
-	return &config{runtimeID: id, rootSessionID: getRootSessionID(id), startedSession: started}
+	return &config{runtimeID: id, rootSessionID: getRootSessionID(id), startedSession: started, callerValue: value, callerSet: set}
 }
 func RuntimeID() string     { return cfg.runtimeID }
 func RootSessionID() string { return cfg.rootSessionID }
@@ -37,12 +41,17 @@ func RootSessionID() string { return cfg.rootSessionID }
 // join this process's root session.
 func RootSessionEnv() string { return rootSessionIDEnvVar + "=" + cfg.rootSessionID }
 
-// KeepCallerEnvironment removes the variable that this package set to hand a
-// root session that this process started to its child processes. ddto calls
-// it: it passes its caller's environment to go test unchanged and hands its
-// session only to its own worker, with RootSessionEnv.
+// KeepCallerEnvironment restores the variable that this package set to hand a
+// root session that this process started to its child processes, as the
+// process received it. ddto calls it: it passes its caller's environment to
+// go test unchanged and hands its session only to its own worker, with
+// RootSessionEnv.
 func KeepCallerEnvironment() {
-	if cfg.startedSession {
+	switch {
+	case !cfg.startedSession:
+	case cfg.callerSet:
+		_ = os.Setenv(rootSessionIDEnvVar, cfg.callerValue)
+	default:
 		_ = os.Unsetenv(rootSessionIDEnvVar)
 	}
 }

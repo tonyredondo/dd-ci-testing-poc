@@ -27,10 +27,11 @@ func git(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// The worker's record changes nothing in the repository before a test
-// process uses the state: a CI head commit missing from a shallow clone is
-// left to test processes, which fetch it as before.
-func TestCollectCLIGitRecordDoesNotFetch(t *testing.T) {
+// The worker changes nothing in the repository before a test process uses
+// its state, neither in its record nor in its own CI tags: a CI head commit
+// missing from a shallow clone is left to test processes, which fetch it as
+// before, and the worker fetches it once a test process uses the state.
+func TestCLIGitWorkerFetchesHeadOnlyAfterUse(t *testing.T) {
 	origin := t.TempDir()
 	git(t, origin, "init", "--initial-branch=main")
 	git(t, origin, "commit", "--allow-empty", "-m", "first")
@@ -52,8 +53,25 @@ func TestCollectCLIGitRecordDoesNotFetch(t *testing.T) {
 			t.Fatalf("head %s: record %+v", c.head, record)
 		}
 	}
-	if err := exec.Command("git", "-C", shallow, "cat-file", "-e", first+"^{commit}").Run(); err == nil {
+	present := func() bool {
+		return exec.Command("git", "-C", shallow, "cat-file", "-e", first+"^{commit}").Run() == nil
+	}
+	if present() {
 		t.Fatal("the record fetched the missing head commit")
+	}
+
+	getProviderTagsFunc = func() map[string]string { return map[string]string{constants.GitHeadCommit: first} }
+	t.Cleanup(ResetHandedCLIGitStateForTesting)
+	t.Cleanup(ResetCITags)
+	ResetHandedCLIGitStateForTesting()
+	UseCLIGitState(t.TempDir(), CollectCLIGitRecord())
+	ResetCITags()
+	if tags := GetCITags(); tags[constants.GitHeadCommit] != first || present() {
+		t.Fatalf("the worker's CI tags fetched the head commit: %v", tags[constants.GitHeadCommit])
+	}
+	FetchCLIHeadCommit()
+	if !present() {
+		t.Fatal("the worker did not fetch the head commit once the state was used")
 	}
 }
 

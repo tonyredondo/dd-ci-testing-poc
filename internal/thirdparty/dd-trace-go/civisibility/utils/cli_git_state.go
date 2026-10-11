@@ -201,6 +201,9 @@ var (
 	cliGitStateOnce sync.Once
 	cliGitStateDir  string
 	cliGitRecord    *CLIGitRecord
+	// cliGitStateOwned is set in ddto's Git worker, which changes nothing in
+	// the repository before a test process uses its state.
+	cliGitStateOwned bool
 )
 
 // HandedCLIGitState returns the CLI's state directory and record when ddto
@@ -257,14 +260,28 @@ func sameFile(a, b string) bool {
 // calls it before creating its CI tags, so it reads Git only once.
 func UseCLIGitState(dir string, record CLIGitRecord) {
 	cliGitStateOnce.Do(func() {
-		cliGitStateDir, cliGitRecord = dir, &record
+		cliGitStateDir, cliGitRecord, cliGitStateOwned = dir, &record, true
 	})
+}
+
+// FetchCLIHeadCommit fetches the CI provider's head commit that the worker's
+// record left out because a shallow clone lacked it, as each test process
+// fetches it. The worker calls it once a test process uses its state, before
+// the upload and the impacted-tests diff, which needs that commit.
+func FetchCLIHeadCommit() {
+	headCommitSha, ok := getProviderTagsFunc()[constants.GitHeadCommit]
+	if !ok || cliGitRecord == nil || cliGitRecord.HeadCommit == headCommitSha {
+		return
+	}
+	if _, err := fetchCommitDataFunc(headCommitSha); err != nil {
+		log.Debug("civisibility: CLI head commit not fetched: %s", err.Error())
+	}
 }
 
 // ResetHandedCLIGitStateForTesting forgets the handed state; readers must stop.
 func ResetHandedCLIGitStateForTesting() {
 	cliGitStateOnce = sync.Once{}
-	cliGitStateDir, cliGitRecord = "", nil
+	cliGitStateDir, cliGitRecord, cliGitStateOwned = "", nil, false
 }
 
 // SameCheckout reports whether dir lies in the checkout whose .git entry is

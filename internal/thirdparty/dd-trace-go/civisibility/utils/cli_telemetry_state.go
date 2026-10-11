@@ -60,6 +60,22 @@ func (s *CLITelemetrySequence) Next() int64 {
 		s.last = max(s.last, n)
 		return n
 	}
+	return s.take()
+}
+
+// Reserve takes the number of the next request now. The owner reserves the
+// number of its final request before that request takes its data, so that a
+// fallback's log leaves with it.
+func (s *CLITelemetrySequence) Reserve() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.reserved == 0 {
+		s.reserved = s.take()
+	}
+}
+
+// take takes the next number; s.mu is held.
+func (s *CLITelemetrySequence) take() int64 {
 	var err error
 	for range cliTelemetryMaxSteps {
 		n := s.highest() + 1
@@ -116,8 +132,7 @@ func (s *CLITelemetrySequence) path(n int64) string {
 
 // WriteCLITelemetry records app as the invocation's telemetry application in
 // dir and returns its owner's sequence, whose first number, for app-started,
-// precedes every test process's. The owner logs a fallback to local numbers;
-// a fallback during its final request goes unreported.
+// precedes every test process's. The owner logs a fallback to local numbers.
 func WriteCLITelemetry(dir string, app telemetry.SharedApp) (*CLITelemetrySequence, error) {
 	seq := &CLITelemetrySequence{dir: filepath.Join(dir, cliTelemetrySeqDir), reserved: 1, report: func() {
 		telemetry.Log(telemetry.NewRecord(telemetry.LogError, "civisibility: CLI telemetry sequence unavailable"))

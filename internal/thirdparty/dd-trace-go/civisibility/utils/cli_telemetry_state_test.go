@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -86,5 +87,52 @@ func TestCLITelemetryFailures(t *testing.T) {
 	want := map[string]int{"status_code:403": 2, cliTelemetryNetworkFailure: 1, CLITelemetrySequenceFailure: 1}
 	if got := CLITelemetryFailures(dir); !reflect.DeepEqual(got, want) {
 		t.Fatalf("failures %v, want %v", got, want)
+	}
+}
+
+// The owner reserves the number of its final request before that request
+// takes its data, so that a fallback is reported in it.
+func TestCLITelemetrySequenceReserve(t *testing.T) {
+	dir := t.TempDir()
+	reports := 0
+	seq := &CLITelemetrySequence{dir: dir, report: func() { reports++ }}
+	if first := seq.Next(); first != 1 {
+		t.Fatalf("first number %d", first)
+	}
+	seq.Reserve()
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	if next := seq.Next(); next != 2 || reports != 0 {
+		t.Fatalf("reserved number %d, %d reports", next, reports)
+	}
+	seq.Reserve()
+	if reports != 1 {
+		t.Fatalf("a fallback while reserving made %d reports", reports)
+	}
+	if next := seq.Next(); next != 3 || reports != 1 {
+		t.Fatalf("number %d after the fallback, %d reports", next, reports)
+	}
+}
+
+// State files keep working at paths that Windows opens only with a prefix.
+func TestCLIStateFilesLongPath(t *testing.T) {
+	dir := t.TempDir()
+	for len(dir) < 300 {
+		dir = filepath.Join(dir, strings.Repeat("d", 40))
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteCLIGitStateFile(dir, CLIGitRecordFile, CLIGitRecord{Branch: "long"}); err != nil {
+		t.Fatal(err)
+	}
+	var record CLIGitRecord
+	if err := ReadCLIGitStateFile(dir, CLIGitRecordFile, &record); err != nil || record.Branch != "long" {
+		t.Fatalf("record %+v, %v", record, err)
+	}
+	mark := filepath.Join(dir, CLIGitUsedFile)
+	if err := createUnlogged(mark); err != nil || !existsUnlogged(mark) {
+		t.Fatalf("mark: %v", err)
 	}
 }

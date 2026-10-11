@@ -349,11 +349,13 @@ func (t *CLITelemetry) Start(languageVersion string) {
 	t.start(&t.owner)
 }
 
-// Stop sends app-closing for the invocation, with the data not yet sent.
+// Stop sends app-closing for the invocation, with the data not yet sent. It
+// takes the request's number first, so that a fallback's log leaves with it.
 func (t *CLITelemetry) Stop() {
 	if t == nil {
 		return
 	}
+	t.owner.sequence.Reserve()
 	telemetry.StopApp()
 }
 

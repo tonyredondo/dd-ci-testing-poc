@@ -590,12 +590,16 @@ initializes.
   opens the state's files with `syscall.Open`, so that the reads and writes of
   test processes stay out of Go's test log: with the state directory in the
   module, as with `TMPDIR` inside it, `go test` would otherwise check files that
-  change on every run and cache no result.
+  change on every run and cache no result. On Windows, a path of 248
+  characters or more goes through `os`, which adds the long-path prefix.
 - `CollectCLIGitRecord` changes nothing in the repository: `fetchCommitData`
   (`git.go`) became `readCommitData(sha, allowFetch)`, and without
   `allowFetch` it reports a CI head commit missing from a shallow clone
   instead of fetching it. The record then leaves the head commit out, and test
-  processes fetch it as before.
+  processes fetch it as before. The worker's own CI tags skip that fetch
+  (`environmentTags.go`), and `FetchCLIHeadCommit` fetches the commit once a
+  test process uses the state, before the upload and the impacted-tests diff,
+  which needs it.
 - `createCITagsMap` (`environmentTags.go`) takes `getLocalGitData`'s and,
   for the same head commit, `fetchCommitData`'s results from the record; the
   CI provider's tags keep their precedence.
@@ -634,18 +638,19 @@ upload instead of eight each, and took 0.47 instead of 0.62 s; each test
 process's bootstrap dropped from 12 to 5 ms.
 
 `globalconfig.go` records whether a process started its root session, which
-it hands to child processes in `_DD_ROOT_GO_SESSION_ID`. Linking the worker
-gives ddto that package, so `ddto`'s `main` calls `KeepCallerEnvironment` to
-remove the variable it set, and hands its session only to the worker
-(`RootSessionEnv`): go test, `-exec` programs and test processes see the
-caller's environment.
+it hands to child processes in `_DD_ROOT_GO_SESSION_ID`, and the variable as
+the process received it. Linking the worker gives ddto that package, so
+`ddto`'s `main` calls `KeepCallerEnvironment` to restore the variable, absent,
+empty or set, and hands its session only to the worker (`RootSessionEnv`): go
+test, `-exec` programs and test processes see the caller's environment.
 
 Checks: `TestMiniGitStateHandoff`, `TestMiniGitStateUploadsOnce`,
 `TestMiniGitStateImpactedTests`, `TestMiniGitStateDeferredWaitsForUpload`,
 `TestMiniGitStateCacheWithTemporaryDirectoryInModule`,
 `TestMiniExecWrapperSeesCallerEnvironment`, `TestRunUploadsOnlyWhenTold`,
-`TestRunClosesResultsOnWriteFailure`, `TestCollectCLIGitRecordDoesNotFetch`,
-`TestHandedCLIGitStateNeedsUsedMark`, `TestGitWorkerRecordsMissingResults`,
+`TestRunClosesResultsOnWriteFailure`, `TestCLIGitWorkerFetchesHeadOnlyAfterUse`,
+`TestHandedCLIGitStateNeedsUsedMark`, `TestCLIStateFilesLongPath`,
+`TestGitWorkerRecordsMissingResults`,
 `TestGitWorkerRecordsResultsWhenOutputCloses` and `TestReceiveRemovesGitState`,
 with the existing upload and impacted-tests tests in `integrations` and
 `impactedtests`.
@@ -681,9 +686,10 @@ ID, one `app-started` and one `app-closing`.
   `app-started`. If the directory cannot be used, a process continues its own
   numbers. A test process records that fallback, and each undelivered
   request, in a `telemetry-failure-*` file, which the owner reports even when
-  it happened in the test process's final request; the owner logs its own
-  fallback, which goes unreported in its final request. The sequence's files
-  stay out of Go's test log, like the Git state's.
+  it happened in the test process's final request. The owner logs its own
+  fallback; it takes the number of `app-closing` before `StopApp` takes the
+  final data, so that a fallback then is logged in that request. The
+  sequence's files stay out of Go's test log, like the Git state's.
 - In `civisibility/utils/net/client.go`, the telemetry start function takes
   the owner, if any. A process whose state ddto handed reports the handed
   application and registers no product or configuration: the owner's
@@ -720,7 +726,8 @@ When updating `telemetry`, keep the shared identity in `newBody` and
 sources.
 
 Checks: `TestSharedAppReportsOwnerIdentity`, `TestSharedAppRequiresSequence`,
-`TestCLITelemetrySequenceAcrossProcesses`, `TestCLITelemetryFailures`,
+`TestCLITelemetrySequenceAcrossProcesses`, `TestCLITelemetrySequenceReserve`,
+`TestCLITelemetryStopReportsSequenceFallback`, `TestCLITelemetryFailures`,
 `TestRunOwnsTelemetryApplication` and `integration/TestMiniCLITelemetry`, which
 checks one application, sequential `seq_id`s, the worker's Git metrics, no
 telemetry from a cached run, reported failures and a binary run alone.
