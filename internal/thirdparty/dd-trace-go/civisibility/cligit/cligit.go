@@ -12,6 +12,9 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
+	"time"
 
 	infra "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
@@ -24,6 +27,7 @@ import (
 
 // Proceed is the line the CLI writes to the worker's input once test
 // processes will receive the state; end of input without it stops the worker.
+// After it, the CLI keeps the input open until go test exits.
 const Proceed = "proceed"
 
 // client is the part of the CI Visibility client that the worker uses.
@@ -42,9 +46,12 @@ var newClient = func() client {
 }
 
 // Run writes the checkout's Git record to dir, then waits for the CLI. Once
-// told to proceed, it uploads the repository's missing commits, as each test
-// process would, and records the end of the upload. Then, if the settings
-// enable impacted tests, it records the base commit and modified files.
+// told to proceed, and once a test process uses the state, it uploads the
+// repository's missing commits, as each test process would, and records the
+// end of the upload. Then, if the settings enable impacted tests, it records
+// the base commit and modified files. When go test exits without running a
+// test process that uses the state, as when every result comes from its
+// cache, the worker exits without network or repository work.
 func Run(dir string, input io.Reader) error {
 	if infra.BoolEnv("DD_TRACE_DEBUG", false) {
 		log.SetLevel(log.LevelDebug)
@@ -54,8 +61,9 @@ func Run(dir string, input io.Reader) error {
 		return err
 	}
 	utils.UseCLIGitState(dir, record)
-	line, _ := bufio.NewReader(input).ReadString('\n')
-	if line != Proceed+"\n" {
+	reader := bufio.NewReader(input)
+	line, _ := reader.ReadString('\n')
+	if line != Proceed+"\n" || !waitUsed(dir, reader) {
 		return nil
 	}
 	c := newClient()
@@ -104,4 +112,28 @@ func impacted(c client, uploaded utils.CLIGitUpload) impactedtests.CLIState {
 		return impactedtests.CLIState{Reason: "impacted tests disabled by the environment"}
 	}
 	return impactedtests.ComputeCLIState()
+}
+
+// waitUsed waits until a test process marks the state as used, or the CLI
+// closes the input because go test has exited.
+func waitUsed(dir string, input io.Reader) bool {
+	closed := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, input)
+		close(closed)
+	}()
+	used := filepath.Join(dir, utils.CLIGitUsedFile)
+	delay := time.Millisecond
+	for {
+		if _, err := os.Stat(used); err == nil {
+			return true
+		}
+		select {
+		case <-closed:
+			_, err := os.Stat(used)
+			return err == nil
+		case <-time.After(delay):
+			delay = min(2*delay, 50*time.Millisecond)
+		}
+	}
 }

@@ -28,6 +28,10 @@ const (
 	CLIGitUploadFile = "upload.json"
 	// CLIGitImpactedFile holds the impacted-tests base and modified files.
 	CLIGitImpactedFile = "impacted.json"
+	// CLIGitUsedFile marks that a test process uses the state. Without it,
+	// as when go test takes every result from its cache, the CLI does not
+	// wait for the worker's upload.
+	CLIGitUsedFile = "used"
 )
 
 // CLIGitUpload records the end of the CLI's repository upload. Error is set
@@ -203,6 +207,9 @@ func HandedCLIGitState() (string, *CLIGitRecord) {
 			return
 		}
 		cliGitStateDir, cliGitRecord = dir, &record
+		if used, err := os.OpenFile(filepath.Join(dir, CLIGitUsedFile), os.O_CREATE|os.O_WRONLY, 0600); err == nil {
+			_ = used.Close()
+		}
 	})
 	return cliGitStateDir, cliGitRecord
 }

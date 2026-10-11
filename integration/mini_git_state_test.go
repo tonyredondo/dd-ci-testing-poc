@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // gitStateFixture prepares a Mini fixture in a two-commit Git repository with
@@ -38,6 +39,12 @@ func gitStateFixture(t *testing.T) (string, string, string) {
 func runGitWorker(t *testing.T, dir, driver, input string, env ...string) string {
 	t.Helper()
 	state := t.TempDir()
+	if input != "" {
+		// As a test process that uses the state marks it.
+		if err := os.WriteFile(filepath.Join(state, "used"), nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	cmd := exec.Command(driver, "ci-git-worker", state)
 	cmd.Dir = dir
 	cmd.Env = append(testEnv(env...), "PWD="+dir)
@@ -150,7 +157,13 @@ func TestMiniGitStateUploadsOnce(t *testing.T) {
 	if err := os.MkdirAll(sub, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(sub, "sub_test.go"), []byte("package sub\n\nimport \"testing\"\n\nfunc TestSub(t *testing.T) {}\n"), 0600); err != nil {
+	subTest := filepath.Join(sub, "sub_test.go")
+	if err := os.WriteFile(subTest, []byte("package sub\n\nimport \"testing\"\n\nfunc TestSub(t *testing.T) {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Go does not cache a result that read a file modified in the last seconds.
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(subTest, old, old); err != nil {
 		t.Fatal(err)
 	}
 	var mu sync.Mutex
@@ -170,13 +183,34 @@ func TestMiniGitStateUploadsOnce(t *testing.T) {
 	defer server.Close()
 	env := testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL,
 		"DD_API_KEY=fixture", "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=true", "DD_GIT_REPOSITORY_URL=", "DD_GIT_COMMIT_SHA=")
-	if out, stderr, code := command(t, dir, env, driver, "test", "--runtime=mini", "-count=1", "-run=^Test(Pass|Sub)$", ".", "./sub"); code != 0 {
-		t.Fatalf("ddto test: %d %s %s", code, out, stderr)
+	run := func(args ...string) string {
+		t.Helper()
+		out, stderr, code := command(t, dir, env, driver, append([]string{"test", "--runtime=mini", "-run=^Test(Pass|Sub)$"}, args...)...)
+		if code != 0 {
+			t.Fatalf("ddto test: %d %s %s", code, out, stderr)
+		}
+		return out
+	}
+	run(".", "./sub")
+	mu.Lock()
+	if requests["search_commits"] != 1 || requests["packfile"] != 1 {
+		t.Fatalf("two test processes: %v", requests)
+	}
+	clear(requests)
+	mu.Unlock()
+	// With every result cached, no test process uses the state: no upload.
+	// The fixture's own tests are not cacheable; sub's are.
+	run("./sub")
+	mu.Lock()
+	clear(requests)
+	mu.Unlock()
+	if out := run("./sub"); !strings.Contains(out, "(cached)") {
+		t.Fatalf("second run was not cached:\n%s", out)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if requests["search_commits"] != 1 || requests["packfile"] != 1 {
-		t.Fatalf("two test processes: %v", requests)
+	if len(requests) != 0 {
+		t.Fatalf("cached run: %v", requests)
 	}
 }
 

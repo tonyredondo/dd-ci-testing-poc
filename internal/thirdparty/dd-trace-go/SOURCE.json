@@ -2132,17 +2132,17 @@
     },
     {
       "path": "civisibility/cligit/cligit.go",
-      "sha256": "01fc5ccd4afe9a4fd75dbb85111e5523df8b366a3f7e075a9e32a091cc40673d",
+      "sha256": "2944aed16bd25bcce0fe22d7cb95470002c195590298fa8ba54a7a9d4c6a4b45",
       "role": "local"
     },
     {
       "path": "civisibility/utils/cli_git_state.go",
-      "sha256": "3568c9b6998b50a3c6e4bf500d25cdf92483d7eeaf2e9debbaf7e96d265da924",
+      "sha256": "d94b59c2d708afd0907c57e2005aab1feb320dc604422b5fb64f316a96529c3e",
       "role": "local"
     },
     {
       "path": "civisibility/cligit/cligit_test.go",
-      "sha256": "9e44e1b7a77d4182c627b10a0049b859f48fc5f28207c5effc48d0de63500434",
+      "sha256": "2e2788f021722ff7230e44eb987ed851b6474f9522ecbe76473ad02ab9b5068a",
       "role": "local"
     },
     {

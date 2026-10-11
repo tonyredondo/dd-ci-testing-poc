@@ -111,7 +111,7 @@ func (w *gitWorker) handOff(testDirs []string, launcher bool) []string {
 		_ = w.input.Close()
 		return nil
 	}
-	_ = w.input.Close()
+	// The input stays open: closing it tells the worker that go test exited.
 	return []string{goenv.GitStateHandoff + "=" + w.state}
 }
 
@@ -156,6 +156,8 @@ func (w *gitWorker) record(timeout time.Duration) (utils.CLIGitRecord, bool) {
 
 // finish waits for the worker, at most timeout, and removes its state. It
 // runs after go test has exited, so no test process reads the state any more.
+// Closing the input lets a worker that no test process used exit without
+// uploading; one that was used finishes its upload first.
 func (w *gitWorker) finish(timeout time.Duration) {
 	if w == nil {
 		return

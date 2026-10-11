@@ -31,6 +31,16 @@ func (c *fakeClient) SendPackFiles(string, []string) (int64, error) {
 	return 42, nil
 }
 
+// usedState returns a state directory that a test process has used.
+func usedState(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, utils.CLIGitUsedFile), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 // gitRepository makes the current directory a one-commit repository.
 func gitRepository(t *testing.T) {
 	t.Helper()
@@ -64,7 +74,17 @@ func TestRunUploadsOnlyWhenTold(t *testing.T) {
 	}
 
 	utils.ResetHandedCLIGitStateForTesting()
-	proceeded := t.TempDir()
+	// Told to proceed, a worker that no test process used does not upload.
+	unused := t.TempDir()
+	if err := Run(unused, strings.NewReader(Proceed+"\n")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(unused, utils.CLIGitUploadFile)); !os.IsNotExist(err) || fake.searches != 0 {
+		t.Fatalf("unused worker uploaded: %v, %+v", err, fake)
+	}
+
+	utils.ResetHandedCLIGitStateForTesting()
+	proceeded := usedState(t)
 	if err := Run(proceeded, strings.NewReader(Proceed+"\n")); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +103,7 @@ func TestRunUploadsOnlyWhenTold(t *testing.T) {
 	// With impacted tests enabled, the worker computes the analyzer's input.
 	utils.ResetHandedCLIGitStateForTesting()
 	fake.impacted = true
-	enabled := t.TempDir()
+	enabled := usedState(t)
 	if err := Run(enabled, strings.NewReader(Proceed+"\n")); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +113,7 @@ func TestRunUploadsOnlyWhenTold(t *testing.T) {
 
 	utils.ResetHandedCLIGitStateForTesting()
 	t.Setenv(constants.CIVisibilityGitUploadEnabledEnvironmentVariable, "false")
-	disabled := t.TempDir()
+	disabled := usedState(t)
 	if err := Run(disabled, strings.NewReader(Proceed+"\n")); err != nil {
 		t.Fatal(err)
 	}
