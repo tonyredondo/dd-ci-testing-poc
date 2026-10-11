@@ -78,18 +78,21 @@ func TestSharedAppReportsOwnerIdentity(t *testing.T) {
 	}
 
 	owner := newShared(true, nil)
+	// The owner's data waits for app-closing, and leaves with it.
+	owner.Count(NamespaceCIVisibility, "owner.metric", nil).Submit(1)
 	owner.AppStart()
 	owner.flushStartup()
 	var failures []int
 	child := newShared(false, func(code int) { failures = append(failures, code) })
 	child.ProductStarted(NamespaceCIVisibility)
+	// Data recorded before the start waits for a regular flush.
+	child.Count(NamespaceCIVisibility, "shared.metric", nil).Submit(1)
 	child.AppStart()
 	child.flushStartup()
 	if got := taken(); len(got) != 1 || got[0].Type != "app-started" {
 		t.Fatalf("startup requests: %+v", got)
 	}
 
-	child.Count(NamespaceCIVisibility, "shared.metric", nil).Submit(1)
 	child.AppStop()
 	child.Flush()
 	failChild.Store(true)
@@ -111,7 +114,7 @@ func TestSharedAppReportsOwnerIdentity(t *testing.T) {
 			t.Errorf("request %d application: %+v %+v", i, request.Application, request.Host)
 		}
 		closing := strings.Contains(string(request.Payload), "app-closing") || request.Type == "app-closing"
-		if (i == 3) != closing {
+		if (i == 3) != closing || (i == 3) != strings.Contains(string(request.Payload), "owner.metric") {
 			t.Errorf("request %d (%s) closing=%t: %s", i, request.Type, closing, request.Payload)
 		}
 	}

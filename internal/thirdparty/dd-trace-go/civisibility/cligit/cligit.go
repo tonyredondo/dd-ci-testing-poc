@@ -125,7 +125,7 @@ func Run(dir, runtimeID string, input io.Reader) error {
 		return err
 	}
 	// Test processes send their telemetry before go test exits, and the
-	// application closes after them.
+	// application closes after them, in one request with the worker's data.
 	<-exited
 	return nil
 }

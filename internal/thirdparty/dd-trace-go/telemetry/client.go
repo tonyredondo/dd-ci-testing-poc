@@ -161,19 +161,24 @@ func (c *client) Config() ClientConfig {
 // Flush sends all the data sources before calling flush
 // This function is called by the flushTicker so it should not panic, or it will crash the whole customer application.
 // If a panic occurs, we stop the telemetry and log the error.
-func (c *client) Flush() { c.flushData(0) }
+func (c *client) Flush() { c.flushData(c.dataSources, 0) }
 
 // flushStartup sends the standalone app-started request before tests. Remaining
 // snapshots stay in the existing queue until a regular flush or shutdown. A
-// client that reports another process's application sends nothing then.
+// client that reports another process's application sends nothing then. The
+// owner of a shared application sends only app-started: its other data waits
+// in its sources, so that it leaves with app-closing in one request.
 func (c *client) flushStartup() {
-	if c.sharedChild() {
-		return
+	switch {
+	case c.sharedChild():
+	case c.clientConfig.SharedOwner:
+		c.flushData([]dataSource{&c.products, &c.configuration}, 1)
+	default:
+		c.flushData(c.dataSources, 1)
 	}
-	c.flushData(1)
 }
 
-func (c *client) flushData(limit int) {
+func (c *client) flushData(sources []dataSource, limit int) {
 	defer func() {
 		r := recover()
 		if r == nil {
@@ -191,7 +196,7 @@ func (c *client) flushData(limit int) {
 	}()
 
 	payloads := make([]transport.Payload, 0, 8)
-	for _, ds := range c.dataSources {
+	for _, ds := range sources {
 		if payload := ds.Payload(); payload != nil {
 			payloads = append(payloads, payload)
 		}
