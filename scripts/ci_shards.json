@@ -39,6 +39,7 @@
       "TestMiniGitStateImpactedTests",
       "TestMiniGitStateStopsUploadCleanly",
       "TestMiniGitStateUploadsOnce",
+      "TestMiniGitWorkerStopsOnInterrupt",
       "TestMiniGoleakAbsoluteTargetRetainsCompilerFlags",
       "TestMiniGoleakForkReplacement",
       "TestMiniGoleakIntegration",

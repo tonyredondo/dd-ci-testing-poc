@@ -88,7 +88,7 @@ var newClient = func(ctx context.Context, dir, runtimeID string) (client, appTel
 // state, as when every result comes from its cache, the worker exits without
 // changing the repository, uploading or sending telemetry. uploadWait, which
 // the record hands to test processes, bounds their wait for the upload.
-func Run(dir, runtimeID string, uploadWait time.Duration, input io.Reader, results io.Closer) error {
+func Run(dir, runtimeID string, uploadWait time.Duration, input io.Reader, results io.Closer, interrupts <-chan os.Signal) error {
 	defer results.Close()
 	if infra.BoolEnv("DD_TRACE_DEBUG", false) {
 		log.SetLevel(log.LevelDebug)
@@ -97,7 +97,14 @@ func Run(dir, runtimeID string, uploadWait time.Duration, input io.Reader, resul
 	defer cancel()
 	utils.SetGitCommandContext(ctx)
 	defer utils.SetGitCommandContext(context.Background())
-	record := utils.CollectCLIGitRecord()
+	// The CLI's lines, and a signal such as the terminal's interrupt, stop
+	// the worker from its first git command on.
+	cli := listen(bufio.NewReader(input), cancel)
+	go cli.interrupt(ctx, interrupts, cancel)
+	record := collectRecord(ctx)
+	if ctx.Err() != nil {
+		return nil
+	}
 	record.UploadWaitMs = uploadWait.Milliseconds()
 	utils.UseCLIGitState(dir, record)
 	// The telemetry application exists before the record, which ddto waits
@@ -106,16 +113,24 @@ func Run(dir, runtimeID string, uploadWait time.Duration, input io.Reader, resul
 	if err := utils.WriteCLIGitStateFile(dir, utils.CLIGitRecordFile, record); err != nil {
 		return err
 	}
-	reader := bufio.NewReader(input)
-	line, _ := reader.ReadString('\n')
-	verb, goVersion, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
-	if !strings.HasSuffix(line, "\n") || verb != Proceed {
+	var goVersion string
+	select {
+	case version, ok := <-cli.proceed:
+		if !ok {
+			return nil
+		}
+		goVersion = version
+	case <-ctx.Done():
 		return nil
 	}
 	uploadEnabled := infra.BoolEnv(constants.CIVisibilityGitUploadEnabledEnvironmentVariable, true)
 	search := searchAhead(c, uploadEnabled)
-	cli := listen(reader, cancel)
 	if !waitUsed(ctx, dir, cli.exited) {
+		// A stopped search ends its git commands, interrupted or killed,
+		// only while this process runs.
+		if search != nil {
+			_, _ = search()
+		}
 		return nil
 	}
 	utils.FetchCLIHeadCommit()
@@ -146,39 +161,51 @@ func Run(dir, runtimeID string, uploadWait time.Duration, input io.Reader, resul
 	}
 	_ = results.Close()
 	// Test processes send their telemetry before go test exits, and the
-	// application closes after them, in one request with the worker's data.
-	select {
-	case <-cli.exited:
-	case <-ctx.Done():
-	}
+	// application closes after them, in one request with the worker's data,
+	// even when the worker stopped its work earlier.
+	<-cli.exited
 	return err
 }
 
-// cliInput follows the CLI's lines after Proceed.
+// collectRecord reads the checkout's Git record; tests replace it.
+var collectRecord = func(context.Context) utils.CLIGitRecord {
+	return utils.CollectCLIGitRecord()
+}
+
+// cliInput follows the CLI's lines.
 type cliInput struct {
+	// proceed receives the test processes' Go version once the CLI writes
+	// Proceed; it is closed if the input ends without it.
+	proceed chan string
 	// exited is closed once go test has exited, or the CLI has gone.
 	exited chan struct{}
 	mu     sync.Mutex
-	reason string // why the CLI stopped the worker
+	reason string // why the worker stopped
 }
 
-// listen reads the CLI's lines; stop cancels the worker's work.
+// listen reads the CLI's lines from the start; stop cancels the worker's work.
 func listen(reader *bufio.Reader, stop context.CancelFunc) *cliInput {
-	in := &cliInput{exited: make(chan struct{})}
+	in := &cliInput{proceed: make(chan string, 1), exited: make(chan struct{})}
 	go func() {
-		exited := false
+		proceeded, exited := false, false
 		for {
 			line, err := reader.ReadString('\n')
-			verb, reason, _ := strings.Cut(strings.TrimSpace(line), " ")
+			verb, value, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
 			switch {
+			case verb == Proceed && strings.HasSuffix(line, "\n") && !proceeded:
+				proceeded = true
+				in.proceed <- value
 			case verb == Exited && !exited:
 				exited = true
 				close(in.exited)
 			case verb == Stop:
-				in.stopped(reason)
+				in.stopped(value)
 				stop()
 			}
 			if err != nil {
+				if !proceeded {
+					close(in.proceed)
+				}
 				if !exited {
 					in.stopped("the CLI exited")
 					stop()
@@ -189,6 +216,18 @@ func listen(reader *bufio.Reader, stop context.CancelFunc) *cliInput {
 		}
 	}()
 	return in
+}
+
+// interrupt stops the worker's work on a signal, as Stop does: the
+// terminal's interrupt reaches the whole process group, the worker included.
+// The worker still waits for go test to close the telemetry application.
+func (in *cliInput) interrupt(ctx context.Context, interrupts <-chan os.Signal, stop context.CancelFunc) {
+	select {
+	case <-interrupts:
+		in.stopped("signal")
+		stop()
+	case <-ctx.Done():
+	}
 }
 
 func (in *cliInput) stopped(reason string) {

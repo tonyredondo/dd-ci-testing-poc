@@ -9,9 +9,11 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/goenv"
@@ -55,6 +57,9 @@ type gitWorker struct {
 	input       io.WriteCloser
 	inputClosed bool
 	stopReason  atomic.Pointer[string]
+	// stopping is closed when ddto first asks the worker to stop, at stopAt.
+	stopping chan struct{}
+	stopAt   time.Time
 
 	uploadTimeout time.Duration
 	stderr        io.Writer
@@ -151,7 +156,7 @@ func launchGitWorker(cmd *exec.Cmd, state string, debug *cliDebug) (*gitWorker, 
 		_ = results.Close()
 		return nil, err
 	}
-	w := &gitWorker{state: state, cmd: cmd, input: input, exited: make(chan struct{}), debug: debug}
+	w := &gitWorker{state: state, cmd: cmd, input: input, exited: make(chan struct{}), stopping: make(chan struct{}), debug: debug}
 	recorded := make(chan struct{})
 	go func() {
 		_, _ = io.Copy(io.Discard, results)
@@ -192,10 +197,24 @@ func (w *gitWorker) closeInput() {
 // requests, removes its pack files, records what it did not finish and
 // closes the telemetry application.
 func (w *gitWorker) stop(reason string) {
-	if w.stopReason.CompareAndSwap(nil, &reason) {
+	w.inputMu.Lock()
+	first := w.stopReason.CompareAndSwap(nil, &reason)
+	if first {
+		w.stopAt = time.Now()
+		close(w.stopping)
+	}
+	w.inputMu.Unlock()
+	if first {
 		w.debug.printf("git worker stop reason=%s", reason)
 		_ = w.send(cligit.Stop + " " + reason)
 	}
+}
+
+// stoppedAt returns when ddto first asked the worker to stop, or zero.
+func (w *gitWorker) stoppedAt() time.Time {
+	w.inputMu.Lock()
+	defer w.inputMu.Unlock()
+	return w.stopAt
 }
 
 // handOff decides whether test processes receive the worker's state, and
@@ -289,31 +308,19 @@ func (w *gitWorker) waitExit(timeout time.Duration) bool {
 // the state; one that was used finishes its upload first, for at most the
 // upload timeout, as a test process waited for its own upload at exit. ddto
 // then stops the worker, which ends its work without leaving pack files or
-// lock files behind and closes the telemetry application; only a worker that
-// does not stop within gitWorkerStopWait is killed. finish then removes the
-// state, or keeps it with --keep-ci-state.
+// lock files behind and closes the telemetry application. A worker stopped
+// earlier, by a signal, gets the same time once go test has exited, since it
+// closes the telemetry application only then. Only a worker that has not
+// exited gitWorkerStopWait after both the stop and go test's exit is killed.
+// finish then removes the state, or keeps it with --keep-ci-state.
 func (w *gitWorker) finish() {
 	if w == nil {
 		return
 	}
 	waited := time.Now()
 	_ = w.send(cligit.Exited)
-	wait := w.uploadTimeout
-	if w.stopReason.Load() != nil {
-		wait = gitWorkerStopWait
-	}
-	outcome := "exited"
-	if !w.waitExit(wait) {
-		w.debug.printf("git worker still running %s after go test", wait)
-		w.stop("timeout")
-		outcome = "stopped"
-		if !w.waitExit(gitWorkerStopWait) {
-			w.debug.printf("git worker did not stop within %s; killing it", gitWorkerStopWait)
-			_ = w.cmd.Process.Kill()
-			<-w.exited
-			outcome = "killed"
-		}
-	} else if w.stopReason.Load() != nil {
+	outcome := w.awaitExit(waited)
+	if outcome == "exited" && w.stopReason.Load() != nil {
 		outcome = "stopped"
 	}
 	w.closeInput()
@@ -324,6 +331,40 @@ func (w *gitWorker) finish() {
 		w.summary.StopReason = *reason
 	}
 	w.release()
+}
+
+// awaitExit waits for the worker, which go test's exit was told at
+// exitedAt: for the upload timeout, unless a signal stops the worker first,
+// then for gitWorkerStopWait from both the stop and exitedAt. It returns
+// how the worker ended: exited or killed.
+func (w *gitWorker) awaitExit(exitedAt time.Time) string {
+	if w.stoppedAt().IsZero() {
+		timer := time.NewTimer(w.uploadTimeout)
+		select {
+		case <-w.exited:
+			timer.Stop()
+			return "exited"
+		case <-w.stopping:
+		case <-timer.C:
+			w.debug.printf("git worker still running %s after go test", w.uploadTimeout)
+			w.stop("timeout")
+		}
+		timer.Stop()
+	}
+	if w.waitExit(time.Until(maxTime(w.stoppedAt(), exitedAt).Add(gitWorkerStopWait))) {
+		return "exited"
+	}
+	w.debug.printf("git worker did not stop within %s; killing it", gitWorkerStopWait)
+	_ = w.cmd.Process.Kill()
+	<-w.exited
+	return "killed"
+}
+
+func maxTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
 }
 
 // release removes the state or, with --keep-ci-state, keeps it with ddto's
@@ -382,6 +423,18 @@ func zipDirectory(dir, path string) error {
 		if entry.IsDir() {
 			header.Name += "/"
 			_, err = archive.CreateHeader(header)
+			return err
+		}
+		if entry.Type()&fs.ModeSymlink != 0 {
+			// A link is archived as a link, never followed.
+			target, err := os.Readlink(file)
+			if err != nil {
+				return err
+			}
+			writer, err := archive.CreateHeader(header)
+			if err == nil {
+				_, err = io.WriteString(writer, target)
+			}
 			return err
 		}
 		header.Method = zip.Deflate
@@ -447,7 +500,12 @@ func RunGitWorker(_ context.Context, args []string, stdin io.Reader, results io.
 		}
 		uploadWait = wait
 	}
-	if err := cligit.Run(state, runtimeID, uploadWait, stdin, results); err != nil {
+	// The terminal's interrupt reaches the worker too: it stops its work as
+	// for a stop line, instead of exiting with its pack files left behind.
+	interrupts := make(chan os.Signal, 1)
+	signal.Notify(interrupts, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(interrupts)
+	if err := cligit.Run(state, runtimeID, uploadWait, stdin, results, interrupts); err != nil {
 		fmt.Fprintln(stderr, "ddto git worker:", err)
 		return 1
 	}

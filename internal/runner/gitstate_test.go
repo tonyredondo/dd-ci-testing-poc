@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -205,5 +206,75 @@ func TestGitWorkerRecordsResultsWhenOutputCloses(t *testing.T) {
 	case <-w.exited:
 	case <-time.After(time.Minute):
 		t.Fatal("the worker did not exit after go test")
+	}
+}
+
+// A worker stopped by a signal gets one gitWorkerStopWait from go test's
+// exit, never two, and a signal during the upload wait ends that wait.
+func TestGitWorkerFinishBoundsAStopBySignal(t *testing.T) {
+	original := gitWorkerStopWait
+	gitWorkerStopWait = 2 * time.Second
+	t.Cleanup(func() { gitWorkerStopWait = original })
+
+	before, _ := helperWorker(t, "hang")
+	before.uploadTimeout = time.Hour
+	before.stop("signal")
+	started := time.Now()
+	before.finish()
+	if elapsed := time.Since(started); before.summary.Worker != "killed" || elapsed > 3500*time.Millisecond {
+		t.Fatalf("signal before finish: %+v after %s", before.summary, elapsed)
+	}
+
+	during, _ := helperWorker(t, "hang")
+	during.uploadTimeout = time.Hour
+	finished := make(chan struct{})
+	go func() {
+		during.finish()
+		close(finished)
+	}()
+	time.Sleep(100 * time.Millisecond)
+	during.stop("signal")
+	select {
+	case <-finished:
+	case <-time.After(30 * time.Second):
+		t.Fatal("a signal did not end the upload wait")
+	}
+	if during.summary.Worker != "killed" || during.summary.StopReason != "signal" {
+		t.Fatalf("signal during the wait: %+v", during.summary)
+	}
+}
+
+// The archive keeps a link as a link, without the file it points to.
+func TestZipDirectoryKeepsLinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating links needs privileges on Windows")
+	}
+	dir, outside := t.TempDir(), filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(outside, []byte("outside the state"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "link")); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "state.zip")
+	if err := zipDirectory(dir, path); err != nil {
+		t.Fatal(err)
+	}
+	archive, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer archive.Close()
+	if len(archive.File) != 1 || archive.File[0].Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("archive %v", archive.File)
+	}
+	content, err := archive.File[0].Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, _ := io.ReadAll(content)
+	_ = content.Close()
+	if string(target) != outside {
+		t.Fatalf("the link holds %q, want its target %q", target, outside)
 	}
 }
