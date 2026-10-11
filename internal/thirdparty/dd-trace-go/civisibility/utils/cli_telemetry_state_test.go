@@ -142,3 +142,24 @@ func TestCLIStateFilesLongPath(t *testing.T) {
 		}
 	}
 }
+
+// Long Windows paths get the prefix that os gives them; extended and device
+// paths keep their meaning.
+func TestExtendedWindowsPath(t *testing.T) {
+	long := strings.Repeat("d", 250)
+	for _, c := range []struct{ name, want string }{
+		{`C:\short`, `C:\short`},
+		{`C:\` + long, `\\?\C:\` + long},
+		{`C:/` + long + `/x`, `\\?\C:\` + long + `\x`},
+		{`\\server\share\` + long, `\\?\UNC\server\share\` + long},
+		{`\\.\C:\` + long, `\\.\C:\` + long},
+		{`//./C:/` + long, `//./C:/` + long},
+		{`\\?\C:\` + long, `\\?\C:\` + long},
+		{`\??\C:\` + long, `\??\C:\` + long},
+		{long, long},
+	} {
+		if got := extendedWindowsPath(c.name); got != c.want {
+			t.Errorf("%.20q...: got %.30q, want %.30q", c.name, got, c.want)
+		}
+	}
+}

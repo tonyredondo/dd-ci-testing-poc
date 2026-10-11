@@ -591,7 +591,8 @@ initializes.
   test processes stay out of Go's test log: with the state directory in the
   module, as with `TMPDIR` inside it, `go test` would otherwise check files that
   change on every run and cache no result. On Windows, it adds the long-path
-  prefix to an absolute path of 248 characters or more, as `os` does.
+  prefix to an absolute path of 248 characters or more and keeps extended and
+  device paths, as `os` does (`extendedWindowsPath`).
 - `CollectCLIGitRecord` changes nothing in the repository: `fetchCommitData`
   (`git.go`) became `readCommitData(sha, allowFetch)`, and without
   `allowFetch` it reports a CI head commit missing from a shallow clone
@@ -650,6 +651,7 @@ Checks: `TestMiniGitStateHandoff`, `TestMiniGitStateUploadsOnce`,
 `TestMiniExecWrapperSeesCallerEnvironment`, `TestRunUploadsOnlyWhenTold`,
 `TestRunClosesResultsOnWriteFailure`, `TestCLIGitWorkerFetchesHeadOnlyAfterUse`,
 `TestHandedCLIGitStateNeedsUsedMark`, `TestCLIStateFilesLongPath`,
+`TestExtendedWindowsPath`,
 `TestGitWorkerRecordsMissingResults`,
 `TestGitWorkerRecordsResultsWhenOutputCloses` and `TestReceiveRemovesGitState`,
 with the existing upload and impacted-tests tests in `integrations` and

@@ -5,7 +5,6 @@ package utils
 import (
 	"io/fs"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -26,16 +25,35 @@ func openUnlogged(name string, flag int, perm uint32) (*os.File, error) {
 
 // windowsLongPath adds the prefix with which Windows opens an absolute path
 // of 248 characters or more, as os does and syscall.Open does not. Other
-// paths, and other systems, keep name.
+// systems keep name.
 func windowsLongPath(name string) string {
-	if runtime.GOOS != "windows" || len(name) < 248 || strings.HasPrefix(name, `\\?\`) || !filepath.IsAbs(name) {
+	if runtime.GOOS != "windows" {
 		return name
 	}
-	name = filepath.Clean(name)
-	if strings.HasPrefix(name, `\\`) {
-		return `\\?\UNC\` + name[2:]
+	return extendedWindowsPath(name)
+}
+
+// extendedWindowsPath classifies name as os/path_windows.go does: paths
+// already extended (\\?\, \??\) and device paths (\\.\) keep their meaning
+// and stay as they are; a UNC path gets \\?\UNC\ and a drive path \\?\.
+// Short and relative paths stay as they are: the CLI state's paths are
+// absolute.
+func extendedWindowsPath(name string) string {
+	separator := func(c byte) bool { return c == '\\' || c == '/' }
+	if len(name) < 248 {
+		return name
 	}
-	return `\\?\` + name
+	if strings.HasPrefix(name, `\??\`) || (separator(name[0]) && separator(name[1]) && (name[2] == '?' || name[2] == '.') && separator(name[3])) {
+		return name
+	}
+	name = strings.ReplaceAll(name, "/", `\`)
+	switch {
+	case strings.HasPrefix(name, `\\`):
+		return `\\?\UNC\` + name[2:]
+	case len(name) >= 3 && name[1] == ':' && name[2] == '\\':
+		return `\\?\` + name
+	}
+	return name
 }
 
 // createUnlogged creates name, which must not exist, without recording it in
