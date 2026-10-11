@@ -525,6 +525,12 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			plan.compilerCache = append(plan.compilerCache, flag)
 		}
 	}
+	if plan.mini && opts.race {
+		racePhase := debug.start("race annotations")
+		files := noraceOverlay(listed, replacements, temp)
+		racePhase.finish(nil)
+		debug.printf("race annotations files=%d", files)
+	}
 	plan.coverOverlay = needsCoverOverlay(dir, opts, packages, []goPackage{*native})
 	plan.File = filepath.Join(temp, "overlay.json")
 	plan.InstrumentedFiles = len(rewritten.Files)
