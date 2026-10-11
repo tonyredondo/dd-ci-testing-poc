@@ -77,13 +77,14 @@ func TestCLITelemetrySequenceAcrossProcesses(t *testing.T) {
 
 func TestCLITelemetryFailures(t *testing.T) {
 	dir := t.TempDir()
-	for _, code := range []int{403, 0, 403} {
-		recordCLITelemetryFailure(dir, code)
+	for _, tag := range []string{"status_code:403", cliTelemetryNetworkFailure, "status_code:403", CLITelemetrySequenceFailure} {
+		recordCLITelemetryFailure(dir, tag)
 	}
 	if err := os.WriteFile(filepath.Join(dir, CLITelemetryFile), []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := CLITelemetryFailures(dir), map[int]int{403: 2, 0: 1}; !reflect.DeepEqual(got, want) {
+	want := map[string]int{"status_code:403": 2, cliTelemetryNetworkFailure: 1, CLITelemetrySequenceFailure: 1}
+	if got := CLITelemetryFailures(dir); !reflect.DeepEqual(got, want) {
 		t.Fatalf("failures %v, want %v", got, want)
 	}
 }

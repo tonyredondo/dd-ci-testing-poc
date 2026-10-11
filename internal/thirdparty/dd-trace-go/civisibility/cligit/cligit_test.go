@@ -3,6 +3,7 @@
 package cligit
 
 import (
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -82,7 +83,7 @@ func TestRunUploadsOnlyWhenTold(t *testing.T) {
 	t.Cleanup(func() { newClient = original })
 
 	stopped := t.TempDir()
-	if err := Run(stopped, "", strings.NewReader("")); err != nil {
+	if err := Run(stopped, "", strings.NewReader(""), newResults()); err != nil {
 		t.Fatal(err)
 	}
 	var record utils.CLIGitRecord
@@ -102,7 +103,7 @@ func TestRunUploadsOnlyWhenTold(t *testing.T) {
 	unusedClient := &fakeClient{}
 	newClient = func(string, string) (client, appTelemetry) { return unusedClient, nil }
 	unused := t.TempDir()
-	if err := Run(unused, "", strings.NewReader(Proceed+"\n")); err != nil {
+	if err := Run(unused, "", strings.NewReader(Proceed+"\n"), newResults()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(unused, utils.CLIGitUploadFile)); !os.IsNotExist(err) {
@@ -115,7 +116,7 @@ func TestRunUploadsOnlyWhenTold(t *testing.T) {
 
 	utils.ResetHandedCLIGitStateForTesting()
 	proceeded := usedState(t)
-	if err := Run(proceeded, "", strings.NewReader(Proceed+"\n")); err != nil {
+	if err := Run(proceeded, "", strings.NewReader(Proceed+"\n"), newResults()); err != nil {
 		t.Fatal(err)
 	}
 	var upload utils.CLIGitUpload
@@ -134,7 +135,7 @@ func TestRunUploadsOnlyWhenTold(t *testing.T) {
 	utils.ResetHandedCLIGitStateForTesting()
 	fake.impacted = true
 	enabled := usedState(t)
-	if err := Run(enabled, "", strings.NewReader(Proceed+"\n")); err != nil {
+	if err := Run(enabled, "", strings.NewReader(Proceed+"\n"), newResults()); err != nil {
 		t.Fatal(err)
 	}
 	if err := utils.ReadCLIGitStateFile(enabled, utils.CLIGitImpactedFile, &state); err != nil || !state.Computed || state.CurrentCommit == "" {
@@ -144,7 +145,7 @@ func TestRunUploadsOnlyWhenTold(t *testing.T) {
 	utils.ResetHandedCLIGitStateForTesting()
 	t.Setenv(constants.CIVisibilityGitUploadEnabledEnvironmentVariable, "false")
 	disabled := usedState(t)
-	if err := Run(disabled, "", strings.NewReader(Proceed+"\n")); err != nil {
+	if err := Run(disabled, "", strings.NewReader(Proceed+"\n"), newResults()); err != nil {
 		t.Fatal(err)
 	}
 	if searches, _ := fake.counts(); searches != 2 {
@@ -153,6 +154,19 @@ func TestRunUploadsOnlyWhenTold(t *testing.T) {
 	if err := utils.ReadCLIGitStateFile(disabled, utils.CLIGitUploadFile, &upload); err != nil || upload.Error == "" {
 		t.Fatalf("disabled upload %+v, %v", upload, err)
 	}
+}
+
+// fakeResults records that the worker closed its results.
+type fakeResults struct {
+	once   sync.Once
+	closed chan struct{}
+}
+
+func newResults() *fakeResults { return &fakeResults{closed: make(chan struct{})} }
+
+func (r *fakeResults) Close() error {
+	r.once.Do(func() { close(r.closed) })
+	return nil
 }
 
 type fakeTelemetry struct {
@@ -191,7 +205,7 @@ func TestRunOwnsTelemetryApplication(t *testing.T) {
 	newClient = func(string, string) (client, appTelemetry) { return &fakeClient{}, app }
 	t.Cleanup(func() { newClient = original })
 
-	if err := Run(t.TempDir(), "", strings.NewReader(Proceed+" go1.99.0\n")); err != nil {
+	if err := Run(t.TempDir(), "", strings.NewReader(Proceed+" go1.99.0\n"), newResults()); err != nil {
 		t.Fatal(err)
 	}
 	if versions, stops := app.calls(); len(versions) != 0 || stops != 0 {
@@ -202,7 +216,8 @@ func TestRunOwnsTelemetryApplication(t *testing.T) {
 	used := usedState(t)
 	input, cli := io.Pipe()
 	done := make(chan error, 1)
-	go func() { done <- Run(used, "", input) }()
+	results := newResults()
+	go func() { done <- Run(used, "", input, results) }()
 	if _, err := io.WriteString(cli, Proceed+" go1.99.0\n"); err != nil {
 		t.Fatal(err)
 	}
@@ -218,11 +233,64 @@ func TestRunOwnsTelemetryApplication(t *testing.T) {
 	if versions, stops := app.calls(); len(versions) != 1 || versions[0] != "go1.99.0" || stops != 0 {
 		t.Fatalf("while go test runs: started %v, stopped %d times", versions, stops)
 	}
+	select {
+	case <-results.closed:
+	default:
+		t.Fatal("the worker did not close its results once it wrote them")
+	}
 	_ = cli.Close()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
 	if versions, stops := app.calls(); len(versions) != 1 || stops != 1 {
 		t.Fatalf("after go test: started %v, stopped %d times", versions, stops)
+	}
+}
+
+// When the worker cannot write a result, it closes its results at once, so
+// that ddto records the result for the test processes waiting for it, and
+// still closes the telemetry application only after go test exits.
+func TestRunClosesResultsOnWriteFailure(t *testing.T) {
+	gitRepository(t)
+	t.Cleanup(utils.ResetHandedCLIGitStateForTesting)
+	t.Setenv(constants.CIVisibilityGitUploadEnabledEnvironmentVariable, "false")
+	app := &fakeTelemetry{}
+	originalClient, originalWrite := newClient, writeStateFile
+	newClient = func(string, string) (client, appTelemetry) { return &fakeClient{}, app }
+	writeStateFile = func(dir, name string, value any) error {
+		if name == utils.CLIGitUploadFile {
+			return errors.New("disk full")
+		}
+		return originalWrite(dir, name, value)
+	}
+	t.Cleanup(func() { newClient, writeStateFile = originalClient, originalWrite })
+
+	used := usedState(t)
+	input, cli := io.Pipe()
+	results := newResults()
+	done := make(chan error, 1)
+	go func() { done <- Run(used, "", input, results) }()
+	if _, err := io.WriteString(cli, Proceed+" go1.99.0\n"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-results.closed:
+	case <-time.After(time.Minute):
+		t.Fatal("the worker kept its results open after a failed write")
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("worker exited before go test: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	if _, stops := app.calls(); stops != 0 {
+		t.Fatalf("telemetry stopped %d times before go test exited", stops)
+	}
+	_ = cli.Close()
+	if err := <-done; err == nil {
+		t.Fatal("the failed write was not reported")
+	}
+	if _, stops := app.calls(); stops != 1 {
+		t.Fatalf("telemetry stopped %d times", stops)
 	}
 }

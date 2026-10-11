@@ -6,17 +6,22 @@ import (
 	"os"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/runner"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/globalconfig"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
 func main() {
+	// The SDK's process identity, which ddto links for its Git worker, hands
+	// its root session to child processes through the environment at
+	// initialization. ddto passes its caller's environment unchanged.
+	globalconfig.KeepCallerEnvironment()
 	// go test -exec entrypoint: restore the caller's Go settings first.
 	if len(os.Args) >= 2 && os.Args[1] == "test-exec" {
 		os.Exit(runner.ExecWithCallerEnvironment(os.Args[2:]))
 	}
 	// The Git worker that ddto test starts once per invocation.
 	if (len(os.Args) == 3 || len(os.Args) == 4) && os.Args[1] == "ci-git-worker" {
-		os.Exit(runner.RunGitWorker(context.Background(), os.Args[2:], os.Stdin, os.Stderr))
+		os.Exit(runner.RunGitWorker(context.Background(), os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	}
 	if len(os.Args) >= 5 && os.Args[1] == "tool-overlay" {
 		mode, plan, args := os.Args[2], os.Args[3], os.Args[4:]

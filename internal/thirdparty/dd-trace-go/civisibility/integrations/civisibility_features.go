@@ -148,9 +148,7 @@ func ensureSettingsInitialization(serviceName string) {
 			}
 		}
 		if cliUploadState != "" {
-			done := cidelivery.TrackBackground()
-			go func() {
-				defer done()
+			waitCLIUpload := func() {
 				defer close(uploadChannel)
 				var result utils.CLIGitUpload
 				if err := utils.WaitCLIGitStateFile(cliUploadState, utils.CLIGitUploadFile, &result, cliUploadWait); err != nil {
@@ -161,7 +159,18 @@ func ensureSettingsInitialization(serviceName string) {
 				} else {
 					log.Debug("civisibility: CLI uploaded %d bytes in pack files", result.Bytes)
 				}
-			}()
+			}
+			// Deferred delivery waits for the upload before admitting tests,
+			// as it waits for its own upload.
+			if cidelivery.Enabled() {
+				waitCLIUpload()
+			} else {
+				done := cidelivery.TrackBackground()
+				go func() {
+					defer done()
+					waitCLIUpload()
+				}()
+			}
 		} else if uploadEnabled {
 			repositoryUpload := snapshotRepositoryUploadHooks()
 

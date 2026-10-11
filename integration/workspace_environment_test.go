@@ -97,7 +97,7 @@ func init() { out, _ := exec.Command("go", "list", "-m").Output(); InitMain = st
 import ("fmt";"os";"os/exec";"strings";"testing";"example.com/environmenthelper")
 func TestEnvironment(t *testing.T) {
  fmt.Printf("ENV INIT_MAIN=%q\n", environmenthelper.InitMain)
- for _, name := range []string{"GOWORK", "GOFLAGS", "DDTO_ORIGINAL_GOWORK", "DDTO_ORIGINAL_GOFLAGS"} {
+ for _, name := range []string{"GOWORK", "GOFLAGS", "DDTO_ORIGINAL_GOWORK", "DDTO_ORIGINAL_GOFLAGS", "_DD_ROOT_GO_SESSION_ID"} {
   value, ok := os.LookupEnv(name)
   fmt.Printf("ENV %s=%t:%q\n", name, ok, value)
  }
@@ -532,7 +532,7 @@ func TestMiniExecWrapperSeesCallerEnvironment(t *testing.T) {
 		"main.go": `package main
 import ("fmt";"os";"os/exec")
 func main() {
- for _, name := range []string{"GOWORK", "GOFLAGS", "DDTO_ORIGINAL_GOWORK", "DDTO_ORIGINAL_GOFLAGS"} {
+ for _, name := range []string{"GOWORK", "GOFLAGS", "DDTO_ORIGINAL_GOWORK", "DDTO_ORIGINAL_GOFLAGS", "_DD_ROOT_GO_SESSION_ID"} {
   value, ok := os.LookupEnv(name)
   fmt.Printf("WRAPPER %s=%t:%q\n", name, ok, value)
  }
@@ -565,7 +565,7 @@ func main() {
 	args := []string{"test", "-v", "-count=1", "-exec=" + quoteToolArgument(t, binary) + ` PAYLOAD={"s":"don't"}`, "."}
 	native, nativeErr, nativeCode := command(t, client, env, "go", args...)
 	out, stderr, code := command(t, client, env, driver, args...)
-	if want, got := lines(native), lines(out); nativeCode != 0 || code != 0 || len(want) != 5 || !slices.Equal(got, want) {
+	if want, got := lines(native), lines(out); nativeCode != 0 || code != 0 || len(want) != 6 || !slices.Equal(got, want) {
 		t.Fatalf("native exit=%d %q\n%s%s\nddto exit=%d %q\n%s%s", nativeCode, want, native, nativeErr, code, got, out, stderr)
 	}
 }

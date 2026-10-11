@@ -1,0 +1,43 @@
+// Copyright 2026 Datadog, Inc. Licensed under the Apache License, Version 2.0.
+
+package utils
+
+import (
+	"io/fs"
+	"os"
+	"syscall"
+)
+
+// openUnlogged opens name as os.OpenFile does, without recording it in Go's
+// test log. Test processes read and create the CLI state's files while tests
+// run. If the state directory lies in the module, as with TMPDIR inside it,
+// go test would check those files, which change on every run, and would cache
+// no result.
+func openUnlogged(name string, flag int, perm uint32) (*os.File, error) {
+	fd, err := syscall.Open(name, flag|syscall.O_CLOEXEC, perm)
+	if err != nil {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+	}
+	return os.NewFile(uintptr(fd), name), nil
+}
+
+// createUnlogged creates name, which must not exist, without recording it in
+// Go's test log.
+func createUnlogged(name string) error {
+	file, err := openUnlogged(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err == nil {
+		err = file.Close()
+	}
+	return err
+}
+
+// existsUnlogged reports whether name can be opened, without recording it in
+// Go's test log.
+func existsUnlogged(name string) bool {
+	file, err := openUnlogged(name, os.O_RDONLY, 0)
+	if err != nil {
+		return false
+	}
+	_ = file.Close()
+	return true
+}

@@ -16,7 +16,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -69,11 +68,14 @@ var newClient = func(dir, runtimeID string) (client, appTelemetry) {
 // that use the state report under, and uploads the missing commits, as each
 // test process would, and records the end of the upload; meanwhile it
 // requests the settings, and if they enable impacted tests it records the
-// base commit and modified files. It closes the telemetry application after
-// go test exits. When go test exits without running a test process that uses
-// the state, as when every result comes from its cache, the worker exits
-// without changing the repository, uploading or sending telemetry.
-func Run(dir, runtimeID string, input io.Reader) error {
+// base commit and modified files. It closes results once it has written them,
+// or failed to, so that ddto records any missing result for the test
+// processes waiting for it. It closes the telemetry application after go test
+// exits. When go test exits without running a test process that uses the
+// state, as when every result comes from its cache, the worker exits without
+// changing the repository, uploading or sending telemetry.
+func Run(dir, runtimeID string, input io.Reader, results io.Closer) error {
+	defer results.Close()
 	if infra.BoolEnv("DD_TRACE_DEBUG", false) {
 		log.SetLevel(log.LevelDebug)
 	}
@@ -118,22 +120,24 @@ func Run(dir, runtimeID string, input io.Reader) error {
 		}()
 	}
 	uploaded := upload(c, uploadEnabled, search)
-	if err := writeState(dir, utils.CLIGitUploadFile, uploaded); err != nil {
-		return err
+	err := writeState(dir, utils.CLIGitUploadFile, uploaded)
+	if err == nil {
+		err = writeState(dir, utils.CLIGitImpactedFile, impacted(c, uploaded, settings))
 	}
-	if err := writeState(dir, utils.CLIGitImpactedFile, impacted(c, uploaded, settings)); err != nil {
-		return err
-	}
+	_ = results.Close()
 	// Test processes send their telemetry before go test exits, and the
 	// application closes after them, in one request with the worker's data.
 	<-exited
-	return nil
+	return err
 }
 
-// writeState writes a result that test processes wait for. If it fails, the
-// worker exits without waiting for go test, so that ddto records the result.
+// writeStateFile writes a state file; tests replace it.
+var writeStateFile = utils.WriteCLIGitStateFile
+
+// writeState writes a result that test processes wait for. If it fails, ddto
+// records the result once the worker closes its results.
 func writeState(dir, name string, value any) error {
-	err := utils.WriteCLIGitStateFile(dir, name, value)
+	err := writeStateFile(dir, name, value)
 	if err != nil {
 		logError("civisibility: CLI state not written", "file:"+name)
 	}
@@ -146,15 +150,16 @@ func logError(message string, tags ...string) {
 }
 
 // reportTestProcessFailures reports, under the invocation's application, the
-// requests that test processes could not deliver under it.
+// failures that test processes recorded: requests they could not deliver
+// under it, and sequences that fell back to local numbers.
 func reportTestProcessFailures(dir string) {
-	for code, count := range utils.CLITelemetryFailures(dir) {
-		tag := "status_code:" + strconv.Itoa(code)
-		if code == 0 {
-			tag = "type:network"
+	for tag, count := range utils.CLITelemetryFailures(dir) {
+		message := "civisibility: test process telemetry request failed"
+		if tag == utils.CLITelemetrySequenceFailure {
+			message = "civisibility: test process telemetry sequence unavailable"
 		}
 		for range count {
-			logError("civisibility: test process telemetry request failed", tag)
+			logError(message, tag)
 		}
 	}
 }

@@ -61,30 +61,59 @@ func startGitWorker(runtime Runtime, opts options, dir string, debug *cliDebug, 
 	if err != nil {
 		return nil
 	}
-	// The worker's telemetry application reports this process's runtime ID:
-	// the invocation is one application.
+	// The worker's telemetry application reports this process's runtime ID
+	// and root session: the invocation is one application. The root session
+	// reaches only the worker; ddto passes its caller's environment to go
+	// test unchanged.
 	cmd := exec.Command(executable, gitWorkerCommand, state, globalconfig.RuntimeID())
 	// Test processes run in their package directories with PWD set; the
 	// worker runs in the invocation's directory, with the same environment.
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "PWD="+dir)
+	cmd.Env = append(os.Environ(), "PWD="+dir, globalconfig.RootSessionEnv())
 	cmd.Stderr = stderr
-	input, err := cmd.StdinPipe()
-	if err == nil {
-		err = cmd.Start()
-	}
+	w, err := launchGitWorker(cmd, state, debug)
 	if err != nil {
 		debug.printf("git worker start failed: %v", err)
 		_ = os.RemoveAll(state)
 		return nil
 	}
+	return w
+}
+
+// launchGitWorker starts cmd, the worker for state. The worker closes its
+// output once it has written its results, or failed to, and keeps running
+// until go test exits; ddto then records any result that the worker did not
+// write, so that test processes stop waiting for it.
+func launchGitWorker(cmd *exec.Cmd, state string, debug *cliDebug) (*gitWorker, error) {
+	input, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	results, output, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	cmd.Stdout = output
+	err = cmd.Start()
+	_ = output.Close()
+	if err != nil {
+		_ = results.Close()
+		return nil, err
+	}
 	w := &gitWorker{state: state, cmd: cmd, input: input, exited: make(chan struct{}), debug: debug}
+	recorded := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, results)
+		_ = results.Close()
+		w.recordMissingResults()
+		close(recorded)
+	}()
 	go func() {
 		_ = cmd.Wait()
-		w.recordMissingResults()
+		<-recorded
 		close(w.exited)
 	}()
-	return w
+	return w, nil
 }
 
 // handOff decides whether test processes receive the worker's state, and
@@ -199,13 +228,14 @@ func (w *gitWorker) relaySignals(signals <-chan os.Signal) <-chan os.Signal {
 
 // RunGitWorker is ddto's private Git worker entry point. Its arguments are
 // the state directory and, optionally, the runtime ID of the invocation's
-// telemetry application; without it the worker owns no telemetry.
-func RunGitWorker(_ context.Context, args []string, stdin io.Reader, stderr io.Writer) int {
+// telemetry application; without it the worker owns no telemetry. It closes
+// results once it has written them.
+func RunGitWorker(_ context.Context, args []string, stdin io.Reader, results io.Closer, stderr io.Writer) int {
 	state, runtimeID := args[0], ""
 	if len(args) > 1 {
 		runtimeID = args[1]
 	}
-	if err := cligit.Run(state, runtimeID, stdin); err != nil {
+	if err := cligit.Run(state, runtimeID, stdin, results); err != nil {
 		fmt.Fprintln(stderr, "ddto git worker:", err)
 		return 1
 	}
