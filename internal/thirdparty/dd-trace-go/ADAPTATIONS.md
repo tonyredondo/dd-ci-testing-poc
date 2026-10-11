@@ -624,7 +624,8 @@ backend's commits while go test builds, a read-only request, but unshallows,
 packs and uploads only after a test process marks the state `used`, and then
 requests the settings as test processes do, concurrently with the upload.
 When go test takes every result from its cache, no process uses the state and
-the worker exits without changing the repository. The worker closes its
+the worker cancels its commit search, waits for it and exits without changing
+the repository. The worker closes its
 standard output once it has written its results, or failed to, and ddto then
 writes any missing result, so no process waits for its timeouts.
 
@@ -641,7 +642,11 @@ package-level `retryBackoff`, and the requests use `NewRequestWithContext`.
 The upload returns, `RemovePackFiles` removes its pack files, `upload.json`
 records the stop, and the worker logs it as telemetry and still sends
 `app-closing`. ddto kills only a worker that has not exited ten seconds after
-`stop`. Test processes, whose handler has no context and which never set the
+`stop`. The worker reads its input from its start, before its first Git
+command: the input ending before `exited` stops it too, and `exited` before
+`proceed`, as when ddto's preparation fails, ends it at once. The signals that
+ddto forwards to go test also reach the worker from the terminal, and the
+worker handles them as a `stop` with reason `signal`. Test processes, whose handler has no context and which never set the
 Git context, keep their behavior.
 Processes outside the worker's checkout, binaries run outside `ddto test`, the
 SDK runtime, Bazel's offline modes, `-c` and `-n`, and commands with a `-exec`
@@ -674,7 +679,12 @@ Checks: `TestMiniGitStateHandoff`, `TestMiniGitStateUploadsOnce`,
 `TestGitWorkerFinishStopsAfterUploadTimeout`,
 `TestGitWorkerFinishKillsAWorkerThatDoesNotStop`,
 `TestGitWorkerSignalStopsTheWorker`, `TestGitWorkerKeepsCIState`,
-`integration/TestMiniGitStateStopsUploadCleanly` and `TestReceiveRemovesGitState`,
+`TestGitWorkerFinishBoundsAStopBySignal`, `TestZipDirectoryKeepsLinks`,
+`TestRunStopsDuringRecordCollection`, `TestRunWaitsForTheStoppedSearch`,
+`TestRunStopsOnInterrupt`, `TestRunEndsWhenGoTestExitsWithoutTheState`,
+`TestRunProceedsWhenGoTestExitedFirst`,
+`integration/TestMiniGitStateStopsUploadCleanly`,
+`integration/TestMiniGitWorkerStopsOnInterrupt` and `TestReceiveRemovesGitState`,
 with the existing upload and impacted-tests tests in `integrations` and
 `impactedtests`.
 

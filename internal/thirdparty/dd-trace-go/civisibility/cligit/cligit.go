@@ -113,21 +113,16 @@ func Run(dir, runtimeID string, uploadWait time.Duration, input io.Reader, resul
 	if err := utils.WriteCLIGitStateFile(dir, utils.CLIGitRecordFile, record); err != nil {
 		return err
 	}
-	var goVersion string
-	select {
-	case version, ok := <-cli.proceed:
-		if !ok {
-			return nil
-		}
-		goVersion = version
-	case <-ctx.Done():
+	goVersion, ok := cli.goAhead(ctx)
+	if !ok {
 		return nil
 	}
 	uploadEnabled := infra.BoolEnv(constants.CIVisibilityGitUploadEnabledEnvironmentVariable, true)
 	search := searchAhead(c, uploadEnabled)
 	if !waitUsed(ctx, dir, cli.exited) {
-		// A stopped search ends its git commands, interrupted or killed,
-		// only while this process runs.
+		// No test process needs the search any more. Its git commands end,
+		// interrupted or killed, only while this process runs.
+		cancel()
 		if search != nil {
 			_, _ = search()
 		}
@@ -216,6 +211,26 @@ func listen(reader *bufio.Reader, stop context.CancelFunc) *cliInput {
 		}
 	}()
 	return in
+}
+
+// goAhead waits for the CLI to hand the state over and returns the test
+// processes' Go version. A quick go test can exit before the worker waits:
+// the proceed line, read before exited, still counts.
+func (in *cliInput) goAhead(ctx context.Context) (string, bool) {
+	select {
+	case version, ok := <-in.proceed:
+		return version, ok
+	case <-ctx.Done():
+		return "", false
+	case <-in.exited:
+	}
+	select {
+	case version, ok := <-in.proceed:
+		return version, ok
+	default:
+		// go test exited without the state, as when preparation failed.
+		return "", false
+	}
 }
 
 // interrupt stops the worker's work on a signal, as Stop does: the

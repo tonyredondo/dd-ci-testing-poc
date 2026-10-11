@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/goenv"
@@ -500,10 +499,11 @@ func RunGitWorker(_ context.Context, args []string, stdin io.Reader, results io.
 		}
 		uploadWait = wait
 	}
-	// The terminal's interrupt reaches the worker too: it stops its work as
-	// for a stop line, instead of exiting with its pack files left behind.
+	// The terminal's signals reach the worker too: it stops its work as for
+	// a stop line, instead of exiting with its pack files left behind. These
+	// are the signals that ddto forwards to go test.
 	interrupts := make(chan os.Signal, 1)
-	signal.Notify(interrupts, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(interrupts, forwardedSignals...)
 	defer signal.Stop(interrupts)
 	if err := cligit.Run(state, runtimeID, uploadWait, stdin, results, interrupts); err != nil {
 		fmt.Fprintln(stderr, "ddto git worker:", err)

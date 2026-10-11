@@ -476,36 +476,115 @@ func (c *slowSearchClient) GetCommits([]string) ([]string, error) {
 	return nil, c.ctx.Err()
 }
 
-// A worker stopped before a test process uses its state waits for its
-// search, whose git commands end only while the worker runs.
+// A worker that no test process used, because go test exited or ddto
+// stopped it, cancels and waits for its search, whose git commands end only
+// while the worker runs.
 func TestRunWaitsForTheStoppedSearch(t *testing.T) {
 	gitRepository(t)
-	t.Cleanup(utils.ResetHandedCLIGitStateForTesting)
-	clients := make(chan *slowSearchClient, 1)
-	original := newClient
-	newClient = func(ctx context.Context, _, _ string) (client, appTelemetry) {
-		search := &slowSearchClient{ctx: ctx, started: make(chan struct{})}
-		clients <- search
-		return search, nil
+	for _, end := range []string{Stop + " signal", Exited} {
+		t.Run(end, func(t *testing.T) {
+			t.Cleanup(utils.ResetHandedCLIGitStateForTesting)
+			clients := make(chan *slowSearchClient, 1)
+			original := newClient
+			newClient = func(ctx context.Context, _, _ string) (client, appTelemetry) {
+				search := &slowSearchClient{ctx: ctx, started: make(chan struct{})}
+				clients <- search
+				return search, nil
+			}
+			t.Cleanup(func() { newClient = original })
+			input, cli := io.Pipe()
+			defer cli.Close()
+			done := make(chan error, 1)
+			go func() { done <- Run(t.TempDir(), "", time.Minute, input, newResults(), nil) }()
+			if _, err := io.WriteString(cli, Proceed+" go1.99.0\n"); err != nil {
+				t.Fatal(err)
+			}
+			search := <-clients
+			<-search.started
+			if _, err := io.WriteString(cli, end+"\n"); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(30 * time.Second):
+				t.Fatal("the worker kept waiting for a search that no one needs")
+			}
+			if !search.finished.Load() {
+				t.Fatal("the worker exited before its stopped search")
+			}
+		})
 	}
+}
+
+// A quick go test can exit before the worker waits for the go-ahead: the
+// worker then reads proceed and exited together, and still uploads for the
+// test processes that used the state.
+func TestRunProceedsWhenGoTestExitedFirst(t *testing.T) {
+	gitRepository(t)
+	t.Cleanup(utils.ResetHandedCLIGitStateForTesting)
+	fake := &fakeClient{}
+	original, originalRecord := newClient, collectRecord
+	newClient = func(context.Context, string, string) (client, appTelemetry) { return fake, nil }
+	t.Cleanup(func() { newClient, collectRecord = original, originalRecord })
+	for i := 1; i <= 20; i++ {
+		utils.ResetHandedCLIGitStateForTesting()
+		input := &drainedReader{Reader: strings.NewReader(Proceed + " go1.99.0\n" + Exited + "\n"), drained: make(chan struct{})}
+		collectRecord = func(ctx context.Context) utils.CLIGitRecord {
+			// Both lines are read once the reader is asked for more.
+			<-input.drained
+			return originalRecord(ctx)
+		}
+		dir := usedState(t)
+		if err := Run(dir, "", time.Minute, input, newResults(), nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, uploads := fake.counts(); uploads != i {
+			t.Fatalf("run %d: %d uploads after go test exited before the go-ahead", i, uploads)
+		}
+	}
+}
+
+// drainedReader closes drained once its reader has no more data.
+type drainedReader struct {
+	io.Reader
+	drained chan struct{}
+	once    sync.Once
+}
+
+func (r *drainedReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if err != nil {
+		r.once.Do(func() { close(r.drained) })
+	}
+	return n, err
+}
+
+// go test can exit before ddto hands the state over, as when preparation
+// fails: the worker then exits at once.
+func TestRunEndsWhenGoTestExitsWithoutTheState(t *testing.T) {
+	gitRepository(t)
+	t.Cleanup(utils.ResetHandedCLIGitStateForTesting)
+	original := newClient
+	newClient = func(context.Context, string, string) (client, appTelemetry) { return &fakeClient{}, nil }
 	t.Cleanup(func() { newClient = original })
 	input, cli := io.Pipe()
 	defer cli.Close()
+	dir := t.TempDir()
 	done := make(chan error, 1)
-	go func() { done <- Run(t.TempDir(), "", time.Minute, input, newResults(), nil) }()
-	if _, err := io.WriteString(cli, Proceed+" go1.99.0\n"); err != nil {
+	go func() { done <- Run(dir, "", time.Minute, input, newResults(), nil) }()
+	if _, err := io.WriteString(cli, Exited+"\n"); err != nil {
 		t.Fatal(err)
 	}
-	search := <-clients
-	<-search.started
-	if _, err := io.WriteString(cli, Stop+" signal\n"); err != nil {
-		t.Fatal(err)
-	}
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
-	if !search.finished.Load() {
-		t.Fatal("the worker exited before its stopped search")
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the worker kept waiting for proceed after go test exited")
 	}
 }
 
