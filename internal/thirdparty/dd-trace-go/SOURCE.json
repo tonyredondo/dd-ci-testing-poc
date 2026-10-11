@@ -35,7 +35,7 @@
     },
     {
       "path": "TESTS.json",
-      "sha256": "6ec3cda576e619f163ae67f54bb0e1e70b3f7c855629452d51c921c104c096c0",
+      "sha256": "0a4e7f9c43466b27416b45eaae2acb720fe3256e924b98a89650930285b0a0d2",
       "role": "local"
     },
     {
@@ -225,14 +225,14 @@
     },
     {
       "path": "civisibility/integrations/civisibility_features.go",
-      "sha256": "1f926d4904b33f8a47de02ea1f31a354a62947062bda5b715123a0add972ee35",
+      "sha256": "baefc64b9460825b054918cc4ae04f7479031d4b711e012695ac8495a16d3603",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/civisibility_features.go",
       "source_sha256": "08c2f82bfc944754d4c7870cfd0c0fc5c4d257edcdea844f00a89bd9cc88f5d8"
     },
     {
       "path": "civisibility/integrations/civisibility_features_test.go",
-      "sha256": "95d60e7ae18a2bf8b2ff19f3d2215403c653059b4ca9cc4e083cb896d418a963",
+      "sha256": "9c5bf66af78f1bbf5e86816c7ad03f7f578a49a085ef573a59beb2c062b36459",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/civisibility_features_test.go",
       "source_sha256": "b305b518346a7916864815adf9b5dd0ab257ccc861bc8f4cff21d67a36e9d32e"
@@ -1150,7 +1150,7 @@
     },
     {
       "path": "civisibility/utils/net/client.go",
-      "sha256": "f2bacdf009f7f9d9e2a7fbfd364b70b64154350f2844d9a7a2c42e80b70e4f93",
+      "sha256": "4ea8baffc229d2ebcea4613c11f722b481558bc78c1d9b5ce36e31b9bf27cb24",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/net/client.go",
       "source_sha256": "bae03f2398dd7c75141e1b6b8f07e89676eb39e0884ab88b9af95211e797ec8b"
@@ -2132,12 +2132,22 @@
     },
     {
       "path": "civisibility/cligit/cligit.go",
-      "sha256": "637d621cb15067338ccc27fc3b29a624c1bafda3000ed6f1a01f1fee74c4d44d",
+      "sha256": "bd74b296bd5b1ff32870cd590e2af83757b21ca13e745c99430b1a34bd9c793f",
       "role": "local"
     },
     {
       "path": "civisibility/utils/cli_git_state.go",
-      "sha256": "d0764ef6f537f3bdef97358a012e7a14693fc47cb7a8f6ea2aafd9975391e96c",
+      "sha256": "3568c9b6998b50a3c6e4bf500d25cdf92483d7eeaf2e9debbaf7e96d265da924",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/cligit/cligit_test.go",
+      "sha256": "f82f9a1871368953719180e5a519da5260ae93ddc8509f34e95b0cbd4757317a",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/utils/gitupload/gitupload.go",
+      "sha256": "c45546e5e5f3cf9e88d5eddd8a28042068689118950864f3834cf5d6d01723f3",
       "role": "local"
     }
   ],

@@ -1,12 +1,18 @@
 package integration
 
 import (
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -133,5 +139,43 @@ func TestMiniGitStateHandoff(t *testing.T) {
 	}
 	if commands := gitCommands(t, otherTrace); !strings.Contains(commands, "rev-parse --show-toplevel") {
 		t.Fatalf("another checkout's state replaced Git:\n%s", commands)
+	}
+}
+
+// A ddto test run uploads the repository once, from its Git worker, instead
+// of once per test process.
+func TestMiniGitStateUploadsOnce(t *testing.T) {
+	dir, driver, _ := gitStateFixture(t)
+	sub := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(sub, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "sub_test.go"), []byte("package sub\n\nimport \"testing\"\n\nfunc TestSub(t *testing.T) {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	requests := map[string]int{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		mu.Lock()
+		requests[path.Base(r.URL.Path)]++
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/setting") {
+			fmt.Fprint(w, `{"data":{"id":"poc","type":"ci_app_test_service_libraries_settings","attributes":{"require_git":false,"impacted_tests_enabled":false,"early_flake_detection":{"enabled":false},"test_management":{"enabled":false}}}}`)
+			return
+		}
+		fmt.Fprint(w, `{"data":[]}`)
+	}))
+	defer server.Close()
+	env := testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL,
+		"DD_API_KEY=fixture", "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=true", "DD_GIT_REPOSITORY_URL=", "DD_GIT_COMMIT_SHA=")
+	if out, stderr, code := command(t, dir, env, driver, "test", "--runtime=mini", "-count=1", "-run=^Test(Pass|Sub)$", ".", "./sub"); code != 0 {
+		t.Fatalf("ddto test: %d %s %s", code, out, stderr)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if requests["search_commits"] != 1 || requests["packfile"] != 1 {
+		t.Fatalf("two test processes: %v", requests)
 	}
 }

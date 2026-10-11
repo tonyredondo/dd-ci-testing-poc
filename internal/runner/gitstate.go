@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sync/atomic"
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/goenv"
@@ -29,11 +30,12 @@ var gitWorkerExitWait = time.Minute
 // gitWorker runs, once per invocation, the Git work that every Mini test
 // process of the invocation's checkout would repeat: see package cligit.
 type gitWorker struct {
-	state  string
-	cmd    *exec.Cmd
-	input  io.WriteCloser
-	exited chan struct{}
-	debug  *cliDebug
+	state     string
+	cmd       *exec.Cmd
+	input     io.WriteCloser
+	exited    chan struct{}
+	debug     *cliDebug
+	proceeded atomic.Bool
 }
 
 // startGitWorker starts the worker in dir while ddto prepares the build, if
@@ -75,6 +77,7 @@ func startGitWorker(runtime Runtime, opts options, dir string, debug *cliDebug, 
 	w := &gitWorker{state: state, cmd: cmd, input: input, exited: make(chan struct{}), debug: debug}
 	go func() {
 		_ = cmd.Wait()
+		w.recordMissingResults()
 		close(w.exited)
 	}()
 	return w
@@ -102,12 +105,26 @@ func (w *gitWorker) handOff(testDirs []string, launcher bool) []string {
 		_ = w.input.Close()
 		return nil
 	}
+	w.proceeded.Store(true)
 	if _, err := fmt.Fprintln(w.input, cligit.Proceed); err != nil {
 		_ = w.input.Close()
 		return nil
 	}
 	_ = w.input.Close()
 	return []string{goenv.GitStateHandoff + "=" + w.state}
+}
+
+// recordMissingResults writes the results that a worker told to proceed did
+// not write before it exited, so test processes waiting for them continue.
+func (w *gitWorker) recordMissingResults() {
+	if !w.proceeded.Load() {
+		return
+	}
+	var upload utils.CLIGitUpload
+	if utils.ReadCLIGitStateFile(w.state, utils.CLIGitUploadFile, &upload) != nil {
+		w.debug.printf("git worker exited without an upload result")
+		_ = utils.WriteCLIGitStateFile(w.state, utils.CLIGitUploadFile, utils.CLIGitUpload{Error: "ddto git worker exited"})
+	}
 }
 
 // record waits up to timeout for the worker's Git record.

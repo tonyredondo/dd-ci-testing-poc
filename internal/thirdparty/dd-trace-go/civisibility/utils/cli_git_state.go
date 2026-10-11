@@ -30,6 +30,13 @@ const (
 	CLIGitImpactedFile = "impacted.json"
 )
 
+// CLIGitUpload records the end of the CLI's repository upload. Error is set
+// when the upload failed or the worker stopped before it ended.
+type CLIGitUpload struct {
+	Bytes int64  `json:"bytes"`
+	Error string `json:"error,omitempty"`
+}
+
 // CLIGitCommit is a commit's metadata as getLocalGitData and fetchCommitData
 // read it. Dates are Unix seconds, so that each process formats them in its
 // own location, as it does after git log.
@@ -207,6 +214,15 @@ func sameFile(a, b string) bool {
 	}
 	second, err := os.Stat(b)
 	return err == nil && os.SameFile(first, second)
+}
+
+// UseCLIGitState makes this process use record, which it collected itself,
+// as a test process uses the state that ddto hands it. ddto's Git worker
+// calls it before creating its CI tags, so it reads Git only once.
+func UseCLIGitState(dir string, record CLIGitRecord) {
+	cliGitStateOnce.Do(func() {
+		cliGitStateDir, cliGitRecord = dir, &record
+	})
 }
 
 // ResetHandedCLIGitStateForTesting forgets the handed state; readers must stop.
