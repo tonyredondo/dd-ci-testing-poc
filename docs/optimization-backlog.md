@@ -285,7 +285,7 @@ CPU microbenchmarks cannot establish that saving.
 
 Any test import missing from the selected packages' dependencies becomes a
 request in `internal/runner/testify.go:139-155` and switches the second query
-in `libraries.go:180-218` to `-deps`. That includes standard-library packages,
+in `libraries.go:46-75` to `-deps`. That includes standard-library packages,
 whose closure can never reach Testify, goleak or the SDK. A fixture whose tests
 import only `net/http/httptest` resolves 197 standard packages in 51–81 ms;
 preparation took 132–148 ms, against about 56 ms without the query. In an
@@ -523,8 +523,9 @@ key again (`gotesting/instrumentation.go:313-327`, written from
 `instrumentation_orchestrion.go:436`, `instrumentation.go:629`, `:751`, `:992`
 and `testing.go:873`); `T.Run` also takes the read lock to check it. A write
 took 20 ns serially and 129 ns with 18 writers; a get plus set took 203 ns
-against 42 ns for the get alone. With test metadata in a `sync.Map`, skipping the redundant writes
-saved another 3–4% in the parallel run, from a 0.67 to a 0.64 s median.
+against 42 ns for the get alone. With test metadata in a `sync.Map`, skipping
+the redundant writes saved another 3–4% in the parallel run, from a 0.67 to a
+0.64 s median.
 
 Record the five closure entry points once in an immutable set and check
 membership without a lock.
@@ -571,7 +572,8 @@ Detect subtests with `IndexByte`, build segments lazily, match by slicing
 ## 39. Source parsing at startup
 
 Parsed sources are cached; a cached lookup takes 17 ns
-(`civisibility/integrations/manual_api_sourcecache.go:264-317`). With EFD and
+(`civisibility/integrations/manual_api_sourcecache.go:134-141` and
+`:204-210`). With EFD and
 impacted tests, however, `IsTestFuncModified` (`gotesting/instrumentation.go:705-711`)
 parses the file of every known test during `M.Run` setup, including tests
 excluded by `-run`, which CI test splitting relies on. Otherwise the first test
@@ -645,7 +647,7 @@ candidate order, `findBestBranch` tie-breaking and the fetch side effects.
 This extends item 10. A binary served by the read cache spends its settings
 phase waiting for `app-started` (`civisibility/utils/net/client.go:226-255`,
 `civisibility/integrations/civisibility_features.go:124-127`): 102 ms with a
-100 ms round trip. At exit (`telemetry/globalclient.go:55-82`,
+100 ms round trip. At exit (`telemetry/globalclient.go:132-146`,
 `civisibility/integrations/civisibility.go:392`) it makes three serial round
 trips: `telemetry stop` took 216.8 ms after a 101 ms test-cycle flush.
 
@@ -718,8 +720,10 @@ its own key or version.
 - GitHub Actions job ID: each binary scans the runner's `Worker_*.log` files
   (`civisibility/utils/ci_providers.go:65-79`, `:130-169`): up to 10 MB read, a
   JSON attempt, a regular expression and a sort that stats files inside its
-  comparator. The CLI could resolve the ID once and export `JOB_CHECK_RUN_ID`,
-  which already takes precedence. Estimated 1–5 ms per binary.
+  comparator. The CLI could resolve the ID once and hand it to the binaries in a
+  private variable that the runtime removes before client code runs. Exporting
+  `JOB_CHECK_RUN_ID`, which already takes precedence, would change the
+  environment that tests see. Estimated 1–5 ms per binary.
 - CODEOWNERS: parsing costs 1.5 ms per 2,000 rules, and `newOwnership`'s
   `json.Marshal` is about 28% of that CPU; compute it on first use. The preload
   at `civisibility/integrations/civisibility.go:124` could overlap the settings
@@ -747,8 +751,9 @@ instrumentation: add a `-gcflags` entry for Mini's import paths that repeats
 the user's flags for those packages and adds `-race=false`. When a package
 matches several `-gcflags` patterns, cmd/go uses the last one, so the entry
 must come after the user's. Marking Mini's hot functions `//go:norace` also
-works outside the runtime, but covers only the annotated functions. User code stays instrumented, and the race runtime
-still tracks synchronization through `sync` and channels. The detector then no
+works outside the runtime, but covers only the annotated functions. User code
+stays instrumented, and the race runtime still tracks synchronization through
+`sync` and channels. The detector then no
 longer reports races inside Mini's code, including a user goroutine racing
 with Mini's reads of `testing` state. Mini's own CI keeps running its tests
 with `-race`. Build cache keys change only for `-race` builds.
@@ -772,8 +777,10 @@ generated file it already adds to the package. The runtime would look a test
 up in that table and parse only on a miss: Testify suite methods, manual
 `testopt.RunM` use and binaries built without the table. Keep the source-root,
 CODEOWNERS and source-range tags identical, including for generics, `//line`
-directives and build-tagged files. Removing `go/parser` from the binary also
-needs a build without that fallback.
+directives and build-tagged files. The table must also carry the
+`//dd:test.unskippable` and `//dd:suite.unskippable` directives, which make
+ITR run a test that the backend lists as skippable. Removing `go/parser` from
+the binary also needs a build without that fallback.
 
 ## 56. Preparation plan reused between invocations
 
@@ -786,13 +793,17 @@ CPU), and `go env`, the runtime probe and two `go mod edit` calls the rest.
 Cache the plan in the user cache: overlay entries, generated files, tool
 selection and library decisions. Key it on everything the queries read: the Go
 environment and version, `go.mod`, `go.sum`, `go.work` and any `-modfile`, the
-flags and build tags, the user's overlay, and the file names, build
-constraints and import declarations of every Go file in the main modules and
-local replacements. Reading those files costs far less than parsing them, but
-measure it on large modules. A miss runs today's path. An input missing from
-the key would reuse a wrong plan, so validate the key with a debug mode that
-also runs the queries and compares their results. Item 4 rules out a
-persistent cache for provisioning commands; this cache needs its own decision.
+flags and build tags, the user's overlay, and the file names, build constraints
+and import declarations of every Go file in the main modules and local
+replacements, ddto's version, and the contents of every source that preparation
+rewrites or inspects, such as `testing`, Testify's `suite` package and goleak.
+A local Testify replacement whose `suite.Run` body changes keeps its file names
+and imports, so without its contents the key would reuse the old rewritten
+copy. Reading those files costs far less than parsing them, but measure it on
+large modules. A miss runs today's path. An input missing from the key would
+reuse a wrong plan, so validate the key with a debug mode that also runs the
+queries and compares their results. Item 4 rules out a persistent cache for
+provisioning commands; this cache needs its own decision.
 
 ## 57. Events through the CLI
 
