@@ -5,7 +5,9 @@
 // It runs in the invocation's directory, with the test processes' environment,
 // so the SDK code it calls sees what a test process would see. It writes its
 // results to a state directory that the CLI hands to the test processes; see
-// utils.HandedCLIGitState.
+// utils.HandedCLIGitState. It also owns the invocation's telemetry
+// application, which those test processes report under; see
+// utils.HandedCLITelemetry.
 package cligit
 
 import (
@@ -14,6 +16,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	infra "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go"
@@ -23,11 +27,13 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/impactedtests"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/net"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry"
 )
 
-// Proceed is the line the CLI writes to the worker's input once test
-// processes will receive the state; end of input without it stops the worker.
-// After it, the CLI keeps the input open until go test exits.
+// Proceed starts the line that the CLI writes to the worker's input once test
+// processes will receive the state, followed by a space and their Go version;
+// end of input without it stops the worker. After it, the CLI keeps the input
+// open until go test exits.
 const Proceed = "proceed"
 
 // client is the part of the CI Visibility client that the worker uses.
@@ -36,43 +42,72 @@ type client interface {
 	GetSettings() (*net.SettingsResponseData, error)
 }
 
-// newClient creates the CI Visibility client; tests replace it.
-var newClient = func() client {
-	c := net.NewClientWithoutTelemetry("")
+// appTelemetry is the invocation's telemetry application, which the worker
+// owns: see net.CLITelemetry.
+type appTelemetry interface {
+	Start(languageVersion string)
+	Stop()
+}
+
+// newClient creates the CI Visibility client and the invocation's telemetry
+// application in the state directory dir; tests replace it.
+var newClient = func(dir, runtimeID string) (client, appTelemetry) {
+	c, t := net.NewCLIClient(dir, runtimeID)
 	if c == nil {
-		return nil
+		return nil, nil
 	}
-	return c
+	if t == nil {
+		return c, nil
+	}
+	return c, t
 }
 
 // Run writes the checkout's Git record to dir, then waits for the CLI. Once
 // told to proceed, it compares the local commits with the backend's while go
 // test builds, a read-only request. Once a test process uses the state, it
-// uploads the missing commits, as each test process would, and records the
-// end of the upload; meanwhile it requests the settings, and if they enable
-// impacted tests it records the base commit and modified files. When go test
-// exits without running a test process that uses the state, as when every
-// result comes from its cache, the worker exits without changing the
-// repository or uploading.
-func Run(dir string, input io.Reader) error {
+// starts the invocation's telemetry application, which the test processes
+// that use the state report under, and uploads the missing commits, as each
+// test process would, and records the end of the upload; meanwhile it
+// requests the settings, and if they enable impacted tests it records the
+// base commit and modified files. It closes the telemetry application after
+// go test exits. When go test exits without running a test process that uses
+// the state, as when every result comes from its cache, the worker exits
+// without changing the repository, uploading or sending telemetry.
+func Run(dir, runtimeID string, input io.Reader) error {
 	if infra.BoolEnv("DD_TRACE_DEBUG", false) {
 		log.SetLevel(log.LevelDebug)
 	}
 	record := utils.CollectCLIGitRecord()
+	utils.UseCLIGitState(dir, record)
+	// The telemetry application exists before the record, which ddto waits
+	// for before it hands the state over.
+	c, app := newClient(dir, runtimeID)
 	if err := utils.WriteCLIGitStateFile(dir, utils.CLIGitRecordFile, record); err != nil {
 		return err
 	}
-	utils.UseCLIGitState(dir, record)
 	reader := bufio.NewReader(input)
 	line, _ := reader.ReadString('\n')
-	if line != Proceed+"\n" {
+	verb, goVersion, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+	if !strings.HasSuffix(line, "\n") || verb != Proceed {
 		return nil
 	}
-	c := newClient()
 	uploadEnabled := infra.BoolEnv(constants.CIVisibilityGitUploadEnabledEnvironmentVariable, true)
 	search := searchAhead(c, uploadEnabled)
-	if !waitUsed(dir, reader) {
+	exited := drain(reader)
+	if !waitUsed(dir, exited) {
 		return nil
+	}
+	if app != nil {
+		started := make(chan struct{})
+		go func() {
+			defer close(started)
+			app.Start(goVersion)
+		}()
+		defer func() {
+			<-started
+			reportTestProcessFailures(dir)
+			app.Stop()
+		}()
 	}
 	// Test processes request the settings while they upload.
 	settings := make(chan settingsResult, 1)
@@ -83,10 +118,45 @@ func Run(dir string, input io.Reader) error {
 		}()
 	}
 	uploaded := upload(c, uploadEnabled, search)
-	if err := utils.WriteCLIGitStateFile(dir, utils.CLIGitUploadFile, uploaded); err != nil {
+	if err := writeState(dir, utils.CLIGitUploadFile, uploaded); err != nil {
 		return err
 	}
-	return utils.WriteCLIGitStateFile(dir, utils.CLIGitImpactedFile, impacted(c, uploaded, settings))
+	if err := writeState(dir, utils.CLIGitImpactedFile, impacted(c, uploaded, settings)); err != nil {
+		return err
+	}
+	// Test processes send their telemetry before go test exits, and the
+	// application closes after them.
+	<-exited
+	return nil
+}
+
+// writeState writes a result that test processes wait for. If it fails, the
+// worker exits without waiting for go test, so that ddto records the result.
+func writeState(dir, name string, value any) error {
+	err := utils.WriteCLIGitStateFile(dir, name, value)
+	if err != nil {
+		logError("civisibility: CLI state not written", "file:"+name)
+	}
+	return err
+}
+
+// logError reports a failure of the worker's work as a telemetry log.
+func logError(message string, tags ...string) {
+	telemetry.Log(telemetry.NewRecord(telemetry.LogError, message), telemetry.WithTags(tags))
+}
+
+// reportTestProcessFailures reports, under the invocation's application, the
+// requests that test processes could not deliver under it.
+func reportTestProcessFailures(dir string) {
+	for code, count := range utils.CLITelemetryFailures(dir) {
+		tag := "status_code:" + strconv.Itoa(code)
+		if code == 0 {
+			tag = "type:network"
+		}
+		for range count {
+			logError("civisibility: test process telemetry request failed", tag)
+		}
+	}
 }
 
 type settingsResult struct {
@@ -132,6 +202,7 @@ func upload(c client, uploadEnabled bool, search func() (*gitupload.SearchCommit
 	bytes, err := gitupload.Upload(hooks)
 	if err != nil {
 		log.Error("civisibility: error uploading repository changes: %s", err.Error())
+		logError("civisibility: CLI repository upload failed")
 		return utils.CLIGitUpload{Bytes: bytes, Error: err.Error()}
 	}
 	log.Debug("civisibility: uploaded %d bytes in pack files", bytes)
@@ -152,23 +223,34 @@ func impacted(c client, uploaded utils.CLIGitUpload, settings <-chan settingsRes
 	}
 	switch {
 	case err != nil:
+		logError("civisibility: CLI settings request failed")
 		return impactedtests.CLIState{Reason: "settings: " + err.Error()}
 	case response == nil || !response.ImpactedTestsEnabled:
 		return impactedtests.CLIState{Reason: "impacted tests disabled by the settings"}
 	case !infra.BoolEnv(constants.CIVisibilityImpactedTestsDetectionEnabled, true):
 		return impactedtests.CLIState{Reason: "impacted tests disabled by the environment"}
 	}
-	return impactedtests.ComputeCLIState()
+	state := impactedtests.ComputeCLIState()
+	if !state.Computed {
+		logError("civisibility: CLI impacted tests state not computed")
+	}
+	return state
 }
 
-// waitUsed waits until a test process marks the state as used, or the CLI
-// closes the input because go test has exited.
-func waitUsed(dir string, input io.Reader) bool {
-	closed := make(chan struct{})
+// drain reads the CLI's input to its end; the returned channel is closed
+// then, because go test has exited.
+func drain(input io.Reader) <-chan struct{} {
+	exited := make(chan struct{})
 	go func() {
 		_, _ = io.Copy(io.Discard, input)
-		close(closed)
+		close(exited)
 	}()
+	return exited
+}
+
+// waitUsed waits until a test process marks the state as used, or go test
+// exits.
+func waitUsed(dir string, exited <-chan struct{}) bool {
 	used := filepath.Join(dir, utils.CLIGitUsedFile)
 	delay := time.Millisecond
 	for {
@@ -176,7 +258,7 @@ func waitUsed(dir string, input io.Reader) bool {
 			return true
 		}
 		select {
-		case <-closed:
+		case <-exited:
 			_, err := os.Stat(used)
 			return err == nil
 		case <-time.After(delay):

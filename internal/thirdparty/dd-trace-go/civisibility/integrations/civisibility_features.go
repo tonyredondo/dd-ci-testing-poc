@@ -19,6 +19,7 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/impactedtests"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/net"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/telemetry"
 )
 
 const (
@@ -154,6 +155,7 @@ func ensureSettingsInitialization(serviceName string) {
 				var result utils.CLIGitUpload
 				if err := utils.WaitCLIGitStateFile(cliUploadState, utils.CLIGitUploadFile, &result, cliUploadWait); err != nil {
 					log.Debug("civisibility: CLI repository upload result unavailable: %s", err.Error())
+					telemetry.Log(telemetry.NewRecord(telemetry.LogError, "civisibility: CLI repository upload result unavailable"))
 				} else if result.Error != "" {
 					log.Debug("civisibility: CLI repository upload: %s", result.Error)
 				} else {

@@ -76,6 +76,8 @@ type Plan struct {
 	testLauncher bool
 	// testDirs are the directories of the packages that have tests.
 	testDirs []string
+	// goVersion is the selected toolchain's version, as go env reports it.
+	goVersion string
 }
 
 // savedEnvironment records the caller's values of the Go settings that go test
@@ -211,6 +213,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		return plan, fmt.Errorf("ddto requires Go 1.25 or newer; selected toolchain is %q", opts.environment.GOVERSION)
 	}
 	plan.testLauncher = opts.exec != "" || opts.environment.GOOS != opts.environment.GOHOSTOS || opts.environment.GOARCH != opts.environment.GOHOSTARCH
+	plan.goVersion = opts.environment.GOVERSION
 	debug.printf("toolchain=%q", opts.environment.GOVERSION)
 	if runtime == Mini {
 		if work := workspaceFile(dir); work != "" {
@@ -717,7 +720,7 @@ func RunRuntime(ctx context.Context, args []string, runtime Runtime, stdin io.Re
 		env = append(env, handoff...)
 		debug.printf("github job id handed found=%t", !strings.HasSuffix(handoff[0], "="))
 	}
-	env = append(env, gitWorker.handOff(plan.testDirs, plan.testLauncher)...)
+	env = append(env, gitWorker.handOff(plan.testDirs, plan.testLauncher, plan.goVersion)...)
 	if plan.launcher != nil {
 		ctx = context.WithValue(ctx, goLauncherKey{}, *plan.launcher)
 	}

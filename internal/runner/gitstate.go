@@ -15,6 +15,7 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/envconfig"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/impactedtests"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/globalconfig"
 )
 
 // gitWorkerCommand is ddto's private entry point for the Git worker.
@@ -60,7 +61,9 @@ func startGitWorker(runtime Runtime, opts options, dir string, debug *cliDebug, 
 	if err != nil {
 		return nil
 	}
-	cmd := exec.Command(executable, gitWorkerCommand, state)
+	// The worker's telemetry application reports this process's runtime ID:
+	// the invocation is one application.
+	cmd := exec.Command(executable, gitWorkerCommand, state, globalconfig.RuntimeID())
 	// Test processes run in their package directories with PWD set; the
 	// worker runs in the invocation's directory, with the same environment.
 	cmd.Dir = dir
@@ -88,8 +91,10 @@ func startGitWorker(runtime Runtime, opts options, dir string, debug *cliDebug, 
 // returns the environment entries for go test. The state is handed when the
 // record is ready in time and belongs to the checkout of a test package, and
 // no launcher, which would see the variable first, starts the test binaries.
-// Otherwise the worker stops and each test process reads Git as before.
-func (w *gitWorker) handOff(testDirs []string, launcher bool) []string {
+// Otherwise the worker stops and each test process reads Git, and reports
+// its telemetry, as before. goVersion is the test processes' Go version,
+// which the worker's telemetry application reports.
+func (w *gitWorker) handOff(testDirs []string, launcher bool, goVersion string) []string {
 	if w == nil {
 		return nil
 	}
@@ -107,7 +112,7 @@ func (w *gitWorker) handOff(testDirs []string, launcher bool) []string {
 		return nil
 	}
 	w.proceeded.Store(true)
-	if _, err := fmt.Fprintln(w.input, cligit.Proceed); err != nil {
+	if _, err := fmt.Fprintln(w.input, cligit.Proceed, goVersion); err != nil {
 		_ = w.input.Close()
 		return nil
 	}
@@ -192,9 +197,15 @@ func (w *gitWorker) relaySignals(signals <-chan os.Signal) <-chan os.Signal {
 	return relayed
 }
 
-// RunGitWorker is ddto's private Git worker entry point.
-func RunGitWorker(_ context.Context, state string, stdin io.Reader, stderr io.Writer) int {
-	if err := cligit.Run(state, stdin); err != nil {
+// RunGitWorker is ddto's private Git worker entry point. Its arguments are
+// the state directory and, optionally, the runtime ID of the invocation's
+// telemetry application; without it the worker owns no telemetry.
+func RunGitWorker(_ context.Context, args []string, stdin io.Reader, stderr io.Writer) int {
+	state, runtimeID := args[0], ""
+	if len(args) > 1 {
+		runtimeID = args[1]
+	}
+	if err := cligit.Run(state, runtimeID, stdin); err != nil {
 		fmt.Fprintln(stderr, "ddto git worker:", err)
 		return 1
 	}

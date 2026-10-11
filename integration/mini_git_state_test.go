@@ -153,19 +153,7 @@ func TestMiniGitStateHandoff(t *testing.T) {
 // of once per test process.
 func TestMiniGitStateUploadsOnce(t *testing.T) {
 	dir, driver, _ := gitStateFixture(t)
-	sub := filepath.Join(dir, "sub")
-	if err := os.MkdirAll(sub, 0700); err != nil {
-		t.Fatal(err)
-	}
-	subTest := filepath.Join(sub, "sub_test.go")
-	if err := os.WriteFile(subTest, []byte("package sub\n\nimport \"testing\"\n\nfunc TestSub(t *testing.T) {}\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	// Go does not cache a result that read a file modified in the last seconds.
-	old := time.Now().Add(-time.Hour)
-	if err := os.Chtimes(subTest, old, old); err != nil {
-		t.Fatal(err)
-	}
+	addSubPackage(t, dir)
 	var mu sync.Mutex
 	requests := map[string]int{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -212,6 +200,25 @@ func TestMiniGitStateUploadsOnce(t *testing.T) {
 	defer mu.Unlock()
 	if requests["packfile"] != 0 || requests["search_commits"] > 1 {
 		t.Fatalf("cached run: %v", requests)
+	}
+}
+
+// addSubPackage adds package sub, with TestSub, whose results Go can cache,
+// unlike the fixture's.
+func addSubPackage(t *testing.T, dir string) {
+	t.Helper()
+	sub := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(sub, 0700); err != nil {
+		t.Fatal(err)
+	}
+	subTest := filepath.Join(sub, "sub_test.go")
+	if err := os.WriteFile(subTest, []byte("package sub\n\nimport \"testing\"\n\nfunc TestSub(t *testing.T) {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Go does not cache a result that read a file modified in the last seconds.
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(subTest, old, old); err != nil {
+		t.Fatal(err)
 	}
 }
 
