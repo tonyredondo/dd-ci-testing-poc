@@ -1238,6 +1238,17 @@ remain failures. No sender/worker filters are widened to net/http or all testing
 validates common type/offset, F's own scheduler pointer and fuzzCalled bool.
 `nativeResult` reads cached failure/skip fields under common.mu. Only the
 post-M.Run drain reads duration; fatal drains use the captured finish time.
+When the drain read Go's duration, `fuzzFinishTime` uses it even when it is
+zero, clamping a negative accumulator to zero, so the event matches Go's
+printed time. The root subtracts the wait for parallel seeds, which it drains,
+from Go's accumulator; `completeParallelSubtestsWithState` measures that wait
+with `startNativeClock`, testing's own clock: QueryPerformanceCounter on
+Windows (`retry_attempt_time_windows.go`), the runtime's monotonic clock
+elsewhere. On Windows, the runtime's clock is coarser, so a wait measured on it
+could exceed the root's QPC-measured time and leave a zero or negative
+duration; the event then fell back to the wrapper's own clock, which includes
+the wait. `TestFuzzFinishTimeUsesKnownNativeDuration` and
+`TestNativeClockNestsInTestingDuration` check both.
 This removes the per-event private-field reflection and common wrapper allocation.
 Six repeated result-collection benchmarks are recorded in `docs/results`.
 

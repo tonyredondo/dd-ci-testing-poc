@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
@@ -169,7 +168,7 @@ func TestMiniCLITelemetry(t *testing.T) {
 	dir, driver, bin := gitStateFixture(t)
 	addSubPackage(t, dir)
 	agent := &telemetryAgent{}
-	server := httptest.NewServer(http.HandlerFunc(agent.handler))
+	server := newServer(http.HandlerFunc(agent.handler))
 	defer server.Close()
 	env := testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=false", "DD_TRACE_AGENT_URL="+server.URL,
 		"DD_INSTRUMENTATION_TELEMETRY_ENABLED=true", "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=true", "DD_GIT_REPOSITORY_URL=", "DD_GIT_COMMIT_SHA=")

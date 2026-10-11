@@ -295,6 +295,14 @@ SDK assertions use [`internal/testassert`](../internal/testassert/assert.go) and
 its fatal `require` wrappers. Preserve the assertion inputs and results when
 updating SDK tests; extend the helpers with standard-library code when needed.
 
+Integration tests start fake intakes with `newServer`
+([`integration/server_test.go`](../integration/server_test.go)), not
+`httptest.NewServer`. Test binaries share the SDK's short-lived read cache by
+intake URL, and binaries run directly by the test process share its scope. A
+server on a port that an earlier server used could otherwise see settings from
+that cache instead of being asked, as `TestMiniCodeOwnersCompiledServices` once
+did on CI. `newServer` never reuses an address within the process.
+
 The module declares Go 1.25 and uses that release's standard library APIs.
 `internal/compat` has only two Go 1.26 equivalents: `AsType` and `Pointer`.
 Keep native error matching and value ownership when changing them. Version

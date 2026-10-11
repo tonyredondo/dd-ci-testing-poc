@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path"
@@ -157,7 +156,7 @@ func TestMiniGitStateUploadsOnce(t *testing.T) {
 	addSubPackage(t, dir)
 	var mu sync.Mutex
 	requests := map[string]int{}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		mu.Lock()
 		requests[path.Base(r.URL.Path)]++
@@ -229,7 +228,7 @@ func runImpactedCase(t *testing.T, dir, bin string, env []string) string {
 	t.Helper()
 	c := &miniWireCapture{}
 	c.profile = "impacted"
-	server := httptest.NewServer(http.HandlerFunc(c.handler))
+	server := newServer(http.HandlerFunc(c.handler))
 	defer server.Close()
 	scratch := t.TempDir()
 	env = append(testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL,
@@ -300,7 +299,7 @@ func TestMiniGitStateImpactedTests(t *testing.T) {
 	// The worker needs the same settings as the test process.
 	c := &miniWireCapture{}
 	c.profile = "impacted"
-	server := httptest.NewServer(http.HandlerFunc(c.handler))
+	server := newServer(http.HandlerFunc(c.handler))
 	defer server.Close()
 	workerEnv := append(append([]string(nil), fromGit...), "DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true",
 		"DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_API_KEY=fixture", "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=true")
@@ -327,7 +326,7 @@ func TestMiniGitStateDeferredWaitsForUpload(t *testing.T) {
 	dir, driver, bin := gitStateFixture(t)
 	state := runGitWorker(t, dir, driver, "")
 	c := &miniWireCapture{}
-	server := httptest.NewServer(http.HandlerFunc(c.handler))
+	server := newServer(http.HandlerFunc(c.handler))
 	defer server.Close()
 	env := testEnv("DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL,
 		"DD_API_KEY=fixture", "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=true", "DD_CIVISIBILITY_DEFERRED_DELIVERY=true", "DD_TRACE_DEBUG=true",
@@ -375,7 +374,7 @@ func TestMiniGitStateCacheWithTemporaryDirectoryInModule(t *testing.T) {
 	if err := os.Mkdir(temp, 0700); err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		w.Header().Set("Content-Type", "application/json")
 		switch {

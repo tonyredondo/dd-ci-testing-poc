@@ -64,6 +64,7 @@
       "TestMiniVendorSelectionMatchesGo",
       "TestMiniVendorTreeMatchesGo",
       "TestMiniVendorWorkspaceLinksAndReusesBuildCache",
+      "TestNewServerSkipsUsedAddresses",
       "TestParallelNormalizationPreservesOutput",
       "TestResultCache",
       "TestSDKProvisionProgressUsesStderr",
