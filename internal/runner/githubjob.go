@@ -28,8 +28,9 @@ func handGitHubJobID(runtime Runtime, debug *cliDebug) func() []string {
 		return func() []string { return nil }
 	}
 	found := make(chan string, 1)
+	dirs := gitHubDiagnosticsDirs
 	go func() {
-		id, _ := githubjob.FromDiagnostics(gitHubDiagnosticsDirs(), debug.printf)
+		id, _ := githubjob.FromDiagnostics(dirs(), debug.printf)
 		found <- id
 	}()
 	return sync.OnceValue(func() []string {
