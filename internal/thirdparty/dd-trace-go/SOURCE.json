@@ -1000,7 +1000,7 @@
     },
     {
       "path": "civisibility/utils/environmentTags.go",
-      "sha256": "5bfe55ce8675e5d8b6cd6677f309dc04deca327da4ca8f3aef5428fe7e7b4667",
+      "sha256": "90141176a5ef2a612daeceecb640d2387dd75c148429ef8636a7e427b77d5b78",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/environmentTags.go",
       "source_sha256": "b9edfc59d95da35311eef551751a52a3e74a607d0cc9dd3229bfbd175519f428"
@@ -2128,6 +2128,16 @@
     {
       "path": "civisibility/utils/githubjob/githubjob_test.go",
       "sha256": "0065b70a085fc439f3561fb36a1d62708c94ed7a0af0c2e6ec1d0ef18269e16a",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/cligit/cligit.go",
+      "sha256": "637d621cb15067338ccc27fc3b29a624c1bafda3000ed6f1a01f1fee74c4d44d",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/utils/cli_git_state.go",
+      "sha256": "d0764ef6f537f3bdef97358a012e7a14693fc47cb7a8f6ea2aafd9975391e96c",
       "role": "local"
     }
   ],
