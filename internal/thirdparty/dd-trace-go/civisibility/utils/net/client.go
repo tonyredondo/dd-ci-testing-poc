@@ -291,7 +291,7 @@ func newClientWithServiceNameAndSubdomain(serviceName, subdomain string) (Client
 			RuntimeVersion: ciTags[constants.RuntimeVersion],
 			Custom:         customConfiguration,
 		},
-		readCacheScopeIdentity: cliReadCacheScopeIdentity(newReadCacheScopeIdentity(ciTags), cliStateDir()),
+		readCacheScopeIdentity: cliReadCacheScopeIdentity(newReadCacheScopeIdentity(ciTags), cliStateDir(), apiKeyValue),
 		headers:                defaultHeaders,
 		handler:                requestHandler,
 	}, startTelemetry

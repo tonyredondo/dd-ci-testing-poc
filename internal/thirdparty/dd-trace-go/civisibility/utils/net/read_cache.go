@@ -103,6 +103,9 @@ type (
 		Source []string
 		Hash   string
 		TTL    time.Duration
+		// directory names the cli scope's entries' directory, which only the
+		// state directory identifies.
+		directory string
 	}
 
 	// readCacheEndpointScope identifies the cacheable endpoint and semantic request payload.
@@ -248,12 +251,24 @@ func newReadCacheScopeIdentity(ciTags map[string]string) readCacheScopeIdentity 
 // processes, which have another parent. CI scopes already include both. The
 // entries last as long as the invocation, whose build can take minutes: they
 // live in its own directory, which ddto removes (RemoveCLIReadCache).
-func cliReadCacheScopeIdentity(identity readCacheScopeIdentity, dir string) readCacheScopeIdentity {
+//
+// The scope also holds a digest of the process's credential: a test process
+// whose API key differs from the worker's, as one that TestMain changed,
+// makes its own requests. The upstream scopes leave the credential out.
+func cliReadCacheScopeIdentity(identity readCacheScopeIdentity, dir, credential string) readCacheScopeIdentity {
 	if identity.Kind != readCacheScopeLocal || dir == "" {
 		return identity
 	}
-	values := []readCacheIdentityValue{{Name: "cli_state", Value: dir}}
-	return newReadCacheScopeIdentityFromValues(readCacheScopeCLI, time.Hour, values)
+	values := []readCacheIdentityValue{{Name: "cli_state", Value: dir}, {Name: "credential", Value: readCacheHashString(credential)}}
+	scoped := newReadCacheScopeIdentityFromValues(readCacheScopeCLI, time.Hour, values)
+	scoped.directory = cliReadCacheDirectoryName(dir)
+	return scoped
+}
+
+// cliReadCacheDirectoryName names the directory of the entries of ddto's
+// invocation whose state is in dir.
+func cliReadCacheDirectoryName(dir string) string {
+	return readCacheHashString(dir)
 }
 
 // readCacheSubdirectory returns the directory, in the shared one, of the
@@ -262,7 +277,7 @@ func readCacheSubdirectory(identity readCacheScopeIdentity) string {
 	if identity.Kind != readCacheScopeCLI {
 		return ""
 	}
-	return filepath.Join(readCacheCLIDirectory, identity.Hash)
+	return filepath.Join(readCacheCLIDirectory, identity.directory)
 }
 
 // RemoveCLIReadCache removes the read-cache entries of ddto's invocation
@@ -270,11 +285,10 @@ func readCacheSubdirectory(identity readCacheScopeIdentity) string {
 // It also removes the expired entries of invocations that ended without
 // removing theirs.
 func RemoveCLIReadCache(stateDir string) error {
-	identity := cliReadCacheScopeIdentity(readCacheScopeIdentity{Kind: readCacheScopeLocal}, stateDir)
-	if identity.Kind != readCacheScopeCLI {
+	if stateDir == "" {
 		return nil
 	}
-	dir, err := readCacheDirectory(readCacheSubdirectory(identity))
+	dir, err := readCacheDirectory(filepath.Join(readCacheCLIDirectory, cliReadCacheDirectoryName(stateDir)))
 	if err != nil {
 		return err
 	}

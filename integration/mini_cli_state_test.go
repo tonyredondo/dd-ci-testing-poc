@@ -364,7 +364,7 @@ func TestMiniCLIStateSharedRequests(t *testing.T) {
 		described = append(described, p.Dir+";"+p.ModulePath+";"+p.ModuleDir)
 	}
 	slices.Sort(described)
-	listed := strings.Fields(module)
+	listed := strings.Split(strings.TrimSpace(module), "\n")
 	slices.Sort(listed)
 	if tests.GOARCH != runtime.GOARCH || !slices.Equal(described, listed) {
 		t.Fatalf("ddto described %+v; go list reports %v", tests, listed)

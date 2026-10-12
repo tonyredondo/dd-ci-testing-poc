@@ -10,12 +10,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
+	civisibilityutils "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
 )
 
 // A local run's read-cache scope is ddto's invocation when the process uses
@@ -25,17 +27,17 @@ func TestCLIReadCacheScopeIdentity(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	setReadCacheHooksForTest(t, t.TempDir(), &now, 111, 222)
 	local := newReadCacheScopeIdentity(map[string]string{})
-	worker := cliReadCacheScopeIdentity(local, "/state")
+	worker := cliReadCacheScopeIdentity(local, "/state", "")
 	setReadCacheHooksForTest(t, t.TempDir(), &now, 333, 444)
-	process := cliReadCacheScopeIdentity(newReadCacheScopeIdentity(map[string]string{}), "/state")
+	process := cliReadCacheScopeIdentity(newReadCacheScopeIdentity(map[string]string{}), "/state", "")
 
 	require.Equal(t, readCacheScopeCLI, worker.Kind)
 	require.Equal(t, time.Hour, worker.TTL)
 	require.Equal(t, worker, process)
-	assert.NotEqual(t, worker.Hash, cliReadCacheScopeIdentity(local, "/other").Hash)
-	require.Equal(t, local, cliReadCacheScopeIdentity(local, ""))
+	assert.NotEqual(t, worker.Hash, cliReadCacheScopeIdentity(local, "/other", "").Hash)
+	require.Equal(t, local, cliReadCacheScopeIdentity(local, "", ""))
 	strong := newReadCacheScopeIdentity(map[string]string{constants.CIProviderName: "github", constants.CIJobID: "job"})
-	require.Equal(t, strong, cliReadCacheScopeIdentity(strong, "/state"))
+	require.Equal(t, strong, cliReadCacheScopeIdentity(strong, "/state", ""))
 }
 
 // The worker's copies of its client request as the test processes do,
@@ -89,11 +91,11 @@ func TestCLIReadCacheLastsTheInvocation(t *testing.T) {
 	// their JSON encoding.
 	worker := newReadCacheTestClient(map[string]string{})
 	worker.testConfigurations.Custom = nil
-	worker.readCacheScopeIdentity = cliReadCacheScopeIdentity(worker.readCacheScopeIdentity, "/state")
+	worker.readCacheScopeIdentity = cliReadCacheScopeIdentity(worker.readCacheScopeIdentity, "/state", "")
 	setReadCacheHooksForTest(t, root, &now, 333, 444)
 	process := newReadCacheTestClient(map[string]string{})
 	process.testConfigurations.Custom = nil
-	process.readCacheScopeIdentity = cliReadCacheScopeIdentity(process.readCacheScopeIdentity, "/state")
+	process.readCacheScopeIdentity = cliReadCacheScopeIdentity(process.readCacheScopeIdentity, "/state", "")
 	request := map[string]string{"request": "ahead"}
 	live := 0
 	fetch := func(c *client) string {
@@ -253,7 +255,7 @@ func TestReadCacheCleanupLeavesAnEntryBeingRenewed(t *testing.T) {
 func TestReadCacheLockRecreatesRemovedDirectory(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	setReadCacheHooksForTest(t, t.TempDir(), &now, 111, 222)
-	identity := cliReadCacheScopeIdentity(newReadCacheScopeIdentity(map[string]string{}), "/state")
+	identity := cliReadCacheScopeIdentity(newReadCacheScopeIdentity(map[string]string{}), "/state", "")
 	paths, err := readCachePathsIn(readCacheSubdirectory(identity), "key")
 	require.NoError(t, err)
 	require.NoError(t, os.Remove(paths.Dir))
@@ -308,4 +310,66 @@ func TestReadCacheCleanupRemovesOnlyAsLockOwner(t *testing.T) {
 	releaseReadCacheLock(owner)
 	_, err = os.Stat(paths.CacheFile)
 	require.True(t, os.IsNotExist(err))
+}
+
+// A test process whose credential differs from the worker's, as one whose
+// TestMain changed DD_API_KEY, takes none of the worker's responses: they are
+// another account's. Both keep the invocation's one directory, and no entry
+// holds a credential.
+func TestCLIReadCacheSeparatesCredentials(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	root := t.TempDir()
+	setReadCacheHooksForTest(t, root, &now, 111, 222)
+	withKey := func(key string) *client {
+		c := newReadCacheTestClient(map[string]string{})
+		c.testConfigurations.Custom = nil
+		c.readCacheScopeIdentity = cliReadCacheScopeIdentity(c.readCacheScopeIdentity, "/state", key)
+		return c
+	}
+	fetch := func(c *client, response string) string {
+		t.Helper()
+		value, err := readThroughShortLivedCache(c, "unit", map[string]string{"request": "settings"}, func() (readCacheLiveResult[string], error) {
+			return readCacheLiveResult[string]{Value: response, Cacheable: true}, nil
+		}, nil)
+		require.NoError(t, err)
+		return value
+	}
+
+	require.Equal(t, "A", fetch(withKey("key-a"), "A"))
+	require.Equal(t, "B", fetch(withKey("key-b"), "B"))
+	require.Equal(t, "A", fetch(withKey("key-a"), "not requested"))
+	directory := readCacheSubdirectory(withKey("key-a").readCacheScopeIdentity)
+	require.Equal(t, directory, readCacheSubdirectory(withKey("key-b").readCacheScopeIdentity))
+	entries, err := os.ReadDir(filepath.Join(root, "dd-trace-go", "civisibility-read-cache", directory))
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	for _, entry := range entries {
+		data, err := os.ReadFile(filepath.Join(root, "dd-trace-go", "civisibility-read-cache", directory, entry.Name()))
+		require.NoError(t, err)
+		require.False(t, strings.Contains(string(data), "key-a") || strings.Contains(string(data), "key-b"), entry.Name())
+	}
+}
+
+// The clients of ddto's invocation take their scope's credential from their
+// own API key.
+func TestCLIClientScopeIncludesCredential(t *testing.T) {
+	origEnv := saveEnv()
+	defer restoreEnv(origEnv)
+	civisibilityutils.ResetHandedCLIGitStateForTesting()
+	t.Cleanup(civisibilityutils.ResetHandedCLIGitStateForTesting)
+	civisibilityutils.UseCLIGitState(t.TempDir(), civisibilityutils.CLIGitRecord{})
+	path := os.Getenv("PATH")
+	scope := func(key string) readCacheScopeIdentity {
+		t.Helper()
+		setCiVisibilityEnv(path, "https://custom.agentless.url")
+		os.Setenv("DD_API_KEY", key)
+		c, ok := NewClient().(*client)
+		require.True(t, ok)
+		return c.readCacheScopeIdentity
+	}
+	a, b := scope("key-a"), scope("key-b")
+	require.Equal(t, readCacheScopeCLI, a.Kind)
+	assert.NotEqual(t, a.Hash, b.Hash)
+	require.Equal(t, readCacheSubdirectory(a), readCacheSubdirectory(b))
+	require.Equal(t, a, scope("key-a"))
 }
