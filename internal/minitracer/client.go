@@ -44,6 +44,7 @@ type Client struct {
 	ready                  []readyBatch    // Sealed batches, oldest first.
 	inflight               int             // Sealed batches being delivered.
 	inflightDone           chan struct{}   // Closed when inflight returns to zero, if awaited.
+	slotFreed              chan struct{}   // Closed when a delivery completes, if awaited.
 	spare                  []*ciEvent      // Delivered storage reused by the next open batch.
 	senders                int             // Running background senders.
 	sendersBusy            int             // Background senders delivering a batch.

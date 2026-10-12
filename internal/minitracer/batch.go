@@ -232,6 +232,10 @@ func (c *Client) completeLocked(batch readyBatch, err error) {
 		close(c.inflightDone)
 		c.inflightDone = nil
 	}
+	if c.slotFreed != nil {
+		close(c.slotFreed)
+		c.slotFreed = nil
+	}
 	if err != nil {
 		c.lastErr = err
 		c.failing = true
@@ -299,17 +303,30 @@ type drain struct {
 // Without background senders, in deferred mode and once Close has stopped
 // them in ordinary mode, the caller sends together with drainWorker
 // goroutines, up to maxConcurrentSends deliveries with those still in flight;
-// with no free slot it sends nothing, and its flush waits for them before
-// draining again. They all finish before it returns: no delivery goroutine
-// outlives a checkpoint, Flush or Close. Payloads sent together can arrive in
-// any order.
+// with no free slot it first waits for a delivery to complete. They all finish
+// before it returns: no delivery goroutine outlives a checkpoint, Flush or
+// Close. Payloads sent together can arrive in any order.
 func (c *Client) drainLocked(ctx context.Context, perBatchTimeout bool) error {
 	d := &drain{ctx: ctx, perBatchTimeout: perBatchTimeout}
 	var workers sync.WaitGroup
 	c.mu.Lock()
 	senders := 1
-	if c.deferUntilIdle || c.closed {
+	for c.deferUntilIdle || c.closed {
 		senders = min(len(c.ready), maxConcurrentSends-c.inflight)
+		if senders > 0 || len(c.ready) == 0 {
+			break
+		}
+		if c.slotFreed == nil {
+			c.slotFreed = make(chan struct{})
+		}
+		freed := c.slotFreed
+		c.mu.Unlock()
+		select {
+		case <-freed:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		c.mu.Lock()
 	}
 	ready, inflight, closed := len(c.ready), c.inflight, c.closed
 	c.mu.Unlock()

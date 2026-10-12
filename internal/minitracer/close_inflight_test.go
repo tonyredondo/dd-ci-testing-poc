@@ -106,7 +106,8 @@ func TestCloseDrainsBacklogConcurrently(t *testing.T) {
 }
 
 // With every slot taken by background deliveries, Close's partial batch waits
-// for them instead of becoming a ninth concurrent request.
+// for one to free instead of becoming a ninth concurrent request, and then
+// starts at once, while the others are still in flight.
 func TestCloseWaitsForAFreeSendSlot(t *testing.T) {
 	recorder := &log.RecordLogger{}
 	t.Cleanup(log.UseLogger(recorder))
@@ -114,16 +115,21 @@ func TestCloseWaitsForAFreeSendSlot(t *testing.T) {
 	t.Cleanup(func() { log.SetLevel(level) })
 	log.SetLevel(log.LevelDebug)
 	var received deliveries
-	var active, peak atomic.Int32
-	release := make(chan struct{})
+	var requests, active, peak atomic.Int32
+	gate := make(chan struct{}, maxConcurrentSends)
+	partial := make(chan int32, 1) // Requests in flight when the partial batch arrives.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		n := active.Add(1)
 		defer active.Add(-1)
 		for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
 		}
-		select {
-		case <-release:
-		case <-time.After(2 * time.Second):
+		if requests.Add(1) > maxConcurrentSends {
+			partial <- n
+		} else {
+			select {
+			case <-gate:
+			case <-time.After(5 * time.Second):
+			}
 		}
 		received.record(t, r)
 		w.WriteHeader(202)
@@ -138,9 +144,28 @@ func TestCloseWaitsForAFreeSendSlot(t *testing.T) {
 		span.Finish()
 	}
 	waitFor(t, func() bool { return active.Load() == maxConcurrentSends })
-	// Leave time for a request beyond the bound to arrive.
-	time.AfterFunc(100*time.Millisecond, func() { close(release) })
-	if err := client.Close(context.Background()); err != nil {
+	closed := make(chan error, 1)
+	go func() { closed <- client.Close(context.Background()) }()
+	waitFor(t, func() bool {
+		client.mu.Lock()
+		defer client.mu.Unlock()
+		return client.closed && len(client.ready) == 1 && client.slotFreed != nil
+	})
+	// Leave time for a request beyond the bound to arrive, then free one slot.
+	time.Sleep(100 * time.Millisecond)
+	gate <- struct{}{}
+	select {
+	case n := <-partial:
+		if n != maxConcurrentSends {
+			t.Fatalf("the partial batch arrived with %d requests in flight", n)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the partial batch waited for every delivery in flight")
+	}
+	for range maxConcurrentSends - 1 {
+		gate <- struct{}{}
+	}
+	if err := <-closed; err != nil {
 		t.Fatal(err)
 	}
 	if delivered := received.distinct(t); delivered != 2*maxConcurrentSends+1 || client.DroppedEvents() != 0 {
@@ -149,13 +174,46 @@ func TestCloseWaitsForAFreeSendSlot(t *testing.T) {
 	if p := peak.Load(); p != maxConcurrentSends {
 		t.Fatalf("concurrent requests: %d", p)
 	}
-	logs := strings.Join(recorder.Logs(), "\n")
-	for _, want := range []string{"final drain batches=1 in_flight=8 senders=0", "final drain batches=1 in_flight=0 senders=1"} {
-		if !strings.Contains(logs, want) {
-			t.Fatalf("missing %q:\n%s", want, logs)
-		}
+	if logs := strings.Join(recorder.Logs(), "\n"); !strings.Contains(logs, "final drain batches=1 in_flight=7 senders=1") {
+		t.Fatalf("missing final drain:\n%s", logs)
 	}
 	waitForNoDrainWorkers(t)
+}
+
+// Waiting for a free slot ends with Close's deadline: the waiting batch is
+// abandoned and the error returned.
+func TestCloseSlotWaitHonorsDeadline(t *testing.T) {
+	var active atomic.Int32
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		active.Add(1)
+		defer active.Add(-1)
+		select {
+		case <-release:
+		case <-time.After(5 * time.Second):
+		}
+		w.WriteHeader(202)
+	}))
+	defer server.Close()
+	defer close(release)
+	client, err := New(Config{MaxEvents: 2, Transport: citransport.Config{Endpoint: server.URL}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2*maxConcurrentSends + 1 {
+		span, _ := client.StartSpan(context.Background(), "test", SpanType("test"))
+		span.Finish()
+	}
+	waitFor(t, func() bool { return active.Load() == maxConcurrentSends })
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	if err := client.Close(ctx); err != context.DeadlineExceeded {
+		t.Fatalf("Close: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > 2*time.Second || client.DroppedEvents() != 1 {
+		t.Fatalf("Close took %v and dropped %d events", elapsed, client.DroppedEvents())
+	}
 }
 
 func TestCloseReportsFailedBackgroundDelivery(t *testing.T) {
