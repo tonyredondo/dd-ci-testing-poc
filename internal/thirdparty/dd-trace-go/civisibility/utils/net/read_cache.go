@@ -74,11 +74,12 @@ const (
 	// readCacheWaiterTimeout is how long waiters wait for another process to
 	// fill the cache when they cannot tell whether that process still runs.
 	readCacheWaiterTimeout = 2 * time.Second
-	// readCacheWaiterLiveOwnerTimeout bounds, from the lock's creation, the
-	// wait for an owner that still runs: about the longest that a request with
-	// its pages and retries should take. A slow owner then serves its waiters
-	// instead of each one sending the request again.
-	readCacheWaiterLiveOwnerTimeout = 30 * time.Second
+	// readCacheWaiterLiveOwnerTimeout bounds the wait for an owner that still
+	// runs, both from the start of the wait and from the lock's creation. It
+	// exceeds what a paginated response takes, so a slow owner serves its
+	// waiters instead of each one sending the request again; an owner slower
+	// than this costs its waiters this wait and their own request.
+	readCacheWaiterLiveOwnerTimeout = 2 * time.Minute
 	// readCacheStaleLockTimeout is intentionally much longer than the HTTP request path.
 	readCacheStaleLockTimeout = time.Hour
 	// readCacheGlobalCleanupMaxEntries bounds opportunistic directory cleanup.
@@ -822,8 +823,10 @@ const (
 
 // waitForReadCacheEntry waits for the lock owner's entry. It waits up to
 // readCacheWaiterTimeout, and longer while the owner still runs and its lock
-// is younger than readCacheWaiterLiveOwnerTimeout. It stops when ctx is done:
-// ddto's Git worker, which stopped, does not wait for another process.
+// is younger than readCacheWaiterLiveOwnerTimeout, but never longer than that
+// from its own start: a lock that new owners keep replacing cannot extend it.
+// It stops when ctx is done: ddto's Git worker, which stopped, does not wait
+// for another process.
 func waitForReadCacheEntry[T any](ctx context.Context, paths readCachePaths, cacheKey string, baseScope readCacheScope, endpointScope readCacheEndpointScope, ttl time.Duration) (T, readCacheWaitOutcome) {
 	var zero T
 
@@ -831,7 +834,9 @@ func waitForReadCacheEntry[T any](ctx context.Context, paths readCachePaths, cac
 		return value, readCacheWaitHit
 	}
 
-	deadline := readCacheNow().Add(readCacheWaiterTimeout)
+	started := readCacheNow()
+	deadline := started.Add(readCacheWaiterTimeout)
+	liveDeadline := started.Add(readCacheWaiterLiveOwnerTimeout)
 	backoff := readCacheWaiterInitialBackoff
 	for {
 		if ctx.Err() != nil {
@@ -850,7 +855,11 @@ func waitForReadCacheEntry[T any](ctx context.Context, paths readCachePaths, cac
 			case known && !alive:
 				return zero, readCacheWaitOwnerGone
 			case known:
-				waitLonger = readCacheNow().Sub(time.Unix(0, lock.CreatedAtUnixNano)) < readCacheWaiterLiveOwnerTimeout
+				// A lock from the future, as after a clock change, gets the
+				// short wait.
+				now := readCacheNow()
+				age := now.Sub(time.Unix(0, lock.CreatedAtUnixNano))
+				waitLonger = age >= 0 && age < readCacheWaiterLiveOwnerTimeout && now.Before(liveDeadline)
 			}
 		}
 		if !waitLonger && !readCacheNow().Before(deadline) {

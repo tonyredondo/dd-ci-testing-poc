@@ -82,13 +82,13 @@ func (w *waiterTest) read() (string, int, time.Duration) {
 }
 
 // A waiter keeps waiting past readCacheWaiterTimeout while the lock's owner
-// runs, and receives its entry instead of sending the request again. It polls
-// at least every 20 ms.
+// runs, as a paginated response can take 40 s, and receives its entry instead
+// of sending the request again. It polls at least every 20 ms.
 func TestReadCacheWaiterWaitsForLiveOwner(t *testing.T) {
 	w := newWaiterTest(t, 333, 0)
 	w.alive[333] = true
 	w.onSleep = func(waited time.Duration) {
-		if waited >= 5*time.Second {
+		if waited >= 40*time.Second {
 			w.publish("owner's response")
 			w.onSleep = nil
 		}
@@ -96,29 +96,52 @@ func TestReadCacheWaiterWaitsForLiveOwner(t *testing.T) {
 	value, requests, waited := w.read()
 	require.Equal(t, "owner's response", value)
 	require.Equal(t, 0, requests)
-	require.LessOrEqual(t, waited, 5*time.Second+readCacheWaiterMaxBackoff)
+	require.LessOrEqual(t, waited, 40*time.Second+readCacheWaiterMaxBackoff)
 	require.LessOrEqual(t, w.maxSleep, readCacheWaiterMaxBackoff)
 	require.Equal(t, 20*time.Millisecond, readCacheWaiterMaxBackoff)
 }
 
 // The wait for a running owner ends readCacheWaiterLiveOwnerTimeout after the
-// lock's creation, and a lock that old gets the usual two seconds.
+// lock's creation and after its own start, even when new owners keep
+// replacing the lock. A lock that old, or from the future, gets the usual two
+// seconds.
 func TestReadCacheWaiterBoundsTheWaitForLiveOwner(t *testing.T) {
 	for _, tc := range []struct {
+		name            string
 		lockAge, waited time.Duration
+		replace         bool
 	}{
-		{0, readCacheWaiterLiveOwnerTimeout},
-		{time.Minute, readCacheWaiterTimeout},
+		{"live owner", 0, readCacheWaiterLiveOwnerTimeout, false},
+		{"old lock", 3 * time.Minute, readCacheWaiterTimeout, false},
+		{"lock from the future", -time.Hour, readCacheWaiterTimeout, false},
+		{"replaced locks", 0, readCacheWaiterLiveOwnerTimeout, true},
 	} {
 		w := newWaiterTest(t, 333, tc.lockAge)
 		w.alive[333] = true
+		if tc.replace {
+			// Each second, the lock's owner releases it without an entry and
+			// another one takes it, newer.
+			next := time.Second
+			w.onSleep = func(waited time.Duration) {
+				if waited > 2*readCacheWaiterLiveOwnerTimeout {
+					t.Fatalf("replaced locks extended the wait to %s", waited)
+				}
+				if waited >= next {
+					next += time.Second
+					releaseReadCacheLock(w.owner)
+					var status readCacheLockAcquireStatus
+					w.owner, status = acquireReadCacheLock(w.paths, w.key)
+					require.Equal(t, readCacheLockAcquired, status)
+				}
+			}
+		}
 		value, requests, waited := w.read()
 		require.Equal(t, "own request", value)
 		require.Equal(t, 1, requests)
 		require.GreaterOrEqual(t, waited, tc.waited)
 		require.LessOrEqual(t, waited, tc.waited+readCacheWaiterMaxBackoff)
 		_, err := os.Stat(w.paths.CacheFile)
-		require.True(t, os.IsNotExist(err), "a waiter that falls back writes no entry")
+		require.True(t, os.IsNotExist(err), "a waiter that falls back writes no entry", tc.name)
 	}
 }
 

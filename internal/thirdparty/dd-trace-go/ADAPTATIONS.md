@@ -961,9 +961,13 @@ request. A lock whose owner was killed blocks its key for an hour.
   `readCacheWaiterMaxBackoff`): a poll reads the small lock file and tries the
   entry, and the owner's response reaches its waiters up to 80 ms sooner;
 - waits past `readCacheWaiterTimeout` while the lock's owner still runs and
-  the lock is younger than `readCacheWaiterLiveOwnerTimeout`, 30 s from its
-  creation, and keeps the 2 s rule when it cannot tell whether the owner runs
-  or the lock is older;
+  the lock is younger than `readCacheWaiterLiveOwnerTimeout`, two minutes,
+  but never longer than that from its own start, so new owners that keep
+  replacing the lock cannot extend it. Two minutes exceed a paginated
+  response, so a slow owner serves its waiters; an owner slower than that
+  costs them the wait and their own request. The waiter keeps the 2 s rule
+  when it cannot tell whether the owner runs, and for a lock that is older or
+  from the future, as after a clock change;
 - returns `readCacheWaitOwnerGone` when the owner's process ended without
   releasing its lock. `readThroughShortLivedCache` then takes the lock and
   requests as its owner, writing the entry for the others.
@@ -972,9 +976,13 @@ request. A lock whose owner was killed blocks its key for an hour.
 stale, so a process that finds one takes it at once. `processAlive`
 (`read_cache_process_unix.go`, `read_cache_process_windows.go`,
 `read_cache_process_other.go`) checks the lock's PID: a signal 0 on Unix, and
-`OpenProcess` with `GetExitCodeProcess` on Windows; it reports unknown where
-it cannot tell. A PID that another process reused looks alive, which costs at
-most the wait up to the 30 s bound. Replacing a dead owner's lock has the
+on Windows a zero wait on the process handle, which does not depend on the
+exit code; it reports unknown where it cannot tell. A zombie, which ended but
+which its parent has not reaped, accepts a signal 0: on Linux,
+`processEnded` (`read_cache_process_linux.go`) reads its state in
+`/proc/<pid>/stat`; on other Unix systems a zombie owner costs its waiters
+the wait for a running one. A PID that another process reused looks alive,
+which costs at most the wait up to the bound. Replacing a dead owner's lock has the
 non-atomic replacement race described above: two processes can both own the
 key, which costs a duplicate request, never wrong data.
 
@@ -989,8 +997,10 @@ test PIDs name no real process: existing tests keep the upstream behavior.
 `setReadCacheProcessAliveForTesting` overrides it.
 `TestReadCacheWaiterWaitsForLiveOwner`,
 `TestReadCacheWaiterBoundsTheWaitForLiveOwner`,
-`TestReadCacheTakesOverDeadOwnersLock` and `TestProcessAlive`
-(`utils/net/read_cache_waiter_test.go`) check these rules.
+`TestReadCacheTakesOverDeadOwnersLock`, `TestProcessAlive`
+(`utils/net/read_cache_waiter_test.go`) and `TestProcessAliveZombie`
+(`read_cache_process_linux_test.go`) check these rules, including a 40 s
+owner, replaced locks and a lock from the future.
 
 ## Testify method names
 

@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "bb6907c0481d1dd2127c80aaf15aaa964d52762b5ec186996ee8837c8a1a147c",
+      "sha256": "62105d45ed766ce52a76cae6c5b83342355058a14383e0a5725cf7987a6cf075",
       "role": "local"
     },
     {
@@ -1232,7 +1232,7 @@
     },
     {
       "path": "civisibility/utils/net/read_cache.go",
-      "sha256": "d68886649ca09ab7aa2dade6a5ee82ea758b53b79340d62afbd1641c1bee6818",
+      "sha256": "b58895a5436b526d851669f56097436a516378f9ffcb4f080c19d6d031d66ac7",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/net/read_cache.go",
       "source_sha256": "34428b9f4f0334d2ba35ab5ef532c32012009e9fb2799bb43cbfabec2b1405d8"
@@ -2237,17 +2237,32 @@
     },
     {
       "path": "civisibility/utils/net/read_cache_process_unix.go",
-      "sha256": "255ae7c302a99913d71157b18c99781a95b1aa982386d060532a51d69fab24a2",
+      "sha256": "dd0cd5fc0bd2e251aa2a80a870753fd67b6caf6d04e94f7d2b4055ea9e4e7cba",
       "role": "local"
     },
     {
       "path": "civisibility/utils/net/read_cache_process_windows.go",
-      "sha256": "675993dd2d2632492c4b7a4f5990e7ed8c527642b4d834ba6538fd67195a02cf",
+      "sha256": "c7f093ffb0d48a602ba0bb08026394fd074e8d2f3f917b53dde2e2dd3d5ac00e",
       "role": "local"
     },
     {
       "path": "civisibility/utils/net/read_cache_waiter_test.go",
-      "sha256": "9f83bb824aa2623df5477255c6ef456e56932c325c9d1fbb39950511cb1009ca",
+      "sha256": "5db889dffcf9775cecb5b02cad6ed0b60980d1262c91050e06a862c33a343152",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/utils/net/read_cache_process_linux.go",
+      "sha256": "fc12f4e4f6e4c82d26fee761f427a88e22dbe64687795e3404617021ba93162d",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/utils/net/read_cache_process_linux_test.go",
+      "sha256": "cecf59c25f59be751f1a9d7b9bbc869d7369108afb69f6510c497c92832918e4",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/utils/net/read_cache_process_nolinux.go",
+      "sha256": "20e61978eee5a8dd6bfb70a23dc44d8c26416a8d552b0097898e632c981fc7ed",
       "role": "local"
     }
   ],
