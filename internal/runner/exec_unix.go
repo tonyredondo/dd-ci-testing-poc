@@ -3,12 +3,10 @@
 package runner
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -35,41 +33,62 @@ func ExecWithCallerEnvironment(args []string) int {
 
 // ExecCommand replaces this process with args, unchanged: ddto passes every
 // command but go test through. It finds and starts the command as execvp,
-// which env and shells use, does: through a relative PATH entry, which only
-// the caller sets; an executable file without a #! line through /bin/sh; and
-// a file in PATH that cannot run is reported as such, not as missing.
+// which env and shells use, does.
 func ExecCommand(args []string) int {
-	executable, err := exec.LookPath(args[0])
-	if errors.Is(err, exec.ErrDot) {
-		err = nil
-	}
-	if err == nil {
-		err = syscall.Exec(executable, args, os.Environ())
-		if errors.Is(err, syscall.ENOEXEC) {
-			err = syscall.Exec("/bin/sh", append([]string{"/bin/sh", executable}, args[1:]...), os.Environ())
-		}
-	} else if errors.Is(err, exec.ErrNotFound) && inPath(args[0]) {
-		err = fmt.Errorf("%s: %w", args[0], fs.ErrPermission)
-	}
-	fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR:", err)
+	err := execvp(args)
+	fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR:", &fs.PathError{Op: "exec", Path: args[0], Err: err})
 	return commandStatus(err)
 }
 
-// inPath reports whether a PATH directory has an entry named file, which
-// LookPath skips when it cannot run.
-func inPath(file string) bool {
+// defaultPath is glibc's search path for execvp without PATH.
+const defaultPath = "/bin:/usr/bin"
+
+// execvp starts args as glibc's execvp does, and returns only if they do not
+// start. A name without / is tried in each PATH directory, or defaultPath's
+// without PATH, where an empty entry is the current directory. The search
+// goes past a missing file, and past one that cannot run, which it then
+// reports (EACCES) if nothing else starts.
+func execvp(args []string) error {
+	file := args[0]
+	if file == "" {
+		return syscall.ENOENT
+	}
 	if strings.Contains(file, "/") {
-		return false
+		return execve(file, args)
 	}
-	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
-		if dir == "" {
-			dir = "."
+	path, ok := os.LookupEnv("PATH")
+	if !ok {
+		path = defaultPath
+	}
+	var err error
+	denied := false
+	for _, dir := range strings.Split(path, ":") {
+		candidate := file
+		if dir != "" {
+			candidate = dir + "/" + file
 		}
-		if _, err := os.Stat(filepath.Join(dir, file)); err == nil {
-			return true
+		switch err = execve(candidate, args); err {
+		case syscall.EACCES:
+			denied = true
+		case syscall.ENOENT, syscall.ESTALE, syscall.ENOTDIR, syscall.ENODEV, syscall.ETIMEDOUT:
+		default:
+			return err
 		}
 	}
-	return false
+	if denied {
+		return syscall.EACCES
+	}
+	return err
+}
+
+// execve starts path with args, and an executable file without a #! line
+// with /bin/sh, as execvp does.
+func execve(path string, args []string) error {
+	err := syscall.Exec(path, args, os.Environ())
+	if err == syscall.ENOEXEC {
+		err = syscall.Exec("/bin/sh", append([]string{"/bin/sh", path}, args[1:]...), os.Environ())
+	}
+	return err
 }
 
 // ExecNativeTool replaces the wrapper: no second process, wait loop or plan I/O.

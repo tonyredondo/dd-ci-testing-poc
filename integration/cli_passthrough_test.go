@@ -122,11 +122,43 @@ func TestCLIPassesOtherCommandsThrough(t *testing.T) {
 			t.Fatalf("a script without #!: %d %q %q; want its output and 7", code, out, stderr)
 		}
 		// A relative PATH entry, which only the caller sets, finds commands
-		// as from a shell.
+		// as from a shell, and so does an empty PATH, as the current
+		// directory.
 		relative := t.TempDir()
 		copyExecutable(t, program, filepath.Join(relative, "bin", "passthrough-relative"))
-		if out, stderr, code := command(t, relative, append(env[:len(env):len(env)], "PATH=bin"), driver, "passthrough-relative", "3"); code != 3 || !strings.HasPrefix(out, `args=["3"]`) {
-			t.Fatalf("a command on a relative PATH: %d %q %q; want 3", code, out, stderr)
+		copyExecutable(t, program, filepath.Join(relative, "passthrough-here"))
+		for name, path := range map[string]string{"passthrough-relative": "PATH=bin", "passthrough-here": "PATH="} {
+			if out, stderr, code := command(t, relative, append(env[:len(env):len(env)], path), driver, name, "3"); code != 3 || !strings.HasPrefix(out, `args=["3"]`) {
+				t.Fatalf("%s with %s: %d %q %q; want 3", name, path, code, out, stderr)
+			}
+		}
+		// Without PATH, execvp searches its default path.
+		var noPath []string
+		for _, v := range env {
+			if !strings.HasPrefix(v, "PATH=") {
+				noPath = append(noPath, v)
+			}
+		}
+		if _, stderr, code := command(t, dir, noPath, driver, "true"); code != 0 {
+			t.Fatalf("true without PATH: %d %q; want 0", code, stderr)
+		}
+		if _, stderr, code := command(t, dir, env, driver, ""); code != 127 {
+			t.Fatalf("an empty command name: %d %q; want 127", code, stderr)
+		}
+		// The search goes past a PATH directory that cannot be searched, and
+		// reports it if the command is nowhere else.
+		if os.Geteuid() != 0 {
+			closed := t.TempDir()
+			if err := os.Chmod(closed, 0); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chmod(closed, 0o700) })
+			for later, want := range map[string]int{t.TempDir(): 126, filepath.Join(relative, "bin"): 3} {
+				path := "PATH=" + closed + string(os.PathListSeparator) + later
+				if _, stderr, code := command(t, dir, append(env[:len(env):len(env)], path), driver, "passthrough-relative", "3"); code != want {
+					t.Fatalf("with %s: %d %q; want %d", path, code, stderr, want)
+				}
+			}
 		}
 	}
 	if _, stderr, code := command(t, dir, env, driver); code != 2 || !strings.Contains(stderr, "usage: ddto") {
