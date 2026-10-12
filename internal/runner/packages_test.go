@@ -153,7 +153,7 @@ func TestTestifyDependencyImports(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			graph := newPackageGraph(append(slices.Clone(tc.packages), tc.dep...))
-			paths, suite := testifyDependencyImports(tc.packages, clientImports(tc.packages, graph))
+			paths, suite, _ := testifyDependencyImports(tc.packages, clientImports(tc.packages, graph))
 			if !slices.Equal(paths, tc.want) || suite != tc.suite {
 				t.Fatalf("imports = %v, suite = %v; want %v, %v", paths, suite, tc.want, tc.suite)
 			}
@@ -180,11 +180,14 @@ func TestTestifyDependencyImportsLeaveOutStandardLibrary(t *testing.T) {
 		{ImportPath: "example.com/client", TestImports: []string{"net/http/httptest", "example.com/testkit", "localkit/helper", "localkit/other"}, XTestImports: []string{"testing/fstest"}},
 	}
 	query := func() []string {
-		paths, _ := testifyDependencyImports(packages, clientImports(packages, newPackageGraph(packages)))
+		paths, _, _ := testifyDependencyImports(packages, clientImports(packages, newPackageGraph(packages)))
 		return paths
 	}
 	if paths, want := query(), []string{"example.com/testkit", "localkit/helper", "localkit/other"}; !slices.Equal(paths, want) {
 		t.Fatalf("imports = %v; want %v", paths, want)
+	}
+	if _, _, standard := testifyDependencyImports(packages, clientImports(packages, newPackageGraph(packages))); standard != 2 {
+		t.Fatalf("standard imports = %d; want 2", standard)
 	}
 	// Only standard-library imports: no query at all.
 	packages[1].TestImports = []string{"net/http/httptest"}

@@ -2,21 +2,30 @@ package minitracer
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 )
 
 // Close stops the background senders and then sends the remaining backlog
 // concurrently, not one batch at a time: up to maxConcurrentSends requests,
 // counting a background delivery still in flight. Every sender finishes
-// before Close returns.
+// before Close returns. The debug log reports the drain and, for each payload,
+// a size that its accounting bounds.
 func TestCloseDrainsBacklogConcurrently(t *testing.T) {
+	recorder := &log.RecordLogger{}
+	t.Cleanup(log.UseLogger(recorder))
+	level := log.GetLevel()
+	t.Cleanup(func() { log.SetLevel(level) })
+	log.SetLevel(log.LevelDebug)
 	var received deliveries
 	var requests, active, peak atomic.Int32
 	release := make(chan struct{})
@@ -75,6 +84,25 @@ func TestCloseDrainsBacklogConcurrently(t *testing.T) {
 		t.Fatalf("concurrent requests: %d", p)
 	}
 	waitForNoDrainWorkers(t)
+	logs := strings.Join(recorder.Logs(), "\n")
+	if !strings.Contains(logs, "ci mini tracer: final drain batches=8 in_flight=1 senders=7") {
+		t.Fatalf("missing final drain:\n%s", logs)
+	}
+	encoded := 0
+	for _, line := range recorder.Logs() {
+		_, fields, found := strings.Cut(line, "ci mini tracer: batch encoded ")
+		if !found {
+			continue
+		}
+		var events, accounted, payload int
+		if _, err := fmt.Sscanf(fields, "events=%d accounted_bytes=%d payload_bytes=%d", &events, &accounted, &payload); err != nil || payload > accounted {
+			t.Fatalf("batch encoded %q: %v", fields, err)
+		}
+		encoded += events
+	}
+	if encoded != 2+17 { // The failed batch was encoded twice.
+		t.Fatalf("encoded %d events:\n%s", encoded, logs)
+	}
 }
 
 func TestCloseReportsFailedBackgroundDelivery(t *testing.T) {

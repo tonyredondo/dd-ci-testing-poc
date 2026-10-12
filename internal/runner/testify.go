@@ -121,9 +121,9 @@ func prepareTestifyEntry(suite *goPackage, replacements map[string]string, runti
 // were not already inspected by the first go list. Unknown imports remain in
 // the query: a helper in another module may call suite.Run on the client's behalf.
 // Standard-library imports do not: their closures cannot reach Testify, goleak
-// or the SDK. imported holds what the named packages, other than the runtime,
-// import.
-func testifyDependencyImports(packages []goPackage, imported map[string]bool) ([]string, bool) {
+// or the SDK; the last result counts those left out. imported holds what the
+// named packages, other than the runtime, import.
+func testifyDependencyImports(packages []goPackage, imported map[string]bool) ([]string, bool, int) {
 	known := map[string]bool{"testing": true}
 	hasSuite := imported[instrument.TestifySuiteImport]
 	gorootSrc := ""
@@ -137,7 +137,7 @@ func testifyDependencyImports(packages []goPackage, imported map[string]bool) ([
 		}
 		known[p.ImportPath] = true
 	}
-	requests := map[string]bool{}
+	requests, standard := map[string]bool{}, map[string]bool{}
 	for _, p := range packages {
 		if p.ImportPath == "testing" || p.ImportPath == sdkPackage || p.ImportPath == miniPackage {
 			continue
@@ -149,7 +149,12 @@ func testifyDependencyImports(packages []goPackage, imported map[string]bool) ([
 				if path == instrument.TestifySuiteImport {
 					hasSuite = true
 				}
-				if !known[path] && !imported[path] && !standardLibraryImport(path, gorootSrc) {
+				if known[path] || imported[path] || requests[path] || standard[path] {
+					continue
+				}
+				if standardLibraryImport(path, gorootSrc) {
+					standard[path] = true
+				} else {
 					requests[path] = true
 				}
 			}
@@ -160,7 +165,7 @@ func testifyDependencyImports(packages []goPackage, imported map[string]bool) ([
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
-	return paths, hasSuite
+	return paths, hasSuite, len(standard)
 }
 
 // standardLibraryImport reports whether path names a standard-library package,

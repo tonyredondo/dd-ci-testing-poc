@@ -10,6 +10,7 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/citransport"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/telemetry"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
 )
 
@@ -308,7 +309,11 @@ func (c *Client) drainLocked(ctx context.Context, perBatchTimeout bool) error {
 	if c.deferUntilIdle || c.closed {
 		extra = min(len(c.ready), maxConcurrentSends-c.inflight) - 1
 	}
+	ready, inflight, closed := len(c.ready), c.inflight, c.closed
 	c.mu.Unlock()
+	if closed && log.DebugEnabled() {
+		log.Debug("ci mini tracer: final drain batches=%d in_flight=%d senders=%d", ready, inflight, max(extra, 0)+1)
+	}
 	for i := 0; i < extra; i++ {
 		workers.Add(1)
 		go c.drainWorker(d, &workers)
@@ -385,6 +390,9 @@ func (c *Client) sendBatch(ctx context.Context, payload *bytes.Buffer, batch rea
 	payload.Grow(batch.bytes + c.envelopeBytes)
 	metadata, wireEvents := prepareCommonMetadata(c.metadata, batch.events)
 	err := msgp.Encode(payload, &testCycleBatch{Version: 1, Metadata: metadata, Events: wireEvents})
+	if err == nil && log.DebugEnabled() {
+		log.Debug("ci mini tracer: batch encoded events=%d accounted_bytes=%d payload_bytes=%d", len(batch.events), batch.bytes+c.envelopeBytes, payload.Len())
+	}
 	if err == nil {
 		telemetry.EndpointPayloadEventsCount(telemetry.TestCycleEndpointType, float64(len(batch.events)))
 		telemetry.EndpointPayloadBytes(telemetry.TestCycleEndpointType, float64(payload.Len()))
