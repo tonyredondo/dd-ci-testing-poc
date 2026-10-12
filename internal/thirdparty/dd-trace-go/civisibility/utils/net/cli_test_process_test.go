@@ -27,17 +27,17 @@ func TestCLIReadCacheScopeIdentity(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	setReadCacheHooksForTest(t, t.TempDir(), &now, 111, 222)
 	local := newReadCacheScopeIdentity(map[string]string{})
-	worker := cliReadCacheScopeIdentity(local, "/state", "")
+	worker := cliReadCacheScopeIdentity(local, "/state", "", "")
 	setReadCacheHooksForTest(t, t.TempDir(), &now, 333, 444)
-	process := cliReadCacheScopeIdentity(newReadCacheScopeIdentity(map[string]string{}), "/state", "")
+	process := cliReadCacheScopeIdentity(newReadCacheScopeIdentity(map[string]string{}), "/state", "", "")
 
 	require.Equal(t, readCacheScopeCLI, worker.Kind)
 	require.Equal(t, time.Hour, worker.TTL)
 	require.Equal(t, worker, process)
-	assert.NotEqual(t, worker.Hash, cliReadCacheScopeIdentity(local, "/other", "").Hash)
-	require.Equal(t, local, cliReadCacheScopeIdentity(local, "", ""))
+	assert.NotEqual(t, worker.Hash, cliReadCacheScopeIdentity(local, "/other", "", "").Hash)
+	require.Equal(t, local, cliReadCacheScopeIdentity(local, "", "", ""))
 	strong := newReadCacheScopeIdentity(map[string]string{constants.CIProviderName: "github", constants.CIJobID: "job"})
-	require.Equal(t, strong, cliReadCacheScopeIdentity(strong, "/state", ""))
+	require.Equal(t, strong, cliReadCacheScopeIdentity(strong, "/state", "", ""))
 }
 
 // The worker's copies of its client request as the test processes do,
@@ -91,11 +91,11 @@ func TestCLIReadCacheLastsTheInvocation(t *testing.T) {
 	// their JSON encoding.
 	worker := newReadCacheTestClient(map[string]string{})
 	worker.testConfigurations.Custom = nil
-	worker.readCacheScopeIdentity = cliReadCacheScopeIdentity(worker.readCacheScopeIdentity, "/state", "")
+	worker.readCacheScopeIdentity = cliReadCacheScopeIdentity(worker.readCacheScopeIdentity, "/state", "", "")
 	setReadCacheHooksForTest(t, root, &now, 333, 444)
 	process := newReadCacheTestClient(map[string]string{})
 	process.testConfigurations.Custom = nil
-	process.readCacheScopeIdentity = cliReadCacheScopeIdentity(process.readCacheScopeIdentity, "/state", "")
+	process.readCacheScopeIdentity = cliReadCacheScopeIdentity(process.readCacheScopeIdentity, "/state", "", "")
 	request := map[string]string{"request": "ahead"}
 	live := 0
 	fetch := func(c *client) string {
@@ -255,7 +255,7 @@ func TestReadCacheCleanupLeavesAnEntryBeingRenewed(t *testing.T) {
 func TestReadCacheLockRecreatesRemovedDirectory(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	setReadCacheHooksForTest(t, t.TempDir(), &now, 111, 222)
-	identity := cliReadCacheScopeIdentity(newReadCacheScopeIdentity(map[string]string{}), "/state", "")
+	identity := cliReadCacheScopeIdentity(newReadCacheScopeIdentity(map[string]string{}), "/state", "", "")
 	paths, err := readCachePathsIn(readCacheSubdirectory(identity), "key")
 	require.NoError(t, err)
 	require.NoError(t, os.Remove(paths.Dir))
@@ -323,7 +323,7 @@ func TestCLIReadCacheSeparatesCredentials(t *testing.T) {
 	withKey := func(key string) *client {
 		c := newReadCacheTestClient(map[string]string{})
 		c.testConfigurations.Custom = nil
-		c.readCacheScopeIdentity = cliReadCacheScopeIdentity(c.readCacheScopeIdentity, "/state", key)
+		c.readCacheScopeIdentity = cliReadCacheScopeIdentity(c.readCacheScopeIdentity, "/state", key, "")
 		return c
 	}
 	fetch := func(c *client, response string) string {
@@ -351,7 +351,7 @@ func TestCLIReadCacheSeparatesCredentials(t *testing.T) {
 }
 
 // The clients of ddto's invocation take their scope's credential from their
-// own API key.
+// own API key, and their Agent's socket from their own Agent URL.
 func TestCLIClientScopeIncludesCredential(t *testing.T) {
 	origEnv := saveEnv()
 	defer restoreEnv(origEnv)
@@ -372,4 +372,20 @@ func TestCLIClientScopeIncludesCredential(t *testing.T) {
 	assert.NotEqual(t, a.Hash, b.Hash)
 	require.Equal(t, readCacheSubdirectory(a), readCacheSubdirectory(b))
 	require.Equal(t, a, scope("key-a"))
+
+	// Both sockets give the same base URL, UDS__tmp_ci_agent.sock.
+	agent := func(socket string) (string, readCacheScopeIdentity) {
+		t.Helper()
+		setCiVisibilityEnv(path, "")
+		os.Unsetenv(constants.CIVisibilityAgentlessEnabledEnvironmentVariable)
+		os.Setenv("DD_TRACE_AGENT_URL", "unix://"+socket)
+		c, ok := NewClient().(*client)
+		require.True(t, ok)
+		return c.baseURL, c.readCacheScopeIdentity
+	}
+	aURL, aScope := agent("/tmp/ci/agent.sock")
+	bURL, bScope := agent("/tmp/ci_agent.sock")
+	require.Equal(t, aURL, bURL)
+	require.Equal(t, readCacheScopeCLI, aScope.Kind)
+	assert.NotEqual(t, aScope.Hash, bScope.Hash)
 }

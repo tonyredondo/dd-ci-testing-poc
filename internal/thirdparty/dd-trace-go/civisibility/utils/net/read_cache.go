@@ -252,14 +252,19 @@ func newReadCacheScopeIdentity(ciTags map[string]string) readCacheScopeIdentity 
 // entries last as long as the invocation, whose build can take minutes: they
 // live in its own directory, which ddto removes (RemoveCLIReadCache).
 //
-// The scope also holds a digest of the process's credential: a test process
-// whose API key differs from the worker's, as one that TestMain changed,
-// makes its own requests. The upstream scopes leave the credential out.
-func cliReadCacheScopeIdentity(identity readCacheScopeIdentity, dir, credential string) readCacheScopeIdentity {
+// The scope also holds a digest of the process's credential and its Agent's
+// socket, whose path the base URL does not keep whole: a test process whose
+// API key or Agent differs from the worker's, as one that TestMain changed,
+// makes its own requests. The upstream scopes leave both out.
+func cliReadCacheScopeIdentity(identity readCacheScopeIdentity, dir, credential, socket string) readCacheScopeIdentity {
 	if identity.Kind != readCacheScopeLocal || dir == "" {
 		return identity
 	}
-	values := []readCacheIdentityValue{{Name: "cli_state", Value: dir}, {Name: "credential", Value: readCacheHashString(credential)}}
+	values := []readCacheIdentityValue{
+		{Name: "cli_state", Value: dir},
+		{Name: "credential", Value: readCacheHashString(credential)},
+		{Name: "socket", Value: socket},
+	}
 	scoped := newReadCacheScopeIdentityFromValues(readCacheScopeCLI, time.Hour, values)
 	scoped.directory = cliReadCacheDirectoryName(dir)
 	return scoped

@@ -802,9 +802,11 @@ will, and the read cache hands the responses to them.
   and in test processes; `ResetHandedCLIGitStateForTesting` also forgets it.
 - `cliReadCacheScopeIdentity` (`utils/net/read_cache.go`) gives the worker,
   and test processes that use its state, the scope of ddto's invocation, kind
-  `cli`, identified by the state directory and a digest of the client's API
-  key, instead of their parent process. The key keeps a response that one
-  credential received from another; the cache never stores it. CI scopes,
+  `cli`, identified by the state directory, a digest of the client's API key
+  and its Agent's Unix socket, instead of their parent process. They keep a
+  response that one credential or Agent received from another client; the
+  cache never stores the key, and the base URL names a socket only lossily,
+  `/` and `_` alike (`UnixDataSocketURL`). CI scopes,
   which both already share, stay. The entries must outlast a build
   of minutes, so the scope's TTL is an hour, and they live in the scope's own
   directory, `cli/<hash>` of the state directory alone, in the shared one

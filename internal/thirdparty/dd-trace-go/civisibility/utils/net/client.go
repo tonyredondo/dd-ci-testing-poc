@@ -163,6 +163,8 @@ func newClientWithServiceNameAndSubdomain(serviceName, subdomain string) (Client
 	var requestHandler *RequestHandler
 	var agentURL *url.URL
 	var apiKeyValue string
+	// socket is the Agent's Unix socket, which baseURL names only lossily.
+	var socket string
 
 	agentlessEnabled := internal.BoolEnv(constants.CIVisibilityAgentlessEnabledEnvironmentVariable, false)
 	if agentlessEnabled {
@@ -200,6 +202,7 @@ func newClientWithServiceNameAndSubdomain(serviceName, subdomain string) (Client
 			// If we're connecting over UDS we can just rely on the agent to provide the hostname
 			log.Debug("connecting to agent over unix, do not set hostname on any traces")
 			requestHandler = NewRequestHandlerWithClient(internal.UDSClient(agentURL.Path, 10*time.Second))
+			socket = agentURL.Path
 			agentURL = internal.UnixDataSocketURL(agentURL.Path)
 		} else {
 			requestHandler = NewRequestHandler()
@@ -291,7 +294,7 @@ func newClientWithServiceNameAndSubdomain(serviceName, subdomain string) (Client
 			RuntimeVersion: ciTags[constants.RuntimeVersion],
 			Custom:         customConfiguration,
 		},
-		readCacheScopeIdentity: cliReadCacheScopeIdentity(newReadCacheScopeIdentity(ciTags), cliStateDir(), apiKeyValue),
+		readCacheScopeIdentity: cliReadCacheScopeIdentity(newReadCacheScopeIdentity(ciTags), cliStateDir(), apiKeyValue, socket),
 		headers:                defaultHeaders,
 		handler:                requestHandler,
 	}, startTelemetry
