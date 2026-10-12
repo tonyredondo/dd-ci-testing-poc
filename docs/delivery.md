@@ -20,7 +20,8 @@ I/O, and up to eight background senders deliver full batches. When delivery fall
 behind, a finishing test waits for a sender rather than losing events; after a
 failed delivery it drops events beyond the queue bound instead. `Close` stops
 the senders and sends the remaining payloads up to eight at once, counting
-deliveries still in flight, within its deadline. With the variable
+deliveries still in flight, within its deadline. As with the background
+senders, payloads sent together can arrive in any order. With the variable
 enabled, delivery runs between completed test groups, and remaining data is sent
 at session close. Sequential tests can have a delivery checkpoint after each
 test. Parallel tests continue together until the whole group finishes; the next
