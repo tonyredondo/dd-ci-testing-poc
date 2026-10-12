@@ -165,7 +165,7 @@ func TestCommonMetadataConcurrentProjectionAndBounds(t *testing.T) {
 				if err := msgp.Encode(&raw, &payload); err != nil {
 					t.Error(err)
 				}
-				if raw.Len() > eventSize(event)+(&testCyclePayload{Version: 1}).Msgsize()+msgp.ArrayHeaderSize {
+				if size, _ := eventSize(event); raw.Len() > size+(&testCyclePayload{Version: 1}).Msgsize()+msgp.ArrayHeaderSize {
 					t.Error("shared metadata escaped byte accounting")
 				}
 				span.SetTag("git.commit.sha", "changed")

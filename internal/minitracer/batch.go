@@ -40,6 +40,71 @@ type readyBatch struct {
 	bytes  int
 }
 
+// batchBytes accounts for the open batch twice. worst charges each event its
+// whole snapshot, which bounds any mix of events. shared charges each
+// test-event kind's snapshot once, as prepareCommonMetadata writes it while all
+// events of that kind have the same snapshot and none overrides it. Once an
+// event breaks that, only worst applies until the batch is sealed.
+type batchBytes struct {
+	worst, shared int
+	snapshots     map[string]*CommonTags // Of each event kind.
+	unshared      bool
+}
+
+// total is the batch's accounted size.
+func (b *batchBytes) total() int {
+	if b.unshared {
+		return b.worst
+	}
+	return b.shared
+}
+
+// with returns the batch's accounted size with event added. size and
+// overrides come from eventSize.
+func (b *batchBytes) with(event *ciEvent, size int, overrides bool) int {
+	if shared, ok := b.sharedWith(event, size, overrides); ok {
+		return shared
+	}
+	return b.worst + size
+}
+
+// sharedWith returns the shared total with event added, unless it no longer
+// applies. Other kinds always carry their snapshot on the event, and so does
+// the first event of a kind, which pays for the envelope entry.
+func (b *batchBytes) sharedWith(event *ciEvent, size int, overrides bool) (int, bool) {
+	if b.unshared {
+		return 0, false
+	}
+	if !isCIEventKind(event.Type) {
+		return b.shared + size, true
+	}
+	snapshot, seen := b.snapshots[event.Type]
+	switch {
+	case overrides || seen && snapshot != event.common:
+		return 0, false
+	case seen && event.common != nil:
+		return b.shared + size - event.common.entrySize(event.Type), true
+	}
+	return b.shared + size, true
+}
+
+func (b *batchBytes) add(event *ciEvent, size int, overrides bool) {
+	shared, ok := b.sharedWith(event, size, overrides)
+	b.worst += size
+	b.shared, b.unshared = shared, !ok
+	if ok {
+		if b.snapshots == nil {
+			b.snapshots = make(map[string]*CommonTags, 4)
+		}
+		b.snapshots[event.Type] = event.common
+	}
+}
+
+func (b *batchBytes) reset() {
+	b.worst, b.shared, b.unshared = 0, 0, false
+	clear(b.snapshots)
+}
+
 // add never performs network I/O. A full batch is sealed for the background
 // senders in ordinary mode, or for the next idle checkpoint in deferred mode.
 //
@@ -50,7 +115,7 @@ type readyBatch struct {
 // cannot stall tests. Deferred delivery never waits; its batches stay queued
 // until an idle checkpoint.
 func (c *Client) add(event *ciEvent) {
-	size := eventSize(event)
+	size, overrides := eventSize(event)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if !c.closed && size+c.envelopeBytes > citransport.TestCycleMaxPayloadBytes {
@@ -62,7 +127,7 @@ func (c *Client) add(event *ciEvent) {
 			c.rejectLocked(errClientClosed)
 			return
 		}
-		if !c.openBatchFullLocked(size) || c.sealLocked() {
+		if !c.openBatchFullLocked(event, size, overrides) || c.sealLocked() {
 			break
 		}
 		c.startSendersLocked()
@@ -74,15 +139,15 @@ func (c *Client) add(event *ciEvent) {
 	}
 	telemetry.EventsEnqueueForSerialization()
 	c.events = append(c.events, event)
-	c.queuedBytes += size
-	if len(c.events) >= c.maxEvents || c.queuedBytes+c.envelopeBytes >= citransport.TestCycleFlushBytes {
+	c.queued.add(event, size, overrides)
+	if len(c.events) >= c.maxEvents || c.queued.total()+c.envelopeBytes >= citransport.TestCycleFlushBytes {
 		c.sealLocked()
 	}
 	c.startSendersLocked()
 }
 
-func (c *Client) openBatchFullLocked(size int) bool {
-	return len(c.events) > 0 && (len(c.events) >= c.maxEvents || c.queuedBytes+size+c.envelopeBytes > citransport.TestCycleFlushBytes)
+func (c *Client) openBatchFullLocked(event *ciEvent, size int, overrides bool) bool {
+	return len(c.events) > 0 && (len(c.events) >= c.maxEvents || c.queued.with(event, size, overrides)+c.envelopeBytes > citransport.TestCycleFlushBytes)
 }
 
 // sealLocked moves the open batch to the ready queue. Ordinary mode keeps that
@@ -104,9 +169,9 @@ func (c *Client) sealAllLocked() {
 	if len(c.events) == 0 {
 		return
 	}
-	c.ready = append(c.ready, readyBatch{events: c.events, bytes: c.queuedBytes})
+	c.ready = append(c.ready, readyBatch{events: c.events, bytes: c.queued.total()})
 	c.events, c.spare = c.spare, nil
-	c.queuedBytes = 0
+	c.queued.reset()
 }
 
 // startSendersLocked starts ordinary-mode senders for sealed batches that no
@@ -433,7 +498,8 @@ func (c *Client) Close(ctx context.Context) error {
 		for _, batch := range c.ready {
 			c.discardBatchLocked(batch.events)
 		}
-		c.ready, c.events, c.queuedBytes = nil, nil, 0
+		c.ready, c.events = nil, nil
+		c.queued.reset()
 		c.lastErr = err
 		c.mu.Unlock()
 	}

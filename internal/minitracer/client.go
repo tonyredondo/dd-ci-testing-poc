@@ -55,7 +55,7 @@ type Client struct {
 	transport              *citransport.Transport
 	service, env           string
 	serviceVersion         string
-	queuedBytes            int
+	queued                 batchBytes // Accounting of the open batch.
 	envelopeBytes          int
 	tags                   map[string]string
 	metadata               map[string]map[string]string
