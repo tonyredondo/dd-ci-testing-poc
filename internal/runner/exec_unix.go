@@ -40,17 +40,11 @@ func ExecCommand(args []string) int {
 	return commandStatus(err)
 }
 
-// defaultPath is glibc's search path for execvp without PATH.
-const defaultPath = "/bin:/usr/bin"
-
-// pathMax is Linux's PATH_MAX: glibc's execvp skips longer PATH entries.
-const pathMax = 4096
-
-// execvp starts args as glibc's execvp does, and returns only if they do not
-// start. A name without / is tried in each PATH directory, or defaultPath's
-// without PATH, where an empty entry is the current directory. The search
-// skips entries longer than pathMax and goes past a missing file, and past
-// one that cannot run, which it then reports (EACCES) if nothing else starts.
+// execvp starts args as the platform's execvp does, and returns only if they
+// do not start. A name without / is tried in each PATH directory, or
+// defaultPath's without PATH, where an empty entry is the current directory.
+// The libc's own rules (searchNext) say which errors end the search and which
+// report that a candidate could not run (EACCES) if nothing else starts.
 func execvp(args []string) error {
 	file := args[0]
 	if file == "" {
@@ -66,25 +60,24 @@ func execvp(args []string) error {
 	var err error = syscall.ENOENT
 	denied := false
 	for _, dir := range strings.Split(path, ":") {
-		if len(dir) >= pathMax {
+		if skipEntry(dir, file) {
 			continue
 		}
 		candidate := file
 		if dir != "" {
 			candidate = dir + "/" + file
 		}
-		switch err = execve(candidate, args); err {
-		case syscall.EACCES:
-			denied = true
-		case syscall.ENOENT, syscall.ESTALE, syscall.ENOTDIR, syscall.ENODEV, syscall.ETIMEDOUT:
-		default:
+		err = execve(candidate, args)
+		next, deniedHere := searchNext(candidate, err)
+		if !next {
 			return err
 		}
+		denied = denied || deniedHere
 	}
 	if denied {
 		return syscall.EACCES
 	}
-	return err
+	return notFound(err)
 }
 
 // execve starts path with args, and an executable file without a #! line

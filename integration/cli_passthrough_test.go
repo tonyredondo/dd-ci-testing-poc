@@ -108,11 +108,6 @@ func TestCLIPassesOtherCommandsThrough(t *testing.T) {
 		if _, stderr, code := command(t, dir, env, driver, notExecutable); code != 126 {
 			t.Fatalf("a file that cannot run: %d %q; want 126", code, stderr)
 		}
-		// Also when PATH names it.
-		notExecutableEnv := append(env[:len(env):len(env)], "PATH="+filepath.Dir(notExecutable))
-		if _, stderr, code := command(t, dir, notExecutableEnv, driver, "notes"); code != 126 {
-			t.Fatalf("a file in PATH that cannot run: %d %q; want 126", code, stderr)
-		}
 		// An executable file without a #! line runs with /bin/sh.
 		script := filepath.Join(t.TempDir(), "script")
 		if err := os.WriteFile(script, []byte("echo \"script $1\"\nexit 7\n"), 0o700); err != nil {
@@ -121,53 +116,7 @@ func TestCLIPassesOtherCommandsThrough(t *testing.T) {
 		if out, stderr, code := command(t, dir, env, driver, script, "one"); code != 7 || out != "script one\n" {
 			t.Fatalf("a script without #!: %d %q %q; want its output and 7", code, out, stderr)
 		}
-		// A relative PATH entry, which only the caller sets, finds commands
-		// as from a shell, and so does an empty PATH, as the current
-		// directory.
-		relative := t.TempDir()
-		copyExecutable(t, program, filepath.Join(relative, "bin", "passthrough-relative"))
-		copyExecutable(t, program, filepath.Join(relative, "passthrough-here"))
-		for name, path := range map[string]string{"passthrough-relative": "PATH=bin", "passthrough-here": "PATH="} {
-			if out, stderr, code := command(t, relative, append(env[:len(env):len(env)], path), driver, name, "3"); code != 3 || !strings.HasPrefix(out, `args=["3"]`) {
-				t.Fatalf("%s with %s: %d %q %q; want 3", name, path, code, out, stderr)
-			}
-		}
-		// Without PATH, execvp searches its default path.
-		var noPath []string
-		for _, v := range env {
-			if !strings.HasPrefix(v, "PATH=") {
-				noPath = append(noPath, v)
-			}
-		}
-		if _, stderr, code := command(t, dir, noPath, driver, "true"); code != 0 {
-			t.Fatalf("true without PATH: %d %q; want 0", code, stderr)
-		}
-		if _, stderr, code := command(t, dir, env, driver, ""); code != 127 {
-			t.Fatalf("an empty command name: %d %q; want 127", code, stderr)
-		}
-		// The search skips a PATH entry longer than PATH_MAX, as glibc does,
-		// and finds nothing in such entries alone.
-		long := "/" + strings.Repeat("a", 4096)
-		for path, want := range map[string]int{long + string(os.PathListSeparator) + filepath.Join(relative, "bin"): 3, long: 127} {
-			if _, stderr, code := command(t, dir, append(env[:len(env):len(env)], "PATH="+path), driver, "passthrough-relative", "3"); code != want {
-				t.Fatalf("with a long PATH entry: %d %q; want %d", code, stderr, want)
-			}
-		}
-		// The search goes past a PATH directory that cannot be searched, and
-		// reports it if the command is nowhere else.
-		if os.Geteuid() != 0 {
-			closed := t.TempDir()
-			if err := os.Chmod(closed, 0); err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { _ = os.Chmod(closed, 0o700) })
-			for later, want := range map[string]int{t.TempDir(): 126, filepath.Join(relative, "bin"): 3} {
-				path := "PATH=" + closed + string(os.PathListSeparator) + later
-				if _, stderr, code := command(t, dir, append(env[:len(env):len(env)], path), driver, "passthrough-relative", "3"); code != want {
-					t.Fatalf("with %s: %d %q; want %d", path, code, stderr, want)
-				}
-			}
-		}
+		lookupThroughPath(t, env, driver, program, filepath.Dir(notExecutable))
 	}
 	if _, stderr, code := command(t, dir, env, driver); code != 2 || !strings.Contains(stderr, "usage: ddto") {
 		t.Fatalf("no command: %d %q; want the usage and 2", code, stderr)
@@ -219,5 +168,71 @@ func copyExecutable(t *testing.T, source, target string) {
 	}
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// lookupThroughPath checks that ddto finds commands through PATH as the
+// platform's execvp does, against env, which uses it: its status and output
+// must be env's, and where every libc agrees, the expected status. notes is a
+// directory with a file named notes that cannot run.
+func lookupThroughPath(t *testing.T, env []string, driver, program, notes string) {
+	t.Helper()
+	native, err := exec.LookPath("env")
+	if err != nil {
+		t.Fatal(err)
+	}
+	native, err = filepath.Abs(native)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cwd := t.TempDir()
+	bin := filepath.Join(cwd, "bin")
+	copyExecutable(t, program, filepath.Join(bin, "passthrough-path"))
+	copyExecutable(t, program, filepath.Join(cwd, "passthrough-path"))
+	closed, empty, loop := t.TempDir(), t.TempDir(), t.TempDir()
+	if err := os.Chmod(closed, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(closed, 0o700) })
+	// A link to itself fails with ELOOP, after which only BSD libcs search on.
+	if err := os.Symlink("passthrough-path", filepath.Join(loop, "passthrough-path")); err != nil {
+		t.Fatal(err)
+	}
+	long := "/" + strings.Repeat("a", 4096)
+	const unset = "\x00"
+	var noPath []string
+	for _, v := range env {
+		if !strings.HasPrefix(v, "PATH=") {
+			noPath = append(noPath, v)
+		}
+	}
+	for _, tc := range []struct {
+		path, name string
+		want       int  // -1 where libcs differ
+		unlike     bool // glibc reports a stale errno: env's status is undefined
+	}{
+		{"bin", "passthrough-path", 3, false},                 // relative entry
+		{"", "passthrough-path", 3, false},                    // empty: the current directory
+		{unset, "true", 0, false},                             // the libc's default path
+		{bin, "", 127, false},                                 // an empty name
+		{notes, "notes", 126, false},                          // a file that cannot run
+		{closed + ":" + bin, "passthrough-path", 3, false},    // past a directory that cannot be searched
+		{closed + ":" + empty, "passthrough-path", -1, false}, // reported by glibc only
+		{long + ":" + bin, "passthrough-path", 3, false},      // past an entry longer than PATH_MAX
+		{long, "passthrough-path", 127, true},                 // only such entries
+		{loop + ":" + bin, "passthrough-path", -1, false},     // ELOOP ends glibc's search only
+	} {
+		caseEnv := noPath
+		if tc.path != unset {
+			caseEnv = append(noPath[:len(noPath):len(noPath)], "PATH="+tc.path)
+		}
+		out, stderr, code := command(t, cwd, caseEnv, driver, tc.name, "3")
+		wantOut, _, wantCode := command(t, cwd, caseEnv, native, tc.name, "3")
+		if tc.unlike {
+			wantOut, wantCode = out, code
+		}
+		if out != wantOut || code != wantCode || tc.want >= 0 && code != tc.want {
+			t.Errorf("%q with PATH %.40q: %d %q %q; env: %d %q; want %d", tc.name, tc.path, code, out, stderr, wantCode, wantOut, tc.want)
+		}
 	}
 }
