@@ -5,6 +5,7 @@ package integration
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,5 +54,51 @@ func TestCLIPassesWindowsCommandLineThrough(t *testing.T) {
 		if !strings.HasPrefix(arguments, `"`) && (code != 5 || strings.TrimSpace(got) != `batch "one&echo.INJECTED"`) {
 			t.Fatalf("%s: %q %d; want the quoted argument and 5", arguments, got, code)
 		}
+	}
+}
+
+// A command gets ddto's environment as it is. os/exec adds SYSTEMROOT to an
+// environment without it, so both runs start without os/exec.
+func TestCLIPassesWindowsEnvironmentThrough(t *testing.T) {
+	dir, driver := prepareMiniFixture(t)
+	program := buildPassthroughProgram(t)
+	var env []string
+	for _, v := range testEnv("PASSTHROUGH_REPORT=SYSTEMROOT") {
+		if name, _, _ := strings.Cut(v, "="); !strings.EqualFold(name, "SYSTEMROOT") {
+			env = append(env, v)
+		}
+	}
+	stdin, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stdin.Close()
+	run := func(name string, argv ...string) string {
+		t.Helper()
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Close()
+		process, err := os.StartProcess(name, argv, &os.ProcAttr{Dir: dir, Env: env, Files: []*os.File{stdin, w, w}})
+		w.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := process.Wait(); err != nil {
+			t.Fatal(err)
+		}
+		return string(out)
+	}
+	want := run(program, program, "0")
+	if !strings.Contains(want, `SYSTEMROOT="" set=false`) {
+		t.Fatalf("directly: %q; want no SYSTEMROOT", want)
+	}
+	if got := run(driver, driver, program, "0"); got != want {
+		t.Fatalf("through ddto: %q; directly: %q", got, want)
 	}
 }

@@ -214,6 +214,7 @@
     "windows": {
       "cli": [
         "TestCLIPassesWindowsCommandLineThrough",
+        "TestCLIPassesWindowsEnvironmentThrough",
         "TestSharedParityWorkspaceRejectsPersistentLock",
         "TestSharedParityWorkspaceWaitsForOpenFile"
       ]

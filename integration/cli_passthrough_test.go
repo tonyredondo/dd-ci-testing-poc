@@ -13,7 +13,8 @@ import (
 )
 
 // passthroughProgram reports its arguments, input and environment, then exits
-// with the status in its first argument.
+// with the status in its first argument. PASSTHROUGH_REPORT names one more
+// variable to report.
 const passthroughProgram = `package main
 
 import (
@@ -30,6 +31,10 @@ func main() {
 		civisibility = "unset"
 	}
 	fmt.Printf("args=%q stdin=%q mark=%q civisibility=%s\n", os.Args[1:], input, os.Getenv("PASSTHROUGH_MARK"), civisibility)
+	if name := os.Getenv("PASSTHROUGH_REPORT"); name != "" {
+		value, set := os.LookupEnv(name)
+		fmt.Printf("%s=%q set=%t\n", name, value, set)
+	}
 	fmt.Fprintln(os.Stderr, "to stderr")
 	status, _ := strconv.Atoi(os.Args[1])
 	os.Exit(status)
@@ -42,16 +47,7 @@ func main() {
 // and a command that does not run exits as from env.
 func TestCLIPassesOtherCommandsThrough(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
-	source := t.TempDir()
-	for name, data := range map[string]string{"go.mod": "module example.com/passthrough\n\ngo 1.25\n", "main.go": passthroughProgram} {
-		if err := os.WriteFile(filepath.Join(source, name), []byte(data), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	program := filepath.Join(t.TempDir(), executableName("passthrough"))
-	if out, stderr, code := command(t, source, testEnv(), "go", "build", "-o", program, "."); code != 0 {
-		t.Fatalf("build: %s %s", out, stderr)
-	}
+	program := buildPassthroughProgram(t)
 	// An invalid DD_LOGGING_RATE made ddto's initialization warn.
 	env := testEnv("PASSTHROUGH_MARK=kept", "DD_LOGGING_RATE=bad")
 
@@ -252,4 +248,20 @@ func lookupThroughPath(t *testing.T, env []string, driver, program, notes string
 			t.Errorf("%q with PATH %.40q: %d %q %q; env: %d %q %q; want %d", tc.name, tc.path, code, out, stderr, wantCode, wantOut, wantErr, tc.want)
 		}
 	}
+}
+
+// buildPassthroughProgram builds passthroughProgram and returns its path.
+func buildPassthroughProgram(t *testing.T) string {
+	t.Helper()
+	source := t.TempDir()
+	for name, data := range map[string]string{"go.mod": "module example.com/passthrough\n\ngo 1.25\n", "main.go": passthroughProgram} {
+		if err := os.WriteFile(filepath.Join(source, name), []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	program := filepath.Join(t.TempDir(), executableName("passthrough"))
+	if out, stderr, code := command(t, source, testEnv(), "go", "build", "-o", program, "."); code != 0 {
+		t.Fatalf("build: %s %s", out, stderr)
+	}
+	return program
 }

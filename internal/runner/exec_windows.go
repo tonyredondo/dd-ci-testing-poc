@@ -65,42 +65,46 @@ func commandLine() string {
 // kills them if this wrapper ends first, and returns their exit status, or
 // failed if they do not start. With breakaway, the job lets them, and what
 // they leave running, start processes outside it (CREATE_BREAKAWAY_FROM_JOB).
+// They get this process's environment as it is: os/exec would add SYSTEMROOT.
 func runInJob(args []string, cmdline string, breakaway bool, failed int) int {
 	signal.Notify(make(chan os.Signal, 1), os.Interrupt)
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	if cmdline != "" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: cmdline}
-	}
-	job, err := startInJob(cmd, breakaway)
+	path, err := exec.LookPath(args[0])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return failed
 	}
-	err = cmd.Wait()
+	attr := &os.ProcAttr{
+		Env:   os.Environ(),
+		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+		Sys:   &syscall.SysProcAttr{CmdLine: cmdline},
+	}
+	process, job, err := startInJob(path, args, attr, breakaway)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return failed
+	}
+	state, err := process.Wait()
 	if job != 0 {
 		releaseJob(job, breakaway)
 	}
 	if err != nil {
-		if exit, ok := err.(*exec.ExitError); ok {
-			return exit.ExitCode()
-		}
 		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
-	return 0
+	return state.ExitCode()
 }
 
 // jobObjectLimitBreakawayOK lets a job's processes start others outside it.
 const jobObjectLimitBreakawayOK = 0x00000800
 
-// startInJob starts cmd suspended, so it runs no code before it belongs to a
+// startInJob starts path suspended, so it runs no code before it belongs to a
 // job that kills it when closed, then resumes it. Where no job is available,
-// cmd runs without one.
-func startInJob(cmd *exec.Cmd, breakaway bool) (windows.Handle, error) {
+// it runs without one.
+func startInJob(path string, args []string, attr *os.ProcAttr, breakaway bool) (*os.Process, windows.Handle, error) {
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
-		return 0, cmd.Start()
+		process, err := os.StartProcess(path, args, attr)
+		return process, 0, err
 	}
 	limits := windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION{}
 	limits.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
@@ -109,34 +113,33 @@ func startInJob(cmd *exec.Cmd, breakaway bool) (windows.Handle, error) {
 	}
 	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&limits)), uint32(unsafe.Sizeof(limits))); err != nil {
 		_ = windows.CloseHandle(job)
-		return 0, cmd.Start()
+		process, err := os.StartProcess(path, args, attr)
+		return process, 0, err
 	}
-	if cmd.SysProcAttr == nil {
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-	}
-	cmd.SysProcAttr.CreationFlags |= windows.CREATE_SUSPENDED
-	if err := cmd.Start(); err != nil {
+	attr.Sys.CreationFlags |= windows.CREATE_SUSPENDED
+	process, err := os.StartProcess(path, args, attr)
+	if err != nil {
 		_ = windows.CloseHandle(job)
-		return 0, err
+		return nil, 0, err
 	}
-	process, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(cmd.Process.Pid))
+	handle, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(process.Pid))
 	if err == nil {
-		err = windows.AssignProcessToJobObject(job, process)
-		_ = windows.CloseHandle(process)
+		err = windows.AssignProcessToJobObject(job, handle)
+		_ = windows.CloseHandle(handle)
 	}
 	if err != nil {
 		_ = windows.CloseHandle(job)
 		job = 0
 	}
-	if err := resumeProcess(uint32(cmd.Process.Pid)); err != nil {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
+	if err := resumeProcess(uint32(process.Pid)); err != nil {
+		_ = process.Kill()
+		_, _ = process.Wait()
 		if job != 0 {
 			_ = windows.CloseHandle(job)
 		}
-		return 0, err
+		return nil, 0, err
 	}
-	return job, nil
+	return process, job, nil
 }
 
 // resumeProcess resumes the threads of a process started suspended.
