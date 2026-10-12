@@ -62,7 +62,8 @@ For example, these abbreviated lines explain a local Mini build. The times
 illustrate the format; they are not benchmark results:
 
 ```text
-2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +120µs command="test" runtime=mini
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +5µs command="test"
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +120µs runtime=mini
 2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +200µs prepare started
 2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +400µs resolve packages started
 2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +24ms resolve packages finished duration=23.6ms status=ok

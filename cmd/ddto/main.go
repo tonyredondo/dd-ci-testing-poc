@@ -50,7 +50,7 @@ func main() {
 		// in front of a go command, or any other, is transparent.
 		os.Exit(runner.ExecCommand(os.Args[1:]))
 	}
-	runner.DebugCommand(form.Name)
+	ctx := runner.DebugCommand(context.Background(), form.Name)
 	cli, args, err := runner.ParseCLIArgs(form.Args)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR:", err)
@@ -64,8 +64,8 @@ func main() {
 		}
 	}
 	if form.Orchestrion {
-		runner.Exit(runner.RunOrchestrion(context.Background(), args, cli, form.GoTool, os.Stdin, os.Stdout, os.Stderr))
+		runner.Exit(runner.RunOrchestrion(ctx, args, cli, form.GoTool, os.Stdin, os.Stdout, os.Stderr))
 		return
 	}
-	runner.Exit(runner.RunRuntime(context.Background(), args, cli, os.Stdin, os.Stdout, os.Stderr))
+	runner.Exit(runner.RunRuntime(ctx, args, cli, os.Stdin, os.Stdout, os.Stderr))
 }
