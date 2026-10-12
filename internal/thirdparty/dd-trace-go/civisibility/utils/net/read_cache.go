@@ -879,11 +879,14 @@ func readCacheGlobalCleanup(dir string) {
 // removeExpiredReadCacheEntry removes the expired entry at path under its
 // key's lock, which a writer holds while it publishes the entry, so that it
 // does not remove an entry that a writer has just renewed. With the lock
-// taken by a writer, it leaves the entry.
+// taken by a writer, it leaves the entry; a stale lock, which a killed process
+// left, it replaces, as a request does.
 func removeExpiredReadCacheEntry(path string) {
 	cacheKey := strings.TrimSuffix(filepath.Base(path), ".json")
-	owner, err := newReadCacheLockOwner(strings.TrimSuffix(path, ".json")+".lock", cacheKey)
-	if err != nil || tryCreateReadCacheLock(owner) != readCacheLockAcquired {
+	base := strings.TrimSuffix(path, ".json")
+	paths := readCachePaths{Dir: filepath.Dir(path), CacheFile: path, LockFile: base + ".lock", TmpGlob: base + ".tmp.*"}
+	owner, status := acquireReadCacheLock(paths, cacheKey)
+	if status != readCacheLockAcquired {
 		return
 	}
 	defer releaseReadCacheLock(owner)

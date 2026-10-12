@@ -263,3 +263,22 @@ func TestReadCacheLockRecreatesRemovedDirectory(t *testing.T) {
 	require.Error(t, os.Remove(paths.Dir))
 	releaseReadCacheLock(owner)
 }
+
+// A process killed while it held a key's lock leaves a stale lock, which the
+// cleanup may not list: it replaces it, as a request does, and removes the
+// expired entry and its own lock.
+func TestReadCacheCleanupReplacesStaleLocks(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	setReadCacheHooksForTest(t, t.TempDir(), &now, 111, 222)
+	paths, err := readCachePathsIn("", "abandoned")
+	require.NoError(t, err)
+	writeCLIEntry(t, paths.Dir, "abandoned.json", now.Add(-2*time.Hour), time.Hour)
+	stale := fmt.Sprintf(`{"pid":1,"created_at_unix_nano":%d,"cache_key":"abandoned","owner_nonce":"killed"}`, now.Add(-2*time.Hour).UnixNano())
+	require.NoError(t, os.WriteFile(paths.LockFile, []byte(stale), 0o600))
+
+	removeExpiredReadCacheEntry(paths.CacheFile)
+	for _, path := range []string{paths.CacheFile, paths.LockFile} {
+		_, err := os.Stat(path)
+		require.True(t, os.IsNotExist(err), path)
+	}
+}
