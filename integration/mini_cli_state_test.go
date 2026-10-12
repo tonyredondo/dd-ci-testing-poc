@@ -240,7 +240,7 @@ func TestMiniCLIStateSharedRequests(t *testing.T) {
 	intake := &featureIntake{}
 	server := newServer(http.HandlerFunc(intake.handler))
 	defer server.Close()
-	archive := filepath.Join(t.TempDir(), "state.zip")
+	archive, cache := filepath.Join(t.TempDir(), "state.zip"), t.TempDir()
 	run := func(env []string) (map[string]int, map[string]int) {
 		t.Helper()
 		out, stderr, code := command(t, dir, env, driver, "test", "--runtime=mini", "--keep-ci-state="+archive, "-count=1", "-run=^Test(Pass|Sub)$", ".", "./sub")
@@ -250,10 +250,23 @@ func TestMiniCLIStateSharedRequests(t *testing.T) {
 		return intake.take()
 	}
 
-	counts, _ := run(featureEnv(t, server.URL))
+	counts, _ := run(featureEnv(t, server.URL, "XDG_CACHE_HOME="+cache))
 	for _, endpoint := range featureEndpoints {
 		if counts[endpoint] != 1 {
 			t.Fatalf("requests %v; want one each", counts)
+		}
+	}
+	// The invocation's read-cache entries go with it. Only Linux takes the
+	// user cache directory from XDG_CACHE_HOME.
+	if runtime.GOOS == "linux" {
+		entries, err := os.ReadDir(filepath.Join(cache, "dd-trace-go", "civisibility-read-cache"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), "cli-") {
+				t.Fatalf("ddto left the invocation's read cache %s", entry.Name())
+			}
 		}
 	}
 	// ddto described the test processes, with their packages' modules.
@@ -296,6 +309,15 @@ func TestMiniCLIStateSharedRequests(t *testing.T) {
 	slices.Sort(listed)
 	if tests.GOARCH != runtime.GOARCH || !slices.Equal(described, listed) {
 		t.Fatalf("ddto described %+v; go list reports %v", tests, listed)
+	}
+
+	// With experiments, which the test binaries' runtime version includes,
+	// the worker still requests as they do.
+	counts, _ = run(featureEnv(t, server.URL, "GOEXPERIMENT=cgocheck2"))
+	for _, endpoint := range featureEndpoints {
+		if counts[endpoint] != 1 {
+			t.Fatalf("requests with GOEXPERIMENT %v; want one each", counts)
+		}
 	}
 
 	if err := os.WriteFile(filepath.Join(dir, "CODEOWNERS"), []byte("* @org/root\n/sub/ @org/sub\n"), 0600); err != nil {

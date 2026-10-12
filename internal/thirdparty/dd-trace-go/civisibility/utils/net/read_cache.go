@@ -6,6 +6,7 @@
 package net
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -238,13 +239,38 @@ func newReadCacheScopeIdentity(ciTags map[string]string) readCacheScopeIdentity 
 
 // cliReadCacheScopeIdentity returns, for a local run, the scope of ddto's
 // invocation whose state is in dir: its Git worker requests ahead for the test
-// processes, which have another parent. CI scopes already include both.
+// processes, which have another parent. CI scopes already include both. The
+// entries last as long as the invocation, whose build can take minutes: they
+// live in its own directory, which ddto removes (RemoveCLIReadCache).
 func cliReadCacheScopeIdentity(identity readCacheScopeIdentity, dir string) readCacheScopeIdentity {
 	if identity.Kind != readCacheScopeLocal || dir == "" {
 		return identity
 	}
 	values := []readCacheIdentityValue{{Name: "cli_state", Value: dir}}
-	return newReadCacheScopeIdentityFromValues(readCacheScopeCLI, identity.TTL, values)
+	return newReadCacheScopeIdentityFromValues(readCacheScopeCLI, time.Hour, values)
+}
+
+// readCacheSubdirectory returns the directory, in the shared one, of the
+// identity's entries: ddto's invocation keeps its own.
+func readCacheSubdirectory(identity readCacheScopeIdentity) string {
+	if identity.Kind != readCacheScopeCLI {
+		return ""
+	}
+	return "cli-" + identity.Hash
+}
+
+// RemoveCLIReadCache removes the read-cache entries of ddto's invocation
+// whose state is in stateDir, once its Git worker and test processes exited.
+func RemoveCLIReadCache(stateDir string) error {
+	subdir := readCacheSubdirectory(cliReadCacheScopeIdentity(readCacheScopeIdentity{Kind: readCacheScopeLocal}, stateDir))
+	if subdir == "" {
+		return nil
+	}
+	dir, err := readCacheDirectory(subdir)
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(dir)
 }
 
 func newReadCacheScopeIdentityFromValues(kind string, ttl time.Duration, values []readCacheIdentityValue) readCacheScopeIdentity {
@@ -323,7 +349,7 @@ func readThroughShortLivedCache[T any](
 		return readCacheLiveValue(live)
 	}
 
-	paths, err := readCachePathsForKey(cacheKey)
+	paths, err := readCachePathsIn(readCacheSubdirectory(c.readCacheScopeIdentity), cacheKey)
 	if err != nil {
 		log.Debug("civisibility.read_cache: cache path unavailable [endpoint:%s key:%s error:%s]", endpoint, cacheKey, err.Error())
 		return readCacheLiveValue(live)
@@ -361,7 +387,7 @@ func readThroughShortLivedCache[T any](
 		}
 		return result.Value, nil
 	case readCacheLockActive:
-		if value, ok := waitForReadCacheEntry[T](paths, cacheKey, baseScope, endpointScope, c.readCacheScopeIdentity.TTL); ok {
+		if value, ok := waitForReadCacheEntry[T](c.requestContext(), paths, cacheKey, baseScope, endpointScope, c.readCacheScopeIdentity.TTL); ok {
 			log.Debug("civisibility.read_cache: hit [endpoint:%s key:%s]", endpoint, cacheKey)
 			if onCacheHit != nil {
 				onCacheHit(value)
@@ -437,11 +463,16 @@ func readCacheSanitizeBaseURL(raw string) string {
 }
 
 func readCachePathsForKey(cacheKey string) (readCachePaths, error) {
-	root, err := readCacheBaseRoot()
+	return readCachePathsIn("", cacheKey)
+}
+
+// readCachePathsIn returns the paths of cacheKey's files in subdir of the
+// shared cache directory, or in that directory itself.
+func readCachePathsIn(subdir, cacheKey string) (readCachePaths, error) {
+	dir, err := readCacheDirectory(subdir)
 	if err != nil {
 		return readCachePaths{}, err
 	}
-	dir := filepath.Join(root, "dd-trace-go", "civisibility-read-cache")
 	if err := ensureReadCacheDir(dir); err != nil {
 		return readCachePaths{}, err
 	}
@@ -451,6 +482,16 @@ func readCachePathsForKey(cacheKey string) (readCachePaths, error) {
 		LockFile:  filepath.Join(dir, cacheKey+".lock"),
 		TmpGlob:   filepath.Join(dir, cacheKey+".tmp.*"),
 	}, nil
+}
+
+// readCacheDirectory returns subdir of the shared cache directory, or that
+// directory itself.
+func readCacheDirectory(subdir string) (string, error) {
+	root, err := readCacheBaseRoot()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "dd-trace-go", "civisibility-read-cache", subdir), nil
 }
 
 func readCacheBaseRoot() (string, error) {
@@ -657,7 +698,9 @@ func tryCreateReadCacheLock(owner *readCacheLockOwner) readCacheLockAcquireStatu
 	return readCacheLockAcquired
 }
 
-func waitForReadCacheEntry[T any](paths readCachePaths, cacheKey string, baseScope readCacheScope, endpointScope readCacheEndpointScope, ttl time.Duration) (T, bool) {
+// waitForReadCacheEntry waits for the lock owner's entry. It stops when ctx is
+// done: ddto's Git worker, which stopped, does not wait for another process.
+func waitForReadCacheEntry[T any](ctx context.Context, paths readCachePaths, cacheKey string, baseScope readCacheScope, endpointScope readCacheEndpointScope, ttl time.Duration) (T, bool) {
 	var zero T
 
 	if value, ok := readFreshReadCacheEntry[T](paths, cacheKey, baseScope, endpointScope, ttl); ok {
@@ -667,6 +710,9 @@ func waitForReadCacheEntry[T any](paths readCachePaths, cacheKey string, baseSco
 	deadline := readCacheNow().Add(readCacheWaiterTimeout)
 	backoff := readCacheWaiterInitialBackoff
 	for readCacheNow().Before(deadline) {
+		if ctx.Err() != nil {
+			return zero, false
+		}
 		if _, err := os.Stat(paths.LockFile); os.IsNotExist(err) {
 			if value, ok := readFreshReadCacheEntry[T](paths, cacheKey, baseScope, endpointScope, ttl); ok {
 				return value, true

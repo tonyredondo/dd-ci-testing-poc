@@ -6,7 +6,9 @@
 package net
 
 import (
+	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -27,7 +29,7 @@ func TestCLIReadCacheScopeIdentity(t *testing.T) {
 	process := cliReadCacheScopeIdentity(newReadCacheScopeIdentity(map[string]string{}), "/state")
 
 	require.Equal(t, readCacheScopeCLI, worker.Kind)
-	require.Equal(t, local.TTL, worker.TTL)
+	require.Equal(t, time.Hour, worker.TTL)
 	require.Equal(t, worker, process)
 	assert.NotEqual(t, worker.Hash, cliReadCacheScopeIdentity(local, "/other").Hash)
 	require.Equal(t, local, cliReadCacheScopeIdentity(local, ""))
@@ -74,4 +76,75 @@ func TestCLITestProcessClients(t *testing.T) {
 	clients = CLITestProcessClients(worker, "go1.99.0", "", dirs)
 	require.Len(t, clients, 1)
 	require.Equal(t, "named", clients[0].(*client).serviceName)
+}
+
+// The invocation's entries outlast the local TTL, as a long build does, and
+// live in the invocation's own directory, which ddto removes afterwards.
+func TestCLIReadCacheLastsTheInvocation(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	root := t.TempDir()
+	setReadCacheHooksForTest(t, root, &now, 111, 222)
+	// Without custom configurations, as clients have them, entries survive
+	// their JSON encoding.
+	worker := newReadCacheTestClient(map[string]string{})
+	worker.testConfigurations.Custom = nil
+	worker.readCacheScopeIdentity = cliReadCacheScopeIdentity(worker.readCacheScopeIdentity, "/state")
+	setReadCacheHooksForTest(t, root, &now, 333, 444)
+	process := newReadCacheTestClient(map[string]string{})
+	process.testConfigurations.Custom = nil
+	process.readCacheScopeIdentity = cliReadCacheScopeIdentity(process.readCacheScopeIdentity, "/state")
+	request := map[string]string{"request": "ahead"}
+	live := 0
+	fetch := func(c *client) string {
+		t.Helper()
+		value, err := readThroughShortLivedCache(c, "unit", request, func() (readCacheLiveResult[string], error) {
+			live++
+			return readCacheLiveResult[string]{Value: "response", Cacheable: true}, nil
+		}, nil)
+		require.NoError(t, err)
+		return value
+	}
+
+	require.Equal(t, "response", fetch(worker))
+	now = now.Add(5 * time.Minute)
+	require.Equal(t, "response", fetch(process))
+	require.Equal(t, 1, live)
+
+	shared := filepath.Join(root, "dd-trace-go", "civisibility-read-cache")
+	entries, err := os.ReadDir(shared)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, readCacheSubdirectory(worker.readCacheScopeIdentity), entries[0].Name())
+	require.NoError(t, RemoveCLIReadCache("/state"))
+	_, err = os.Stat(filepath.Join(shared, entries[0].Name()))
+	require.True(t, os.IsNotExist(err))
+}
+
+// A stopped worker does not wait for another process's request: the read
+// cache's waiter stops with the client's context.
+func TestReadCacheWaiterStopsWithContext(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	root := t.TempDir()
+	setReadCacheHooksForTest(t, root, &now, 111, 222)
+	c := newReadCacheTestClient(map[string]string{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c.handler = &RequestHandler{Context: ctx}
+	request := map[string]string{"request": "stopped"}
+	cacheKey, paths := readCacheTestKeyAndPaths(t, c, "unit", request)
+	owner, status := acquireReadCacheLock(paths, cacheKey)
+	require.Equal(t, readCacheLockAcquired, status)
+	defer releaseReadCacheLock(owner)
+	sleeps := 0
+	SetReadCacheHooksForTesting(root, func() time.Time { return now }, func() int { return 111 }, func() int { return 222 }, func(d time.Duration) {
+		sleeps++
+		cancel()
+		now = now.Add(d)
+	})
+
+	_, err := readThroughShortLivedCache(c, "unit", request, func() (readCacheLiveResult[string], error) {
+		return readCacheLiveResult[string]{}, ctx.Err()
+	}, nil)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, 1, sleeps)
 }

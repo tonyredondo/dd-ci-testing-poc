@@ -799,10 +799,17 @@ will, and the read cache hands the responses to them.
 - `cliReadCacheScopeIdentity` (`utils/net/read_cache.go`) gives the worker,
   and test processes that use its state, the scope of ddto's invocation, kind
   `cli`, identified by the state directory, instead of their parent process.
-  It keeps the local TTL, and CI scopes, which both already share, stay. The
-  entries stay in the user's cache directory: test processes may read them
-  while Go's test log is active, and the state directory can lie in the
-  module.
+  CI scopes, which both already share, stay. The entries must outlast a build
+  of minutes, so the scope's TTL is an hour, and they live in the scope's own
+  directory, `cli-<hash>` in the shared one (`readCacheSubdirectory`,
+  `readCachePathsIn`), which ddto removes once the worker has exited
+  (`RemoveCLIReadCache`); the shared directory's cleanup skips directories.
+  They stay in the user's cache directory, not the state directory: test
+  processes may read them while Go's test log is active, and the state
+  directory can lie in the module.
+- `waitForReadCacheEntry` stops waiting for another process's request when the
+  client's request context is done (`requestContext`), so a stopped worker
+  does not wait up to two seconds; other clients have no context.
 - `CLITestProcessClients` (`utils/net/client.go`) copies the worker's client
   with the test processes' Go version, from `proceed`, and architecture, and
   with the service that each test package reports: `DD_SERVICE`,
@@ -824,6 +831,13 @@ will, and the read cache hands the responses to them.
   it; the worker joins them before `app-closing`, so their metrics leave in it.
   Test processes request, and report, whatever is missing.
 
+The test processes report `runtime.Version()`, which includes the experiments
+that `GOEXPERIMENT` sets. ddto's `go env` reports the go command's own version,
+with the toolchain's default experiments, and the raw setting; when they
+differ, ddto takes the canonical list from `go tool compile -V`, about 6 ms, and
+appends it as the linker does (`testRuntimeVersion` in
+`internal/runner/environment.go`).
+
 Like the commit search, these requests are read-only and start before a test
 process uses the state, so a run whose results all come from Go's test cache
 sends the settings request too, which go test's exit cancels. Test processes
@@ -831,14 +845,17 @@ outside the worker's checkout, binaries run outside `ddto test` and the SDK
 runtime keep their own requests and scopes.
 
 Checks: `TestCLIReadCacheScopeIdentity`, `TestCLITestProcessClients`,
+`TestCLIReadCacheLastsTheInvocation`, `TestReadCacheWaiterStopsWithContext`,
+`TestTestRuntimeVersionMatchesBinaries`, which builds a binary under each
+`GOEXPERIMENT` case, `TestExperimentSeparator`,
 `TestCodeOwnersPackageService`, `TestCLITestPackageModule`,
 `TestRunRequestsAheadForTestProcesses`, `TestRunWaitsForItsStoppedRequests`,
 `TestWorkerRequestsAsTestProcesses`,
 `integration/TestMiniCLIStateRequestsAhead`, which runs the worker and then
 a test process that makes no request of its own, also with services from
 CODEOWNERS, and `integration/TestMiniCLIStateSharedRequests`, which checks one
-request per endpoint, or per service, in a `ddto test` run and ddto's
-`tests.json`.
+request per endpoint, or per service, in a `ddto test` run, also with
+`GOEXPERIMENT`, ddto's `tests.json` and the removed cache directory.
 
 ## Testify method names
 

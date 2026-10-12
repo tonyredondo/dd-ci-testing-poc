@@ -78,8 +78,9 @@ type Plan struct {
 	// tests describes the test binaries and the packages that have tests,
 	// with their modules, for the Git worker and the test processes.
 	tests utils.CLITests
-	// goVersion is the selected toolchain's version, as go env reports it.
-	goVersion string
+	// goVersion is the selected toolchain's version, as go env reports it,
+	// and goExperiment its GOEXPERIMENT setting.
+	goVersion, goExperiment string
 }
 
 // savedEnvironment records the caller's values of the Go settings that go test
@@ -215,7 +216,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		return plan, fmt.Errorf("ddto requires Go 1.25 or newer; selected toolchain is %q", opts.environment.GOVERSION)
 	}
 	plan.testLauncher = opts.exec != "" || opts.environment.GOOS != opts.environment.GOHOSTOS || opts.environment.GOARCH != opts.environment.GOHOSTARCH
-	plan.goVersion = opts.environment.GOVERSION
+	plan.goVersion, plan.goExperiment = opts.environment.GOVERSION, opts.environment.GOEXPERIMENT
 	plan.tests.GOARCH = opts.environment.GOARCH
 	debug.printf("toolchain=%q", opts.environment.GOVERSION)
 	if runtime == Mini {
@@ -728,6 +729,11 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 	if handoff := gitHubJobID(); handoff != nil && !plan.testLauncher {
 		env = append(env, handoff...)
 		debug.printf("github job id handed found=%t", !strings.HasSuffix(handoff[0], "="))
+	}
+	if gitWorker != nil {
+		// The worker requests, and reports its telemetry, as the test
+		// processes, whose version includes their experiments.
+		plan.goVersion = testRuntimeVersion(ctx, dir, plan.goVersion, plan.goExperiment)
 	}
 	env = append(env, gitWorker.handOff(plan.tests, plan.testLauncher, plan.goVersion)...)
 	if plan.launcher != nil {

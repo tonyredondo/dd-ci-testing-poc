@@ -21,6 +21,7 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/envconfig"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/impactedtests"
+	civisibilitynet "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/net"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/globalconfig"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
@@ -376,6 +377,11 @@ func maxTime(a, b time.Time) time.Time {
 func (w *gitWorker) release() {
 	if w.log != nil {
 		_ = w.log.Close()
+	}
+	// The invocation's read-cache entries, which the worker requested ahead,
+	// serve no later invocation.
+	if err := civisibilitynet.RemoveCLIReadCache(w.state); err != nil {
+		w.debug.printf("git worker read cache not removed: %v", err)
 	}
 	if !w.keep {
 		_ = os.RemoveAll(w.state)

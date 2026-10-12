@@ -837,6 +837,12 @@ func TestWorkerRequestsAsTestProcesses(t *testing.T) {
 	t.Setenv(constants.CIVisibilityAgentlessEnabledEnvironmentVariable, "false")
 	t.Setenv("DD_TRACE_AGENT_URL", server.URL)
 	t.Setenv("DD_SERVICE", "poc")
+	// The CI tags, which other tests leave from their repositories, come
+	// from these.
+	t.Setenv("DD_GIT_REPOSITORY_URL", "https://example.invalid/acme/poc.git")
+	t.Setenv("DD_GIT_COMMIT_SHA", "1111111111111111111111111111111111111111")
+	utils.ResetCITags()
+	t.Cleanup(utils.ResetCITags)
 	net.SetReadCacheHooksForTesting(t.TempDir(), time.Now, os.Getpid, func() int { return 1 }, time.Sleep)
 	t.Cleanup(net.ResetReadCacheHooksForTesting)
 	c, _ := net.NewCLIClient(context.Background(), t.TempDir(), "")

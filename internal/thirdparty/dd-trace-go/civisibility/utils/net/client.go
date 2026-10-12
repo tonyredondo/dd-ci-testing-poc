@@ -297,6 +297,14 @@ func newClientWithServiceNameAndSubdomain(serviceName, subdomain string) (Client
 	}, startTelemetry
 }
 
+// requestContext returns the context that stops c's requests.
+func (c *client) requestContext() context.Context {
+	if c.handler == nil {
+		return context.Background()
+	}
+	return c.handler.context()
+}
+
 // repositoryServiceName returns the service named after the repository, the
 // last resort for a test process's service.
 func repositoryServiceName(repoURL string) string {

@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "7fef98a3e1e9f949734e70feedc6f1efcc85df260de7d1616ebfe9b7fa6e698e",
+      "sha256": "6580b8c9b08c8f05f5bf98f30c296a7d7b4f3d708b5344cb224319658d84af48",
       "role": "local"
     },
     {
@@ -1150,7 +1150,7 @@
     },
     {
       "path": "civisibility/utils/net/client.go",
-      "sha256": "66b550f188e15f6b0a47d232706de87c396ec3ebfd786f14bb494b982346d401",
+      "sha256": "8536e1e024c0c80362d167d9a8c8ad356b97431e45128ec702582b8e35ffd670",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/net/client.go",
       "source_sha256": "bae03f2398dd7c75141e1b6b8f07e89676eb39e0884ab88b9af95211e797ec8b"
@@ -1232,7 +1232,7 @@
     },
     {
       "path": "civisibility/utils/net/read_cache.go",
-      "sha256": "5930a7ebbd9d48c424dcd3ff49a86fdb6839f7cfd1192a5d96e20f8969373f18",
+      "sha256": "b54e993bced0dd2d904bdeb9c4e1d3b2a2fced3f129d7cd87c1ea560411ca2ce",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/net/read_cache.go",
       "source_sha256": "34428b9f4f0334d2ba35ab5ef532c32012009e9fb2799bb43cbfabec2b1405d8"
@@ -2142,7 +2142,7 @@
     },
     {
       "path": "civisibility/cligit/cligit_test.go",
-      "sha256": "966bddd63614ce41b66f1149f01ebb0fd2797421fbc26736623e755cfda5f39b",
+      "sha256": "063256827ac65b9f3ed7ca24bb2637569dcd18c0b765e1616c2b7956f4a2ce3f",
       "role": "local"
     },
     {
@@ -2182,7 +2182,7 @@
     },
     {
       "path": "civisibility/utils/cli_git_state_test.go",
-      "sha256": "97a326ced0aa31e52b65f90c0e27fa8bffcc91becc57ac3181d81dbe9c958e05",
+      "sha256": "6219b22f3f9e46abf9895448fc786248114018ec9b9da75310cb8a663bb3ee2b",
       "role": "local"
     },
     {
@@ -2222,7 +2222,7 @@
     },
     {
       "path": "civisibility/utils/net/cli_test_process_test.go",
-      "sha256": "674547ddd3f7d65da6a33dbbaf8efda9c1f47c76f57809feb3c0da0982b863da",
+      "sha256": "7b32f5fdff2b8d44e98e7fdebe0762e4e7dff66a56ea088645cdde2bfe9515f1",
       "role": "local"
     }
   ],
