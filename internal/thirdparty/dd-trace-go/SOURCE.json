@@ -2132,7 +2132,7 @@
     },
     {
       "path": "civisibility/cligit/cligit.go",
-      "sha256": "bca9bc54d7e66ae17109f6394b5aeb76b82935d2372a258b8a384561d9ee5f7e",
+      "sha256": "c8f3c969ac2b0c3a763c169d904be8c880c6c9f86f58c5a3f3390ac0b13bdaab",
       "role": "local"
     },
     {
@@ -2142,7 +2142,7 @@
     },
     {
       "path": "civisibility/cligit/cligit_test.go",
-      "sha256": "57137580e04b350d3e2671e08785fdc9e03375cd3bf89a6488c2219208ba04ab",
+      "sha256": "a0e9c3df1f7456f6361e9c6b49ddff3ef34fa5a253975f1d0e459ef73c0000b3",
       "role": "local"
     },
     {

@@ -980,6 +980,14 @@ func TestRequestAheadErrorsHideURLCredentials(t *testing.T) {
 	if got := redactError(errors.New("unexpected status code 403")); got != "unexpected status code 403" {
 		t.Fatalf("redactError changed a message without a URL: %q", got)
 	}
+	// Go's parser takes the authority's last @, and accepts @ and ' in a
+	// password.
+	for _, raw := range []string{"https://ci:prefix@SYNTHETIC_SECRET@intake.example/%zz", "https://ci:prefix'SYNTHETIC_SECRET@intake.example/%zz", "https://ci:SYNTHETIC_SECRET@intake.example"} {
+		got := redactError(&url.Error{Op: "Post", URL: raw, Err: errors.New("EOF")})
+		if strings.Contains(got, "SYNTHETIC_SECRET") || !strings.Contains(got, "https://[redacted]@intake.example") {
+			t.Fatalf("redactError(%q) = %q", raw, got)
+		}
+	}
 
 	t.Setenv("DD_TRACE_DEBUG", "true")
 	log.SetLevel(log.LevelDebug)

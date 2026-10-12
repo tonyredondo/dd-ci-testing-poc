@@ -456,8 +456,9 @@ func requestFeatures(client int, c featureClient) {
 }
 
 // urlUserinfo matches the user and password of a URL, which an error such as
-// url.Error repeats.
-var urlUserinfo = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.-]*://)[^/?#\s"'@]*@`)
+// url.Error repeats: as Go's URL parser, everything in the authority up to its
+// last @.
+var urlUserinfo = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.-]*://)[^/?#\s]*@`)
 
 // redactError returns err's message without the credentials of a URL in it.
 func redactError(err error) string {
