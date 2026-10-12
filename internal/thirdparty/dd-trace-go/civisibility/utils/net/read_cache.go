@@ -66,11 +66,19 @@ const (
 	readCacheEndpointTestManagementTests = "test_management_tests"
 
 	// readCacheWaiterInitialBackoff is the first waiter poll interval.
-	readCacheWaiterInitialBackoff = 20 * time.Millisecond
-	// readCacheWaiterMaxBackoff caps waiter polling backoff.
-	readCacheWaiterMaxBackoff = 100 * time.Millisecond
-	// readCacheWaiterTimeout is how long waiters wait for another process to fill the cache.
+	readCacheWaiterInitialBackoff = 5 * time.Millisecond
+	// readCacheWaiterMaxBackoff caps waiter polling backoff: a poll reads the
+	// lock and tries the entry, so a short interval costs little and returns
+	// the owner's response sooner.
+	readCacheWaiterMaxBackoff = 20 * time.Millisecond
+	// readCacheWaiterTimeout is how long waiters wait for another process to
+	// fill the cache when they cannot tell whether that process still runs.
 	readCacheWaiterTimeout = 2 * time.Second
+	// readCacheWaiterLiveOwnerTimeout bounds, from the lock's creation, the
+	// wait for an owner that still runs: about the longest that a request with
+	// its pages and retries should take. A slow owner then serves its waiters
+	// instead of each one sending the request again.
+	readCacheWaiterLiveOwnerTimeout = 30 * time.Second
 	// readCacheStaleLockTimeout is intentionally much longer than the HTTP request path.
 	readCacheStaleLockTimeout = time.Hour
 	// readCacheGlobalCleanupMaxEntries bounds opportunistic directory cleanup.
@@ -164,6 +172,9 @@ type (
 		pid       func() int
 		parentPID func() int
 		sleep     func(time.Duration)
+		// processAlive reports whether a lock owner's process runs, and
+		// whether that is known.
+		processAlive func(pid int) (alive bool, known bool)
 	}
 )
 
@@ -189,7 +200,18 @@ func SetReadCacheHooksForTesting(cacheRoot string, now func() time.Time, pid fun
 		pid:       pid,
 		parentPID: parentPID,
 		sleep:     sleep,
+		// Test PIDs name no real process: whether an owner runs is unknown.
+		processAlive: func(int) (bool, bool) { return false, false },
 	}
+}
+
+// setReadCacheProcessAliveForTesting overrides whether lock owners run, after
+// SetReadCacheHooksForTesting.
+func setReadCacheProcessAliveForTesting(alive func(pid int) (bool, bool)) {
+	readCacheHooksMu.Lock()
+	defer readCacheHooksMu.Unlock()
+
+	readCacheState.processAlive = alive
 }
 
 // ResetReadCacheHooksForTesting restores production read-cache hooks after internal tests.
@@ -426,9 +448,8 @@ func readThroughShortLivedCache[T any](
 		return value, nil
 	}
 
-	owner, status := acquireReadCacheLock(paths, cacheKey)
-	switch status {
-	case readCacheLockAcquired:
+	// asOwner requests and publishes the entry while holding its key's lock.
+	asOwner := func(owner *readCacheLockOwner) (T, error) {
 		defer releaseReadCacheLock(owner)
 		readCacheGlobalCleanup(paths.Dir)
 
@@ -450,14 +471,29 @@ func readThroughShortLivedCache[T any](
 			writeReadCacheEntry(paths, owner, cacheKey, baseScope, endpointScope, c.readCacheScopeIdentity.TTL, result.Value)
 		}
 		return result.Value, nil
+	}
+
+	owner, status := acquireReadCacheLock(paths, cacheKey)
+	switch status {
+	case readCacheLockAcquired:
+		return asOwner(owner)
 	case readCacheLockActive:
 		started := time.Now()
-		if value, ok := waitForReadCacheEntry[T](c.requestContext(), paths, cacheKey, baseScope, endpointScope, c.readCacheScopeIdentity.TTL); ok {
+		value, outcome := waitForReadCacheEntry[T](c.requestContext(), paths, cacheKey, baseScope, endpointScope, c.readCacheScopeIdentity.TTL)
+		switch outcome {
+		case readCacheWaitHit:
 			log.Debug("civisibility.read_cache: hit after wait [endpoint:%s key:%s scope:%s waited:%s]", endpoint, cacheKey, scope, time.Since(started).Round(time.Microsecond))
 			if onCacheHit != nil {
 				onCacheHit(value)
 			}
 			return value, nil
+		case readCacheWaitOwnerGone:
+			// The owner's process ended without releasing its lock, which is
+			// therefore stale: take its place, so that the entry is written.
+			if owner, status := acquireReadCacheLock(paths, cacheKey); status == readCacheLockAcquired {
+				log.Debug("civisibility.read_cache: owner gone, taking over [endpoint:%s key:%s scope:%s waited:%s]", endpoint, cacheKey, scope, time.Since(started).Round(time.Microsecond))
+				return asOwner(owner)
+			}
 		}
 		log.Debug("civisibility.read_cache: waiter fallback [endpoint:%s key:%s scope:%s waited:%s]", endpoint, cacheKey, scope, time.Since(started).Round(time.Microsecond))
 		return readCacheLiveValue(live)
@@ -770,40 +806,63 @@ func tryCreateReadCacheLock(owner *readCacheLockOwner) readCacheLockAcquireStatu
 	return readCacheLockAcquired
 }
 
-// waitForReadCacheEntry waits for the lock owner's entry. It stops when ctx is
-// done: ddto's Git worker, which stopped, does not wait for another process.
-func waitForReadCacheEntry[T any](ctx context.Context, paths readCachePaths, cacheKey string, baseScope readCacheScope, endpointScope readCacheEndpointScope, ttl time.Duration) (T, bool) {
+// readCacheWaitOutcome is how a wait for another process's entry ended.
+type readCacheWaitOutcome int
+
+const (
+	// readCacheWaitHit: the entry appeared.
+	readCacheWaitHit readCacheWaitOutcome = iota
+	// readCacheWaitFallback: the owner released its lock without an entry, the
+	// wait timed out or ctx is done; the waiter requests without the lock.
+	readCacheWaitFallback
+	// readCacheWaitOwnerGone: the owner's process ended without releasing its
+	// lock; the waiter can take its place.
+	readCacheWaitOwnerGone
+)
+
+// waitForReadCacheEntry waits for the lock owner's entry. It waits up to
+// readCacheWaiterTimeout, and longer while the owner still runs and its lock
+// is younger than readCacheWaiterLiveOwnerTimeout. It stops when ctx is done:
+// ddto's Git worker, which stopped, does not wait for another process.
+func waitForReadCacheEntry[T any](ctx context.Context, paths readCachePaths, cacheKey string, baseScope readCacheScope, endpointScope readCacheEndpointScope, ttl time.Duration) (T, readCacheWaitOutcome) {
 	var zero T
 
 	if value, ok := readFreshReadCacheEntry[T](paths, cacheKey, baseScope, endpointScope, ttl); ok {
-		return value, true
+		return value, readCacheWaitHit
 	}
 
 	deadline := readCacheNow().Add(readCacheWaiterTimeout)
 	backoff := readCacheWaiterInitialBackoff
-	for readCacheNow().Before(deadline) {
+	for {
 		if ctx.Err() != nil {
-			return zero, false
+			return zero, readCacheWaitFallback
 		}
-		if _, err := os.Stat(paths.LockFile); os.IsNotExist(err) {
+		lock, err := readCacheLockEntryFromFile(paths.LockFile)
+		if os.IsNotExist(err) {
 			if value, ok := readFreshReadCacheEntry[T](paths, cacheKey, baseScope, endpointScope, ttl); ok {
-				return value, true
+				return value, readCacheWaitHit
 			}
-			return zero, false
+			return zero, readCacheWaitFallback
+		}
+		waitLonger := false
+		if err == nil {
+			switch alive, known := readCacheProcessAlive(lock.PID); {
+			case known && !alive:
+				return zero, readCacheWaitOwnerGone
+			case known:
+				waitLonger = readCacheNow().Sub(time.Unix(0, lock.CreatedAtUnixNano)) < readCacheWaiterLiveOwnerTimeout
+			}
+		}
+		if !waitLonger && !readCacheNow().Before(deadline) {
+			return zero, readCacheWaitFallback
 		}
 
 		readCacheSleep(backoff)
 		if value, ok := readFreshReadCacheEntry[T](paths, cacheKey, baseScope, endpointScope, ttl); ok {
-			return value, true
+			return value, readCacheWaitHit
 		}
-		if backoff < readCacheWaiterMaxBackoff {
-			backoff *= 2
-			if backoff > readCacheWaiterMaxBackoff {
-				backoff = readCacheWaiterMaxBackoff
-			}
-		}
+		backoff = min(2*backoff, readCacheWaiterMaxBackoff)
 	}
-	return zero, false
 }
 
 func readCacheLockOwnerStillValid(owner *readCacheLockOwner) bool {
@@ -827,6 +886,11 @@ func releaseReadCacheLock(owner *readCacheLockOwner) {
 func readCacheLockIsStale(lockPath string) (stale bool, decoded bool) {
 	lockEntry, err := readCacheLockEntryFromFile(lockPath)
 	if err == nil {
+		// A lock whose owner's process ended is stale too: nothing will
+		// release it.
+		if alive, known := readCacheProcessAlive(lockEntry.PID); known && !alive {
+			return true, true
+		}
 		return readCacheNow().Sub(time.Unix(0, lockEntry.CreatedAtUnixNano)) > readCacheStaleLockTimeout, true
 	}
 	info, statErr := os.Stat(lockPath)
@@ -996,6 +1060,15 @@ func readCacheParentPID() int {
 		return parentPID()
 	}
 	return os.Getppid()
+}
+
+// readCacheProcessAlive reports whether the process pid runs, and whether that
+// is known.
+func readCacheProcessAlive(pid int) (alive bool, known bool) {
+	if processAlive := readCacheHookSnapshot().processAlive; processAlive != nil {
+		return processAlive(pid)
+	}
+	return processAlive(pid)
 }
 
 func readCacheSleep(duration time.Duration) {

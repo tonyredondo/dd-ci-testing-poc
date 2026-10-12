@@ -946,6 +946,52 @@ duration. None of these lines holds a credential or a request body.
 `integration/TestMiniCLIStateDebugLog` and
 `integration/TestMiniCLIStateGivesModuleToCoverage` check them.
 
+## Read-cache waiters
+
+Upstream, a process that finds another one's lock on a read-cache key polls
+for its entry after 20, 40, 80 and then every 100 ms, and after 2 s sends the
+request itself, without the lock, and writes no entry. When the owner's
+request takes longer, as a large paginated known-tests response or a slow
+backend can make it, every waiting process pays the wait and a duplicate
+request. A lock whose owner was killed blocks its key for an hour.
+
+`waitForReadCacheEntry` (`utils/net/read_cache.go`) now:
+
+- polls every 5, 10 and then 20 ms (`readCacheWaiterInitialBackoff`,
+  `readCacheWaiterMaxBackoff`): a poll reads the small lock file and tries the
+  entry, and the owner's response reaches its waiters up to 80 ms sooner;
+- waits past `readCacheWaiterTimeout` while the lock's owner still runs and
+  the lock is younger than `readCacheWaiterLiveOwnerTimeout`, 30 s from its
+  creation, and keeps the 2 s rule when it cannot tell whether the owner runs
+  or the lock is older;
+- returns `readCacheWaitOwnerGone` when the owner's process ended without
+  releasing its lock. `readThroughShortLivedCache` then takes the lock and
+  requests as its owner, writing the entry for the others.
+
+`readCacheLockIsStale` also takes a lock whose owner's process ended for
+stale, so a process that finds one takes it at once. `processAlive`
+(`read_cache_process_unix.go`, `read_cache_process_windows.go`,
+`read_cache_process_other.go`) checks the lock's PID: a signal 0 on Unix, and
+`OpenProcess` with `GetExitCodeProcess` on Windows; it reports unknown where
+it cannot tell. A PID that another process reused looks alive, which costs at
+most the wait up to the 30 s bound. Replacing a dead owner's lock has the
+non-atomic replacement race described above: two processes can both own the
+key, which costs a duplicate request, never wrong data.
+
+A waiter whose owner released its lock without an entry still requests
+without the lock at once, as upstream: that owner failed or got a response
+that the cache does not keep, and taking the lock in turn would serialize the
+waiters' failures. The lock and entry formats are unchanged, so SDK binaries
+that share the cache directory interoperate.
+
+`SetReadCacheHooksForTesting` sets whether an owner runs to unknown, because
+test PIDs name no real process: existing tests keep the upstream behavior.
+`setReadCacheProcessAliveForTesting` overrides it.
+`TestReadCacheWaiterWaitsForLiveOwner`,
+`TestReadCacheWaiterBoundsTheWaitForLiveOwner`,
+`TestReadCacheTakesOverDeadOwnersLock` and `TestProcessAlive`
+(`utils/net/read_cache_waiter_test.go`) check these rules.
+
 ## Testify method names
 
 [`civisibility/integrations/gotesting/testify.go`](civisibility/integrations/gotesting/testify.go)

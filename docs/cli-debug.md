@@ -190,7 +190,9 @@ Test processes, in their output, and the worker:
 | --- | --- |
 | `civisibility.read_cache: invocation scope [directory:cli/… ttl:1h0m0s]` | The process shares ddto's invocation's cache |
 | `civisibility.read_cache: hit [endpoint:… key:… scope:cli]` | The response was there, usually from the worker |
-| `civisibility.read_cache: hit after wait [… waited:…]` | Another process was requesting it; this one waited for its response |
+| `civisibility.read_cache: hit after wait [… waited:…]` | Another process was requesting it; this one waited for its response, for up to 2 s, or up to 30 s from the lock's creation while that process runs |
+| `civisibility.read_cache: owner gone, taking over [… waited:…]` | The process that held the key's lock ended without releasing it; this one took the lock, requested and stored the response |
+| `civisibility.read_cache: waiter fallback [… waited:…]` | The owner released its lock without a response, or the wait ran out; this process requested for itself, without storing the response |
 | `civisibility.read_cache: miss [… duration:… cacheable:… error:…]` | This process requested it itself. `cacheable` says whether the response may be stored; a store that fails logs its own line, such as `temp write failed` or `rename failed`. In a test process with `scope:cli`, the worker's request differed, had not started, failed, or was not stored |
 | `civisibility.coverage: module from ddto's test description` or `… from go list [… duration:…]` | Where per-test coverage found the test package's module |
 

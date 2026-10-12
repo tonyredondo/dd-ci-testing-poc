@@ -18,8 +18,9 @@ whose pull request records its results, such as
 [#25](https://github.com/tonyredondo/dd-ci-testing-poc/pull/25),
 [#29](https://github.com/tonyredondo/dd-ci-testing-poc/pull/29),
 [#31](https://github.com/tonyredondo/dd-ci-testing-poc/pull/31),
-[#32](https://github.com/tonyredondo/dd-ci-testing-poc/pull/32) and
-[#34](https://github.com/tonyredondo/dd-ci-testing-poc/pull/34), or an item
+[#32](https://github.com/tonyredondo/dd-ci-testing-poc/pull/32),
+[#34](https://github.com/tonyredondo/dd-ci-testing-poc/pull/34) and
+[#38](https://github.com/tonyredondo/dd-ci-testing-poc/pull/38), or an item
 listed under [Evaluated and dropped](#evaluated-and-dropped).
 
 In the items, `civisibility/`, `hostname/`, `osinfo/` and `telemetry/` paths
@@ -60,9 +61,6 @@ Ordered by the expected effect on a `ddto test` run's wall time, then by cost.
 
 | Order | Change | Where it can help | Complexity |
 | --- | --- | --- | --- |
-| 10 | Remove a round trip from each test process's exit | About 100 ms of a run with 100 ms requests | Medium |
-| 56 | Reuse the preparation plan between unchanged invocations | About 90 ms of a cached Gin run's 184 ms | Medium to high |
-| 48 | Let read-cache waiters wait for a slow owner | 2 s and a duplicate request per binary when the worker's request is slow | Medium |
 | 23 | Charge the shared common snapshot once per batch | Up to about 60% more test-cycle requests per binary | Medium to high |
 | 14 | Leave standard-library imports out of library discovery | Part of a 28–80 ms query in most invocations | Low |
 | 15 | Overlap the Orchestrion tool lookup with preparation | 0.5–2 s in Orchestrion modes of large modules | Low to medium |
@@ -79,7 +77,9 @@ Ordered by the expected effect on a `ddto test` run's wall time, then by cost.
 
 | Item | Change | Decision |
 | --- | --- | --- |
+| 10 | Remove a round trip from each test process's exit; about 100 ms of a run with 100 ms requests | Not now (2026-10-12) |
 | 55 | Test source locations from the CLI; extends 39 | Parked on 2026-10-11: it needs a cache location |
+| 56 | Reuse the preparation plan between unchanged invocations; about 90 ms of a cached Gin run's 184 ms | Not yet (2026-10-12) |
 | 57 | Deliver events through the CLI; extends 10 | Not now (2026-10-11) |
 
 ### Evaluated and dropped
@@ -299,27 +299,6 @@ excluded by `-run`, which CI test splitting relies on. Otherwise the first test
 of each file pays for its parse: 1.08 ms for 2,300 lines and 4.5 ms for 8,300.
 Prefetch the files of selected tests with a bounded worker pool, or restrict
 the modified-test check to selected tests.
-
-## 48. Read-cache waiters
-
-A binary waiting for another binary's request
-(`civisibility/utils/net/read_cache.go:58-63`, `:349-358`, `:646-675`) polls
-after 20, 40, 80 and then every 100 ms. After 2 s it sends the request itself,
-without the lock, and never writes the result. When the owner takes longer, as
-with large paginated known-test or skippable responses or a slow backend,
-every binary of the first wave pays 2 s plus a duplicate request.
-
-Wait while the lock's process is alive and the lock is younger than the
-request bound, try to acquire the lock again before falling back, and cap the
-poll interval at 10–20 ms: a poll is one stat and a failed open. Expect 0–100 ms
-less per wait normally and 2 s less per waiter when the owner is slow. The
-cache format is shared with dd-trace-go binaries, so keep it compatible. In
-`ddto test`, [#34](https://github.com/tonyredondo/dd-ci-testing-poc/pull/34) starts these requests in the Git
-worker while `go test` builds, or when it links a test binary, so a binary
-waits only for the rest of a request that is already under way. A binary
-that has waited 2 s without an entry still sends its own: when the request
-outlasts the build or link by more than 2 s, as a large paginated known-tests
-response can, the binaries that started first do.
 
 ## 49. Read-cache expiry fields
 
