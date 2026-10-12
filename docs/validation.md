@@ -252,9 +252,10 @@ the key. Pull requests save only when nothing was restored, so `main` and nightl
 runs own the caches. The frozen Orchestrion binary is cached per platform and Go
 version. Module downloads outside tests retry with a five-minute deadline per
 attempt, because a proxy fetch can stall for several minutes. Before the tests,
-each job downloads this way the modules of the fixture and of
-`testdata/toolchain`, the consumer module of `TestMiniToolchainFeatures`, so no
-test fetches a module itself. Tip is built once
+the differential jobs download this way the fixture's modules, and every job,
+tip included, those of `testdata/toolchain`, the consumer module of
+`TestMiniToolchainFeatures`, which then needs no network. Tests that run
+`go mod tidy` in their own consumer modules still fetch what the cache lacks. Tip is built once
 from a recorded source SHA. All tip groups download that toolchain, check its
 revision, and disable automatic upgrades.
 

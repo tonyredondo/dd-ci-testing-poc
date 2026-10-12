@@ -338,6 +338,11 @@ jobs:
           echo "$RUNNER_TEMP/go-tip/bin" >> "$GITHUB_PATH"
           echo "GOTOOLCHAIN=local" >> "$GITHUB_ENV"
           echo "GO_TIP_SHA=$GO_TIP_SHA" >> "$GITHUB_ENV"
+      - name: Verify test modules
+        shell: bash
+        run: |
+          python scripts/ci_shards.py retry -- go -C testdata/toolchain mod download
+          go -C testdata/toolchain mod verify
       - name: Vet
         if: contains(format(',{0},', matrix.shards), ',units,')
         shell: bash
