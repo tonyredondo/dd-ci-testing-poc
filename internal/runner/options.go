@@ -180,7 +180,7 @@ func parseOptions(args []string, goflags string) (options, error) {
 			if arg == "--" {
 				// The terminator and everything after it go to the test binary.
 				o.arguments = append(o.arguments, argument{raw: args})
-				o.runsEveryTest = len(args) > 1 || o.runsEveryTest
+				o.runsEveryTest = true
 				break
 			}
 			arg = arg[1:]
@@ -220,7 +220,9 @@ func parseOptions(args []string, goflags string) (options, error) {
 			// binary.
 			if raw == "-args" || raw == "--args" {
 				o.arguments = append(o.arguments, argument{raw: args})
-				o.runsEveryTest = len(args) > 1 || o.runsEveryTest
+				for _, arg := range args[1:] {
+					o.noteTestArgument(arg)
+				}
 				break
 			}
 			o.runsEveryTest = true
@@ -266,6 +268,19 @@ func parseOptions(args []string, goflags string) (options, error) {
 // keeps go test from taking results from its cache.
 func (o *options) noteTestFlag(name string) {
 	if testBinaryFlags[name] && !cacheableTestFlags[name] {
+		o.runsEveryTest = true
+	}
+}
+
+// noteTestArgument records that an argument that go test hands to the test
+// binary as is, as those after -args, keeps it from taking results from its
+// cache, unless it has the form -test.<cacheable flag>=<value>.
+func (o *options) noteTestArgument(arg string) {
+	name, hasValue := "", false
+	if flag, ok := strings.CutPrefix(arg, "-test."); ok {
+		name, _, hasValue = strings.Cut(flag, "=")
+	}
+	if !hasValue || !cacheableTestFlags[name] {
 		o.runsEveryTest = true
 	}
 }

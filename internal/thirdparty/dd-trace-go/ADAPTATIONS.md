@@ -869,8 +869,11 @@ A run whose results all come from Go's test cache sends no request. ddto
 parses go test's arguments as go test does (`internal/runner/options.go`) and
 records in `tests.json` whether go test runs every test package
 (`RunsEveryTest`): in local directory mode, or when a test binary gets an
-argument outside go test's cacheable flags, such as `-count=1` or one after
-`-args`, from the command line or `GOFLAGS`. Only then does the worker search
+argument outside go test's cacheable flags, from the command line or
+`GOFLAGS`: a flag such as `-count=1`, an unknown flag, an argument after the
+package list, `--`, which go test hands on itself, or after `-args` anything
+but `-test.<cacheable flag>=<value>`, as go test checks the arguments that it
+hands on as they are (`noteTestArgument`). Only then does the worker search
 the commits and request while go test builds; otherwise it does both once a
 test process uses its state, when that process requests too, and the read
 cache still gives the later ones the responses. The cacheable flags are the
@@ -899,7 +902,8 @@ a test process that makes no request of its own, also with services from
 CODEOWNERS, and `integration/TestMiniCLIStateSharedRequests`, which checks one
 request per endpoint, or per service, in a `ddto test` run that runs every
 test, also with `GOEXPERIMENT`, none in a run whose results all come from the
-cache, ddto's `tests.json` and the removed cache directory.
+cache, also with cacheable flags after `-args`, ddto's `tests.json` and the
+removed cache directory.
 
 ## Testify method names
 

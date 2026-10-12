@@ -284,6 +284,12 @@ func TestMiniCLIStateSharedRequests(t *testing.T) {
 	if out, counts, _ := runCached(cachedEnv, "-run=^TestSub$", "./sub"); !strings.Contains(out, "(cached)") || len(counts) != 0 {
 		t.Fatalf("a cached run made requests %v:\n%s", counts, out)
 	}
+	// So with cacheable test flags after -args, which go test hands to the
+	// test binary as they are.
+	runCached(cachedEnv, "./sub", "-args", "-test.run=^TestSub$")
+	if out, counts, _ := runCached(cachedEnv, "./sub", "-args", "-test.run=^TestSub$"); !strings.Contains(out, "(cached)") || len(counts) != 0 {
+		t.Fatalf("a cached run with -args made requests %v:\n%s", counts, out)
+	}
 
 	counts, _ := run(featureEnv(t, server.URL, "XDG_CACHE_HOME="+cache))
 	for _, endpoint := range featureEndpoints {
