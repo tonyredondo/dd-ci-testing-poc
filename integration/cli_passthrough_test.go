@@ -189,6 +189,12 @@ func lookupThroughPath(t *testing.T, env []string, driver, program, notes string
 	bin := filepath.Join(cwd, "bin")
 	copyExecutable(t, program, filepath.Join(bin, "passthrough-path"))
 	copyExecutable(t, program, filepath.Join(cwd, "passthrough-path"))
+	// The script's $0 is the candidate that the libc started.
+	for _, dir := range []string{cwd, bin} {
+		if err := os.WriteFile(filepath.Join(dir, "passthrough-script"), []byte("#!/bin/sh\necho \"$0 $1\"\nexit 3\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
 	closed, empty, loop := t.TempDir(), t.TempDir(), t.TempDir()
 	if err := os.Chmod(closed, 0); err != nil {
 		t.Fatal(err)
@@ -213,6 +219,8 @@ func lookupThroughPath(t *testing.T, env []string, driver, program, notes string
 	}{
 		{"bin", "passthrough-path", 3, false},                 // relative entry
 		{"", "passthrough-path", 3, false},                    // empty: the current directory
+		{"bin", "passthrough-script", 3, false},               // the script's $0
+		{"", "passthrough-script", 3, false},                  // glibc's file, BSD's ./file
 		{unset, "true", 0, false},                             // the libc's default path
 		{bin, "", 127, false},                                 // an empty name
 		{notes, "notes", 126, false},                          // a file that cannot run
@@ -227,12 +235,17 @@ func lookupThroughPath(t *testing.T, env []string, driver, program, notes string
 			caseEnv = append(noPath[:len(noPath):len(noPath)], "PATH="+tc.path)
 		}
 		out, stderr, code := command(t, cwd, caseEnv, driver, tc.name, "3")
-		wantOut, _, wantCode := command(t, cwd, caseEnv, native, tc.name, "3")
+		wantOut, wantErr, wantCode := command(t, cwd, caseEnv, native, tc.name, "3")
 		if tc.unlike {
 			wantOut, wantCode = out, code
 		}
-		if out != wantOut || code != wantCode || tc.want >= 0 && code != tc.want {
-			t.Errorf("%q with PATH %.40q: %d %q %q; env: %d %q; want %d", tc.name, tc.path, code, out, stderr, wantCode, wantOut, tc.want)
+		// Where the command ran, its stderr holds only its own output and the
+		// libc's, which env and ddto print alike; their own errors differ.
+		if code == 126 || code == 127 || tc.unlike {
+			wantErr = stderr
+		}
+		if out != wantOut || stderr != wantErr || code != wantCode || tc.want >= 0 && code != tc.want {
+			t.Errorf("%q with PATH %.40q: %d %q %q; env: %d %q %q; want %d", tc.name, tc.path, code, out, stderr, wantCode, wantOut, wantErr, tc.want)
 		}
 	}
 }

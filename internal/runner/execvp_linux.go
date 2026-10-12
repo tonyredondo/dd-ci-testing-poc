@@ -6,10 +6,17 @@ import "syscall"
 // without PATH.
 const defaultPath = "/bin:/usr/bin"
 
-// skipEntry reports whether glibc skips a PATH entry: one too long for its
-// buffer, of Linux's PATH_MAX.
-func skipEntry(dir, _ string) bool {
-	return len(dir) >= 4096
+// entryPath returns the candidate that glibc tries for file in a PATH entry:
+// file itself in an empty entry, the current directory. glibc skips an entry
+// too long for its buffer, of Linux's PATH_MAX.
+func entryPath(dir, file string) (string, bool) {
+	if len(dir) >= 4096 {
+		return "", false
+	}
+	if dir == "" {
+		return file, true
+	}
+	return dir + "/" + file, true
 }
 
 // searchNext reports whether glibc goes on to the next PATH entry after err,

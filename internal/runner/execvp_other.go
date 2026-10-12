@@ -12,14 +12,19 @@ import (
 // defaultPath, _PATH_DEFPATH, without PATH.
 const defaultPath = "/usr/bin:/bin"
 
-// skipEntry reports whether the libc skips a PATH entry, with the message it
-// prints: one whose candidate is too long for its buffer, of PATH_MAX.
-func skipEntry(dir, file string) bool {
-	if len(dir)+len(file)+2 <= 1024 {
-		return false
+// entryPath returns the candidate that the libc tries for file in a PATH
+// entry: ./file in an empty entry, the current directory. The libc skips an
+// entry whose candidate is too long for its buffer, of PATH_MAX, with this
+// message.
+func entryPath(dir, file string) (string, bool) {
+	if dir == "" {
+		dir = "."
 	}
-	fmt.Fprintf(os.Stderr, "execvp: %s: path too long\n", dir)
-	return true
+	if len(dir)+len(file)+2 > 1024 {
+		fmt.Fprintf(os.Stderr, "execvP: %s: path too long\n", dir)
+		return "", false
+	}
+	return dir + "/" + file, true
 }
 
 // searchNext reports whether the libc goes on to the next PATH entry after

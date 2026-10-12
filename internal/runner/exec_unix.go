@@ -60,12 +60,9 @@ func execvp(args []string) error {
 	var err error = syscall.ENOENT
 	denied := false
 	for _, dir := range strings.Split(path, ":") {
-		if skipEntry(dir, file) {
+		candidate, ok := entryPath(dir, file)
+		if !ok {
 			continue
-		}
-		candidate := file
-		if dir != "" {
-			candidate = dir + "/" + file
 		}
 		err = execve(candidate, args)
 		next, deniedHere := searchNext(candidate, err)
