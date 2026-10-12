@@ -110,7 +110,7 @@ in this file's history.
 | 38 | Match test identity and management data by slicing | About 0.2 µs per subtest |
 | 40 | Resolve module and suite counters once | No wall-time change measured |
 | 41 | Stop the Testify parent walk when no suite is active | Not measured; read locks per `T.Run`, only after a suite ran |
-| 46 | Overlap telemetry round trips | Merged into item 10; its startup part only affects binaries outside `ddto test` |
+| 46 | Overlap telemetry round trips | Merged into item 10; its startup part only affects binaries without the worker's state: run alone, or under a `-exec` launcher |
 | 58 | Drop the per-test `t.Helper()` in the wrapper | 0.7 µs per test, and dropping it can move the lines that `testing` reports |
 
 ## 3. Per-test state in `testing`'s structures
@@ -190,8 +190,9 @@ settings, they wait for `app-started`
 (`civisibility/utils/net/client.go:226-255`), and at exit they make two
 `message-batch` sends after the test cycle. Starting telemetry before the Git
 phase of `createCITagsMap`, when the service name does not depend on Git, and
-combining compatible messages at exit would address them. Those binaries are
-outside `ddto test`'s path.
+combining compatible messages at exit would address them. Those binaries run
+alone or, under `ddto test`, with a `-exec` launcher, which keeps ddto from
+handing them the worker's state.
 
 ## 14. Standard-library imports in library discovery
 
@@ -315,9 +316,10 @@ less per wait normally and 2 s less per waiter when the owner is slow. The
 cache format is shared with dd-trace-go binaries, so keep it compatible. In
 `ddto test`, [#34](https://github.com/tonyredondo/dd-ci-testing-poc/pull/34) starts these requests in the Git
 worker while `go test` builds, or when it links a test binary, so a binary
-waits only for the rest of a request that is already under way. When that
-request takes longer than 2 s, as a large paginated known-tests response can,
-every binary still waiting sends its own.
+waits only for the rest of a request that is already under way. A binary
+that has waited 2 s without an entry still sends its own: when the request
+outlasts the build or link by more than 2 s, as a large paginated known-tests
+response can, the binaries that started first do.
 
 ## 49. Read-cache expiry fields
 
@@ -334,7 +336,7 @@ it too.
 Under `ddto test`, the worker usually makes these misses while `go test`
 builds, off the critical path. They stay on it when the worker waits for a
 test process (`-o` or `-a`), when the settings require Git, and in binaries
-outside `ddto test`.
+without the worker's state: run alone, or under a `-exec` launcher.
 
 ## 50. Idle connections during deferred startup
 
@@ -351,7 +353,8 @@ connection while tests run. Expect an estimated one to four handshakes, of
 Under `ddto test`, the read cache serves the startup requests that the worker
 made ahead. Deferred-mode binaries still dial again when the settings require
 Git, whose requests the worker does not make ahead, when the worker waits for a
-test process, and outside `ddto test`.
+test process, and without the worker's state: run alone, or under a `-exec`
+launcher.
 
 ## 51. Known tests per module
 
