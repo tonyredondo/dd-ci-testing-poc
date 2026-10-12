@@ -32,6 +32,7 @@ waiting. Durations include subprocess waiting and I/O; they do not measure CPU.
 
 The log records:
 
+- The command form that ran go test (`command="go -C test"`, for example).
 - The selected runtime, its resolved module version and replacement status, and
   the effective working directory, including `-C`.
 - The effective toolchain version and package resolution, with the number of
@@ -61,7 +62,7 @@ For example, these abbreviated lines explain a local Mini build. The times
 illustrate the format; they are not benchmark results:
 
 ```text
-2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +120µs runtime=mini
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +120µs command="test" runtime=mini
 2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +200µs prepare started
 2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +400µs resolve packages started
 2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +24ms resolve packages finished duration=23.6ms status=ok
@@ -149,6 +150,41 @@ are needed for medians and ranges. They do not measure the exact first test-body
 entry, individual compiler/linker durations, CPU time or memory. A normal
 `go test` duration includes both building and executing tests; use `-c` for a
 build-only observation.
+
+## Commands other than go test
+
+ddto runs any other command unchanged. With `DD_TRACE_DEBUG=true`, it logs on
+`stderr` which program it started and how, before the program's own output.
+The lines name the command and count its arguments; they never show them.
+
+On Unix, ddto replaces itself with the program, searching `PATH` as the
+platform's `execvp` does:
+
+```text
+… TestOptimization.build v0.0.0 DEBUG: +40µs pass-through command="go" args=2
+… TestOptimization.build v0.0.0 DEBUG: +52µs pass-through search path_entries=4 default_path=false
+… TestOptimization.build v0.0.0 DEBUG: +55µs pass-through exec path="/home/user/bin/go"
+… TestOptimization.build v0.0.0 DEBUG: +61µs pass-through exec path="/home/user/bin/go" failed error="no such file or directory"
+… TestOptimization.build v0.0.0 DEBUG: +63µs pass-through exec path="/usr/local/go/bin/go"
+```
+
+Each `exec path` line is a candidate, and a `failed` line follows each
+candidate that did not start. The last `exec path` line without one is the
+program that runs. `shell=/bin/sh` marks an executable file without a `#!`
+line, which `/bin/sh` runs.
+
+On Windows, ddto starts the program in a job and waits for it:
+
+```text
+… TestOptimization.build v0.0.0 DEBUG: +40µs pass-through command="build.cmd" args=1
+… TestOptimization.build v0.0.0 DEBUG: +45µs pass-through caller_command_line=true
+… TestOptimization.build v0.0.0 DEBUG: +2.1ms pass-through started path="C:\\tools\\build.cmd" job=true breakaway=true
+… TestOptimization.build v0.0.0 DEBUG: +1.2s pass-through exited code=0 duration=1.2s
+```
+
+`caller_command_line=true` means the program received ddto's command line
+after `ddto` as written. `job=false` means no job was available, so the program
+would outlive a terminated ddto.
 
 ## Keeping the CI state
 

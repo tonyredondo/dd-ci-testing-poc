@@ -3,6 +3,7 @@ package integration
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -82,6 +83,27 @@ func TestCLIPassesOtherCommandsThrough(t *testing.T) {
 		t.Fatalf("ddto orchestrion go build: %d %q", code, out)
 	}
 
+	// With DD_TRACE_DEBUG, ddto logs what it passed through, and how.
+	debugEnv := append(env[:len(env):len(env)], "DD_TRACE_DEBUG=true")
+	debugOut, debugErr, debugCode := command(t, dir, debugEnv, driver, program, "0", "secret")
+	want := []string{fmt.Sprintf("pass-through command=%q args=2", program), fmt.Sprintf("pass-through exec path=%q", program)}
+	if runtime.GOOS == "windows" {
+		want = []string{fmt.Sprintf("pass-through command=%q args=2", program), "pass-through caller_command_line=true", "job=true breakaway=true", "pass-through exited code=0"}
+	}
+	for _, line := range want {
+		if debugCode != 0 || !strings.HasPrefix(debugOut, "args=") || !strings.Contains(debugErr, line) {
+			t.Fatalf("with DD_TRACE_DEBUG: %d %q %q; want %q", debugCode, debugOut, debugErr, line)
+		}
+	}
+	if strings.Contains(debugErr, "secret") {
+		t.Fatalf("the debug log shows an argument: %q", debugErr)
+	}
+	if runtime.GOOS != "windows" {
+		if _, stderr, code := command(t, dir, debugEnv, driver, "ddto-no-such-command"); code != 127 || !strings.Contains(stderr, "pass-through search path_entries=") || !strings.Contains(stderr, "/ddto-no-such-command\" failed error=") {
+			t.Fatalf("the debug log of a failed search: %d %q", code, stderr)
+		}
+	}
+
 	for _, missing := range []string{"ddto-no-such-command", filepath.Join(t.TempDir(), "ddto-no-such-command")} {
 		if _, stderr, code := command(t, dir, env, driver, missing); code != 127 || !strings.Contains(stderr, "ddto-no-such-command") {
 			t.Fatalf("a missing command %s: %d %q; want 127", missing, code, stderr)
@@ -131,10 +153,12 @@ func TestCLIGoTestIsTest(t *testing.T) {
 		cwd := dir
 		if len(form) > 2 {
 			cwd = elsewhere
+			// The debug log names the form.
+			env = append(env, "DD_TRACE_DEBUG=true")
 		}
 		out, stderr, code := command(t, cwd, env, driver, append(form, "--runtime=mini", "-count=1", "-run=^TestPass$", ".")...)
 		server.Close()
-		if code != 0 || !strings.Contains(out, "ok") {
+		if code != 0 || !strings.Contains(out, "ok") || len(form) > 2 && !strings.Contains(stderr, `command="go -C test" runtime=mini`) {
 			t.Fatalf("ddto %v: %d\n%s\n%s", form, code, out, stderr)
 		}
 		receiver.mu.Lock()

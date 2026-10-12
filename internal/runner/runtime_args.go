@@ -23,6 +23,9 @@ type CLIOptions struct {
 	// (--keep-ci-state); KeepCIStateZip, if set, archives it there instead.
 	KeepCIState    bool
 	KeepCIStateZip string
+	// Command names the form that ran go test, such as "go -C test", for
+	// debug logs.
+	Command string
 }
 
 // DefaultCLIOptions are the options without any ddto flag.
@@ -113,13 +116,23 @@ func (o *CLIOptions) keepCIState(value string, hasValue bool) error {
 	return nil
 }
 
+// TestForm is the go test command that ddto's arguments name.
+type TestForm struct {
+	// Args are go test's arguments.
+	Args []string
+	// Name is the form, such as "go -C test", for debug logs.
+	Name string
+	// Orchestrion and GoTool select Orchestrion mode, through go tool.
+	Orchestrion, GoTool bool
+}
+
 // TestCommand reports whether ddto's arguments name go test: test, go test, or
 // Orchestrion's orchestrion go test and go tool orchestrion go test, which
-// run in Orchestrion mode. It returns go test's arguments. As go does, it
-// accepts -C dir after go and before test; go test takes it as its first flag.
-func TestCommand(args []string) (testArgs []string, orchestrion, goTool, ok bool) {
+// run in Orchestrion mode. As go does, it accepts -C dir after go and before
+// test; go test takes it as its first flag.
+func TestCommand(args []string) (TestForm, bool) {
 	if len(args) > 0 && args[0] == "test" {
-		return args[1:], false, false, true
+		return TestForm{Args: args[1:], Name: "test"}, true
 	}
 	for _, form := range []struct {
 		prefix              []string
@@ -129,18 +142,22 @@ func TestCommand(args []string) (testArgs []string, orchestrion, goTool, ok bool
 		{[]string{"orchestrion", "go"}, true, false},
 		{[]string{"go", "tool", "orchestrion", "go"}, true, true},
 	} {
-		if testArgs, ok := goTestArgs(args, form.prefix); ok {
-			return testArgs, form.orchestrion, form.goTool, true
+		if testArgs, chdir, ok := goTestArgs(args, form.prefix); ok {
+			name := strings.Join(form.prefix, " ")
+			if chdir {
+				name += " -C"
+			}
+			return TestForm{Args: testArgs, Name: name + " test", Orchestrion: form.orchestrion, GoTool: form.goTool}, true
 		}
 	}
-	return nil, false, false, false
+	return TestForm{}, false
 }
 
 // goTestArgs returns go test's arguments when args are prefix, a go command,
-// then test, after an optional -C dir.
-func goTestArgs(args, prefix []string) ([]string, bool) {
+// then test, after an optional -C dir, and whether -C came first.
+func goTestArgs(args, prefix []string) ([]string, bool, bool) {
 	if len(args) <= len(prefix) || !slices.Equal(args[:len(prefix)], prefix) {
-		return nil, false
+		return nil, false, false
 	}
 	args = args[len(prefix):]
 	var chdir []string
@@ -151,7 +168,7 @@ func goTestArgs(args, prefix []string) ([]string, bool) {
 		chdir, args = args[:1], args[1:]
 	}
 	if len(args) == 0 || args[0] != "test" {
-		return nil, false
+		return nil, false, false
 	}
-	return append(slices.Clip(chdir), args[1:]...), true
+	return append(slices.Clip(chdir), args[1:]...), chdir != nil, true
 }

@@ -35,7 +35,7 @@ func main() {
 		os.Exit(runner.RunTool(context.Background(), plan, args, os.Stdin, os.Stdout, os.Stderr))
 	}
 	// ddto go test is ddto test, as go test is.
-	args, orchestrion, goTool, isTest := runner.TestCommand(os.Args[1:])
+	form, isTest := runner.TestCommand(os.Args[1:])
 	switch {
 	case isTest:
 	case len(os.Args) == 1 || os.Args[1] == "-h" || os.Args[1] == "-help" || os.Args[1] == "--help":
@@ -50,7 +50,8 @@ func main() {
 		// in front of a go command, or any other, is transparent.
 		os.Exit(runner.ExecCommand(os.Args[1:]))
 	}
-	cli, args, err := runner.ParseCLIArgs(args)
+	cli, args, err := runner.ParseCLIArgs(form.Args)
+	cli.Command = form.Name
 	if err != nil {
 		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR:", err)
 		os.Exit(2)
@@ -62,8 +63,8 @@ func main() {
 			os.Exit(2)
 		}
 	}
-	if orchestrion {
-		runner.Exit(runner.RunOrchestrion(context.Background(), args, cli, goTool, os.Stdin, os.Stdout, os.Stderr))
+	if form.Orchestrion {
+		runner.Exit(runner.RunOrchestrion(context.Background(), args, cli, form.GoTool, os.Stdin, os.Stdout, os.Stderr))
 		return
 	}
 	runner.Exit(runner.RunRuntime(context.Background(), args, cli, os.Stdin, os.Stdout, os.Stderr))

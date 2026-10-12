@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"os/signal"
 	"slices"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/goenv"
@@ -30,7 +32,7 @@ func ExecWithCallerEnvironment(args []string) int {
 		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR: missing -exec program")
 		return 2
 	}
-	return runInJob(args, "", false, 2)
+	return runInJob(args, "", false, 2, nil)
 }
 
 // ExecCommand runs args unchanged, with the native streams and exit status:
@@ -40,6 +42,8 @@ func ExecWithCallerEnvironment(args []string) int {
 // quoting otherwise than Go writes it. The command may start processes
 // outside its job, as it could without ddto.
 func ExecCommand(args []string) int {
+	debug := debugFromContext(withCLIDebug(context.Background(), os.Stderr))
+	debug.printf("pass-through command=%q args=%d", args[0], len(args)-1)
 	if _, err := exec.LookPath(args[0]); err != nil {
 		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR:", err)
 		return commandStatus(err)
@@ -48,7 +52,8 @@ func ExecCommand(args []string) int {
 	if slices.Equal(args, os.Args[1:]) {
 		cmdline = commandLineTail(commandLine())
 	}
-	return runInJob(args, cmdline, true, 126)
+	debug.printf("pass-through caller_command_line=%t", cmdline != "")
+	return runInJob(args, cmdline, true, 126, debug)
 }
 
 // commandLine is this process's command line.
@@ -67,7 +72,7 @@ func commandLine() string {
 // they leave running, start processes outside it (CREATE_BREAKAWAY_FROM_JOB).
 // They get this process's environment and standard streams as they are:
 // os/exec would add SYSTEMROOT and open NUL for a missing stream.
-func runInJob(args []string, cmdline string, breakaway bool, failed int) int {
+func runInJob(args []string, cmdline string, breakaway bool, failed int, debug *cliDebug) int {
 	signal.Notify(make(chan os.Signal, 1), os.Interrupt)
 	path, err := exec.LookPath(args[0])
 	if err != nil {
@@ -79,11 +84,14 @@ func runInJob(args []string, cmdline string, breakaway bool, failed int) int {
 		Files: []uintptr{stdHandle(os.Stdin), stdHandle(os.Stdout), stdHandle(os.Stderr)},
 		Sys:   &syscall.SysProcAttr{CmdLine: cmdline},
 	}
+	started := time.Now()
 	process, job, err := startInJob(path, args, attr, breakaway)
 	if err != nil {
+		debug.printf("pass-through start path=%q failed error=%q", path, err.Error())
 		fmt.Fprintln(os.Stderr, err)
 		return failed
 	}
+	debug.printf("pass-through started path=%q job=%t breakaway=%t", path, job != 0, breakaway)
 	defer syscall.CloseHandle(process)
 	code, err := waitProcess(process)
 	if job != 0 {
@@ -93,6 +101,7 @@ func runInJob(args []string, cmdline string, breakaway bool, failed int) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
+	debug.printf("pass-through exited code=%d duration=%s", code, time.Since(started).Round(time.Microsecond))
 	return int(code)
 }
 

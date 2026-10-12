@@ -48,7 +48,9 @@ DD_SERVICE=my-tests DD_ENV=ci ddto test -count=1 ./...
 streams, environment and exit status: `ddto go build ./...` runs `go build
 ./...`. As from `env`, a command that is not found exits with 127, and one
 that cannot run with 126. A CI script can put `ddto` in front of its go
-commands; only `go test` reports to CI Visibility.
+commands; only `go test` reports to CI Visibility. With `DD_TRACE_DEBUG=true`,
+ddto logs on `stderr` which program it started and how; see
+[CLI build diagnostics](docs/cli-debug.md#commands-other-than-go-test).
 
 ddto is a Go program, and a command starts with the process state that Go's
 runtime leaves. On Unix, some signals that the caller ignored or blocked,

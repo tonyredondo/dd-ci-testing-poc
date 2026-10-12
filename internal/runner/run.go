@@ -617,7 +617,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		started.finish(err)
 		debug.printf("ddto exit_code=%d", exitCode)
 	}()
-	debug.printf("runtime=%s", runtime)
+	debug.printf("command=%q runtime=%s", cli.Command, runtime)
 	signals := make(chan os.Signal, 4)
 	signal.Notify(signals, forwardedSignals...)
 	defer signal.Stop(signals)

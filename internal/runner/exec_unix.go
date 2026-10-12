@@ -3,6 +3,7 @@
 package runner
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -35,7 +36,9 @@ func ExecWithCallerEnvironment(args []string) int {
 // command but go test through. It finds and starts the command as execvp,
 // which env and shells use, does.
 func ExecCommand(args []string) int {
-	err := execvp(args)
+	debug := debugFromContext(withCLIDebug(context.Background(), os.Stderr))
+	debug.printf("pass-through command=%q args=%d", args[0], len(args)-1)
+	err := execvp(args, debug)
 	fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR:", &fs.PathError{Op: "exec", Path: args[0], Err: err})
 	return commandStatus(err)
 }
@@ -45,13 +48,13 @@ func ExecCommand(args []string) int {
 // defaultPath's without PATH, where an empty entry is the current directory.
 // The libc's own rules (searchNext) say which errors end the search and which
 // report that a candidate could not run (EACCES) if nothing else starts.
-func execvp(args []string) error {
+func execvp(args []string, debug *cliDebug) error {
 	file := args[0]
 	if file == "" {
 		return syscall.ENOENT
 	}
 	if strings.Contains(file, "/") {
-		return execve(file, args)
+		return execve(file, args, debug)
 	}
 	if err := searchName(file); err != nil {
 		return err
@@ -60,6 +63,7 @@ func execvp(args []string) error {
 	if !ok {
 		path = defaultPath
 	}
+	debug.printf("pass-through search path_entries=%d default_path=%t", strings.Count(path, ":")+1, !ok)
 	var err error = syscall.ENOENT
 	denied := false
 	for _, dir := range strings.Split(path, ":") {
@@ -67,7 +71,7 @@ func execvp(args []string) error {
 		if !ok {
 			continue
 		}
-		err = execve(candidate, args)
+		err = execve(candidate, args, debug)
 		next, deniedHere := searchNext(candidate, err)
 		if !next {
 			return err
@@ -82,11 +86,14 @@ func execvp(args []string) error {
 
 // execve starts path with args, and an executable file without a #! line
 // with /bin/sh, as execvp does.
-func execve(path string, args []string) error {
+func execve(path string, args []string, debug *cliDebug) error {
+	debug.printf("pass-through exec path=%q", path)
 	err := syscall.Exec(path, args, os.Environ())
 	if err == syscall.ENOEXEC {
+		debug.printf("pass-through exec path=%q shell=/bin/sh reason=%q", path, "no #! line")
 		err = syscall.Exec("/bin/sh", append([]string{"/bin/sh", path}, args[1:]...), os.Environ())
 	}
+	debug.printf("pass-through exec path=%q failed error=%q", path, err.Error())
 	return err
 }
 
