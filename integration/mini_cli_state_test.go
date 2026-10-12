@@ -141,23 +141,6 @@ func TestMiniCLIStateRequestsAhead(t *testing.T) {
 	proceed := startWorker(t, dir, driver, env, state, dir)
 	// No test process has started: the worker requests on its own.
 	intake.wait(t, map[string]int{"known": 1, "skippable": 1, "management": 1})
-	// It records its state directory with its read-cache entries, so that a
-	// later invocation can tell when it has ended. Only Linux takes the user
-	// cache directory from XDG_CACHE_HOME.
-	if runtime.GOOS == "linux" {
-		records, err := filepath.Glob(filepath.Join(cache, "dd-trace-go", "civisibility-read-cache", "cli", "*", "state"))
-		if err != nil || len(records) != 1 {
-			t.Fatalf("records %v, %v", records, err)
-		}
-		var owner struct {
-			Host     string `json:"host"`
-			StateDir string `json:"state_dir"`
-		}
-		host, _ := os.Hostname()
-		if recorded, err := os.ReadFile(records[0]); err != nil || json.Unmarshal(recorded, &owner) != nil || owner.StateDir != state || owner.Host != host {
-			t.Fatalf("recorded %q, %v; want %q on %q", recorded, err, state, host)
-		}
-	}
 	if out, stderr, code := command(t, dir, append(env, "DDTO_GIT_STATE="+state), bin, "-test.run=^TestPass$"); code != 0 {
 		t.Fatalf("fixture: %d %s %s", code, out, stderr)
 	}

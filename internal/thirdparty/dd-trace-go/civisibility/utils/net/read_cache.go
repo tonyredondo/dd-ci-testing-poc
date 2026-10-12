@@ -52,9 +52,9 @@ const (
 	// readCacheCLIDirectory holds, in the shared directory, one directory of
 	// entries per ddto invocation.
 	readCacheCLIDirectory = "cli"
-	// readCacheCLIStateFile records, in an invocation's directory, its machine
-	// and state directory, which ddto removes once the invocation has ended.
-	readCacheCLIStateFile = "state"
+	// readCacheCLICleanupMaxDirectories bounds the invocation directories that
+	// one cleanup examines.
+	readCacheCLICleanupMaxDirectories = 8
 
 	// readCacheEndpointSettings names the settings cache endpoint.
 	readCacheEndpointSettings = "settings"
@@ -103,9 +103,6 @@ type (
 		Source []string
 		Hash   string
 		TTL    time.Duration
-		// stateDir is the state directory of ddto's invocation, in the cli
-		// scope.
-		stateDir string
 	}
 
 	// readCacheEndpointScope identifies the cacheable endpoint and semantic request payload.
@@ -149,13 +146,6 @@ type (
 		CreatedAtUnixNano int64  `json:"created_at_unix_nano"`
 		CacheKey          string `json:"cache_key"`
 		OwnerNonce        string `json:"owner_nonce"`
-	}
-
-	// readCacheCLIOwner is what an invocation's directory records about the
-	// invocation: its machine and state directory.
-	readCacheCLIOwner struct {
-		Host     string `json:"host"`
-		StateDir string `json:"state_dir"`
 	}
 
 	readCacheLockOwner struct {
@@ -263,9 +253,7 @@ func cliReadCacheScopeIdentity(identity readCacheScopeIdentity, dir string) read
 		return identity
 	}
 	values := []readCacheIdentityValue{{Name: "cli_state", Value: dir}}
-	identity = newReadCacheScopeIdentityFromValues(readCacheScopeCLI, time.Hour, values)
-	identity.stateDir = dir
-	return identity
+	return newReadCacheScopeIdentityFromValues(readCacheScopeCLI, time.Hour, values)
 }
 
 // readCacheSubdirectory returns the directory, in the shared one, of the
@@ -277,32 +265,10 @@ func readCacheSubdirectory(identity readCacheScopeIdentity) string {
 	return filepath.Join(readCacheCLIDirectory, identity.Hash)
 }
 
-// prepareCLIReadCache creates the directory of the invocation's entries and
-// records there its machine and state directory, so that a later cleanup on
-// that machine knows when the invocation has ended. ddto's Git worker calls it
-// before any test process uses its state.
-func prepareCLIReadCache(identity readCacheScopeIdentity) error {
-	host, err := os.Hostname()
-	if err != nil {
-		return err
-	}
-	record, err := json.Marshal(readCacheCLIOwner{Host: host, StateDir: identity.stateDir})
-	if err != nil {
-		return err
-	}
-	dir, err := readCacheDirectory(readCacheSubdirectory(identity))
-	if err != nil {
-		return err
-	}
-	if err := ensureReadCacheDir(dir); err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(dir, readCacheCLIStateFile), record, 0o600)
-}
-
 // RemoveCLIReadCache removes the read-cache entries of ddto's invocation
 // whose state is in stateDir, once its Git worker and test processes exited.
-// It also removes those of invocations that ended without removing theirs.
+// It also removes the expired entries of invocations that ended without
+// removing theirs.
 func RemoveCLIReadCache(stateDir string) error {
 	identity := cliReadCacheScopeIdentity(readCacheScopeIdentity{Kind: readCacheScopeLocal}, stateDir)
 	if identity.Kind != readCacheScopeCLI {
@@ -312,47 +278,34 @@ func RemoveCLIReadCache(stateDir string) error {
 	if err != nil {
 		return err
 	}
-	defer removeEndedCLIReadCaches(filepath.Dir(dir), identity.TTL)
+	defer removeExpiredCLIReadCaches(filepath.Dir(dir))
 	return os.RemoveAll(dir)
 }
 
-// removeEndedCLIReadCaches removes, in root, the entries of this machine's
-// invocations that a reboot ended before ddto removed them: their recorded
-// state directory, which ddto removes last, is gone, and nothing changed in
-// them for longer than the TTL. A running invocation keeps its state
-// directory, and so its entries; so does a killed ddto, whose state directory
-// also stays. Another machine's, which may share the cache directory, stay:
-// this machine cannot tell whether they ended. root holds only invocation
-// directories; each call examines and removes a bounded number of them, from
-// a position that the clock moves, so that directories that stay do not hide
-// the others.
-func removeEndedCLIReadCaches(root string, ttl time.Duration) {
-	entries, err := os.ReadDir(root)
-	if err != nil || len(entries) == 0 {
+// removeExpiredCLIReadCaches applies, to a bounded number of the invocation
+// directories in root, the shared directory's cleanup, which removes only
+// expired entries, stale locks and old temporary files, and then removes the
+// directories that are empty. A kill or a reboot leaves an invocation's
+// directory; its entries expire within the TTL, so it empties and goes, and
+// hides the others only for that long. A running invocation's entries do not
+// expire, and its process holds a lock file in the directory while it writes,
+// so the directory cannot go under it.
+func removeExpiredCLIReadCaches(root string) {
+	dirFile, err := os.Open(root)
+	if err != nil {
 		return
 	}
-	host, err := os.Hostname()
-	if err != nil || host == "" {
-		return
-	}
-	start := int(uint64(readCacheNow().UnixNano()) % uint64(len(entries)))
-	removed := 0
-	for i := range min(len(entries), 2*readCacheGlobalCleanupMaxEntries) {
-		if removed == readCacheGlobalCleanupMaxEntries {
+	entries, _ := dirFile.ReadDir(readCacheCLICleanupMaxDirectories)
+	_ = dirFile.Close()
+	start := readCacheNow()
+	for _, entry := range entries {
+		if readCacheNow().Sub(start) > readCacheGlobalCleanupMaxDuration {
 			return
 		}
-		dir := filepath.Join(root, entries[(start+i)%len(entries)].Name())
-		var owner readCacheCLIOwner
-		record, err := os.ReadFile(filepath.Join(dir, readCacheCLIStateFile))
-		if err != nil || json.Unmarshal(record, &owner) != nil || owner.Host != host || owner.StateDir == "" {
-			continue
-		}
-		if _, err := os.Stat(owner.StateDir); !os.IsNotExist(err) {
-			continue
-		}
-		if readCachePathOlderThan(dir, ttl) {
-			_ = os.RemoveAll(dir)
-			removed++
+		if entry.IsDir() {
+			dir := filepath.Join(root, entry.Name())
+			readCacheGlobalCleanup(dir)
+			_ = os.Remove(dir)
 		}
 	}
 }
@@ -761,6 +714,13 @@ func tryCreateReadCacheLock(owner *readCacheLockOwner) readCacheLockAcquireStatu
 		return readCacheLockBypass
 	}
 	file, err := os.OpenFile(owner.Path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if os.IsNotExist(err) {
+		// The cleanup removed the empty directory of an invocation's entries
+		// after this process created it.
+		if err = ensureReadCacheDir(filepath.Dir(owner.Path)); err == nil {
+			file, err = os.OpenFile(owner.Path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		}
+	}
 	if err != nil {
 		if os.IsExist(err) {
 			return readCacheLockActive

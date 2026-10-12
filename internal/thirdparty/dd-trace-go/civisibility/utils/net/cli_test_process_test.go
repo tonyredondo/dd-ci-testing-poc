@@ -7,7 +7,6 @@ package net
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -154,111 +153,54 @@ func TestReadCacheWaiterStopsWithContext(t *testing.T) {
 	require.Equal(t, 1, sleeps)
 }
 
-// recordCLIOwner records, in the invocation directory dir, its owner's
-// machine and state directory, as prepareCLIReadCache does.
-func recordCLIOwner(t *testing.T, dir, host, state string) {
+// writeCLIEntry writes, in the invocation directory dir, an entry named name
+// created at createdAt that lasts ttl.
+func writeCLIEntry(t *testing.T, dir, name string, createdAt time.Time, ttl time.Duration) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(dir, 0o700))
-	record, err := json.Marshal(readCacheCLIOwner{Host: host, StateDir: state})
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, readCacheCLIStateFile), record, 0o600))
+	entry := fmt.Sprintf(`{"created_at_unix_nano":%d,"ttl_seconds":%d}`, createdAt.UnixNano(), int64(ttl.Seconds()))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(entry), 0o600))
 }
 
-// The worker records its machine and state directory with its entries, so
-// that a later invocation on that machine removes the entries of one that a
-// reboot ended: those whose state directory is gone and that did not change
-// for longer than the TTL. A running invocation, which keeps its state
-// directory, keeps its entries however old; so do another machine's, which
-// may be running, and a directory without the record.
-func TestRemoveCLIReadCacheRemovesEndedInvocations(t *testing.T) {
-	now := time.Now()
+// A kill or a reboot leaves an invocation's directory. A later invocation
+// removes its expired entries, as the shared directory's cleanup does, and
+// then the emptied directory. A running invocation's entries, which have not
+// expired, stay, and so does a directory where a process holds a lock.
+func TestRemoveCLIReadCacheRemovesExpiredEntries(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
 	root := t.TempDir()
 	setReadCacheHooksForTest(t, root, &now, 111, 222)
-	host, err := os.Hostname()
-	require.NoError(t, err)
-	running := t.TempDir()
-	identity := cliReadCacheScopeIdentity(newReadCacheScopeIdentity(map[string]string{}), running)
-	require.NoError(t, prepareCLIReadCache(identity))
 	shared := filepath.Join(root, "dd-trace-go", "civisibility-read-cache")
-	var recorded readCacheCLIOwner
-	data, err := os.ReadFile(filepath.Join(shared, readCacheSubdirectory(identity), readCacheCLIStateFile))
-	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(data, &recorded))
-	require.Equal(t, readCacheCLIOwner{Host: host, StateDir: running}, recorded)
-
 	cli := filepath.Join(shared, readCacheCLIDirectory)
-	gone := filepath.Join(t.TempDir(), "gone")
-	recordCLIOwner(t, filepath.Join(cli, "ended"), host, gone)
-	recordCLIOwner(t, filepath.Join(cli, "ended-recently"), host, gone)
-	recordCLIOwner(t, filepath.Join(cli, "remote"), host+"-other", gone)
-	require.NoError(t, os.MkdirAll(filepath.Join(cli, "unrecorded"), 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(shared, "entry.json"), nil, 0o600))
-	old := now.Add(-2 * time.Hour)
-	for _, name := range []string{"ended", "remote", "unrecorded", identity.Hash} {
-		require.NoError(t, os.Chtimes(filepath.Join(cli, name), old, old))
-	}
-	require.NoError(t, os.Chtimes(filepath.Join(shared, "entry.json"), old, old))
+	writeCLIEntry(t, filepath.Join(cli, "ended"), "ended.json", now.Add(-2*time.Hour), time.Hour)
+	writeCLIEntry(t, filepath.Join(cli, "running"), "running.json", now.Add(-time.Minute), time.Hour)
+	writeCLIEntry(t, filepath.Join(cli, "writing"), "writing.lock", now.Add(-time.Minute), time.Hour)
+	writeCLIEntry(t, shared, "shared.json", now.Add(-2*time.Hour), time.Hour)
 
-	require.NoError(t, RemoveCLIReadCache(filepath.Join(t.TempDir(), "other")))
+	require.NoError(t, RemoveCLIReadCache("/state"))
 	for name, kept := range map[string]bool{
-		filepath.Join(readCacheCLIDirectory, "ended"):          false,
-		filepath.Join(readCacheCLIDirectory, "ended-recently"): true,
-		filepath.Join(readCacheCLIDirectory, "remote"):         true,
-		filepath.Join(readCacheCLIDirectory, "unrecorded"):     true,
-		readCacheSubdirectory(identity):                        true,
-		"entry.json":                                           true,
+		filepath.Join(readCacheCLIDirectory, "ended"):                   false,
+		filepath.Join(readCacheCLIDirectory, "running", "running.json"): true,
+		filepath.Join(readCacheCLIDirectory, "writing", "writing.lock"): true,
+		"shared.json": true,
 	} {
 		_, err := os.Stat(filepath.Join(shared, name))
 		require.Equal(t, kept, err == nil, name)
 	}
 }
 
-// Each invocation removes a bounded number of ended invocations' entries; the
-// next one continues.
-func TestRemoveCLIReadCacheBoundsRemovals(t *testing.T) {
-	now := time.Now()
-	root := t.TempDir()
-	setReadCacheHooksForTest(t, root, &now, 111, 222)
-	host, err := os.Hostname()
-	require.NoError(t, err)
-	cli := filepath.Join(root, "dd-trace-go", "civisibility-read-cache", readCacheCLIDirectory)
-	gone, old := filepath.Join(t.TempDir(), "gone"), now.Add(-2*time.Hour)
-	for i := range readCacheGlobalCleanupMaxEntries + 8 {
-		dir := filepath.Join(cli, fmt.Sprint("ended-", i))
-		recordCLIOwner(t, dir, host, gone)
-		require.NoError(t, os.Chtimes(dir, old, old))
-	}
-	for _, left := range []int{8, 0} {
-		require.NoError(t, RemoveCLIReadCache(filepath.Join(t.TempDir(), "other")))
-		entries, err := os.ReadDir(cli)
-		require.NoError(t, err)
-		require.Len(t, entries, left)
-	}
-}
-
-// Directories that stay do not hide the others: each call examines a bounded
-// window, which starts where the clock points.
+// Each invocation examines a bounded number of directories. Directories that
+// stay, whatever their order, hide the others only until their entries expire.
 func TestRemoveCLIReadCacheReachesEveryDirectory(t *testing.T) {
-	host, err := os.Hostname()
-	require.NoError(t, err)
-	examined := 2 * readCacheGlobalCleanupMaxEntries
-	total := examined + 8
 	now := time.Unix(1_700_000_000, 0)
-	// The first call's window starts at the first directory.
-	now = now.Add(time.Duration(uint64(total) - uint64(now.UnixNano())%uint64(total)))
 	root := t.TempDir()
 	setReadCacheHooksForTest(t, root, &now, 111, 222)
 	cli := filepath.Join(root, "dd-trace-go", "civisibility-read-cache", readCacheCLIDirectory)
-	gone, old := filepath.Join(t.TempDir(), "gone"), now.Add(-2*time.Hour)
-	for i := range examined {
-		dir := filepath.Join(cli, fmt.Sprintf("a-%03d", i))
-		require.NoError(t, os.MkdirAll(dir, 0o700))
-		require.NoError(t, os.Chtimes(dir, old, old))
+	for i := range readCacheCLICleanupMaxDirectories {
+		writeCLIEntry(t, filepath.Join(cli, fmt.Sprint("fresh-", i)), "entry.json", now.Add(-time.Minute), time.Hour)
 	}
-	for i := range total - examined {
-		dir := filepath.Join(cli, fmt.Sprintf("z-%03d", i))
-		recordCLIOwner(t, dir, host, gone)
-		require.NoError(t, os.Chtimes(dir, old, old))
+	for i := range 2 {
+		writeCLIEntry(t, filepath.Join(cli, fmt.Sprint("expired-", i)), "entry.json", now.Add(-2*time.Hour), time.Hour)
 	}
 	count := func() int {
 		entries, err := os.ReadDir(cli)
@@ -266,9 +208,30 @@ func TestRemoveCLIReadCacheReachesEveryDirectory(t *testing.T) {
 		return len(entries)
 	}
 
-	require.NoError(t, RemoveCLIReadCache(filepath.Join(t.TempDir(), "other")))
-	require.Equal(t, total, count())
-	now = now.Add(time.Duration(examined))
-	require.NoError(t, RemoveCLIReadCache(filepath.Join(t.TempDir(), "other")))
-	require.Equal(t, examined, count())
+	require.NoError(t, RemoveCLIReadCache("/state"))
+	require.True(t, count() >= readCacheCLICleanupMaxDirectories, "a fresh entry was removed")
+	now = now.Add(2 * time.Hour)
+	require.NoError(t, RemoveCLIReadCache("/state"))
+	// Every entry has expired: a call removes the bounded number of
+	// directories, and the next one the rest.
+	require.Equal(t, 2, count())
+	require.NoError(t, RemoveCLIReadCache("/state"))
+	require.Equal(t, 0, count())
+}
+
+// The cleanup can remove an invocation's empty directory after a process
+// created it for a request: the process creates it again for its lock, and the
+// directory, which then holds the lock, cannot go while the process writes.
+func TestReadCacheLockRecreatesRemovedDirectory(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	setReadCacheHooksForTest(t, t.TempDir(), &now, 111, 222)
+	identity := cliReadCacheScopeIdentity(newReadCacheScopeIdentity(map[string]string{}), "/state")
+	paths, err := readCachePathsIn(readCacheSubdirectory(identity), "key")
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(paths.Dir))
+
+	owner, status := acquireReadCacheLock(paths, "key")
+	require.Equal(t, readCacheLockAcquired, status)
+	require.Error(t, os.Remove(paths.Dir))
+	releaseReadCacheLock(owner)
 }

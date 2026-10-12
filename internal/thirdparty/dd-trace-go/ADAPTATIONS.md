@@ -804,17 +804,16 @@ will, and the read cache hands the responses to them.
   directory, `cli/<hash>` in the shared one (`readCacheSubdirectory`,
   `readCachePathsIn`), which ddto removes once the worker has exited
   (`RemoveCLIReadCache`); the shared directory's cleanup skips directories.
-  The worker's `NewCLIClient` records there the invocation's machine and
-  state directory (`prepareCLIReadCache`, file `state`). `RemoveCLIReadCache`
-  then also removes the `cli/` directories of this machine's invocations that
-  a reboot ended: their recorded state directory, which ddto removes last, is
-  gone, and they did not change for longer than the TTL. A running invocation
-  keeps its state directory, and so its entries; so does a killed ddto, whose
-  state directory also stays. Another machine's directories, in a shared
-  cache directory, stay, since this machine cannot tell whether they ended.
-  Each call examines and removes a bounded number of directories, from a
-  position that the clock moves, so that directories that stay do not hide
-  the others.
+  A kill or a reboot leaves an invocation's directory, so
+  `RemoveCLIReadCache` also applies the shared directory's cleanup, which
+  removes only expired entries, stale locks and old temporary files, to a
+  bounded number of `cli/` directories (`removeExpiredCLIReadCaches`), and
+  removes those that it emptied. A left directory's entries expire within the
+  TTL, so it hides the others only for that long; a running invocation's
+  entries do not expire. A process holds a lock file in the directory while it
+  writes, so the directory cannot go under it, and `tryCreateReadCacheLock`
+  creates the directory again if the cleanup removed it, empty, after the
+  process computed its paths.
   They stay in the user's cache directory, not the state directory: test
   processes may read them while Go's test log is active, and the state
   directory can lie in the module.
@@ -857,9 +856,9 @@ runtime keep their own requests and scopes.
 
 Checks: `TestCLIReadCacheScopeIdentity`, `TestCLITestProcessClients`,
 `TestCLIReadCacheLastsTheInvocation`,
-`TestRemoveCLIReadCacheRemovesEndedInvocations`,
-`TestRemoveCLIReadCacheBoundsRemovals`,
+`TestRemoveCLIReadCacheRemovesExpiredEntries`,
 `TestRemoveCLIReadCacheReachesEveryDirectory`,
+`TestReadCacheLockRecreatesRemovedDirectory`,
 `TestReadCacheWaiterStopsWithContext`,
 `TestTestRuntimeVersionMatchesBinaries`, which builds a binary under each
 `GOEXPERIMENT` case, `TestExperimentSeparator`,
