@@ -43,11 +43,14 @@ remaining costs come in three sizes:
 - **Preparation.** Every invocation spends about 95 ms before `go test` starts,
   and more in larger modules: a run whose results all came from Go's test cache
   took 184 ms against 78 ms natively.
-- **Per-test and per-event work.** Mini adds about 35 µs per test, of which
-  item 58's `t.Helper()` is 2%. The micro-optimizations below one microsecond
-  per test or event stay under 1% of Mini's own cost each and do not move a
-  run's wall time; they were dropped. Revisit them together if a profile of a
-  large suite shows Mini's per-test cost dominating.
+- **Per-test and per-event work.** Mini adds about 35 µs per test: item 58
+  measured its `t.Helper()` at 0.7 µs, 2% of that cost, with 2,000 empty tests
+  at `2d0059a`. The dropped micro-optimizations save at most about a
+  microsecond per test or event each, about 3% of that estimate, and a few
+  milliseconds of CPU for Gin's 700 tests, spread across six binaries. A test
+  emits one test event; tests that create many SDK spans emit more, which is
+  where items 22 and 24 would count. Revisit them with a profile of such a
+  suite, or of one large enough for Mini's per-test cost to dominate.
 
 ## Summary
 
@@ -67,6 +70,8 @@ Ordered by the expected effect on a `ddto test` run's wall time, then by cost.
 | 51 | Store known tests per module in the read cache | 10–25 ms of CPU and megabytes per binary with 100,000 tests | Medium to high |
 | 32 | Scope retry subtest-name cleanup to the attempt | Up to 9 ms per retry group with 100,000 subtests, blocking `T.Run` | Medium to high |
 | 28 | Drain the final backlog in parallel | Events dropped behind a slow intake at close | Low to medium |
+| 49 | Stream read-cache expiry fields | 5–15 ms per cache miss when a test process requests itself | Low |
+| 50 | Keep idle connections during deferred startup | One to four TLS handshakes at startup in deferred mode | Low to medium |
 | 8 | Collect coverage counters in memory | Profile I/O and parsing per covered test; measure first | High |
 | 3 | Keep per-test state in `testing`'s structures | About 1 µs per test; mainly removes offset and reflection code | Medium to high |
 
@@ -106,8 +111,6 @@ in this file's history.
 | 40 | Resolve module and suite counters once | No wall-time change measured |
 | 41 | Stop the Testify parent walk when no suite is active | Not measured; read locks per `T.Run`, only after a suite ran |
 | 46 | Overlap telemetry round trips | Merged into item 10; its startup part only affects binaries outside `ddto test` |
-| 49 | Stream read-cache expiry fields | Under `ddto test`, cache misses happen in the worker while `go test` builds |
-| 50 | Keep idle connections during deferred startup | Under `ddto test`, the read cache serves the startup requests that dialed again; it remains for deferred-mode binaries outside it |
 | 58 | Drop the per-test `t.Helper()` in the wrapper | 0.7 µs per test, and dropping it can move the lines that `testing` reports |
 
 ## 3. Per-test state in `testing`'s structures
@@ -167,13 +170,14 @@ process's exit took 200 ms: the test-cycle send, then the telemetry request.
 ddto then waited about 100 ms after `go test` for the worker's `app-closing`.
 The last 300 ms of the run were these round trips.
 
-Remove one of them from each test process, in one of two ways:
-
-- Hand the test process's telemetry to the worker, which sends it with
-  `app-closing`. Test processes then send no telemetry request.
-- Send the telemetry concurrently with the session-close flush.
-
-Either takes about 100 ms off such a run. Keep `app-started` in its own
+Hand the test process's telemetry to the worker, which sends it with
+`app-closing`: test processes then send no telemetry request, and each one's
+exit loses a round trip, about 100 ms of such a run. The test process writes
+its telemetry after its test cycle ends, so the data keeps the test cycle's
+own metrics: `EndpointPayloadRequestsMs` and `EndpointPayloadRequestsErrors`,
+which `internal/citransport/transport.go` records after the request returns.
+Sending the telemetry concurrently with the session-close flush would lose
+them. Keep `app-started` in its own
 request under its mapper contract, and keep the payload order. Startup and
 shutdown must respect deferred admission and goleak checkpoints, including
 errors and cancellation. Use decoded telemetry and actual HTTP captures to check
@@ -314,6 +318,40 @@ worker while `go test` builds, or when it links a test binary, so a binary
 waits only for the rest of a request that is already under way. When that
 request takes longer than 2 s, as a large paginated known-tests response can,
 every binary still waiting sends its own.
+
+## 49. Read-cache expiry fields
+
+Before a cache miss sends its request (`civisibility/utils/net/read_cache.go:331`),
+cleanup (`:739-791`) reads and unmarshals each JSON entry, up to 32, only to
+obtain two leading fields. Its 5 ms budget is checked between files, so one
+large file can exceed it. A 3.2 MB known-tests entry for 100,000 tests took
+4.2 ms with a complete `json.Unmarshal` and 17 µs with a streaming decoder that
+stops after `created_at_unix_nano` and `ttl_seconds`, which are serialized
+first. Use the streaming decoder, or clean up after `live()` returns. Expect an
+estimated 5–15 ms on CI hardware per cache miss and endpoint; waiters wait for
+it too.
+
+Under `ddto test`, the worker usually makes these misses while `go test`
+builds, off the critical path. They stay on it when the worker waits for a
+test process (`-o` or `-a`), when the settings require Git, and in binaries
+outside `ddto test`.
+
+## 50. Idle connections during deferred startup
+
+With `DD_CIVISIBILITY_DEFERRED_DELIVERY=true`, every `SendRequest` closes the
+shared connection pool (`civisibility/utils/net/http.go:165-169`), which
+telemetry also uses (`civisibility/utils/net/client.go:240-242`). Settings,
+commit search, packfile and the three parallel feature requests each dial
+again, with another TLS handshake in Agentless mode, and telemetry loses its
+pooled connection. Close idle connections once at test admission and at
+checkpoints, as `PrepareLeakCheck` already does for goleak, and keep no idle
+connection while tests run. Expect an estimated one to four handshakes, of
+50–150 ms each, less on the startup critical path.
+
+Under `ddto test`, the read cache serves the startup requests that the worker
+made ahead. Deferred-mode binaries still dial again when the settings require
+Git, whose requests the worker does not make ahead, when the worker waits for a
+test process, and outside `ddto test`.
 
 ## 51. Known tests per module
 
