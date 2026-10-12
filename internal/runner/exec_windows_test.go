@@ -2,6 +2,7 @@ package runner
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,10 +10,24 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unsafe"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/xsys/windows"
 )
 
 // createBreakawayFromJob starts a process outside its parent's job.
 const createBreakawayFromJob = 0x01000000
+
+var queryInformationJobObject = syscall.NewLazyDLL("kernel32.dll").NewProc("QueryInformationJobObject")
+
+// jobLimits returns the limit flags of this process's own job, the innermost.
+func jobLimits() (uint32, error) {
+	var limits windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+	if ok, _, err := queryInformationJobObject.Call(0, uintptr(windows.JobObjectExtendedLimitInformation), uintptr(unsafe.Pointer(&limits)), unsafe.Sizeof(limits), 0); ok == 0 {
+		return 0, err
+	}
+	return limits.BasicLimitInformation.LimitFlags, nil
+}
 
 // TestExecHelperProcess is the wrapper, the -exec program and the process the
 // program leaves running in TestExecWrapperEndsProgramWithItself.
@@ -39,11 +54,19 @@ func TestExecHelperProcess(t *testing.T) {
 			os.Exit(3)
 		}
 		os.Exit(0)
+	case "job-limits":
+		limits, err := jobLimits()
+		if err != nil || limits&jobObjectLimitBreakawayOK == 0 {
+			os.Exit(4)
+		}
+		os.Exit(0)
 	case "late-worker":
-		result := "denied"
+		result := "timeout"
 		for deadline := time.Now().Add(time.Minute); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
 			if _, err := os.Stat(os.Getenv("DDTO_EXEC_GO")); err == nil {
-				if breakAway(self) {
+				limits, err := jobLimits()
+				result = fmt.Sprintf("limits %#x %v", limits, err)
+				if err == nil && limits&jobObjectLimitBreakawayOK != 0 && limits&windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE == 0 && (!canBreakAway() || breakAway(self)) {
 					result = "ok"
 				}
 				break
@@ -143,6 +166,12 @@ func TestExecWrapperEndsProgramWithItself(t *testing.T) {
 	})
 }
 
+// canBreakAway reports whether this process's parent, the test, could start
+// a process outside its own jobs, which a CI runner's job may forbid.
+func canBreakAway() bool {
+	return os.Getenv("DDTO_EXEC_BREAKAWAY") == "true"
+}
+
 // breakAway starts self outside the job of this process, and reports whether
 // it could.
 func breakAway(self []string) bool {
@@ -168,18 +197,23 @@ func runHelper(t *testing.T, helper string, env ...string) int {
 }
 
 // A command that ddto passes through, and a process that it leaves running,
-// may start processes outside its job, as they may without ddto.
+// may start processes outside its job, as they may without ddto: the job
+// allows breaking away. Where the test itself can break away, which a CI
+// runner's job may forbid, they also do.
 func TestExecCommandAllowsBreakaway(t *testing.T) {
-	if !breakAway([]string{os.Args[0], "-test.run=^TestExecHelperProcess$"}) {
-		t.Skip("this process cannot start processes outside its job")
+	if status := runHelper(t, "command", "DDTO_EXEC_PROGRAM=job-limits"); status != 0 {
+		t.Fatalf("a passed-through command's job does not allow breaking away: status %d", status)
 	}
-	if status := runHelper(t, "command", "DDTO_EXEC_PROGRAM=breakaway"); status != 0 {
+	breakaway := breakAway([]string{os.Args[0], "-test.run=^TestExecHelperProcess$"})
+	if !breakaway {
+		t.Log("this process cannot start processes outside its job; checking the job's limits only")
+	} else if status := runHelper(t, "command", "DDTO_EXEC_PROGRAM=breakaway"); status != 0 {
 		t.Fatalf("a passed-through command could not start a process outside its job: status %d", status)
 	}
 
 	dir := t.TempDir()
 	start, result := filepath.Join(dir, "go"), filepath.Join(dir, "result")
-	if status := runHelper(t, "command", "DDTO_EXEC_PROGRAM=late-spawn", "DDTO_EXEC_GO="+start, "DDTO_EXEC_RESULT="+result); status != 0 {
+	if status := runHelper(t, "command", "DDTO_EXEC_PROGRAM=late-spawn", "DDTO_EXEC_GO="+start, "DDTO_EXEC_RESULT="+result, "DDTO_EXEC_BREAKAWAY="+strconv.FormatBool(breakaway)); status != 0 {
 		t.Fatalf("the program exited with %d", status)
 	}
 	// The wrapper has released the job, where the worker still runs.
@@ -190,7 +224,7 @@ func TestExecCommandAllowsBreakaway(t *testing.T) {
 		data, err := os.ReadFile(result)
 		if err == nil {
 			if string(data) != "ok" {
-				t.Fatalf("a process left in the released job could not break away: %s", data)
+				t.Fatalf("a process left in the released job cannot break away: %s", data)
 			}
 			return
 		}
