@@ -61,7 +61,6 @@ Ordered by the expected effect on a `ddto test` run's wall time, then by cost.
 
 | Order | Change | Where it can help | Complexity |
 | --- | --- | --- | --- |
-| 23 | Charge the shared common snapshot once per batch | Up to about 60% more test-cycle requests per binary | Medium to high |
 | 15 | Overlap the Orchestrion tool lookup with preparation | 0.5–2 s in Orchestrion modes of large modules | Low to medium |
 | 39 | Parse selected sources concurrently at startup | Parsing the files of every known test with EFD and impacted tests | Medium |
 | 51 | Store known tests per module in the read cache | 10–25 ms of CPU and megabytes per binary with 100,000 tests | Medium to high |
@@ -208,28 +207,6 @@ Do not overlap with `-mod=mod`, where both commands could write `go.mod`.
 Preserve progress streaming and error precedence: report preparation errors
 first, then cancel the lookup. The shorter of the two steps disappears from the
 critical path, an estimated 0.5–2 s in a dd-go-sized module.
-
-## 23. Shared snapshot charged once
-
-Each event's accounted size includes the whole common snapshot
-(`internal/minitracer/common_tags.go:66-70`, `batch.go:78` and `:321`), although
-a homogeneous batch writes it once. With a snapshot of 40 values of 80 bytes,
-batches sealed at 486.6 events instead of 1,000, about twice the requests,
-while the real payload was about 280 KB against the 2.5 MiB threshold. A
-GitHub-like environment without commit fields produced a 908-byte snapshot;
-long commit messages or environments push typical CI past the event-count cap,
-for an estimated 0–60% more requests. `payload.Grow(batch.bytes+envelope)` also
-reserves up to 2.5 MiB for small payloads, and a buffer that grows past that
-threshold is discarded and allocated again.
-
-Keep two totals: today's worst case and a shared total that charges each
-kind's snapshot once. Use the shared total while the open batch is safe to
-project: one snapshot per kind and no overrides. `eventSize` already looks up
-each common key, so it can record on the event, in a `msg:"-"` field, whether
-it overrides one.
-Preserve the 5 MiB limit under any mix of events. [Delivery](delivery.md)
-describes the current accounting as deliberately conservative; update it with
-the change.
 
 ## 28. Final drain in parallel
 

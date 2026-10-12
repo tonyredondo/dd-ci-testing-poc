@@ -28,6 +28,8 @@ Spans retain that read-only base and their own overrides. Getters check local
 text/metrics first; delivery lifts compatible defaults without mutating either
 map. An overridden key falls back to local strings for peers, so a masked value
 cannot consume the event's byte budget. Mixed snapshots fall back per event kind.
+Batch accounting counts a kind's shared snapshot once until an event of that
+kind would fall back, and then counts every event's snapshot.
 Generic child spans receive no CI defaults. See
 [the metadata contract](../../docs/delivery.md#payload-level-common-metadata).
 
