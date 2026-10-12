@@ -120,11 +120,17 @@ func prepareTestifyEntry(suite *goPackage, replacements map[string]string, runti
 // testifyDependencyImports walks only test imports whose dependency closures
 // were not already inspected by the first go list. Unknown imports remain in
 // the query: a helper in another module may call suite.Run on the client's behalf.
-// imported holds what the named packages, other than the runtime, import.
+// Standard-library imports do not: their closures cannot reach Testify, goleak
+// or the SDK. imported holds what the named packages, other than the runtime,
+// import.
 func testifyDependencyImports(packages []goPackage, imported map[string]bool) ([]string, bool) {
 	known := map[string]bool{"testing": true}
 	hasSuite := imported[instrument.TestifySuiteImport]
+	gorootSrc := ""
 	for _, p := range packages {
+		if p.ImportPath == "testing" && p.Dir != "" {
+			gorootSrc = filepath.Dir(p.Dir)
+		}
 		if p.ImportPath == sdkPackage || p.ImportPath == miniPackage {
 			// The runtime's graph says nothing about the client's test helpers.
 			continue
@@ -143,7 +149,7 @@ func testifyDependencyImports(packages []goPackage, imported map[string]bool) ([
 				if path == instrument.TestifySuiteImport {
 					hasSuite = true
 				}
-				if !known[path] && !imported[path] {
+				if !known[path] && !imported[path] && !standardLibraryImport(path, gorootSrc) {
 					requests[path] = true
 				}
 			}
@@ -155,6 +161,20 @@ func testifyDependencyImports(packages []goPackage, imported map[string]bool) ([
 	}
 	sort.Strings(paths)
 	return paths, hasSuite
+}
+
+// standardLibraryImport reports whether path names a standard-library package,
+// by Go's rule: its first element has no dot, and gorootSrc, $GOROOT/src,
+// holds it. Without gorootSrc it reports false, which keeps path in the query.
+func standardLibraryImport(path, gorootSrc string) bool {
+	if gorootSrc == "" {
+		return false
+	}
+	if first, _, _ := strings.Cut(path, "/"); strings.Contains(first, ".") {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(gorootSrc, filepath.FromSlash(path)))
+	return err == nil && info.IsDir()
 }
 
 func prepareLibraryCompile(plan *LibraryEntry, args []string) ([]string, func(), error) {
