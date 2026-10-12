@@ -205,6 +205,8 @@ func lookupThroughPath(t *testing.T, env []string, driver, program, notes string
 		t.Fatal(err)
 	}
 	long := "/" + strings.Repeat("a", 4096)
+	// The kernel reports ENOENT for a missing directory before a long name.
+	missing := filepath.Join(empty, "missing")
 	const unset = "\x00"
 	var noPath []string
 	for _, v := range env {
@@ -229,6 +231,8 @@ func lookupThroughPath(t *testing.T, env []string, driver, program, notes string
 		{long + ":" + bin, "passthrough-path", 3, false},      // past an entry longer than PATH_MAX
 		{long, "passthrough-path", 127, true},                 // only such entries
 		{loop + ":" + bin, "passthrough-path", -1, false},     // ELOOP ends glibc's search only
+		{missing, strings.Repeat("a", 255), 127, false},       // a name of NAME_MAX
+		{missing, strings.Repeat("a", 256), -1, false},        // longer: glibc does not search
 	} {
 		caseEnv := noPath
 		if tc.path != unset {

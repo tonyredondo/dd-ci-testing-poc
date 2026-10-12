@@ -12,6 +12,11 @@ import (
 // defaultPath, _PATH_DEFPATH, without PATH.
 const defaultPath = "/usr/bin:/bin"
 
+// searchName is nil: the BSD libcs search PATH for any name.
+func searchName(string) error {
+	return nil
+}
+
 // entryPath returns the candidate that the libc tries for file in a PATH
 // entry: ./file in an empty entry, the current directory. The libc skips an
 // entry whose candidate is too long for its buffer, of PATH_MAX, with this

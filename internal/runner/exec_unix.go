@@ -53,6 +53,9 @@ func execvp(args []string) error {
 	if strings.Contains(file, "/") {
 		return execve(file, args)
 	}
+	if err := searchName(file); err != nil {
+		return err
+	}
 	path, ok := os.LookupEnv("PATH")
 	if !ok {
 		path = defaultPath

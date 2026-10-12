@@ -6,6 +6,15 @@ import "syscall"
 // without PATH.
 const defaultPath = "/bin:/usr/bin"
 
+// searchName is glibc's error for a name that it does not search PATH for:
+// one longer than NAME_MAX.
+func searchName(file string) error {
+	if len(file) > 255 {
+		return syscall.ENAMETOOLONG
+	}
+	return nil
+}
+
 // entryPath returns the candidate that glibc tries for file in a PATH entry:
 // file itself in an empty entry, the current directory. glibc skips an entry
 // too long for its buffer, of Linux's PATH_MAX.
