@@ -880,7 +880,14 @@ go test in its `link` mode (`plan.linkSignal`), and the tool marks the state
 links a test binary: go test checks its cache just before the link and links
 only for a result outside it. The worker does both once that mark, or the
 `used` one, appears (`waitFor`), so the requests run while the binary links,
-and a run whose results all come from the cache sends none. The tool, which
+and a run whose results all come from the cache sends none. go test checks its
+cache again after the link, by the binary's content, so a link does not always
+mean a test process: `-o`, which saves the binary, and `-a`, which rebuilds
+everything, link even for cached results, so ddto adds no signal with them
+(`linksCachedResults`) and the worker waits for a test process. A change that
+leaves a test binary identical, such as a comment, still makes go test relink
+it and take its result from the cache: the worker then requests although no
+test process runs, an accepted cost of the earlier requests. The tool, which
 lets every tool through after its fast check, keeps Go's cache keys: cmd/go
 takes each tool's identity from its `-V=full` output through the wrapper. The cacheable flags are the
 newest supported Go's: Go has only added to them, so a flag outside them
@@ -902,7 +909,7 @@ Checks: `TestCLIReadCacheScopeIdentity`, `TestCLITestProcessClients`,
 `TestCodeOwnersPackageService`, `TestCLITestPackageModule`,
 `TestRunRequestsAheadForTestProcesses`, `TestRunWaitsForItsStoppedRequests`,
 `TestRunRequestsNothingWhileResultsMayBeCached`, `TestRunsEveryTest`,
-`TestRunRequestsWhenGoTestLinks`, `TestNoteTestLink`,
+`TestRunRequestsWhenGoTestLinks`, `TestNoteTestLink`, `TestLinksCachedResults`,
 `TestToolModeWithLinkSignal`,
 `TestWorkerRequestsAsTestProcesses`,
 `integration/TestMiniCLIStateRequestsAhead`, which runs the worker and then
@@ -910,8 +917,8 @@ a test process that makes no request of its own, also with services from
 CODEOWNERS, and `integration/TestMiniCLIStateSharedRequests`, which checks one
 request per endpoint, or per service, in a `ddto test` run that runs every
 test, also with `GOEXPERIMENT`, none in a run whose results all come from the
-cache, also with cacheable flags after `-args`, a `linking` mark only in a run
-with a result outside the cache, ddto's `tests.json` and the removed cache
+cache, also with cacheable flags after `-args` and with `-o`, a `linking` mark
+only in a run with a result outside the cache, ddto's `tests.json` and the removed cache
 directory.
 
 ## Testify method names

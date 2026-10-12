@@ -108,7 +108,9 @@ no Git command for it. When `go test` runs every test package, as with
 a test binary, which it does only for a result outside its test cache, or a
 test process starts, so that a run whose results all come from the cache
 sends no request: `ddto` then adds its tool to `go test`, which tells the worker
-when a test binary links. That costs about 1.8 ms per tool that Go runs: 7 ms
+when a test binary links. With `-o` or `-a`, which link even for cached results,
+the worker waits for a test process instead; a change that leaves a test binary
+identical, such as a comment, still relinks it and makes the worker request. That costs about 1.8 ms per tool that Go runs: 7 ms
 for a fully cached run, 4 ms when one package changed, and about 5% of a cold
 build. Once a test process starts, it uploads the missing commits once and, if the settings enable impacted
 tests, computes the base commit and the modified files once; test processes

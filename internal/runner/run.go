@@ -681,8 +681,9 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 	handoff := gitWorker.handOff(plan.tests, plan.testLauncher, plan.goVersion)
 	// When go test may take every result from its cache, the worker requests
 	// for the test processes once go test links a test binary, which it does
-	// only for a result that is not in its cache.
-	plan.linkSignal = len(handoff) != 0 && !plan.tests.RunsEveryTest
+	// only for a result that is not in its cache, unless -o or -a makes it
+	// link anyway: then the worker waits for a test process.
+	plan.linkSignal = len(handoff) != 0 && !plan.tests.RunsEveryTest && !opts.linksCachedResults
 	var tool string
 	var env []string
 	if plan.coverOverlay || plan.testify || plan.goleak || plan.orchestrion || plan.sdkCI || plan.linkSignal {

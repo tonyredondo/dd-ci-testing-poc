@@ -291,6 +291,14 @@ func TestMiniCLIStateSharedRequests(t *testing.T) {
 	if out, counts, _ := runCached(cachedEnv, "./sub", "-args", "-test.run=^TestSub$"); !strings.Contains(out, "(cached)") || len(counts) != 0 {
 		t.Fatalf("a cached run with -args made requests %v:\n%s", counts, out)
 	}
+	// -o makes go test link the test binary to save it, even for a cached
+	// result: the worker waits for a test process, and none runs.
+	// A new path makes go test link again.
+	saved := t.TempDir()
+	runCached(cachedEnv, "-o", filepath.Join(saved, "first.test"), "-run=^TestSub$", "./sub")
+	if out, counts, _ := runCached(cachedEnv, "-o", filepath.Join(saved, "second.test"), "-run=^TestSub$", "./sub"); !strings.Contains(out, "(cached)") || len(counts) != 0 || zipFiles(t, archive)["linking"] {
+		t.Fatalf("a cached run with -o made requests %v or signalled a link:\n%s", counts, out)
+	}
 	// With one result outside the cache, go test links that package's test
 	// binary, which tells the worker to request; the root package's result is
 	// never cached.

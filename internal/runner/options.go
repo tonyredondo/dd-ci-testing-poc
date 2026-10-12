@@ -107,6 +107,9 @@ type options struct {
 	// runs in local directory mode, or the test binaries get an argument
 	// outside the cacheable flags.
 	runsEveryTest bool
+	// linksCachedResults reports that go test links test binaries even for
+	// results in its cache: -o saves the binary, and -a rebuilds everything.
+	linksCachedResults bool
 	// workfile applies only to preparation children, never os.Setenv.
 	workfile         string
 	environment      *goEnvironment
@@ -324,6 +327,12 @@ func (o *options) apply(name, value string) error {
 		// go test reports an invalid value itself.
 		if enabled, err := strconv.ParseBool(value); err == nil {
 			o.race = enabled
+		}
+	case "o":
+		o.linksCachedResults = o.linksCachedResults || value != ""
+	case "a":
+		if enabled, err := strconv.ParseBool(value); err == nil && enabled {
+			o.linksCachedResults = true
 		}
 	case "c", "n":
 		if enabled, err := strconv.ParseBool(value); err == nil {

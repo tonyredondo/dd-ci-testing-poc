@@ -231,3 +231,29 @@ func TestRunsEveryTest(t *testing.T) {
 		}
 	}
 }
+
+// -o and -a make go test link test binaries even for results in its cache, so
+// a link no longer tells that a test process will run.
+func TestLinksCachedResults(t *testing.T) {
+	for _, tc := range []struct {
+		args    []string
+		goflags string
+		want    bool
+	}{
+		{[]string{"./..."}, "", false},
+		{[]string{"-o", "pkg.test", "./pkg"}, "", true},
+		{[]string{"-o=pkg.test", "./pkg"}, "", true},
+		{[]string{"-a", "./..."}, "", true},
+		{[]string{"-a=false", "./..."}, "", false},
+		{[]string{"./..."}, "-a", true},
+		{[]string{"-race", "-v", "./..."}, "", false},
+	} {
+		opts, err := parseOptions(tc.args, tc.goflags)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if opts.linksCachedResults != tc.want {
+			t.Errorf("go test %v with GOFLAGS=%q: linksCachedResults = %t, want %t", tc.args, tc.goflags, opts.linksCachedResults, tc.want)
+		}
+	}
+}
