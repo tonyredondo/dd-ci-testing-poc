@@ -107,9 +107,10 @@ type options struct {
 	// runs in local directory mode, or the test binaries get an argument
 	// outside the cacheable flags.
 	runsEveryTest bool
-	// linksCachedResults reports that go test links test binaries even for
-	// results in its cache: -o saves the binary, and -a rebuilds everything.
-	linksCachedResults bool
+	// rebuildAll and output record -a and -o as go test applies them, the
+	// last one winning.
+	rebuildAll bool
+	output     string
 	// workfile applies only to preparation children, never os.Setenv.
 	workfile         string
 	environment      *goEnvironment
@@ -267,6 +268,12 @@ func parseOptions(args []string, goflags string) (options, error) {
 	return o, nil
 }
 
+// linksCachedResults reports that go test links test binaries even for
+// results in its cache: -o saves the binary, and -a rebuilds everything.
+func (o *options) linksCachedResults() bool {
+	return o.rebuildAll || o.output != ""
+}
+
 // noteTestFlag records that a test binary flag outside the cacheable ones
 // keeps go test from taking results from its cache.
 func (o *options) noteTestFlag(name string) {
@@ -329,10 +336,10 @@ func (o *options) apply(name, value string) error {
 			o.race = enabled
 		}
 	case "o":
-		o.linksCachedResults = o.linksCachedResults || value != ""
+		o.output = value
 	case "a":
-		if enabled, err := strconv.ParseBool(value); err == nil && enabled {
-			o.linksCachedResults = true
+		if enabled, err := strconv.ParseBool(value); err == nil {
+			o.rebuildAll = enabled
 		}
 	case "c", "n":
 		if enabled, err := strconv.ParseBool(value); err == nil {

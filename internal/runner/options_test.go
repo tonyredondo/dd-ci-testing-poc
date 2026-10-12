@@ -247,13 +247,17 @@ func TestLinksCachedResults(t *testing.T) {
 		{[]string{"-a=false", "./..."}, "", false},
 		{[]string{"./..."}, "-a", true},
 		{[]string{"-race", "-v", "./..."}, "", false},
+		// The last value wins, as in go test, GOFLAGS first.
+		{[]string{"-a=false", "./..."}, "-a", false},
+		{[]string{"-o=first.test", "-o=", "./pkg"}, "", false},
+		{[]string{"-a=false", "-a", "./..."}, "", true},
 	} {
 		opts, err := parseOptions(tc.args, tc.goflags)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if opts.linksCachedResults != tc.want {
-			t.Errorf("go test %v with GOFLAGS=%q: linksCachedResults = %t, want %t", tc.args, tc.goflags, opts.linksCachedResults, tc.want)
+		if opts.linksCachedResults() != tc.want {
+			t.Errorf("go test %v with GOFLAGS=%q: linksCachedResults = %t, want %t", tc.args, tc.goflags, opts.linksCachedResults(), tc.want)
 		}
 	}
 }
