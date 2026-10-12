@@ -65,7 +65,8 @@ func commandLine() string {
 // kills them if this wrapper ends first, and returns their exit status, or
 // failed if they do not start. With breakaway, the job lets them, and what
 // they leave running, start processes outside it (CREATE_BREAKAWAY_FROM_JOB).
-// They get this process's environment as it is: os/exec would add SYSTEMROOT.
+// They get this process's environment and standard streams as they are:
+// os/exec would add SYSTEMROOT and open NUL for a missing stream.
 func runInJob(args []string, cmdline string, breakaway bool, failed int) int {
 	signal.Notify(make(chan os.Signal, 1), os.Interrupt)
 	path, err := exec.LookPath(args[0])
@@ -73,9 +74,9 @@ func runInJob(args []string, cmdline string, breakaway bool, failed int) int {
 		fmt.Fprintln(os.Stderr, err)
 		return failed
 	}
-	attr := &os.ProcAttr{
-		Env:   os.Environ(),
-		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+	attr := &syscall.ProcAttr{
+		Env:   syscall.Environ(),
+		Files: []uintptr{stdHandle(os.Stdin), stdHandle(os.Stdout), stdHandle(os.Stderr)},
 		Sys:   &syscall.SysProcAttr{CmdLine: cmdline},
 	}
 	process, job, err := startInJob(path, args, attr, breakaway)
@@ -83,7 +84,8 @@ func runInJob(args []string, cmdline string, breakaway bool, failed int) int {
 		fmt.Fprintln(os.Stderr, err)
 		return failed
 	}
-	state, err := process.Wait()
+	defer syscall.CloseHandle(process)
+	code, err := waitProcess(process)
 	if job != 0 {
 		releaseJob(job, breakaway)
 	}
@@ -91,7 +93,27 @@ func runInJob(args []string, cmdline string, breakaway bool, failed int) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
-	return state.ExitCode()
+	return int(code)
+}
+
+// stdHandle is f's handle for a new process, or 0 for a stream that this
+// process does not have. A nil os.File's Fd is INVALID_HANDLE_VALUE, which is
+// also this process's pseudo-handle: syscall.StartProcess would duplicate it.
+func stdHandle(f *os.File) uintptr {
+	if f == nil {
+		return 0
+	}
+	return f.Fd()
+}
+
+// waitProcess waits for process to exit and returns its exit status.
+func waitProcess(process syscall.Handle) (uint32, error) {
+	if _, err := syscall.WaitForSingleObject(process, syscall.INFINITE); err != nil {
+		return 0, err
+	}
+	var code uint32
+	err := syscall.GetExitCodeProcess(process, &code)
+	return code, err
 }
 
 // jobObjectLimitBreakawayOK lets a job's processes start others outside it.
@@ -99,11 +121,15 @@ const jobObjectLimitBreakawayOK = 0x00000800
 
 // startInJob starts path suspended, so it runs no code before it belongs to a
 // job that kills it when closed, then resumes it. Where no job is available,
-// it runs without one.
-func startInJob(path string, args []string, attr *os.ProcAttr, breakaway bool) (*os.Process, windows.Handle, error) {
+// it runs without one. It returns the process's handle.
+func startInJob(path string, args []string, attr *syscall.ProcAttr, breakaway bool) (syscall.Handle, windows.Handle, error) {
+	start := func() (syscall.Handle, uint32, error) {
+		pid, handle, err := syscall.StartProcess(path, args, attr)
+		return syscall.Handle(handle), uint32(pid), err
+	}
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
-		process, err := os.StartProcess(path, args, attr)
+		process, _, err := start()
 		return process, 0, err
 	}
 	limits := windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION{}
@@ -113,31 +139,27 @@ func startInJob(path string, args []string, attr *os.ProcAttr, breakaway bool) (
 	}
 	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&limits)), uint32(unsafe.Sizeof(limits))); err != nil {
 		_ = windows.CloseHandle(job)
-		process, err := os.StartProcess(path, args, attr)
+		process, _, err := start()
 		return process, 0, err
 	}
 	attr.Sys.CreationFlags |= windows.CREATE_SUSPENDED
-	process, err := os.StartProcess(path, args, attr)
+	process, pid, err := start()
 	if err != nil {
 		_ = windows.CloseHandle(job)
-		return nil, 0, err
+		return 0, 0, err
 	}
-	handle, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(process.Pid))
-	if err == nil {
-		err = windows.AssignProcessToJobObject(job, handle)
-		_ = windows.CloseHandle(handle)
-	}
-	if err != nil {
+	if err := windows.AssignProcessToJobObject(job, windows.Handle(process)); err != nil {
 		_ = windows.CloseHandle(job)
 		job = 0
 	}
-	if err := resumeProcess(uint32(process.Pid)); err != nil {
-		_ = process.Kill()
-		_, _ = process.Wait()
+	if err := resumeProcess(pid); err != nil {
+		_ = syscall.TerminateProcess(process, 1)
+		_, _ = waitProcess(process)
+		_ = syscall.CloseHandle(process)
 		if job != 0 {
 			_ = windows.CloseHandle(job)
 		}
-		return nil, 0, err
+		return 0, 0, err
 	}
 	return process, job, nil
 }

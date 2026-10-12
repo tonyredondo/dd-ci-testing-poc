@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unicode/utf16"
 	"unsafe"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/xsys/windows"
@@ -54,6 +55,12 @@ func TestExecHelperProcess(t *testing.T) {
 			os.Exit(3)
 		}
 		os.Exit(0)
+	case "stdin-report":
+		// 0 when this process has a standard input, 4 when it has none.
+		if h, err := syscall.GetStdHandle(syscall.STD_INPUT_HANDLE); err == nil && h != 0 {
+			os.Exit(0)
+		}
+		os.Exit(4)
 	case "job-limits":
 		limits, err := jobLimits()
 		if err != nil || limits&jobObjectLimitBreakawayOK == 0 {
@@ -231,5 +238,49 @@ func TestExecCommandAllowsBreakaway(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatal("the worker did not report")
 		}
+	}
+}
+
+// startWithoutStdin runs TestExecHelperProcess as helper, with env, through
+// CreateProcess with INVALID_HANDLE_VALUE as its standard input, which os/exec
+// and syscall.StartProcess cannot pass, and returns its exit status.
+func startWithoutStdin(t *testing.T, helper string, env ...string) uint32 {
+	t.Helper()
+	var block []uint16
+	for _, kv := range append(append(os.Environ(), "DDTO_EXEC_HELPER="+helper), env...) {
+		block = append(append(block, utf16.Encode([]rune(kv))...), 0)
+	}
+	block = append(block, 0)
+	cmdline, err := syscall.UTF16PtrFromString(syscall.EscapeArg(os.Args[0]) + " -test.run=^TestExecHelperProcess$")
+	if err != nil {
+		t.Fatal(err)
+	}
+	si := syscall.StartupInfo{Flags: syscall.STARTF_USESTDHANDLES, StdInput: syscall.InvalidHandle}
+	si.Cb = uint32(unsafe.Sizeof(si))
+	var pi syscall.ProcessInformation
+	if err := syscall.CreateProcess(nil, cmdline, nil, nil, false, syscall.CREATE_UNICODE_ENVIRONMENT, &block[0], nil, &si, &pi); err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.CloseHandle(pi.Thread)
+	defer syscall.CloseHandle(pi.Process)
+	code, err := waitProcess(pi.Process)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return code
+}
+
+// A command that ddto passes through has no standard input when ddto has
+// none, as without ddto. syscall.StartProcess would duplicate a nil os.File's
+// INVALID_HANDLE_VALUE, this process's pseudo-handle, into a real handle.
+func TestExecCommandKeepsMissingStdin(t *testing.T) {
+	if code := startWithoutStdin(t, "stdin-report"); code != 4 {
+		t.Fatalf("started directly without standard input, the program reports %d; want 4", code)
+	}
+	if code := startWithoutStdin(t, "command", "DDTO_EXEC_PROGRAM=stdin-report"); code != 4 {
+		t.Fatalf("passed through without standard input, the program reports %d; want 4", code)
+	}
+	if h := stdHandle(nil); h != 0 {
+		t.Fatalf("stdHandle(nil) = %#x; want 0", h)
 	}
 }

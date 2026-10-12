@@ -212,8 +212,12 @@ func lookupThroughPath(t *testing.T, env []string, driver, program, notes string
 	}
 	for _, tc := range []struct {
 		path, name string
-		want       int  // -1 where libcs differ
-		unlike     bool // glibc reports a stale errno: env's status is undefined
+		want       int // -1 where libcs differ
+		// unlike marks where env's status depends on the glibc release: a
+		// stale errno after skipping every entry, and the NAME_MAX check,
+		// which glibc 2.39 has but never meets, as it compares the length
+		// that strnlen caps at NAME_MAX. ddto follows the current glibc.
+		unlike bool
 	}{
 		{"bin", "passthrough-path", 3, false},                 // relative entry
 		{"", "passthrough-path", 3, false},                    // empty: the current directory
@@ -228,7 +232,7 @@ func lookupThroughPath(t *testing.T, env []string, driver, program, notes string
 		{long, "passthrough-path", 127, true},                 // only such entries
 		{loop + ":" + bin, "passthrough-path", -1, false},     // ELOOP ends glibc's search only
 		{missing, strings.Repeat("a", 255), 127, false},       // a name of NAME_MAX
-		{missing, strings.Repeat("a", 256), -1, false},        // longer: glibc does not search
+		{missing, strings.Repeat("a", 256), 126, true},        // longer: current glibc does not search
 	} {
 		caseEnv := noPath
 		if tc.path != unset {
