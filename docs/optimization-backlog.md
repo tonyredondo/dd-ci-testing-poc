@@ -65,7 +65,7 @@ Ordered by the expected effect on a `ddto test` run's wall time, then by cost.
 | 39 | Parse selected sources concurrently at startup | Parsing the files of every known test with EFD and impacted tests | Medium |
 | 51 | Store known tests per module in the read cache | 10–25 ms of CPU and megabytes per binary with 100,000 tests | Medium to high |
 | 32 | Scope retry subtest-name cleanup to the attempt | Up to 9 ms per retry group with 100,000 subtests, blocking `T.Run` | Medium to high |
-| 28 | Drain the final backlog in parallel | Events dropped behind a slow intake at close | Low to medium |
+| 28 | Skip the final retries after a failed session-close flush | About 0.3 s at exit with a refused connection | Low |
 | 49 | Stream read-cache expiry fields | 5–15 ms per cache miss when a test process requests itself | Low |
 | 50 | Keep idle connections during deferred startup | One to four TLS handshakes at startup in deferred mode | Low to medium |
 | 8 | Collect coverage counters in memory | Profile I/O and parsing per covered test; measure first | High |
@@ -208,21 +208,14 @@ Preserve progress streaming and error precedence: report preparation errors
 first, then cancel the lookup. The shorter of the two steps disappears from the
 critical path, an estimated 0.5–2 s in a dd-go-sized module.
 
-## 28. Final drain in parallel
+## 28. Final retries after a failed session close
 
-After `Close` sets `closed` (`internal/minitracer/batch.go:422`), background
-senders exit (`:137`) and `drainLocked` (`:243-252`) sends the remaining batches one at a
-time within one 10 s context. Only deferred mode uses parallel `drainWorker`s.
-The runtime flushes before it stops, while senders still help, so this mainly
-affects explicit clients and recovery after a failure backoff. With a slow
-intake, the serial drain can exceed its budget and drop events. Use the
-`drainWorker` fan-out in both modes.
-
-With a refused connection, the session-close flush and the final delivery at
-exit each spend a retry cycle of about 0.3 s on the same payload. Once the
-session-close flush has failed with a network error, the final delivery could
-skip its retries; a black-holed intake would then also wait for one flush
-timeout instead of two.
+[#38](https://github.com/tonyredondo/dd-ci-testing-poc/pull/38) made the final
+drain parallel in ordinary mode too. What remains: with a refused connection,
+the session-close flush and the final delivery at exit each spend a retry cycle
+of about 0.3 s on the same payload. Once the session-close flush has failed
+with a network error, the final delivery could skip its retries; a black-holed
+intake would then also wait for one flush timeout instead of two.
 
 ## 32. Retry name cleanup scoped to the attempt
 

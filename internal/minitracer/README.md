@@ -20,7 +20,8 @@ payload buffer. `mu` protects queue/error state. In ordinary delivery, a failed
 flush keeps its batch and rejects work that would exceed queue bounds. Deferred
 delivery can buffer multiple batches until idle; it bounds each outgoing payload
 but not the pending queue's total size. `Close` prevents new events before the
-final flush. Readers are sealed by `citransport` before buffers or compressors are
+final flush, which sends up to `maxConcurrentSends` payloads at once in both
+modes. Readers are sealed by `citransport` before buffers or compressors are
 reused. Keep these rules together when changing synchronization or pooling.
 
 The SDK port binds common CI/Git/system strings once per snapshot revision.

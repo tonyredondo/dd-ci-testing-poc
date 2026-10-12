@@ -295,29 +295,31 @@ type drain struct {
 // its own flush timeout. No batch starts after the first failure, which is
 // returned.
 //
-// Deferred mode has no background senders, so the caller sends together with
-// up to maxConcurrentSends-1 drainWorker goroutines, all finished before it
-// returns: no delivery goroutine outlives a checkpoint, Flush or Close.
-// Payloads sent together can arrive in any order.
+// Without background senders, in deferred mode and once Close has stopped
+// them in ordinary mode, the caller sends together with drainWorker
+// goroutines, up to maxConcurrentSends deliveries with those still in flight.
+// They all finish before it returns: no delivery goroutine outlives a
+// checkpoint, Flush or Close. Payloads sent together can arrive in any order.
 func (c *Client) drainLocked(ctx context.Context, perBatchTimeout bool) error {
 	d := &drain{ctx: ctx, perBatchTimeout: perBatchTimeout}
 	var workers sync.WaitGroup
-	if c.deferUntilIdle {
-		c.mu.Lock()
-		extra := min(len(c.ready), maxConcurrentSends) - 1
-		c.mu.Unlock()
-		for i := 0; i < extra; i++ {
-			workers.Add(1)
-			go c.drainWorker(d, &workers)
-		}
+	c.mu.Lock()
+	extra := 0
+	if c.deferUntilIdle || c.closed {
+		extra = min(len(c.ready), maxConcurrentSends-c.inflight) - 1
+	}
+	c.mu.Unlock()
+	for i := 0; i < extra; i++ {
+		workers.Add(1)
+		go c.drainWorker(d, &workers)
 	}
 	c.drainBatches(d, &c.payload)
 	workers.Wait()
 	return d.err
 }
 
-// drainWorker is an additional deferred-mode sender of one drain, with its own
-// encoding buffer. The goleak shim recognizes this frame.
+// drainWorker is an additional sender of one drain, with its own encoding
+// buffer. The goleak shim recognizes this frame.
 func (c *Client) drainWorker(d *drain, done *sync.WaitGroup) {
 	defer done.Done()
 	c.mu.Lock()
