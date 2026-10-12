@@ -279,10 +279,11 @@ func TestMiniCLIStateSharedRequests(t *testing.T) {
 
 	// When every result comes from Go's test cache, nothing is requested.
 	// The sub package's result can be cached, as in TestMiniCLITelemetry.
+	// ddto's tool, which signals a test binary's link, keeps Go's cache.
 	cachedEnv := featureEnv(t, server.URL)
 	runCached(cachedEnv, "-run=^TestSub$", "./sub")
-	if out, counts, _ := runCached(cachedEnv, "-run=^TestSub$", "./sub"); !strings.Contains(out, "(cached)") || len(counts) != 0 {
-		t.Fatalf("a cached run made requests %v:\n%s", counts, out)
+	if out, counts, _ := runCached(cachedEnv, "-run=^TestSub$", "./sub"); !strings.Contains(out, "(cached)") || len(counts) != 0 || zipFiles(t, archive)["linking"] {
+		t.Fatalf("a cached run made requests %v or linked:\n%s", counts, out)
 	}
 	// So with cacheable test flags after -args, which go test hands to the
 	// test binary as they are.
@@ -290,12 +291,23 @@ func TestMiniCLIStateSharedRequests(t *testing.T) {
 	if out, counts, _ := runCached(cachedEnv, "./sub", "-args", "-test.run=^TestSub$"); !strings.Contains(out, "(cached)") || len(counts) != 0 {
 		t.Fatalf("a cached run with -args made requests %v:\n%s", counts, out)
 	}
+	// With one result outside the cache, go test links that package's test
+	// binary, which tells the worker to request; the root package's result is
+	// never cached.
+	if out, counts, _ := runCached(cachedEnv, "-run=^TestSub$", ".", "./sub"); !strings.Contains(out, "(cached)") || counts["settings"] != 1 || !zipFiles(t, archive)["linking"] {
+		t.Fatalf("a partly cached run made requests %v, linked %t:\n%s", counts, zipFiles(t, archive)["linking"], out)
+	}
 
 	counts, _ := run(featureEnv(t, server.URL, "XDG_CACHE_HOME="+cache))
 	for _, endpoint := range featureEndpoints {
 		if counts[endpoint] != 1 {
 			t.Fatalf("requests %v; want one each", counts)
 		}
+	}
+	// With -count=1, the worker requests while go test builds, so ddto adds
+	// no tool to signal links.
+	if zipFiles(t, archive)["linking"] {
+		t.Fatal("ddto signalled a link in a run that takes no result from the cache")
 	}
 	// The invocation's read-cache entries go with it. Only Linux takes the
 	// user cache directory from XDG_CACHE_HOME.
@@ -371,4 +383,19 @@ func TestMiniCLIStateSharedRequests(t *testing.T) {
 			t.Fatalf("requests %v; want one per service", counts)
 		}
 	}
+}
+
+// zipFiles returns the names of the files in the zip archive.
+func zipFiles(t *testing.T, archive string) map[string]bool {
+	t.Helper()
+	reader, err := zip.OpenReader(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	names := map[string]bool{}
+	for _, file := range reader.File {
+		names[file.Name] = true
+	}
+	return names
 }

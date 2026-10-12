@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "eaaa588e14aba9aad7d27167a7cc63898880159d70e266b108cc11d134fa0c69",
+      "sha256": "bb302f5b2c89cc0f4e856bf7188fdecf380a637f81d9b4b0801fb75c0133b777",
       "role": "local"
     },
     {
@@ -2132,17 +2132,17 @@
     },
     {
       "path": "civisibility/cligit/cligit.go",
-      "sha256": "c7ce5dba40afb648edb83293db7737023d6648e18131d5ceb644e1cb72bda6b7",
+      "sha256": "b9a4749783a67f93c2cf10bed506774efc5dce93c6e10a6acd23ec1aa1cb563c",
       "role": "local"
     },
     {
       "path": "civisibility/utils/cli_git_state.go",
-      "sha256": "bd0f437bf36a7fc8a379546aae3c964de09382477301ba1a5760187d6aeb60b1",
+      "sha256": "0cee8f25ae9b095d8bac7c4f4cb382ba06ff4c22f00fc297d6db6bb208b1b425",
       "role": "local"
     },
     {
       "path": "civisibility/cligit/cligit_test.go",
-      "sha256": "203d095c325774e6c90e3cfd8d593577b878c13460a357f3dcfa8afc56ec88ea",
+      "sha256": "3faf6ad8c2429ba46b8f6280a809fa8daf37e7abab23357abcb0b91796daea5c",
       "role": "local"
     },
     {

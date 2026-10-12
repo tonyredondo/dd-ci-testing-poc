@@ -104,9 +104,13 @@ Git metadata before `go test` starts and hands it, through
 `DDTO_GIT_STATE`, to the test processes of the same checkout, which then run
 no Git command for it. When `go test` runs every test package, as with
 `-count=1`, the worker compares the local commits with the backend's while
-`go test` builds, a read-only request; otherwise it waits for a test process
-to start, so that a run whose results all come from Go's test cache sends no
-request. Once a test process starts, it uploads the missing commits once and, if the settings enable impacted
+`go test` builds, a read-only request. Otherwise it waits until `go test` links
+a test binary, which it does only for a result outside its test cache, or a
+test process starts, so that a run whose results all come from the cache
+sends no request: `ddto` then adds its tool to `go test`, which tells the worker
+when a test binary links. That costs about 1.8 ms per tool that Go runs: 7 ms
+for a fully cached run, 4 ms when one package changed, and about 5% of a cold
+build. Once a test process starts, it uploads the missing commits once and, if the settings enable impacted
 tests, computes the base commit and the modified files once; test processes
 wait for those results where they used to wait for their own work. When every
 result comes from Go's test cache, no test process starts and the worker
@@ -137,8 +141,8 @@ known tests, skippable tests and test management data, with the test
 processes' Go version and architecture and for each service that their
 packages report. The read cache, whose local scope is the invocation for the
 worker and the test processes, hands them the responses, so the first test
-starts without waiting for the network when `go test` runs every test
-package. A test process whose request differs makes it itself. `ddto` also hands each test package's module to the test
+starts without waiting for the network, the link of its test binary covering
+the requests. A test process whose request differs makes it itself. `ddto` also hands each test package's module to the test
 processes, which then start no `go list` for per-test coverage, LCOV reports
 or backfill.
 

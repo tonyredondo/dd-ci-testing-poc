@@ -874,9 +874,15 @@ argument outside go test's cacheable flags, from the command line or
 package list, `--`, which go test hands on itself, or after `-args` anything
 but `-test.<cacheable flag>=<value>`, as go test checks the arguments that it
 hands on as they are (`noteTestArgument`). Only then does the worker search
-the commits and request while go test builds; otherwise it does both once a
-test process uses its state, when that process requests too, and the read
-cache still gives the later ones the responses. The cacheable flags are the
+the commits and request while go test builds. Otherwise ddto adds its tool to
+go test in its `link` mode (`plan.linkSignal`), and the tool marks the state
+`linking` (`utils.CLIGitLinkingFile`, `runner.NoteTestLink`) when go test
+links a test binary: go test checks its cache just before the link and links
+only for a result outside it. The worker does both once that mark, or the
+`used` one, appears (`waitFor`), so the requests run while the binary links,
+and a run whose results all come from the cache sends none. The tool, which
+lets every tool through after its fast check, keeps Go's cache keys: cmd/go
+takes each tool's identity from its `-V=full` output through the wrapper. The cacheable flags are the
 newest supported Go's: Go has only added to them, so a flag outside them
 disables the cache in every version. Test processes outside the worker's
 checkout, binaries run outside `ddto test` and the SDK runtime keep their own
@@ -896,14 +902,17 @@ Checks: `TestCLIReadCacheScopeIdentity`, `TestCLITestProcessClients`,
 `TestCodeOwnersPackageService`, `TestCLITestPackageModule`,
 `TestRunRequestsAheadForTestProcesses`, `TestRunWaitsForItsStoppedRequests`,
 `TestRunRequestsNothingWhileResultsMayBeCached`, `TestRunsEveryTest`,
+`TestRunRequestsWhenGoTestLinks`, `TestNoteTestLink`,
+`TestToolModeWithLinkSignal`,
 `TestWorkerRequestsAsTestProcesses`,
 `integration/TestMiniCLIStateRequestsAhead`, which runs the worker and then
 a test process that makes no request of its own, also with services from
 CODEOWNERS, and `integration/TestMiniCLIStateSharedRequests`, which checks one
 request per endpoint, or per service, in a `ddto test` run that runs every
 test, also with `GOEXPERIMENT`, none in a run whose results all come from the
-cache, also with cacheable flags after `-args`, ddto's `tests.json` and the
-removed cache directory.
+cache, also with cacheable flags after `-args`, a `linking` mark only in a run
+with a result outside the cache, ddto's `tests.json` and the removed cache
+directory.
 
 ## Testify method names
 

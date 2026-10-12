@@ -911,3 +911,45 @@ func TestRunRequestsNothingWhileResultsMayBeCached(t *testing.T) {
 		}
 	}
 }
+
+// When every result may come from Go's test cache, go test linking a test
+// binary is enough: it links one only for a result that is not in its cache,
+// so the worker requests for the test processes while the binary links,
+// before any of them starts.
+func TestRunRequestsWhenGoTestLinks(t *testing.T) {
+	gitRepository(t)
+	t.Cleanup(utils.ResetHandedCLIGitStateForTesting)
+	original, originalClients := newClient, testProcessClients
+	newClient = func(context.Context, string, string) (client, appTelemetry) { return &fakeClient{}, nil }
+	request := &featureFake{}
+	testProcessClients = func(client, string, *utils.CLITests) []featureClient { return []featureClient{request} }
+	t.Cleanup(func() { newClient, testProcessClients = original, originalClients })
+	dir := t.TempDir()
+	if err := utils.WriteCLIGitStateFile(dir, utils.CLITestsFile, utils.CLITests{Packages: []utils.CLITestPackage{{Dir: "/pkg"}}}); err != nil {
+		t.Fatal(err)
+	}
+	input, cli := io.Pipe()
+	defer cli.Close()
+	done := make(chan error, 1)
+	go func() { done <- Run(dir, "", time.Minute, input, newResults(), nil) }()
+	if _, err := io.WriteString(cli, Proceed+" go1.99.0\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, utils.CLIGitLinkingFile), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(30 * time.Second); len(request.requests()) == 0; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the worker did not request when go test linked a test binary")
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, utils.CLIGitUsedFile)); !os.IsNotExist(err) {
+		t.Fatalf("a test process used the state: %v", err)
+	}
+	if _, err := io.WriteString(cli, Exited+"\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}

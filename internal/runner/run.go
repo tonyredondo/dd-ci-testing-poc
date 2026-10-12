@@ -78,6 +78,9 @@ type Plan struct {
 	// tests describes the test binaries and the packages that have tests,
 	// with their modules, for the Git worker and the test processes.
 	tests utils.CLITests
+	// linkSignal makes ddto's tool tell the Git worker when go test links a
+	// test binary.
+	linkSignal bool
 	// goVersion is the selected toolchain's version, as go env reports it,
 	// and goExperiment its GOEXPERIMENT setting.
 	goVersion, goExperiment string
@@ -670,9 +673,19 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 	for _, warning := range plan.Warnings {
 		fmt.Fprintln(stderr, version.BuildLogPrefix+" WARN:", warning)
 	}
+	if gitWorker != nil {
+		// The worker requests, and reports its telemetry, as the test
+		// processes, whose version includes their experiments.
+		plan.goVersion = testRuntimeVersion(ctx, dir, plan.goVersion, plan.goExperiment)
+	}
+	handoff := gitWorker.handOff(plan.tests, plan.testLauncher, plan.goVersion)
+	// When go test may take every result from its cache, the worker requests
+	// for the test processes once go test links a test binary, which it does
+	// only for a result that is not in its cache.
+	plan.linkSignal = len(handoff) != 0 && !plan.tests.RunsEveryTest
 	var tool string
 	var env []string
-	if plan.coverOverlay || plan.testify || plan.goleak || plan.orchestrion || plan.sdkCI {
+	if plan.coverOverlay || plan.testify || plan.goleak || plan.orchestrion || plan.sdkCI || plan.linkSignal {
 		executable, e := os.Executable()
 		if e != nil {
 			fmt.Fprintln(stderr, e)
@@ -693,7 +706,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 			env[1] = orchestrionBypassEnv + "=" + string(runtime)
 		}
 	}
-	debug.printf("tool selection testify=%t goleak=%t cover=%t user_toolexec=%t orchestrion=%t sdk_ci_gate=%t", plan.testify, plan.goleak, plan.coverOverlay, opts.toolexec != "", plan.orchestrion, plan.sdkCI)
+	debug.printf("tool selection testify=%t goleak=%t cover=%t user_toolexec=%t orchestrion=%t sdk_ci_gate=%t link_signal=%t", plan.testify, plan.goleak, plan.coverOverlay, opts.toolexec != "", plan.orchestrion, plan.sdkCI, plan.linkSignal)
 	// A -exec program, or Go's cross-compilation helper, starts before the test
 	// binary can restore the caller's Go settings. Go already disables result
 	// caching for those runs, so ddto's wrapper restores them first.
@@ -730,12 +743,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		env = append(env, handoff...)
 		debug.printf("github job id handed found=%t", !strings.HasSuffix(handoff[0], "="))
 	}
-	if gitWorker != nil {
-		// The worker requests, and reports its telemetry, as the test
-		// processes, whose version includes their experiments.
-		plan.goVersion = testRuntimeVersion(ctx, dir, plan.goVersion, plan.goExperiment)
-	}
-	env = append(env, gitWorker.handOff(plan.tests, plan.testLauncher, plan.goVersion)...)
+	env = append(env, handoff...)
 	if plan.launcher != nil {
 		ctx = context.WithValue(ctx, goLauncherKey{}, *plan.launcher)
 	}

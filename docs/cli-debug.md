@@ -52,8 +52,8 @@ The log records:
   a temporary modfile or coverage bridge is needed. `generated_backing_files`
   counts the distinct generated hook/import files; rewritten standard-library
   files are counted separately.
-- The selective tool decision for Testify, goleak and coverage, plus whether
-  the client supplied its own `toolexec`.
+- The selective tool decision for Testify, goleak, coverage and the Git
+  worker's link signal, plus whether the client supplied its own `toolexec`.
 - Native `go test` duration and exit code, followed by the whole CLI duration
   and exit code. Interrupt forwarding and context cancellation are recorded.
 
@@ -69,7 +69,7 @@ illustrate the format; they are not benchmark results:
 2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +31ms mini source=cli-local
 2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +36ms provide runtime finished duration=11.9ms status=ok
 2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +58ms plan ready testing_files=3 test_packages=1 overlay_entries=5 generated_backing_files=2 temporary_modfile=true cover_bridge=false
-2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +59ms tool selection testify=false goleak=false cover=false user_toolexec=false
+2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +59ms tool selection testify=false goleak=false cover=false user_toolexec=false orchestrion=false sdk_ci_gate=false link_signal=false
 2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +60ms go test started
 2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +410ms go test finished duration=350ms status=ok
 2026/10/07 10:00:00 TestOptimization.build v0.0.0 DEBUG: +410.1ms go test exit_code=0
@@ -167,6 +167,7 @@ ddto test --keep-ci-state=ci-state.zip ./...    # prints: INFO: archived the CI 
 | `git.json` | The checkout's Git metadata that the worker read once, and the upload wait that test processes use |
 | `telemetry.json` | The invocation's telemetry application: runtime ID, application and host |
 | `seq/` | One file per telemetry request number taken, by the worker or a test process |
+| `linking` | Present when `go test` linked a test binary in a run whose results could come from its cache; `ddto`'s tool writes it |
 | `used` | Present when a test process used the state |
 | `upload.json` | The repository upload's result, or why it failed or stopped |
 | `impacted.json` | The impacted-tests base commit and modified files, or why they were not computed |

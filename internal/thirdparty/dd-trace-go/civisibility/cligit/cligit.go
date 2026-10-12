@@ -136,10 +136,12 @@ func Run(dir, runtimeID string, uploadWait time.Duration, input io.Reader, resul
 		search = searchAhead(c, uploadEnabled)
 		requests = requestAhead(testProcessClients(c, goVersion, tests))
 	}
-	// While go test builds, the worker requests for the test processes only
-	// if every one of them runs: a run whose results all come from Go's test
-	// cache sends no request.
-	if tests != nil && tests.RunsEveryTest {
+	// While go test builds, the worker requests for the test processes if
+	// every one of them runs. Otherwise it waits until go test links a test
+	// binary, which it does only for a result that is not in its cache, or a
+	// test process starts: a run whose results all come from Go's test cache
+	// sends no request.
+	if tests != nil && tests.RunsEveryTest || waitFor(ctx, dir, cli.exited, utils.CLIGitLinkingFile, utils.CLIGitUsedFile) {
 		requestNow()
 	}
 	if !waitUsed(ctx, dir, cli.exited) {
@@ -513,16 +515,28 @@ func impacted(ctx context.Context, c client, uploaded utils.CLIGitUpload, settin
 // waitUsed waits until a test process marks the state as used, or go test
 // exits, or the CLI stops the worker.
 func waitUsed(ctx context.Context, dir string, exited <-chan struct{}) bool {
-	used := filepath.Join(dir, utils.CLIGitUsedFile)
+	return waitFor(ctx, dir, exited, utils.CLIGitUsedFile)
+}
+
+// waitFor waits until one of the named files exists in dir, or go test exits,
+// or the CLI stops the worker; it reports whether one exists.
+func waitFor(ctx context.Context, dir string, exited <-chan struct{}, names ...string) bool {
+	exists := func() bool {
+		for _, name := range names {
+			if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+				return true
+			}
+		}
+		return false
+	}
 	delay := time.Millisecond
 	for {
-		if _, err := os.Stat(used); err == nil {
+		if exists() {
 			return true
 		}
 		select {
 		case <-exited:
-			_, err := os.Stat(used)
-			return err == nil && ctx.Err() == nil
+			return exists() && ctx.Err() == nil
 		case <-ctx.Done():
 			return false
 		case <-time.After(delay):
