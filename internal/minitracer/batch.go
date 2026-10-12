@@ -46,12 +46,20 @@ type readyBatch struct {
 // test-event kind's snapshot once, as prepareCommonMetadata writes it while all
 // events of that kind have the same snapshot and none overrides it. Once an
 // event breaks that, only worst applies until the batch is sealed.
+//
+// worst stops at maxWorstBytes. While shared applies it can grow far beyond
+// any payload limit, which it then only has to exceed: an event that ends
+// sharing seals the batch first. The cap keeps a 32-bit int from overflowing.
 type batchBytes struct {
 	worst, shared int
 	snapshots     [4]*CommonTags // Of each test-event kind, by ciEventKindIndex,
 	seen          [4]bool        // when the batch holds that kind.
 	unshared      bool
 }
+
+// maxWorstBytes caps batchBytes.worst far above the payload limits, and far
+// enough below 2^31 to add another event of up to the 5 MiB limit.
+const maxWorstBytes = 1 << 30
 
 // total is the batch's accounted size.
 func (b *batchBytes) total() int {
@@ -92,7 +100,7 @@ func (b *batchBytes) sharedWith(event *ciEvent, size int, overrides bool) (int, 
 
 func (b *batchBytes) add(event *ciEvent, size int, overrides bool) {
 	shared, ok := b.sharedWith(event, size, overrides)
-	b.worst += size
+	b.worst = min(b.worst+size, maxWorstBytes)
 	b.shared, b.unshared = shared, !ok
 	if kind := ciEventKindIndex(event.Type); kind >= 0 {
 		b.snapshots[kind], b.seen[kind] = event.common, true

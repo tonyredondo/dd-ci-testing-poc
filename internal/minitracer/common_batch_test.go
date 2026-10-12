@@ -85,6 +85,27 @@ func TestBatchBytesBoundProjectedPayload(t *testing.T) {
 	}
 }
 
+// While sharing applies, the worst case of a large snapshot can grow beyond
+// what a 32-bit int holds. It stops at maxWorstBytes, which still exceeds the
+// flush threshold, so an event that ends sharing seals the batch first.
+func TestBatchBytesWorstCaseSaturates(t *testing.T) {
+	common := NewCommonTags(map[string]string{"ci.large": strings.Repeat("c", (2<<20)+(128<<10))})
+	var accounted batchBytes
+	for i := range 1000 {
+		event := &ciEvent{Type: "test", Version: 1, common: common, Content: eventContent{Name: "test", Meta: map[string]string{"test.name": fmt.Sprint(i)}}}
+		size, overrides := eventSize(event)
+		accounted.add(event, size, overrides)
+	}
+	if accounted.unshared || accounted.total() >= citransport.TestCycleFlushBytes || accounted.worst != maxWorstBytes {
+		t.Fatalf("shared=%d worst=%d unshared=%t", accounted.shared, accounted.worst, accounted.unshared)
+	}
+	breaking := &ciEvent{Type: "test", Version: 1, Content: eventContent{Name: "test"}}
+	size, overrides := eventSize(breaking)
+	if with := accounted.with(breaking, size, overrides); with <= citransport.TestCycleMaxPayloadBytes {
+		t.Fatalf("an event ending sharing accounts for %d bytes", with)
+	}
+}
+
 // A homogeneous batch writes its snapshot once, so a large snapshot no longer
 // seals batches below the event cap. An event that would break that sharing
 // seals the batch first: projected peers would otherwise carry the snapshot,
