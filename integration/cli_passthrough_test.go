@@ -210,6 +210,11 @@ func lookupThroughPath(t *testing.T, env []string, driver, program, notes string
 			noPath = append(noPath, v)
 		}
 	}
+	// The BSD libcs search PATH for a name longer than NAME_MAX, as env shows.
+	longWant, longUnlike := -1, false
+	if runtime.GOOS == "linux" {
+		longWant, longUnlike = 126, true
+	}
 	for _, tc := range []struct {
 		path, name string
 		want       int // -1 where libcs differ
@@ -219,20 +224,20 @@ func lookupThroughPath(t *testing.T, env []string, driver, program, notes string
 		// that strnlen caps at NAME_MAX. ddto follows the current glibc.
 		unlike bool
 	}{
-		{"bin", "passthrough-path", 3, false},                 // relative entry
-		{"", "passthrough-path", 3, false},                    // empty: the current directory
-		{"bin", "passthrough-script", 3, false},               // the script's $0
-		{"", "passthrough-script", 3, false},                  // glibc's file, BSD's ./file
-		{unset, "true", 0, false},                             // the libc's default path
-		{bin, "", 127, false},                                 // an empty name
-		{notes, "notes", 126, false},                          // a file that cannot run
-		{closed + ":" + bin, "passthrough-path", 3, false},    // past a directory that cannot be searched
-		{closed + ":" + empty, "passthrough-path", -1, false}, // reported by glibc only
-		{long + ":" + bin, "passthrough-path", 3, false},      // past an entry longer than PATH_MAX
-		{long, "passthrough-path", 127, true},                 // only such entries
-		{loop + ":" + bin, "passthrough-path", -1, false},     // ELOOP ends glibc's search only
-		{missing, strings.Repeat("a", 255), 127, false},       // a name of NAME_MAX
-		{missing, strings.Repeat("a", 256), 126, true},        // longer: current glibc does not search
+		{"bin", "passthrough-path", 3, false},                     // relative entry
+		{"", "passthrough-path", 3, false},                        // empty: the current directory
+		{"bin", "passthrough-script", 3, false},                   // the script's $0
+		{"", "passthrough-script", 3, false},                      // glibc's file, BSD's ./file
+		{unset, "true", 0, false},                                 // the libc's default path
+		{bin, "", 127, false},                                     // an empty name
+		{notes, "notes", 126, false},                              // a file that cannot run
+		{closed + ":" + bin, "passthrough-path", 3, false},        // past a directory that cannot be searched
+		{closed + ":" + empty, "passthrough-path", -1, false},     // reported by glibc only
+		{long + ":" + bin, "passthrough-path", 3, false},          // past an entry longer than PATH_MAX
+		{long, "passthrough-path", 127, true},                     // only such entries
+		{loop + ":" + bin, "passthrough-path", -1, false},         // ELOOP ends glibc's search only
+		{missing, strings.Repeat("a", 255), 127, false},           // a name of NAME_MAX
+		{missing, strings.Repeat("a", 256), longWant, longUnlike}, // longer: current glibc does not search
 	} {
 		caseEnv := noPath
 		if tc.path != unset {
