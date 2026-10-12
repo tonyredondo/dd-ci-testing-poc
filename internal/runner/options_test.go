@@ -232,6 +232,41 @@ func TestRunsEveryTest(t *testing.T) {
 	}
 }
 
+// The debug log says why go test takes no result from its cache, without a
+// value from the command line, and which flag links cached results.
+func TestCacheRuleReasons(t *testing.T) {
+	for _, tc := range []struct {
+		args          []string
+		goflags, want string
+	}{
+		{[]string{"./..."}, "", ""},
+		{nil, "", "local directory mode"},
+		{[]string{"-count=1", "-shuffle=on", "./..."}, "", "test binary flag -count"},
+		{[]string{"./..."}, "-count=1", "test binary flag -count in GOFLAGS"},
+		{[]string{"-secret=value", "./..."}, "", "an unknown flag, which the test binary gets"},
+		{[]string{"./...", "-v", "secret"}, "", "test binary arguments after the packages"},
+		{[]string{"./...", "-args", "secret"}, "", "a test binary argument after -args"},
+		{[]string{"./...", "--", "secret"}, "", "test binary arguments after --"},
+	} {
+		opts, err := parseOptions(tc.args, tc.goflags)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if opts.cacheRule != tc.want || opts.runsEveryTest != (tc.want != "") {
+			t.Errorf("go test %v with GOFLAGS=%q: cacheRule %q, runsEveryTest %t; want %q", tc.args, tc.goflags, opts.cacheRule, opts.runsEveryTest, tc.want)
+		}
+	}
+	for args, want := range map[string]string{"-o=x.test ./...": "-o", "-a ./...": "-a", "-a -o=x.test ./...": "-o", "./...": ""} {
+		opts, err := parseOptions(strings.Fields(args), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := opts.linkRule(); got != want {
+			t.Errorf("go test %s: linkRule %q, want %q", args, got, want)
+		}
+	}
+}
+
 // -o and -a make go test link test binaries even for results in its cache, so
 // a link no longer tells that a test process will run.
 func TestLinksCachedResults(t *testing.T) {

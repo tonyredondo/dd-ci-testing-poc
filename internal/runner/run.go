@@ -684,6 +684,15 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 	// only for a result that is not in its cache, unless -o or -a makes it
 	// link anyway: then the worker waits for a test process.
 	plan.linkSignal = len(handoff) != 0 && !plan.tests.RunsEveryTest && !opts.linksCachedResults()
+	switch {
+	case len(handoff) == 0:
+	case plan.tests.RunsEveryTest:
+		debug.printf("git worker requests_ahead=while_building reason=%q", opts.cacheRule)
+	case opts.linksCachedResults():
+		debug.printf("git worker requests_ahead=at_first_test reason=%q", opts.linkRule()+" links test binaries even for cached results")
+	default:
+		debug.printf("git worker requests_ahead=at_link reason=%q", "go test may take results from its cache")
+	}
 	var tool string
 	var env []string
 	if plan.coverOverlay || plan.testify || plan.goleak || plan.orchestrion || plan.sdkCI || plan.linkSignal {

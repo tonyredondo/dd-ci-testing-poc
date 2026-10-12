@@ -105,8 +105,10 @@ type options struct {
 	compileOnly, printOnly bool
 	// runsEveryTest reports that go test takes no result from its cache: it
 	// runs in local directory mode, or the test binaries get an argument
-	// outside the cacheable flags.
+	// outside the cacheable flags. cacheRule says why, for debug logs, without
+	// any value from the command line.
 	runsEveryTest bool
+	cacheRule     string
 	// rebuildAll and output record -a and -o as go test applies them, the
 	// last one winning.
 	rebuildAll bool
@@ -172,7 +174,7 @@ func parseOptions(args []string, goflags string) (options, error) {
 		if err := o.apply(canonical, value); err != nil {
 			return o, err
 		}
-		o.noteTestFlag(canonical)
+		o.noteTestFlag(canonical, " in GOFLAGS")
 	}
 	o.chdir, args = chdirFlag(args)
 	var packages []string
@@ -184,7 +186,7 @@ func parseOptions(args []string, goflags string) (options, error) {
 			if arg == "--" {
 				// The terminator and everything after it go to the test binary.
 				o.arguments = append(o.arguments, argument{raw: args})
-				o.runsEveryTest = true
+				o.runsEveryTestBecause("test binary arguments after --")
 				break
 			}
 			arg = arg[1:]
@@ -204,7 +206,7 @@ func parseOptions(args []string, goflags string) (options, error) {
 					continue
 				}
 				o.arguments = append(o.arguments, argument{raw: args})
-				o.runsEveryTest = true
+				o.runsEveryTestBecause("test binary arguments after the packages")
 				break
 			}
 			inPackages = true
@@ -229,7 +231,7 @@ func parseOptions(args []string, goflags string) (options, error) {
 				}
 				break
 			}
-			o.runsEveryTest = true
+			o.runsEveryTestBecause("an unknown flag, which the test binary gets")
 			o.arguments = append(o.arguments, argument{raw: args[:1]})
 			args = args[1:]
 			afterFlagWithoutValue = !hasValue
@@ -251,7 +253,7 @@ func parseOptions(args []string, goflags string) (options, error) {
 		if err := o.apply(canonical, value); err != nil {
 			return o, err
 		}
-		o.noteTestFlag(canonical)
+		o.noteTestFlag(canonical, "")
 		if spec.list {
 			o.buildFlags = append(o.buildFlags, args[:width]...)
 		}
@@ -260,7 +262,7 @@ func parseOptions(args []string, goflags string) (options, error) {
 	}
 	if len(packages) == 0 {
 		// Local directory mode caches no result.
-		o.runsEveryTest = true
+		o.runsEveryTestBecause("local directory mode")
 		packages = []string{"."}
 	}
 	o.packages = packages
@@ -271,14 +273,34 @@ func parseOptions(args []string, goflags string) (options, error) {
 // linksCachedResults reports that go test links test binaries even for
 // results in its cache: -o saves the binary, and -a rebuilds everything.
 func (o *options) linksCachedResults() bool {
-	return o.rebuildAll || o.output != ""
+	return o.linkRule() != ""
+}
+
+// linkRule names the flag that makes go test link test binaries even for
+// cached results, if any.
+func (o *options) linkRule() string {
+	switch {
+	case o.output != "":
+		return "-o"
+	case o.rebuildAll:
+		return "-a"
+	}
+	return ""
 }
 
 // noteTestFlag records that a test binary flag outside the cacheable ones
 // keeps go test from taking results from its cache.
-func (o *options) noteTestFlag(name string) {
+func (o *options) noteTestFlag(name, from string) {
 	if testBinaryFlags[name] && !cacheableTestFlags[name] {
-		o.runsEveryTest = true
+		o.runsEveryTestBecause("test binary flag -" + name + from)
+	}
+}
+
+// runsEveryTestBecause records that go test takes no result from its cache,
+// and the first reason.
+func (o *options) runsEveryTestBecause(reason string) {
+	if !o.runsEveryTest {
+		o.runsEveryTest, o.cacheRule = true, reason
 	}
 }
 
@@ -291,7 +313,7 @@ func (o *options) noteTestArgument(arg string) {
 		name, _, hasValue = strings.Cut(flag, "=")
 	}
 	if !hasValue || !cacheableTestFlags[name] {
-		o.runsEveryTest = true
+		o.runsEveryTestBecause("a test binary argument after -args")
 	}
 }
 

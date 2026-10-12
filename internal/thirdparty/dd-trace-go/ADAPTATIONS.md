@@ -926,6 +926,23 @@ cache, also with cacheable flags after `-args` and with `-o`, a `linking` mark
 only in a run with a result outside the cache, ddto's `tests.json` and the removed cache
 directory.
 
+With `DD_TRACE_DEBUG`, the worker, the read cache and test processes log
+these decisions. In `worker.log`, `cligit.Run` logs what started the requests
+ahead (`trigger:runs_every_test`, `linking` or `used`), with the test
+processes' Go version and the number of clients, or that go test exited
+before a test process used the state. `requestFeatures` logs, per client, a
+failed or Git-requiring settings response, each failed feature request and
+the features it requested with the duration. `HandedCLITests` logs the test
+description it read. The read cache logs the invocation's scope
+(`cliReadCacheScopeIdentity`), each hit with the scope's kind, a hit after
+waiting for another process's request with the wait, and a miss with the
+request's duration and whether it was stored. `RemoveCLIReadCache` returns how
+many left directories it removed, for ddto's log. Coverage logs whether the
+module came from ddto's description or `go list`, with the latter's
+duration. None of these lines holds a credential or a request body.
+`integration/TestMiniCLIStateDebugLog` and
+`integration/TestMiniCLIStateGivesModuleToCoverage` check them.
+
 ## Testify method names
 
 [`civisibility/integrations/gotesting/testify.go`](civisibility/integrations/gotesting/testify.go)

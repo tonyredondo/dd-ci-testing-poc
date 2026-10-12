@@ -132,22 +132,38 @@ func Run(dir, runtimeID string, uploadWait time.Duration, input io.Reader, resul
 	uploadEnabled := infra.BoolEnv(constants.CIVisibilityGitUploadEnabledEnvironmentVariable, true)
 	var search func() (*gitupload.SearchCommitsResponse, error)
 	var requests func()
-	requestNow := func() {
+	started := time.Now()
+	requestNow := func(trigger string) {
+		clients := testProcessClients(c, goVersion, tests)
+		log.Debug("civisibility: CLI requests ahead started [trigger:%s go_version:%s clients:%d after:%s]", trigger, goVersion, len(clients), time.Since(started).Round(time.Microsecond))
 		search = searchAhead(c, uploadEnabled)
-		requests = requestAhead(testProcessClients(c, goVersion, tests))
+		requests = requestAhead(clients)
 	}
 	// While go test builds, the worker requests for the test processes if
 	// every one of them runs. Otherwise it waits until go test links a test
 	// binary, which it does only for a result that is not in its cache, or a
 	// test process starts: a run whose results all come from Go's test cache
 	// sends no request.
-	if tests != nil && tests.RunsEveryTest || waitFor(ctx, dir, cli.exited, utils.CLIGitLinkingFile, utils.CLIGitUsedFile) {
-		requestNow()
+	switch {
+	case tests != nil && tests.RunsEveryTest:
+		requestNow("runs_every_test")
+	case tests == nil:
+		log.Debug("civisibility: CLI requests ahead wait for a test process: no test description")
+		fallthrough
+	default:
+		if waitFor(ctx, dir, cli.exited, utils.CLIGitLinkingFile, utils.CLIGitUsedFile) {
+			trigger := utils.CLIGitUsedFile
+			if _, err := os.Stat(filepath.Join(dir, utils.CLIGitLinkingFile)); err == nil {
+				trigger = utils.CLIGitLinkingFile
+			}
+			requestNow(trigger)
+		}
 	}
 	if !waitUsed(ctx, dir, cli.exited) {
 		// No test process needs the search or the requests any more. The
 		// search's git commands end, interrupted or killed, only while this
 		// process runs.
+		log.Debug("civisibility: CLI requests ahead not needed: go test exited before a test process used the state [started:%t]", requests != nil)
 		cancel()
 		if search != nil {
 			_, _ = search()
@@ -158,7 +174,7 @@ func Run(dir, runtimeID string, uploadWait time.Duration, input io.Reader, resul
 		return nil
 	}
 	if requests == nil {
-		requestNow()
+		requestNow(utils.CLIGitUsedFile)
 	}
 	utils.FetchCLIHeadCommit()
 	if app != nil {
@@ -389,8 +405,8 @@ var testProcessClients = func(c client, goVersion string, tests *utils.CLITests)
 // for itself, as before. The returned function waits for the requests.
 func requestAhead(clients []featureClient) func() {
 	var wg sync.WaitGroup
-	for _, c := range clients {
-		wg.Go(func() { requestFeatures(c) })
+	for i, c := range clients {
+		wg.Go(func() { requestFeatures(i, c) })
 	}
 	return wg.Wait
 }
@@ -398,24 +414,40 @@ func requestAhead(clients []featureClient) func() {
 // requestFeatures requests what one test process would, deciding as
 // ensureAdditionalFeaturesInitialization does. Test processes request again,
 // and report, what fails here.
-func requestFeatures(c featureClient) {
+func requestFeatures(client int, c featureClient) {
+	started := time.Now()
 	settings, err := c.GetSettings()
-	if err != nil || settings == nil || settings.RequireGit {
+	switch {
+	case err != nil:
+		log.Debug("civisibility: CLI request ahead settings failed [client:%d duration:%s error:%s]", client, time.Since(started).Round(time.Microsecond), err.Error())
+		return
+	case settings == nil:
+		log.Debug("civisibility: CLI request ahead settings empty [client:%d]", client)
+		return
+	case settings.RequireGit:
 		// Settings that require Git change after the upload, which waits
 		// for a test process.
+		log.Debug("civisibility: CLI requests ahead stop: the settings require Git [client:%d]", client)
 		return
 	}
+	testManagement := settings.TestManagement.Enabled && infra.BoolEnv(constants.CIVisibilityTestManagementEnabledEnvironmentVariable, true)
 	var wg sync.WaitGroup
+	result := func(name string, err error) {
+		if err != nil {
+			log.Debug("civisibility: CLI request ahead %s failed [client:%d error:%s]", name, client, err.Error())
+		}
+	}
 	if settings.KnownTestsEnabled {
-		wg.Go(func() { _, _ = c.GetKnownTests() })
+		wg.Go(func() { _, err := c.GetKnownTests(); result("known tests", err) })
 	}
 	if settings.TestsSkipping {
-		wg.Go(func() { _, _ = c.GetSkippableTests() })
+		wg.Go(func() { _, err := c.GetSkippableTests(); result("skippable tests", err) })
 	}
-	if settings.TestManagement.Enabled && infra.BoolEnv(constants.CIVisibilityTestManagementEnabledEnvironmentVariable, true) {
-		wg.Go(func() { _, _ = c.GetTestManagementTests() })
+	if testManagement {
+		wg.Go(func() { _, err := c.GetTestManagementTests(); result("test management", err) })
 	}
 	wg.Wait()
+	log.Debug("civisibility: CLI requests ahead finished [client:%d known_tests:%t skippable:%t test_management:%t duration:%s]", client, settings.KnownTestsEnabled, settings.TestsSkipping, testManagement, time.Since(started).Round(time.Microsecond))
 }
 
 // searchAhead starts the upload's first commit search; the returned function

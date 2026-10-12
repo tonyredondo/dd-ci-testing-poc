@@ -246,6 +246,8 @@ func (w *gitWorker) handOff(tests utils.CLITests, launcher bool, goVersion strin
 	// modules, with this description; without it, they work as before.
 	if err := utils.WriteCLIGitStateFile(w.state, utils.CLITestsFile, tests); err != nil {
 		w.debug.printf("git worker test description not written: %v", err)
+	} else {
+		w.debug.printf("git worker test description packages=%d goarch=%s runs_every_test=%t go_version=%s", len(tests.Packages), tests.GOARCH, tests.RunsEveryTest, goVersion)
 	}
 	w.proceeded.Store(true)
 	if err := w.send(cligit.Proceed + " " + goVersion); err != nil {
@@ -380,8 +382,10 @@ func (w *gitWorker) release() {
 	}
 	// The invocation's read-cache entries, which the worker requested ahead,
 	// serve no later invocation.
-	if err := civisibilitynet.RemoveCLIReadCache(w.state); err != nil {
+	if removed, err := civisibilitynet.RemoveCLIReadCache(w.state); err != nil {
 		w.debug.printf("git worker read cache not removed: %v", err)
+	} else {
+		w.debug.printf("git worker read cache removed left_directories_removed=%d", removed)
 	}
 	if !w.keep {
 		_ = os.RemoveAll(w.state)

@@ -67,21 +67,29 @@ func readGoEnvironment(ctx context.Context, dir string) (*goEnvironment, error) 
 // -V prints, to the toolchain's version. A wrong result only costs the test
 // processes their own requests.
 func testRuntimeVersion(ctx context.Context, dir, goVersion, goExperiment string) string {
+	debug := debugFromContext(ctx)
 	if _, own, _ := cutExperiments(goVersion); goExperiment == own {
+		debug.printf("test runtime version=%q source=go_env", goVersion)
 		return goVersion
 	}
+	phase := debug.start("test runtime version")
 	cmd := exec.CommandContext(ctx, "go", "tool", "compile", "-V")
 	cmd.Dir = dir
 	cmd.Env = append(cmd.Environ(), "GOFLAGS=", "GOEXPERIMENT="+goExperiment)
 	out, err := cmd.Output()
+	phase.finish(err)
 	if err != nil {
+		debug.printf("test runtime version=%q source=go_env compile_error=true", goVersion)
 		return goVersion
 	}
-	base, experiments, _ := strings.Cut(strings.TrimPrefix(strings.TrimSpace(string(out)), "compile version "), " X:")
-	if experiments == "" {
-		return base
+	runtimeVersion := strings.TrimPrefix(strings.TrimSpace(string(out)), "compile version ")
+	if base, experiments, _ := strings.Cut(runtimeVersion, " X:"); experiments == "" {
+		runtimeVersion = base
+	} else {
+		runtimeVersion = base + experimentSeparator(goVersion, base) + "X:" + experiments
 	}
-	return base + experimentSeparator(goVersion, base) + "X:" + experiments
+	debug.printf("test runtime version=%q source=go_tool_compile", runtimeVersion)
+	return runtimeVersion
 }
 
 // cutExperiments splits a runtime version at the experiments that the linker

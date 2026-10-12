@@ -56,6 +56,7 @@ func HandedCLITests() *CLITests {
 			log.Debug("civisibility: CLI test description unavailable: %s", err.Error())
 			return
 		}
+		log.Debug("civisibility: CLI test description [packages:%d goarch:%s runs_every_test:%t]", len(tests.Packages), tests.GOARCH, tests.RunsEveryTest)
 		cliTests = &tests
 	})
 	return cliTests

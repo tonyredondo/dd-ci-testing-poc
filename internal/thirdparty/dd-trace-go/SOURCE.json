@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "2401d00e73fad80355e271a28016ba8c03c2038ef14bf987b01f1d9667c70f30",
+      "sha256": "d51f747b1823b9c28e9db13977d6ec8e7b322534bc49448d5cc9cf755219461c",
       "role": "local"
     },
     {
@@ -410,7 +410,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/coverage/test_coverage.go",
-      "sha256": "36db9a026cf93ace062660e41f22b3161059e111b780c1367cfb3a049b468650",
+      "sha256": "45a277b0e171177aed906412bc45a7caf8106aaf70d368825325f745bc54fd0d",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/coverage/test_coverage.go",
       "source_sha256": "90f437bef02e1c4eca6e220f13d128ce8da64109359b66b98db6b5bb3bb5c352"
@@ -1232,7 +1232,7 @@
     },
     {
       "path": "civisibility/utils/net/read_cache.go",
-      "sha256": "e07fb1207b5a00ae5f0eeeac78245d5cf3b60337882c0adb2f15299692a04642",
+      "sha256": "48b750571f8272894ce66e6afe64604d68eb2f6b01de85228dda768d50fed520",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/net/read_cache.go",
       "source_sha256": "34428b9f4f0334d2ba35ab5ef532c32012009e9fb2799bb43cbfabec2b1405d8"
@@ -2132,7 +2132,7 @@
     },
     {
       "path": "civisibility/cligit/cligit.go",
-      "sha256": "b9a4749783a67f93c2cf10bed506774efc5dce93c6e10a6acd23ec1aa1cb563c",
+      "sha256": "a02a71824d7606cfe52d15dcbb4d6e1adaffeb9a8817f4bdd6043d3c5652d17b",
       "role": "local"
     },
     {
@@ -2212,7 +2212,7 @@
     },
     {
       "path": "civisibility/utils/cli_tests_state.go",
-      "sha256": "66071dba7743fd45b440c5d09f3defc7187788d9ec183843402718fb10aef308",
+      "sha256": "a99a3dcedd073b7c5edc5c2300be78a274e5a3d5fad9f4b01439bb15215fa878",
       "role": "local"
     },
     {
@@ -2222,7 +2222,7 @@
     },
     {
       "path": "civisibility/utils/net/cli_test_process_test.go",
-      "sha256": "3fd9f317978c4e1dd03aff5776b1d9b0581c3f2cabd4a029bc19cd5e9910b2b3",
+      "sha256": "dadfb61ceef5072b74ca5de7e6e81cf13a8c106e9883676db062788f1de9f620",
       "role": "local"
     }
   ],

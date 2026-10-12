@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -391,6 +392,87 @@ func TestMiniCLIStateSharedRequests(t *testing.T) {
 			t.Fatalf("requests %v; want one per service", counts)
 		}
 	}
+}
+
+// With DD_TRACE_DEBUG, ddto, its Git worker and the test processes log when
+// and why the worker requests ahead, and where test processes find the
+// responses.
+func TestMiniCLIStateDebugLog(t *testing.T) {
+	dir, driver, _ := gitStateFixture(t)
+	addSubPackage(t, dir)
+	intake := &featureIntake{}
+	server := newServer(http.HandlerFunc(intake.handler))
+	defer server.Close()
+	archive := filepath.Join(t.TempDir(), "state.zip")
+	env := featureEnv(t, server.URL, "DD_TRACE_DEBUG=true")
+	run := func(args ...string) (string, string) {
+		t.Helper()
+		args = append([]string{"test", "--runtime=mini", "--keep-ci-state=" + archive}, args...)
+		out, stderr, code := command(t, dir, env, driver, args...)
+		if code != 0 {
+			t.Fatalf("ddto test: %d %s %s", code, out, stderr)
+		}
+		intake.take()
+		return out, stderr
+	}
+	requireLines := func(log, name string, lines ...string) {
+		t.Helper()
+		for _, line := range lines {
+			if !strings.Contains(log, line) {
+				t.Fatalf("%s lacks %q:\n%s", name, line, log)
+			}
+		}
+	}
+
+	// -count=1: the worker requests while go test builds, and the test
+	// processes find its responses in the invocation's read cache.
+	out, stderr := run("-count=1", "-v", "-run=^Test(Pass|Sub)$", ".", "./sub")
+	requireLines(stderr, "ddto's log", `requests_ahead=while_building reason="test binary flag -count"`,
+		"git worker test description packages=2", "test runtime version=", "git worker read cache removed")
+	requireLines(zipFile(t, archive, "worker.log"), "the worker's log", "civisibility: CLI test description [packages:2",
+		"CLI requests ahead started [trigger:runs_every_test", "CLI requests ahead finished [client:0 known_tests:true skippable:true test_management:true")
+	requireLines(out, "the test processes' log", "civisibility.read_cache: invocation scope", "scope:cli")
+	if !regexp.MustCompile(`civisibility\.read_cache: hit (after wait )?\[endpoint:settings `).MatchString(out) {
+		t.Fatalf("no test process found the worker's settings:\n%s", out)
+	}
+
+	// Every result from the cache: nothing needed the requests.
+	run("-run=^TestSub$", "./sub")
+	_, stderr = run("-run=^TestSub$", "./sub")
+	requireLines(stderr, "ddto's log", "requests_ahead=at_link")
+	worker := zipFile(t, archive, "worker.log")
+	requireLines(worker, "the worker's log", "CLI requests ahead not needed")
+	if strings.Contains(worker, "CLI requests ahead started") {
+		t.Fatalf("the worker requested in a cached run:\n%s", worker)
+	}
+
+	// One result outside the cache: go test linked its test binary.
+	run("-run=^TestSub$", ".", "./sub")
+	requireLines(zipFile(t, archive, "worker.log"), "the worker's log", "CLI requests ahead started [trigger:linking")
+
+	// -o links even cached results: the worker waits for a test process.
+	_, stderr = run("-o", filepath.Join(t.TempDir(), "sub.test"), "-run=^TestSub$", "./sub")
+	requireLines(stderr, "ddto's log", `requests_ahead=at_first_test reason="-o links test binaries even for cached results"`)
+}
+
+// zipFile returns the contents of the file name in archive.
+func zipFile(t *testing.T, archive, name string) string {
+	t.Helper()
+	reader, err := zip.OpenReader(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	file, err := reader.Open(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	data, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
 
 // zipFiles returns the names of the files in the zip archive.

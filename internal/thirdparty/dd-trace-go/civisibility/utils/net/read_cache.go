@@ -267,6 +267,7 @@ func cliReadCacheScopeIdentity(identity readCacheScopeIdentity, dir, credential,
 	}
 	scoped := newReadCacheScopeIdentityFromValues(readCacheScopeCLI, time.Hour, values)
 	scoped.directory = cliReadCacheDirectoryName(dir)
+	log.Debug("civisibility.read_cache: invocation scope [directory:%s ttl:%s]", filepath.Join(readCacheCLIDirectory, scoped.directory), scoped.TTL)
 	return scoped
 }
 
@@ -288,17 +289,17 @@ func readCacheSubdirectory(identity readCacheScopeIdentity) string {
 // RemoveCLIReadCache removes the read-cache entries of ddto's invocation
 // whose state is in stateDir, once its Git worker and test processes exited.
 // It also removes the expired entries of invocations that ended without
-// removing theirs.
-func RemoveCLIReadCache(stateDir string) error {
+// removing theirs, and returns how many of their directories it removed.
+func RemoveCLIReadCache(stateDir string) (int, error) {
 	if stateDir == "" {
-		return nil
+		return 0, nil
 	}
 	dir, err := readCacheDirectory(filepath.Join(readCacheCLIDirectory, cliReadCacheDirectoryName(stateDir)))
 	if err != nil {
-		return err
+		return 0, err
 	}
-	defer removeExpiredCLIReadCaches(filepath.Dir(dir))
-	return os.RemoveAll(dir)
+	err = os.RemoveAll(dir)
+	return removeExpiredCLIReadCaches(filepath.Dir(dir)), err
 }
 
 // removeExpiredCLIReadCaches applies, to a bounded number of the invocation
@@ -308,25 +309,29 @@ func RemoveCLIReadCache(stateDir string) error {
 // directory; its entries expire within the TTL, so it empties and goes, and
 // hides the others only for that long. A running invocation's entries do not
 // expire, and its process holds a lock file in the directory while it writes,
-// so the directory cannot go under it.
-func removeExpiredCLIReadCaches(root string) {
+// so the directory cannot go under it. It returns how many it removed.
+func removeExpiredCLIReadCaches(root string) int {
 	dirFile, err := os.Open(root)
 	if err != nil {
-		return
+		return 0
 	}
 	entries, _ := dirFile.ReadDir(readCacheCLICleanupMaxDirectories)
 	_ = dirFile.Close()
 	start := readCacheNow()
+	removed := 0
 	for _, entry := range entries {
 		if readCacheNow().Sub(start) > readCacheGlobalCleanupMaxDuration {
-			return
+			return removed
 		}
 		if entry.IsDir() {
 			dir := filepath.Join(root, entry.Name())
 			readCacheGlobalCleanup(dir)
-			_ = os.Remove(dir)
+			if os.Remove(dir) == nil {
+				removed++
+			}
 		}
 	}
+	return removed
 }
 
 func newReadCacheScopeIdentityFromValues(kind string, ttl time.Duration, values []readCacheIdentityValue) readCacheScopeIdentity {
@@ -412,8 +417,9 @@ func readThroughShortLivedCache[T any](
 	}
 	readCacheCleanupCurrentKey(paths)
 
+	scope := c.readCacheScopeIdentity.Kind
 	if value, ok := readFreshReadCacheEntry[T](paths, cacheKey, baseScope, endpointScope, c.readCacheScopeIdentity.TTL); ok {
-		log.Debug("civisibility.read_cache: hit [endpoint:%s key:%s]", endpoint, cacheKey)
+		log.Debug("civisibility.read_cache: hit [endpoint:%s key:%s scope:%s]", endpoint, cacheKey, scope)
 		if onCacheHit != nil {
 			onCacheHit(value)
 		}
@@ -427,14 +433,16 @@ func readThroughShortLivedCache[T any](
 		readCacheGlobalCleanup(paths.Dir)
 
 		if value, ok := readFreshReadCacheEntry[T](paths, cacheKey, baseScope, endpointScope, c.readCacheScopeIdentity.TTL); ok {
-			log.Debug("civisibility.read_cache: hit [endpoint:%s key:%s]", endpoint, cacheKey)
+			log.Debug("civisibility.read_cache: hit [endpoint:%s key:%s scope:%s]", endpoint, cacheKey, scope)
 			if onCacheHit != nil {
 				onCacheHit(value)
 			}
 			return value, nil
 		}
 
+		started := time.Now()
 		result, err := live()
+		log.Debug("civisibility.read_cache: miss [endpoint:%s key:%s scope:%s duration:%s cacheable:%t error:%t]", endpoint, cacheKey, scope, time.Since(started).Round(time.Microsecond), err == nil && result.Cacheable, err != nil)
 		if err != nil {
 			return zero, err
 		}
@@ -443,14 +451,15 @@ func readThroughShortLivedCache[T any](
 		}
 		return result.Value, nil
 	case readCacheLockActive:
+		started := time.Now()
 		if value, ok := waitForReadCacheEntry[T](c.requestContext(), paths, cacheKey, baseScope, endpointScope, c.readCacheScopeIdentity.TTL); ok {
-			log.Debug("civisibility.read_cache: hit [endpoint:%s key:%s]", endpoint, cacheKey)
+			log.Debug("civisibility.read_cache: hit after wait [endpoint:%s key:%s scope:%s waited:%s]", endpoint, cacheKey, scope, time.Since(started).Round(time.Microsecond))
 			if onCacheHit != nil {
 				onCacheHit(value)
 			}
 			return value, nil
 		}
-		log.Debug("civisibility.read_cache: waiter fallback [endpoint:%s key:%s]", endpoint, cacheKey)
+		log.Debug("civisibility.read_cache: waiter fallback [endpoint:%s key:%s scope:%s waited:%s]", endpoint, cacheKey, scope, time.Since(started).Round(time.Microsecond))
 		return readCacheLiveValue(live)
 	default:
 		log.Debug("civisibility.read_cache: lock bypass [endpoint:%s key:%s]", endpoint, cacheKey)

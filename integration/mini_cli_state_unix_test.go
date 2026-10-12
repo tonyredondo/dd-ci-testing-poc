@@ -34,18 +34,26 @@ func TestMiniCLIStateGivesModuleToCoverage(t *testing.T) {
 	server := newServer(http.HandlerFunc(intake.handler))
 	defer server.Close()
 	env := featureEnv(t, server.URL, "PATH="+shim+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// The debug log says where the module came from.
+	env = append(env, "DD_TRACE_DEBUG=true")
+	var output string
 	run := func(extra ...string) string {
 		t.Helper()
 		_ = os.Remove(calls)
-		if out, stderr, code := command(t, dir, append(env, extra...), bin, "-test.run=^TestPass$"); code != 0 {
+		out, stderr, code := command(t, dir, append(env, extra...), bin, "-test.run=^TestPass$")
+		if code != 0 {
 			t.Fatalf("fixture: %d %s %s", code, out, stderr)
 		}
+		output = out + stderr
 		data, _ := os.ReadFile(calls)
 		return string(data)
 	}
 
 	if got := run(); !strings.Contains(got, "{{.Module.Path}};{{.Module.Dir}}") {
 		t.Fatalf("alone, the test process did not ask go list for its module: %q", got)
+	}
+	if !strings.Contains(output, "civisibility.coverage: module from go list") {
+		t.Fatalf("the debug log does not say that the module came from go list:\n%s", output)
 	}
 
 	state := runGitWorker(t, dir, driver, "", "DD_GIT_REPOSITORY_URL=", "DD_GIT_COMMIT_SHA=")
@@ -55,6 +63,9 @@ func TestMiniCLIStateGivesModuleToCoverage(t *testing.T) {
 	}
 	if got := run("DDTO_GIT_STATE=" + state); strings.Contains(got, "list") {
 		t.Fatalf("with ddto's state, the test process started go list: %q", got)
+	}
+	if !strings.Contains(output, "civisibility.coverage: module from ddto's test description [module:"+modulePath+"]") {
+		t.Fatalf("the debug log does not say that the module came from ddto:\n%s", output)
 	}
 	if _, err := os.Stat(filepath.Join(state, "used")); err != nil {
 		t.Fatalf("the test process did not use the state: %v", err)

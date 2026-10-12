@@ -121,7 +121,7 @@ func TestCLIReadCacheLastsTheInvocation(t *testing.T) {
 	own := filepath.Join(shared, readCacheSubdirectory(worker.readCacheScopeIdentity))
 	_, err = os.Stat(own)
 	require.NoError(t, err)
-	require.NoError(t, RemoveCLIReadCache("/state"))
+	removeCLIReadCache(t)
 	_, err = os.Stat(own)
 	require.True(t, os.IsNotExist(err))
 }
@@ -179,7 +179,7 @@ func TestRemoveCLIReadCacheRemovesExpiredEntries(t *testing.T) {
 	writeCLIEntry(t, filepath.Join(cli, "writing"), "writing.lock", now.Add(-time.Minute), time.Hour)
 	writeCLIEntry(t, shared, "shared.json", now.Add(-2*time.Hour), time.Hour)
 
-	require.NoError(t, RemoveCLIReadCache("/state"))
+	require.Equal(t, 1, removeCLIReadCache(t))
 	for name, kept := range map[string]bool{
 		filepath.Join(readCacheCLIDirectory, "ended"):                   false,
 		filepath.Join(readCacheCLIDirectory, "running", "running.json"): true,
@@ -212,18 +212,20 @@ func TestRemoveCLIReadCacheReachesEveryDirectory(t *testing.T) {
 
 	// The first batch, in the directory's order, may hold the expired
 	// directories or not; the fresh ones stay either way.
-	require.NoError(t, RemoveCLIReadCache("/state"))
+	before := count()
+	removed := removeCLIReadCache(t)
 	for i := range readCacheCLICleanupMaxDirectories {
 		_, err := os.Stat(filepath.Join(cli, fmt.Sprint("fresh-", i), "entry.json"))
 		require.NoError(t, err)
 	}
 	left := count()
+	require.Equal(t, before-left, removed)
 	// Once every entry has expired, a call removes the bounded number of
 	// directories, and the next one the rest.
 	now = now.Add(2 * time.Hour)
-	require.NoError(t, RemoveCLIReadCache("/state"))
+	require.Equal(t, readCacheCLICleanupMaxDirectories, removeCLIReadCache(t))
 	require.Equal(t, left-readCacheCLICleanupMaxDirectories, count())
-	require.NoError(t, RemoveCLIReadCache("/state"))
+	require.Equal(t, left-readCacheCLICleanupMaxDirectories, removeCLIReadCache(t))
 	require.Equal(t, 0, count())
 }
 
@@ -388,4 +390,13 @@ func TestCLIClientScopeIncludesCredential(t *testing.T) {
 	require.Equal(t, aURL, bURL)
 	require.Equal(t, readCacheScopeCLI, aScope.Kind)
 	assert.NotEqual(t, aScope.Hash, bScope.Hash)
+}
+
+// removeCLIReadCache removes the "/state" invocation's entries and returns how
+// many left directories it removed.
+func removeCLIReadCache(t *testing.T) int {
+	t.Helper()
+	removed, err := RemoveCLIReadCache("/state")
+	require.NoError(t, err)
+	return removed
 }
