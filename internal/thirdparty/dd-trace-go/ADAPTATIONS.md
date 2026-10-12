@@ -804,14 +804,17 @@ will, and the read cache hands the responses to them.
   directory, `cli/<hash>` in the shared one (`readCacheSubdirectory`,
   `readCachePathsIn`), which ddto removes once the worker has exited
   (`RemoveCLIReadCache`); the shared directory's cleanup skips directories.
-  The worker's `NewCLIClient` records the invocation's state directory there
-  (`prepareCLIReadCache`, file `state`). `RemoveCLIReadCache` then also
-  removes, examining and removing a bounded number per call, the `cli/`
-  directories of invocations that a reboot ended: their recorded state
-  directory, which ddto removes last, is gone, and they did not change for
-  longer than the TTL, as when machines share the cache directory. A running
-  invocation keeps its state directory, and so its entries; so does a killed
-  ddto, whose state directory also stays.
+  The worker's `NewCLIClient` records there the invocation's machine and
+  state directory (`prepareCLIReadCache`, file `state`). `RemoveCLIReadCache`
+  then also removes the `cli/` directories of this machine's invocations that
+  a reboot ended: their recorded state directory, which ddto removes last, is
+  gone, and they did not change for longer than the TTL. A running invocation
+  keeps its state directory, and so its entries; so does a killed ddto, whose
+  state directory also stays. Another machine's directories, in a shared
+  cache directory, stay, since this machine cannot tell whether they ended.
+  Each call examines and removes a bounded number of directories, from a
+  position that the clock moves, so that directories that stay do not hide
+  the others.
   They stay in the user's cache directory, not the state directory: test
   processes may read them while Go's test log is active, and the state
   directory can lie in the module.
@@ -856,6 +859,7 @@ Checks: `TestCLIReadCacheScopeIdentity`, `TestCLITestProcessClients`,
 `TestCLIReadCacheLastsTheInvocation`,
 `TestRemoveCLIReadCacheRemovesEndedInvocations`,
 `TestRemoveCLIReadCacheBoundsRemovals`,
+`TestRemoveCLIReadCacheReachesEveryDirectory`,
 `TestReadCacheWaiterStopsWithContext`,
 `TestTestRuntimeVersionMatchesBinaries`, which builds a binary under each
 `GOEXPERIMENT` case, `TestExperimentSeparator`,

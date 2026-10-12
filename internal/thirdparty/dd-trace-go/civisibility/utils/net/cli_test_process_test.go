@@ -7,6 +7,7 @@ package net
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -153,34 +154,48 @@ func TestReadCacheWaiterStopsWithContext(t *testing.T) {
 	require.Equal(t, 1, sleeps)
 }
 
-// The worker records its invocation's state directory with its entries, so
-// that a later invocation removes the entries of one that a reboot ended:
-// those whose state directory is gone and that did not change for longer than
-// the TTL. A running invocation, which keeps its state directory, keeps its
-// entries, however old; so does a directory without the record.
+// recordCLIOwner records, in the invocation directory dir, its owner's
+// machine and state directory, as prepareCLIReadCache does.
+func recordCLIOwner(t *testing.T, dir, host, state string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	record, err := json.Marshal(readCacheCLIOwner{Host: host, StateDir: state})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, readCacheCLIStateFile), record, 0o600))
+}
+
+// The worker records its machine and state directory with its entries, so
+// that a later invocation on that machine removes the entries of one that a
+// reboot ended: those whose state directory is gone and that did not change
+// for longer than the TTL. A running invocation, which keeps its state
+// directory, keeps its entries however old; so do another machine's, which
+// may be running, and a directory without the record.
 func TestRemoveCLIReadCacheRemovesEndedInvocations(t *testing.T) {
 	now := time.Now()
 	root := t.TempDir()
 	setReadCacheHooksForTest(t, root, &now, 111, 222)
+	host, err := os.Hostname()
+	require.NoError(t, err)
 	running := t.TempDir()
 	identity := cliReadCacheScopeIdentity(newReadCacheScopeIdentity(map[string]string{}), running)
 	require.NoError(t, prepareCLIReadCache(identity))
 	shared := filepath.Join(root, "dd-trace-go", "civisibility-read-cache")
-	recorded, err := os.ReadFile(filepath.Join(shared, readCacheSubdirectory(identity), readCacheCLIStateFile))
+	var recorded readCacheCLIOwner
+	data, err := os.ReadFile(filepath.Join(shared, readCacheSubdirectory(identity), readCacheCLIStateFile))
 	require.NoError(t, err)
-	require.Equal(t, running, string(recorded))
+	require.NoError(t, json.Unmarshal(data, &recorded))
+	require.Equal(t, readCacheCLIOwner{Host: host, StateDir: running}, recorded)
 
+	cli := filepath.Join(shared, readCacheCLIDirectory)
 	gone := filepath.Join(t.TempDir(), "gone")
-	for name, state := range map[string]string{"ended": gone, "ended-recently": gone, "unrecorded": ""} {
-		require.NoError(t, os.MkdirAll(filepath.Join(shared, readCacheCLIDirectory, name), 0o700))
-		if state != "" {
-			require.NoError(t, os.WriteFile(filepath.Join(shared, readCacheCLIDirectory, name, readCacheCLIStateFile), []byte(state), 0o600))
-		}
-	}
+	recordCLIOwner(t, filepath.Join(cli, "ended"), host, gone)
+	recordCLIOwner(t, filepath.Join(cli, "ended-recently"), host, gone)
+	recordCLIOwner(t, filepath.Join(cli, "remote"), host+"-other", gone)
+	require.NoError(t, os.MkdirAll(filepath.Join(cli, "unrecorded"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(shared, "entry.json"), nil, 0o600))
 	old := now.Add(-2 * time.Hour)
-	for _, name := range []string{"ended", "unrecorded", identity.Hash} {
-		require.NoError(t, os.Chtimes(filepath.Join(shared, readCacheCLIDirectory, name), old, old))
+	for _, name := range []string{"ended", "remote", "unrecorded", identity.Hash} {
+		require.NoError(t, os.Chtimes(filepath.Join(cli, name), old, old))
 	}
 	require.NoError(t, os.Chtimes(filepath.Join(shared, "entry.json"), old, old))
 
@@ -188,6 +203,7 @@ func TestRemoveCLIReadCacheRemovesEndedInvocations(t *testing.T) {
 	for name, kept := range map[string]bool{
 		filepath.Join(readCacheCLIDirectory, "ended"):          false,
 		filepath.Join(readCacheCLIDirectory, "ended-recently"): true,
+		filepath.Join(readCacheCLIDirectory, "remote"):         true,
 		filepath.Join(readCacheCLIDirectory, "unrecorded"):     true,
 		readCacheSubdirectory(identity):                        true,
 		"entry.json":                                           true,
@@ -203,12 +219,13 @@ func TestRemoveCLIReadCacheBoundsRemovals(t *testing.T) {
 	now := time.Now()
 	root := t.TempDir()
 	setReadCacheHooksForTest(t, root, &now, 111, 222)
+	host, err := os.Hostname()
+	require.NoError(t, err)
 	cli := filepath.Join(root, "dd-trace-go", "civisibility-read-cache", readCacheCLIDirectory)
 	gone, old := filepath.Join(t.TempDir(), "gone"), now.Add(-2*time.Hour)
 	for i := range readCacheGlobalCleanupMaxEntries + 8 {
 		dir := filepath.Join(cli, fmt.Sprint("ended-", i))
-		require.NoError(t, os.MkdirAll(dir, 0o700))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, readCacheCLIStateFile), []byte(gone), 0o600))
+		recordCLIOwner(t, dir, host, gone)
 		require.NoError(t, os.Chtimes(dir, old, old))
 	}
 	for _, left := range []int{8, 0} {
@@ -217,4 +234,41 @@ func TestRemoveCLIReadCacheBoundsRemovals(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, entries, left)
 	}
+}
+
+// Directories that stay do not hide the others: each call examines a bounded
+// window, which starts where the clock points.
+func TestRemoveCLIReadCacheReachesEveryDirectory(t *testing.T) {
+	host, err := os.Hostname()
+	require.NoError(t, err)
+	examined := 2 * readCacheGlobalCleanupMaxEntries
+	total := examined + 8
+	now := time.Unix(1_700_000_000, 0)
+	// The first call's window starts at the first directory.
+	now = now.Add(time.Duration(uint64(total) - uint64(now.UnixNano())%uint64(total)))
+	root := t.TempDir()
+	setReadCacheHooksForTest(t, root, &now, 111, 222)
+	cli := filepath.Join(root, "dd-trace-go", "civisibility-read-cache", readCacheCLIDirectory)
+	gone, old := filepath.Join(t.TempDir(), "gone"), now.Add(-2*time.Hour)
+	for i := range examined {
+		dir := filepath.Join(cli, fmt.Sprintf("a-%03d", i))
+		require.NoError(t, os.MkdirAll(dir, 0o700))
+		require.NoError(t, os.Chtimes(dir, old, old))
+	}
+	for i := range total - examined {
+		dir := filepath.Join(cli, fmt.Sprintf("z-%03d", i))
+		recordCLIOwner(t, dir, host, gone)
+		require.NoError(t, os.Chtimes(dir, old, old))
+	}
+	count := func() int {
+		entries, err := os.ReadDir(cli)
+		require.NoError(t, err)
+		return len(entries)
+	}
+
+	require.NoError(t, RemoveCLIReadCache(filepath.Join(t.TempDir(), "other")))
+	require.Equal(t, total, count())
+	now = now.Add(time.Duration(examined))
+	require.NoError(t, RemoveCLIReadCache(filepath.Join(t.TempDir(), "other")))
+	require.Equal(t, examined, count())
 }

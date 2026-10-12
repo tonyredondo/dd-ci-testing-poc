@@ -52,8 +52,8 @@ const (
 	// readCacheCLIDirectory holds, in the shared directory, one directory of
 	// entries per ddto invocation.
 	readCacheCLIDirectory = "cli"
-	// readCacheCLIStateFile records, in an invocation's directory, its state
-	// directory, which ddto removes once the invocation has ended.
+	// readCacheCLIStateFile records, in an invocation's directory, its machine
+	// and state directory, which ddto removes once the invocation has ended.
 	readCacheCLIStateFile = "state"
 
 	// readCacheEndpointSettings names the settings cache endpoint.
@@ -149,6 +149,13 @@ type (
 		CreatedAtUnixNano int64  `json:"created_at_unix_nano"`
 		CacheKey          string `json:"cache_key"`
 		OwnerNonce        string `json:"owner_nonce"`
+	}
+
+	// readCacheCLIOwner is what an invocation's directory records about the
+	// invocation: its machine and state directory.
+	readCacheCLIOwner struct {
+		Host     string `json:"host"`
+		StateDir string `json:"state_dir"`
 	}
 
 	readCacheLockOwner struct {
@@ -271,10 +278,18 @@ func readCacheSubdirectory(identity readCacheScopeIdentity) string {
 }
 
 // prepareCLIReadCache creates the directory of the invocation's entries and
-// records its state directory there, so that a later cleanup knows when the
-// invocation has ended. ddto's Git worker calls it before any test process
-// uses its state.
+// records there its machine and state directory, so that a later cleanup on
+// that machine knows when the invocation has ended. ddto's Git worker calls it
+// before any test process uses its state.
 func prepareCLIReadCache(identity readCacheScopeIdentity) error {
+	host, err := os.Hostname()
+	if err != nil {
+		return err
+	}
+	record, err := json.Marshal(readCacheCLIOwner{Host: host, StateDir: identity.stateDir})
+	if err != nil {
+		return err
+	}
 	dir, err := readCacheDirectory(readCacheSubdirectory(identity))
 	if err != nil {
 		return err
@@ -282,7 +297,7 @@ func prepareCLIReadCache(identity readCacheScopeIdentity) error {
 	if err := ensureReadCacheDir(dir); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, readCacheCLIStateFile), []byte(identity.stateDir), 0o600)
+	return os.WriteFile(filepath.Join(dir, readCacheCLIStateFile), record, 0o600)
 }
 
 // RemoveCLIReadCache removes the read-cache entries of ddto's invocation
@@ -301,31 +316,38 @@ func RemoveCLIReadCache(stateDir string) error {
 	return os.RemoveAll(dir)
 }
 
-// removeEndedCLIReadCaches removes, in root, the entries of invocations that a
-// reboot ended before ddto removed them: their recorded state directory, which
-// ddto removes last, is gone, and nothing changed in them for longer than the
-// TTL, as when machines share the cache directory. A running invocation keeps
-// its state directory, so its entries stay, and so do those of a killed ddto,
-// whose state directory stays too. Like the global cleanup, it examines and
-// removes a bounded number of directories per call.
+// removeEndedCLIReadCaches removes, in root, the entries of this machine's
+// invocations that a reboot ended before ddto removed them: their recorded
+// state directory, which ddto removes last, is gone, and nothing changed in
+// them for longer than the TTL. A running invocation keeps its state
+// directory, and so its entries; so does a killed ddto, whose state directory
+// also stays. Another machine's, which may share the cache directory, stay:
+// this machine cannot tell whether they ended. root holds only invocation
+// directories; each call examines and removes a bounded number of them, from
+// a position that the clock moves, so that directories that stay do not hide
+// the others.
 func removeEndedCLIReadCaches(root string, ttl time.Duration) {
-	f, err := os.Open(root)
-	if err != nil {
+	entries, err := os.ReadDir(root)
+	if err != nil || len(entries) == 0 {
 		return
 	}
-	entries, _ := f.ReadDir(2 * readCacheGlobalCleanupMaxEntries)
-	_ = f.Close()
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		return
+	}
+	start := int(uint64(readCacheNow().UnixNano()) % uint64(len(entries)))
 	removed := 0
-	for _, entry := range entries {
+	for i := range min(len(entries), 2*readCacheGlobalCleanupMaxEntries) {
 		if removed == readCacheGlobalCleanupMaxEntries {
 			return
 		}
-		dir := filepath.Join(root, entry.Name())
-		state, err := os.ReadFile(filepath.Join(dir, readCacheCLIStateFile))
-		if err != nil || len(state) == 0 {
+		dir := filepath.Join(root, entries[(start+i)%len(entries)].Name())
+		var owner readCacheCLIOwner
+		record, err := os.ReadFile(filepath.Join(dir, readCacheCLIStateFile))
+		if err != nil || json.Unmarshal(record, &owner) != nil || owner.Host != host || owner.StateDir == "" {
 			continue
 		}
-		if _, err := os.Stat(string(state)); !os.IsNotExist(err) {
+		if _, err := os.Stat(owner.StateDir); !os.IsNotExist(err) {
 			continue
 		}
 		if readCachePathOlderThan(dir, ttl) {

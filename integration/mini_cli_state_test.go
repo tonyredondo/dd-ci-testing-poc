@@ -149,8 +149,13 @@ func TestMiniCLIStateRequestsAhead(t *testing.T) {
 		if err != nil || len(records) != 1 {
 			t.Fatalf("records %v, %v", records, err)
 		}
-		if recorded, err := os.ReadFile(records[0]); err != nil || string(recorded) != state {
-			t.Fatalf("recorded %q, %v; want %q", recorded, err, state)
+		var owner struct {
+			Host     string `json:"host"`
+			StateDir string `json:"state_dir"`
+		}
+		host, _ := os.Hostname()
+		if recorded, err := os.ReadFile(records[0]); err != nil || json.Unmarshal(recorded, &owner) != nil || owner.StateDir != state || owner.Host != host {
+			t.Fatalf("recorded %q, %v; want %q on %q", recorded, err, state, host)
 		}
 	}
 	if out, stderr, code := command(t, dir, append(env, "DDTO_GIT_STATE="+state), bin, "-test.run=^TestPass$"); code != 0 {
