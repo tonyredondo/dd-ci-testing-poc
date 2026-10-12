@@ -43,11 +43,18 @@ With a Datadog Agent that accepts CI Visibility requests, run from your project:
 DD_SERVICE=my-tests DD_ENV=ci ddto test -count=1 ./...
 ```
 
-`ddto go test` is the same as `ddto test`. Any other command runs unchanged,
-with its arguments, standard streams, environment and exit status: `ddto go
-build ./...` runs `go build ./...`, and a missing command exits with 127, as
-from a shell. A CI script can put `ddto` in front of its go commands; only
-`go test` reports to CI Visibility.
+`ddto go test` is the same as `ddto test`, also with go's `-C dir` before
+`test`. Any other command runs unchanged, with its arguments, standard
+streams, environment and exit status: `ddto go build ./...` runs `go build
+./...`. As from `env`, a command that is not found exits with 127, and one
+that cannot run with 126. A CI script can put `ddto` in front of its go
+commands; only `go test` reports to CI Visibility.
+
+ddto is a Go program, and a command starts with the process state that Go's
+runtime leaves. On Unix, some signals that the caller ignored or blocked,
+such as SIGTERM, reach the command with their default action, and a standard
+stream that the caller closed is open on `/dev/null`. On Windows,
+ddto waits for the command in a job that ends it if ddto is terminated.
 
 Set `DD_TRACE_AGENT_URL` to select an Agent address. Without an override, Mini
 uses the default Agent Unix socket when present, then `http://localhost:8126`.

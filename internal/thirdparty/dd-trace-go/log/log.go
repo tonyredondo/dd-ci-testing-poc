@@ -136,17 +136,18 @@ var (
 	erragg  = map[string]*errorReport{} // aggregated errors
 	errrate = time.Minute               // the rate at which errors are reported
 	erron   bool                        // true if errors are being aggregated
+
+	// loggingRateOnce applies DD_LOGGING_RATE when the first error is
+	// reported, rather than at initialization: ddto, which links this
+	// package, runs commands other than go test unchanged and prints nothing.
+	loggingRateOnce sync.Once
 )
 
-func init() {
+func readLoggingRate() {
 	// This cannot use env.Get because it would cause a cyclic import
 	if v := os.Getenv("DD_LOGGING_RATE"); v != "" {
 		setLoggingRate(v)
 	}
-
-	// This is required because we really want to be able to log errors from dyngo
-	// but the log package depend on too much packages that we want to instrument.
-	// So we need to do this to avoid dependency cycles.
 }
 
 func setLoggingRate(v string) {
@@ -171,6 +172,7 @@ type errorReport struct {
 // Error reports an error. Errors get aggregated and logged periodically. The
 // default is once per minute or once every DD_LOGGING_RATE number of seconds.
 func Error(format string, a ...any) {
+	loggingRateOnce.Do(readLoggingRate)
 	key := format // format should 99.9% of the time be constant
 	if reachedLimit(key) {
 		// avoid too much lock contention on spammy errors

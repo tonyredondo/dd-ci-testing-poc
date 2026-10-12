@@ -1,13 +1,18 @@
 package runner
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"syscall"
 	"testing"
 	"time"
 )
+
+// createBreakawayFromJob starts a process outside its parent's job.
+const createBreakawayFromJob = 0x01000000
 
 // TestExecHelperProcess is the wrapper, the -exec program and the process the
 // program leaves running in TestExecWrapperEndsProgramWithItself.
@@ -17,6 +22,17 @@ func TestExecHelperProcess(t *testing.T) {
 	case "wrapper":
 		os.Setenv("DDTO_EXEC_HELPER", os.Getenv("DDTO_EXEC_PROGRAM"))
 		os.Exit(ExecWithCallerEnvironment(self))
+	case "command":
+		os.Setenv("DDTO_EXEC_HELPER", os.Getenv("DDTO_EXEC_PROGRAM"))
+		os.Exit(ExecCommand(self))
+	case "breakaway":
+		cmd := exec.Command(self[0], self[1:]...)
+		cmd.Env = append(os.Environ(), "DDTO_EXEC_HELPER=")
+		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createBreakawayFromJob}
+		if err := cmd.Run(); err != nil {
+			os.Exit(4)
+		}
+		os.Exit(0)
 	case "sleep":
 		path := os.Getenv("DDTO_EXEC_PID")
 		if err := os.WriteFile(path+".tmp", []byte(strconv.Itoa(os.Getpid())), 0600); err != nil {
@@ -101,4 +117,27 @@ func TestExecWrapperEndsProgramWithItself(t *testing.T) {
 			t.Fatal("a process left by the exec program ended with the wrapper")
 		}
 	})
+}
+
+// A command that ddto passes through may start processes outside its job, as
+// it may without ddto.
+func TestExecCommandAllowsBreakaway(t *testing.T) {
+	run := func(helper string) int {
+		t.Helper()
+		cmd := exec.Command(os.Args[0], "-test.run=^TestExecHelperProcess$")
+		cmd.Env = append(os.Environ(), "DDTO_EXEC_HELPER="+helper, "DDTO_EXEC_PROGRAM=breakaway")
+		var exit *exec.ExitError
+		if err := cmd.Run(); errors.As(err, &exit) {
+			return exit.ExitCode()
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		return 0
+	}
+	if run("breakaway") != 0 {
+		t.Skip("this process cannot start processes outside its job")
+	}
+	if status := run("command"); status != 0 {
+		t.Fatalf("a passed-through command could not start a process outside its job: status %d", status)
+	}
 }

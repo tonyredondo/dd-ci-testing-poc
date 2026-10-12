@@ -31,18 +31,18 @@ func ExecWithCallerEnvironment(args []string) int {
 }
 
 // ExecCommand replaces this process with args, unchanged: ddto passes every
-// command but go test through. A command that is not found exits with 127,
-// as from a shell.
+// command but go test through. A command found through a relative PATH
+// entry, which only the caller sets, runs as from a shell.
 func ExecCommand(args []string) int {
 	executable, err := exec.LookPath(args[0])
+	if errors.Is(err, exec.ErrDot) {
+		err = nil
+	}
 	if err == nil {
 		err = syscall.Exec(executable, args, os.Environ())
 	}
 	fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR:", err)
-	if errors.Is(err, exec.ErrNotFound) {
-		return 127
-	}
-	return 2
+	return commandStatus(err)
 }
 
 // ExecNativeTool replaces the wrapper: no second process, wait loop or plan I/O.

@@ -3,6 +3,7 @@ package runner
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -110,4 +111,47 @@ func (o *CLIOptions) keepCIState(value string, hasValue bool) error {
 	}
 	o.KeepCIStateZip = path
 	return nil
+}
+
+// TestCommand reports whether ddto's arguments name go test: test, go test, or
+// Orchestrion's orchestrion go test and go tool orchestrion go test, which
+// run in Orchestrion mode. It returns go test's arguments. As go does, it
+// accepts -C dir after go and before test; go test takes it as its first flag.
+func TestCommand(args []string) (testArgs []string, orchestrion, goTool, ok bool) {
+	if len(args) > 0 && args[0] == "test" {
+		return args[1:], false, false, true
+	}
+	for _, form := range []struct {
+		prefix              []string
+		orchestrion, goTool bool
+	}{
+		{[]string{"go"}, false, false},
+		{[]string{"orchestrion", "go"}, true, false},
+		{[]string{"go", "tool", "orchestrion", "go"}, true, true},
+	} {
+		if testArgs, ok := goTestArgs(args, form.prefix); ok {
+			return testArgs, form.orchestrion, form.goTool, true
+		}
+	}
+	return nil, false, false, false
+}
+
+// goTestArgs returns go test's arguments when args are prefix, a go command,
+// then test, after an optional -C dir.
+func goTestArgs(args, prefix []string) ([]string, bool) {
+	if len(args) <= len(prefix) || !slices.Equal(args[:len(prefix)], prefix) {
+		return nil, false
+	}
+	args = args[len(prefix):]
+	var chdir []string
+	switch a := args[0]; {
+	case (a == "-C" || a == "--C") && len(args) > 1:
+		chdir, args = args[:2], args[2:]
+	case strings.HasPrefix(a, "-C=") || strings.HasPrefix(a, "--C="):
+		chdir, args = args[:1], args[1:]
+	}
+	if len(args) == 0 || args[0] != "test" {
+		return nil, false
+	}
+	return append(slices.Clip(chdir), args[1:]...), true
 }

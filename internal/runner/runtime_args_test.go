@@ -89,3 +89,36 @@ func TestParseCLIArgsUploadTimeoutAndCIState(t *testing.T) {
 		}
 	}
 }
+
+// ddto go test is ddto test, also with -C dir before test, where go accepts it.
+func TestTestCommand(t *testing.T) {
+	for _, tc := range []struct {
+		args, want          []string
+		orchestrion, goTool bool
+	}{
+		{args: []string{"test", "-v"}, want: []string{"-v"}},
+		{args: []string{"go", "test", "./..."}, want: []string{"./..."}},
+		{args: []string{"go", "-C", "sub", "test", "-v"}, want: []string{"-C", "sub", "-v"}},
+		{args: []string{"go", "--C", "sub", "test"}, want: []string{"--C", "sub"}},
+		{args: []string{"go", "-C=sub", "test", "."}, want: []string{"-C=sub", "."}},
+		{args: []string{"go", "--C=sub", "test"}, want: []string{"--C=sub"}},
+		{args: []string{"orchestrion", "go", "test", "-v"}, want: []string{"-v"}, orchestrion: true},
+		{args: []string{"orchestrion", "go", "-C", "sub", "test"}, want: []string{"-C", "sub"}, orchestrion: true},
+		{args: []string{"go", "tool", "orchestrion", "go", "test", "-v"}, want: []string{"-v"}, orchestrion: true, goTool: true},
+		{args: []string{"go", "tool", "orchestrion", "go", "-C=sub", "test"}, want: []string{"-C=sub"}, orchestrion: true, goTool: true},
+	} {
+		got, orchestrion, goTool, ok := TestCommand(tc.args)
+		if !ok || !reflect.DeepEqual(got, tc.want) || orchestrion != tc.orchestrion || goTool != tc.goTool {
+			t.Errorf("TestCommand(%q) = %q, %t, %t, %t; want %q, %t, %t", tc.args, got, orchestrion, goTool, ok, tc.want, tc.orchestrion, tc.goTool)
+		}
+	}
+	for _, args := range [][]string{
+		nil, {"go"}, {"go", "build"}, {"go", "vet", "test"}, {"go", "-C"}, {"go", "-C", "test"},
+		{"go", "-C", "sub"}, {"-C", "sub", "test"}, {"go", "-x", "test"}, {"orchestrion", "go", "build"},
+		{"orchestrion", "test"}, {"go", "tool", "orchestrion", "go"}, {"make", "test"},
+	} {
+		if got, _, _, ok := TestCommand(args); ok {
+			t.Errorf("TestCommand(%q) = %q; want another command", args, got)
+		}
+	}
+}

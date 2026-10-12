@@ -34,32 +34,21 @@ func main() {
 		}
 		os.Exit(runner.RunTool(context.Background(), plan, args, os.Stdin, os.Stdout, os.Stderr))
 	}
-	args := os.Args[1:]
-	orchestrion, goTool := false, false
+	// ddto go test is ddto test, as go test is.
+	args, orchestrion, goTool, isTest := runner.TestCommand(os.Args[1:])
 	switch {
-	case len(args) > 0 && args[0] == "test":
-		args = args[1:]
-	case len(args) >= 2 && args[0] == "go" && args[1] == "test":
-		// ddto go test is ddto test, as go test is.
-		args = args[2:]
-	case len(args) >= 3 && args[0] == "orchestrion" && args[1] == "go" && args[2] == "test":
-		orchestrion = true
-		args = args[3:]
-	case len(args) >= 5 && args[0] == "go" && args[1] == "tool" && args[2] == "orchestrion" && args[3] == "go" && args[4] == "test":
-		orchestrion = true
-		goTool = true
-		args = args[5:]
-	case len(args) == 0 || args[0] == "-h" || args[0] == "-help" || args[0] == "--help":
+	case isTest:
+	case len(os.Args) == 1 || os.Args[1] == "-h" || os.Args[1] == "-help" || os.Args[1] == "--help":
 		fmt.Fprintln(os.Stderr, "usage: ddto [go | orchestrion go | go tool orchestrion go] test [--runtime=mini|sdk] [--git-upload-timeout=1m] [--keep-ci-state[=file.zip]] [go test flags] [packages] (default: mini)")
 		fmt.Fprintln(os.Stderr, "       ddto command [arguments]: runs any other command unchanged, such as ddto go build ./...")
-		if len(args) == 0 {
+		if len(os.Args) == 1 {
 			os.Exit(2)
 		}
 		os.Exit(0)
 	default:
 		// Any other command runs unchanged, before ddto sets anything: ddto
 		// in front of a go command, or any other, is transparent.
-		os.Exit(runner.ExecCommand(args))
+		os.Exit(runner.ExecCommand(os.Args[1:]))
 	}
 	cli, args, err := runner.ParseCLIArgs(args)
 	if err != nil {

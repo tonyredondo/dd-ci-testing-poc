@@ -29,30 +29,31 @@ func ExecWithCallerEnvironment(args []string) int {
 		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR: missing -exec program")
 		return 2
 	}
-	return runInJob(args)
+	return runInJob(args, false, 2)
 }
 
 // ExecCommand runs args unchanged, with the native streams and exit status:
-// ddto passes every command but go test through. A command that is not found
-// exits with 127, as from a shell.
+// ddto passes every command but go test through. The command may start
+// processes outside its job, as it could without ddto.
 func ExecCommand(args []string) int {
-	if _, err := exec.LookPath(args[0]); errors.Is(err, exec.ErrNotFound) {
+	if _, err := exec.LookPath(args[0]); err != nil {
 		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR:", err)
-		return 127
+		return commandStatus(err)
 	}
-	return runInJob(args)
+	return runInJob(args, true, 126)
 }
 
 // runInJob runs args in a job that kills them if this wrapper ends first, and
-// returns their exit status.
-func runInJob(args []string) int {
+// returns their exit status, or failed if they do not start. With breakaway,
+// the job lets them start processes outside it (CREATE_BREAKAWAY_FROM_JOB).
+func runInJob(args []string, breakaway bool, failed int) int {
 	signal.Notify(make(chan os.Signal, 1), os.Interrupt)
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	job, err := startInJob(cmd)
+	job, err := startInJob(cmd, breakaway)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		return 2
+		return failed
 	}
 	err = cmd.Wait()
 	if job != 0 {
@@ -68,16 +69,22 @@ func runInJob(args []string) int {
 	return 0
 }
 
+// jobObjectLimitBreakawayOK lets a job's processes start others outside it.
+const jobObjectLimitBreakawayOK = 0x00000800
+
 // startInJob starts cmd suspended, so it runs no code before it belongs to a
 // job that kills it when closed, then resumes it. Where no job is available,
 // cmd runs without one.
-func startInJob(cmd *exec.Cmd) (windows.Handle, error) {
+func startInJob(cmd *exec.Cmd, breakaway bool) (windows.Handle, error) {
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
 		return 0, cmd.Start()
 	}
 	limits := windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION{}
 	limits.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+	if breakaway {
+		limits.BasicLimitInformation.LimitFlags |= jobObjectLimitBreakawayOK
+	}
 	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&limits)), uint32(unsafe.Sizeof(limits))); err != nil {
 		_ = windows.CloseHandle(job)
 		return 0, cmd.Start()

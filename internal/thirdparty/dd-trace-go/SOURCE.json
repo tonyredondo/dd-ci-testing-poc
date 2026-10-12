@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "032bf4bc772a64c8ae9cfaaa1cc30c4535a842ea428c68410ba66357871a41af",
+      "sha256": "793cc56c63aa66e0858d3246c0a7c162f213d33b83beafe6f29ba8d1c9df6948",
       "role": "local"
     },
     {
@@ -1639,7 +1639,7 @@
     },
     {
       "path": "log/log.go",
-      "sha256": "917617c4b60f5d56a41ceea5232f2e8712afeafa2ea977b6a3f59f26a0c4c482",
+      "sha256": "86307b8e9328471d671db24f5ff549cee6d03b54d6fc6270c09592a40e455afd",
       "role": "adapted",
       "source_path": "internal/log/log.go",
       "source_sha256": "021fafa9f8f8b154356fdf3a80a099cd949fecd9eba8d212946ee61597600e74"
@@ -2208,6 +2208,11 @@
     {
       "path": "civisibility/utils/net/http_stop_test.go",
       "sha256": "65efdd5763c6b3255d3e004f4319c25cfe284e78ea7cb31f257f24ddbf5bc8af",
+      "role": "local"
+    },
+    {
+      "path": "log/log_test.go",
+      "sha256": "82f53d9cf1c610ef3bec99065f5ac20ea232b5206886e52bae9b27b777398f5c",
       "role": "local"
     }
   ],
