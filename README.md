@@ -53,8 +53,9 @@ commands; only `go test` reports to CI Visibility.
 ddto is a Go program, and a command starts with the process state that Go's
 runtime leaves. On Unix, some signals that the caller ignored or blocked,
 such as SIGTERM, reach the command with their default action, and a standard
-stream that the caller closed is open on `/dev/null`. On Windows,
-ddto waits for the command in a job that ends it if ddto is terminated.
+stream that the caller closed is open on `/dev/null`. On Windows, the
+command receives ddto's command line after `ddto` as written, and ddto waits
+for it in a job that ends it if ddto is terminated.
 
 Set `DD_TRACE_AGENT_URL` to select an Agent address. Without an override, Mini
 uses the default Agent Unix socket when present, then `http://localhost:8126`.

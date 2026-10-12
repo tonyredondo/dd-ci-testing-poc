@@ -26,11 +26,35 @@ func TestExecHelperProcess(t *testing.T) {
 		os.Setenv("DDTO_EXEC_HELPER", os.Getenv("DDTO_EXEC_PROGRAM"))
 		os.Exit(ExecCommand(self))
 	case "breakaway":
-		cmd := exec.Command(self[0], self[1:]...)
-		cmd.Env = append(os.Environ(), "DDTO_EXEC_HELPER=")
-		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createBreakawayFromJob}
-		if err := cmd.Run(); err != nil {
+		if !breakAway(self) {
 			os.Exit(4)
+		}
+		os.Exit(0)
+	case "late-spawn":
+		// A worker that the program leaves running breaks away once the
+		// test lets it, after the wrapper has exited.
+		cmd := exec.Command(self[0], self[1:]...)
+		cmd.Env = append(os.Environ(), "DDTO_EXEC_HELPER=late-worker")
+		if err := cmd.Start(); err != nil {
+			os.Exit(3)
+		}
+		os.Exit(0)
+	case "late-worker":
+		result := "denied"
+		for deadline := time.Now().Add(time.Minute); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+			if _, err := os.Stat(os.Getenv("DDTO_EXEC_GO")); err == nil {
+				if breakAway(self) {
+					result = "ok"
+				}
+				break
+			}
+		}
+		path := os.Getenv("DDTO_EXEC_RESULT")
+		if err := os.WriteFile(path+".tmp", []byte(result), 0600); err != nil {
+			os.Exit(3)
+		}
+		if err := os.Rename(path+".tmp", path); err != nil {
+			os.Exit(3)
 		}
 		os.Exit(0)
 	case "sleep":
@@ -119,25 +143,59 @@ func TestExecWrapperEndsProgramWithItself(t *testing.T) {
 	})
 }
 
-// A command that ddto passes through may start processes outside its job, as
-// it may without ddto.
-func TestExecCommandAllowsBreakaway(t *testing.T) {
-	run := func(helper string) int {
-		t.Helper()
-		cmd := exec.Command(os.Args[0], "-test.run=^TestExecHelperProcess$")
-		cmd.Env = append(os.Environ(), "DDTO_EXEC_HELPER="+helper, "DDTO_EXEC_PROGRAM=breakaway")
-		var exit *exec.ExitError
-		if err := cmd.Run(); errors.As(err, &exit) {
-			return exit.ExitCode()
-		} else if err != nil {
-			t.Fatal(err)
-		}
-		return 0
+// breakAway starts self outside the job of this process, and reports whether
+// it could.
+func breakAway(self []string) bool {
+	cmd := exec.Command(self[0], self[1:]...)
+	cmd.Env = append(os.Environ(), "DDTO_EXEC_HELPER=")
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createBreakawayFromJob}
+	return cmd.Run() == nil
+}
+
+// runHelper runs TestExecHelperProcess as helper, with env, and returns its
+// exit status.
+func runHelper(t *testing.T, helper string, env ...string) int {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestExecHelperProcess$")
+	cmd.Env = append(append(os.Environ(), "DDTO_EXEC_HELPER="+helper), env...)
+	var exit *exec.ExitError
+	if err := cmd.Run(); errors.As(err, &exit) {
+		return exit.ExitCode()
+	} else if err != nil {
+		t.Fatal(err)
 	}
-	if run("breakaway") != 0 {
+	return 0
+}
+
+// A command that ddto passes through, and a process that it leaves running,
+// may start processes outside its job, as they may without ddto.
+func TestExecCommandAllowsBreakaway(t *testing.T) {
+	if !breakAway([]string{os.Args[0], "-test.run=^TestExecHelperProcess$"}) {
 		t.Skip("this process cannot start processes outside its job")
 	}
-	if status := run("command"); status != 0 {
+	if status := runHelper(t, "command", "DDTO_EXEC_PROGRAM=breakaway"); status != 0 {
 		t.Fatalf("a passed-through command could not start a process outside its job: status %d", status)
+	}
+
+	dir := t.TempDir()
+	start, result := filepath.Join(dir, "go"), filepath.Join(dir, "result")
+	if status := runHelper(t, "command", "DDTO_EXEC_PROGRAM=late-spawn", "DDTO_EXEC_GO="+start, "DDTO_EXEC_RESULT="+result); status != 0 {
+		t.Fatalf("the program exited with %d", status)
+	}
+	// The wrapper has released the job, where the worker still runs.
+	if err := os.WriteFile(start, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(time.Minute); ; time.Sleep(10 * time.Millisecond) {
+		data, err := os.ReadFile(result)
+		if err == nil {
+			if string(data) != "ok" {
+				t.Fatalf("a process left in the released job could not break away: %s", data)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the worker did not report")
+		}
 	}
 }

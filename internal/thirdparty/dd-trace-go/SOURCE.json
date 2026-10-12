@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "793cc56c63aa66e0858d3246c0a7c162f213d33b83beafe6f29ba8d1c9df6948",
+      "sha256": "4abd0cefb2c957807c9f4261f8422776d1707d3226e4864ada5d5866352ff7dd",
       "role": "local"
     },
     {
@@ -1639,7 +1639,7 @@
     },
     {
       "path": "log/log.go",
-      "sha256": "86307b8e9328471d671db24f5ff549cee6d03b54d6fc6270c09592a40e455afd",
+      "sha256": "db186778f847924656986ef884ff691f58c1551266489e591ed8f1c411d87877",
       "role": "adapted",
       "source_path": "internal/log/log.go",
       "source_sha256": "021fafa9f8f8b154356fdf3a80a099cd949fecd9eba8d212946ee61597600e74"
@@ -2212,7 +2212,7 @@
     },
     {
       "path": "log/log_test.go",
-      "sha256": "82f53d9cf1c610ef3bec99065f5ac20ea232b5206886e52bae9b27b777398f5c",
+      "sha256": "78663ada13bf2d1ae99e60c9740f79df6516e978cbbf05ba6e9dd120b7dddaa7",
       "role": "local"
     }
   ],

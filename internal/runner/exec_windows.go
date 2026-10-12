@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"slices"
 	"syscall"
 	"unsafe"
 
@@ -29,27 +30,48 @@ func ExecWithCallerEnvironment(args []string) int {
 		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR: missing -exec program")
 		return 2
 	}
-	return runInJob(args, false, 2)
+	return runInJob(args, "", false, 2)
 }
 
 // ExecCommand runs args unchanged, with the native streams and exit status:
-// ddto passes every command but go test through. The command may start
-// processes outside its job, as it could without ddto.
+// ddto passes every command but go test through. When args are this
+// process's own arguments, the command receives the caller's command line
+// after ddto's name as written: cmd.exe, which runs batch files, reads its
+// quoting otherwise than Go writes it. The command may start processes
+// outside its job, as it could without ddto.
 func ExecCommand(args []string) int {
 	if _, err := exec.LookPath(args[0]); err != nil {
 		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR:", err)
 		return commandStatus(err)
 	}
-	return runInJob(args, true, 126)
+	var cmdline string
+	if slices.Equal(args, os.Args[1:]) {
+		cmdline = commandLineTail(commandLine())
+	}
+	return runInJob(args, cmdline, true, 126)
 }
 
-// runInJob runs args in a job that kills them if this wrapper ends first, and
-// returns their exit status, or failed if they do not start. With breakaway,
-// the job lets them start processes outside it (CREATE_BREAKAWAY_FROM_JOB).
-func runInJob(args []string, breakaway bool, failed int) int {
+// commandLine is this process's command line.
+func commandLine() string {
+	p := syscall.GetCommandLine()
+	n := 0
+	for *(*uint16)(unsafe.Add(unsafe.Pointer(p), 2*n)) != 0 {
+		n++
+	}
+	return syscall.UTF16ToString(unsafe.Slice(p, n))
+}
+
+// runInJob runs args, with cmdline as their command line if set, in a job that
+// kills them if this wrapper ends first, and returns their exit status, or
+// failed if they do not start. With breakaway, the job lets them, and what
+// they leave running, start processes outside it (CREATE_BREAKAWAY_FROM_JOB).
+func runInJob(args []string, cmdline string, breakaway bool, failed int) int {
 	signal.Notify(make(chan os.Signal, 1), os.Interrupt)
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if cmdline != "" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: cmdline}
+	}
 	job, err := startInJob(cmd, breakaway)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -57,7 +79,7 @@ func runInJob(args []string, breakaway bool, failed int) int {
 	}
 	err = cmd.Wait()
 	if job != 0 {
-		releaseJob(job)
+		releaseJob(job, breakaway)
 	}
 	if err != nil {
 		if exit, ok := err.(*exec.ExitError); ok {
@@ -89,7 +111,10 @@ func startInJob(cmd *exec.Cmd, breakaway bool) (windows.Handle, error) {
 		_ = windows.CloseHandle(job)
 		return 0, cmd.Start()
 	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_SUSPENDED}
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.CreationFlags |= windows.CREATE_SUSPENDED
 	if err := cmd.Start(); err != nil {
 		_ = windows.CloseHandle(job)
 		return 0, err
@@ -151,9 +176,13 @@ func resumeProcess(pid uint32) error {
 	return nil
 }
 
-// releaseJob closes the job without killing what the program left running.
-func releaseJob(job windows.Handle) {
+// releaseJob closes the job without killing what the program left running,
+// which keeps breaking away if the job allowed it.
+func releaseJob(job windows.Handle, breakaway bool) {
 	limits := windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION{}
+	if breakaway {
+		limits.BasicLimitInformation.LimitFlags = jobObjectLimitBreakawayOK
+	}
 	_, _ = windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&limits)), uint32(unsafe.Sizeof(limits)))
 	_ = windows.CloseHandle(job)
 }

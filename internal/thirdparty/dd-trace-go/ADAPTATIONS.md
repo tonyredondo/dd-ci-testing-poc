@@ -1245,10 +1245,13 @@ used in event metadata and CI telemetry. Preserve this identity when updating
 the incorporated logger. The original SDK's logger is unchanged.
 
 `log/log.go` reads `DD_LOGGING_RATE` when the first error is reported
-(`loggingRateOnce`, `readLoggingRate`), where the rate applies, instead of at
+(`applyLoggingRate`, `loggingRateOnce`), where the rate applies, instead of at
 initialization. ddto links this package and runs commands other than go test
 unchanged; an invalid value made it print a warning before them. An invalid
-value now warns at the first error. `log/log_test.go` checks both.
+value now warns at the first error, after `loggingRateOnce` returns:
+`setLoggingRate` returns the warning instead of printing it, so a logger that
+reports an error itself does not wait for the rate. `log/log_test.go` checks
+the rate, the warning and such a logger.
 
 ## Fuzz and executable Examples
 

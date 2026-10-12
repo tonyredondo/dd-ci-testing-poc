@@ -213,6 +213,7 @@
     },
     "windows": {
       "cli": [
+        "TestCLIPassesWindowsCommandLineThrough",
         "TestSharedParityWorkspaceRejectsPersistentLock",
         "TestSharedParityWorkspaceWaitsForOpenFile"
       ]

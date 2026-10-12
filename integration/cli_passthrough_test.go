@@ -108,6 +108,19 @@ func TestCLIPassesOtherCommandsThrough(t *testing.T) {
 		if _, stderr, code := command(t, dir, env, driver, notExecutable); code != 126 {
 			t.Fatalf("a file that cannot run: %d %q; want 126", code, stderr)
 		}
+		// Also when PATH names it.
+		notExecutableEnv := append(env[:len(env):len(env)], "PATH="+filepath.Dir(notExecutable))
+		if _, stderr, code := command(t, dir, notExecutableEnv, driver, "notes"); code != 126 {
+			t.Fatalf("a file in PATH that cannot run: %d %q; want 126", code, stderr)
+		}
+		// An executable file without a #! line runs with /bin/sh.
+		script := filepath.Join(t.TempDir(), "script")
+		if err := os.WriteFile(script, []byte("echo \"script $1\"\nexit 7\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if out, stderr, code := command(t, dir, env, driver, script, "one"); code != 7 || out != "script one\n" {
+			t.Fatalf("a script without #!: %d %q %q; want its output and 7", code, out, stderr)
+		}
 		// A relative PATH entry, which only the caller sets, finds commands
 		// as from a shell.
 		relative := t.TempDir()
