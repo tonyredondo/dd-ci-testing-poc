@@ -19,6 +19,8 @@
       "TestInvalidRuntimeFailsBeforeGo",
       "TestMiniBazelOfflineAndPayloadFiles",
       "TestMiniCLIActivation",
+      "TestCLIGoTestIsTest",
+      "TestCLIPassesOtherCommandsThrough",
       "TestMiniCLIRuntimeSelectionAndSourceRange",
       "TestMiniCLITelemetry",
       "TestMiniCLIWithoutSDK",

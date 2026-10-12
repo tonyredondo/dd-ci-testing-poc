@@ -39,6 +39,9 @@ func main() {
 	switch {
 	case len(args) > 0 && args[0] == "test":
 		args = args[1:]
+	case len(args) >= 2 && args[0] == "go" && args[1] == "test":
+		// ddto go test is ddto test, as go test is.
+		args = args[2:]
 	case len(args) >= 3 && args[0] == "orchestrion" && args[1] == "go" && args[2] == "test":
 		orchestrion = true
 		args = args[3:]
@@ -46,9 +49,17 @@ func main() {
 		orchestrion = true
 		goTool = true
 		args = args[5:]
+	case len(args) == 0 || args[0] == "-h" || args[0] == "-help" || args[0] == "--help":
+		fmt.Fprintln(os.Stderr, "usage: ddto [go | orchestrion go | go tool orchestrion go] test [--runtime=mini|sdk] [--git-upload-timeout=1m] [--keep-ci-state[=file.zip]] [go test flags] [packages] (default: mini)")
+		fmt.Fprintln(os.Stderr, "       ddto command [arguments]: runs any other command unchanged, such as ddto go build ./...")
+		if len(args) == 0 {
+			os.Exit(2)
+		}
+		os.Exit(0)
 	default:
-		fmt.Fprintln(os.Stderr, "usage: ddto [orchestrion go | go tool orchestrion go] test [--runtime=mini|sdk] [--git-upload-timeout=1m] [--keep-ci-state[=file.zip]] [go test flags] [packages] (default: mini)")
-		os.Exit(2)
+		// Any other command runs unchanged, before ddto sets anything: ddto
+		// in front of a go command, or any other, is transparent.
+		os.Exit(runner.ExecCommand(args))
 	}
 	cli, args, err := runner.ParseCLIArgs(args)
 	if err != nil {

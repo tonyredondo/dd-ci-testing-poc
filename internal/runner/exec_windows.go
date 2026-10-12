@@ -29,6 +29,23 @@ func ExecWithCallerEnvironment(args []string) int {
 		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR: missing -exec program")
 		return 2
 	}
+	return runInJob(args)
+}
+
+// ExecCommand runs args unchanged, with the native streams and exit status:
+// ddto passes every command but go test through. A command that is not found
+// exits with 127, as from a shell.
+func ExecCommand(args []string) int {
+	if _, err := exec.LookPath(args[0]); errors.Is(err, exec.ErrNotFound) {
+		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR:", err)
+		return 127
+	}
+	return runInJob(args)
+}
+
+// runInJob runs args in a job that kills them if this wrapper ends first, and
+// returns their exit status.
+func runInJob(args []string) int {
 	signal.Notify(make(chan os.Signal, 1), os.Interrupt)
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr

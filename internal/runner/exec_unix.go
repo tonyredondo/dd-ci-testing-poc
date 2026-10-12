@@ -3,6 +3,7 @@
 package runner
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -26,6 +27,21 @@ func ExecWithCallerEnvironment(args []string) int {
 		err = syscall.Exec(executable, args, os.Environ())
 	}
 	fmt.Fprintln(os.Stderr, err)
+	return 2
+}
+
+// ExecCommand replaces this process with args, unchanged: ddto passes every
+// command but go test through. A command that is not found exits with 127,
+// as from a shell.
+func ExecCommand(args []string) int {
+	executable, err := exec.LookPath(args[0])
+	if err == nil {
+		err = syscall.Exec(executable, args, os.Environ())
+	}
+	fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR:", err)
+	if errors.Is(err, exec.ErrNotFound) {
+		return 127
+	}
 	return 2
 }
 

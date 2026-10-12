@@ -43,6 +43,12 @@ With a Datadog Agent that accepts CI Visibility requests, run from your project:
 DD_SERVICE=my-tests DD_ENV=ci ddto test -count=1 ./...
 ```
 
+`ddto go test` is the same as `ddto test`. Any other command runs unchanged,
+with its arguments, standard streams, environment and exit status: `ddto go
+build ./...` runs `go build ./...`, and a missing command exits with 127, as
+from a shell. A CI script can put `ddto` in front of its go commands; only
+`go test` reports to CI Visibility.
+
 Set `DD_TRACE_AGENT_URL` to select an Agent address. Without an override, Mini
 uses the default Agent Unix socket when present, then `http://localhost:8126`.
 For Agentless delivery, supply `DD_API_KEY` through your usual secret
@@ -59,8 +65,8 @@ Git checkout, supply `DD_GIT_REPOSITORY_URL` and `DD_GIT_COMMIT_SHA`.
 [Runtime configuration](docs/mini-runtime.md#configuration) lists the main
 settings and their defaults.
 
-The CLI sets `DD_CIVISIBILITY_ENABLED=parent` when it is absent and preserves
-explicit values. Use `-count=1` for fresh events: Go can otherwise reuse cached
+For `go test`, the CLI sets `DD_CIVISIBILITY_ENABLED=parent` when it is absent
+and preserves explicit values. Use `-count=1` for fresh events: Go can otherwise reuse cached
 test results. Delivery errors are logged; the command retains Go's exit code.
 The runtime is provided through temporary module files when needed, leaving
 your sources unchanged. Explicit `-mod=mod` still permits Go's own module edits.
