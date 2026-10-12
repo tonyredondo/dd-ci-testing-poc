@@ -820,7 +820,13 @@ will, and the read cache hands the responses to them.
   `writeReadCacheEntry` checks before it publishes; it leaves the entry when
   a writer holds the lock. Upstream, a
   cleanup could remove an entry that a writer had just renewed, which this
-  change would otherwise extend to other invocations' directories.
+  change would otherwise extend to other invocations' directories. One race
+  remains in the SDK's own lock protocol, unchanged here: replacing a stale
+  lock, which a process killed more than an hour earlier left, is not
+  atomic, so two processes can both own the lock, and a cleanup that passed
+  its owner check can still remove a fresh entry before the other replaces
+  its lock. It costs a cache entry and a request, never wrong data; fixing it
+  means changing the protocol upstream, for example stealing locks by rename.
   They stay in the user's cache directory, not the state directory: test
   processes may read them while Go's test log is active, and the state
   directory can lie in the module.
