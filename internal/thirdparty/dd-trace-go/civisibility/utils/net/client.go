@@ -401,6 +401,11 @@ func NewCLIClient(ctx context.Context, dir, runtimeID string) (Client, *CLITelem
 	}
 	cc := c.(*client)
 	cc.handler = &RequestHandler{Client: cc.handler.Client, Context: ctx}
+	if cc.readCacheScopeIdentity.Kind == readCacheScopeCLI {
+		if err := prepareCLIReadCache(cc.readCacheScopeIdentity); err != nil {
+			log.Debug("civisibility: CLI read cache not prepared: %s", err.Error())
+		}
+	}
 	if start == nil || runtimeID == "" {
 		return c, nil
 	}

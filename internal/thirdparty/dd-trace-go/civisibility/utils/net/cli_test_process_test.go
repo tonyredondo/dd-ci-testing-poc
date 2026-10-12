@@ -7,6 +7,7 @@ package net
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -114,9 +115,12 @@ func TestCLIReadCacheLastsTheInvocation(t *testing.T) {
 	entries, err := os.ReadDir(shared)
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
-	require.Equal(t, readCacheSubdirectory(worker.readCacheScopeIdentity), entries[0].Name())
+	require.Equal(t, readCacheCLIDirectory, entries[0].Name())
+	own := filepath.Join(shared, readCacheSubdirectory(worker.readCacheScopeIdentity))
+	_, err = os.Stat(own)
+	require.NoError(t, err)
 	require.NoError(t, RemoveCLIReadCache("/state"))
-	_, err = os.Stat(filepath.Join(shared, entries[0].Name()))
+	_, err = os.Stat(own)
 	require.True(t, os.IsNotExist(err))
 }
 
@@ -149,26 +153,68 @@ func TestReadCacheWaiterStopsWithContext(t *testing.T) {
 	require.Equal(t, 1, sleeps)
 }
 
-// An invocation that ended without removing its entries, as a killed ddto
-// does, leaves a directory that the next invocation removes once its entries
-// expired; another invocation's recent directory stays.
-func TestRemoveCLIReadCacheRemovesAbandonedDirectories(t *testing.T) {
+// The worker records its invocation's state directory with its entries, so
+// that a later invocation removes the entries of one that a reboot ended:
+// those whose state directory is gone and that did not change for longer than
+// the TTL. A running invocation, which keeps its state directory, keeps its
+// entries, however old; so does a directory without the record.
+func TestRemoveCLIReadCacheRemovesEndedInvocations(t *testing.T) {
 	now := time.Now()
 	root := t.TempDir()
 	setReadCacheHooksForTest(t, root, &now, 111, 222)
+	running := t.TempDir()
+	identity := cliReadCacheScopeIdentity(newReadCacheScopeIdentity(map[string]string{}), running)
+	require.NoError(t, prepareCLIReadCache(identity))
 	shared := filepath.Join(root, "dd-trace-go", "civisibility-read-cache")
-	for _, name := range []string{"cli-abandoned", "cli-running", "unrelated"} {
-		require.NoError(t, os.MkdirAll(filepath.Join(shared, name), 0o700))
-		require.NoError(t, os.WriteFile(filepath.Join(shared, name, "entry.json"), nil, 0o600))
-	}
-	old := now.Add(-2 * time.Hour)
-	for _, name := range []string{"cli-abandoned", "unrelated"} {
-		require.NoError(t, os.Chtimes(filepath.Join(shared, name), old, old))
-	}
+	recorded, err := os.ReadFile(filepath.Join(shared, readCacheSubdirectory(identity), readCacheCLIStateFile))
+	require.NoError(t, err)
+	require.Equal(t, running, string(recorded))
 
-	require.NoError(t, RemoveCLIReadCache("/state"))
-	for name, kept := range map[string]bool{"cli-abandoned": false, "cli-running": true, "unrelated": true} {
+	gone := filepath.Join(t.TempDir(), "gone")
+	for name, state := range map[string]string{"ended": gone, "ended-recently": gone, "unrecorded": ""} {
+		require.NoError(t, os.MkdirAll(filepath.Join(shared, readCacheCLIDirectory, name), 0o700))
+		if state != "" {
+			require.NoError(t, os.WriteFile(filepath.Join(shared, readCacheCLIDirectory, name, readCacheCLIStateFile), []byte(state), 0o600))
+		}
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(shared, "entry.json"), nil, 0o600))
+	old := now.Add(-2 * time.Hour)
+	for _, name := range []string{"ended", "unrecorded", identity.Hash} {
+		require.NoError(t, os.Chtimes(filepath.Join(shared, readCacheCLIDirectory, name), old, old))
+	}
+	require.NoError(t, os.Chtimes(filepath.Join(shared, "entry.json"), old, old))
+
+	require.NoError(t, RemoveCLIReadCache(filepath.Join(t.TempDir(), "other")))
+	for name, kept := range map[string]bool{
+		filepath.Join(readCacheCLIDirectory, "ended"):          false,
+		filepath.Join(readCacheCLIDirectory, "ended-recently"): true,
+		filepath.Join(readCacheCLIDirectory, "unrecorded"):     true,
+		readCacheSubdirectory(identity):                        true,
+		"entry.json":                                           true,
+	} {
 		_, err := os.Stat(filepath.Join(shared, name))
 		require.Equal(t, kept, err == nil, name)
+	}
+}
+
+// Each invocation removes a bounded number of ended invocations' entries; the
+// next one continues.
+func TestRemoveCLIReadCacheBoundsRemovals(t *testing.T) {
+	now := time.Now()
+	root := t.TempDir()
+	setReadCacheHooksForTest(t, root, &now, 111, 222)
+	cli := filepath.Join(root, "dd-trace-go", "civisibility-read-cache", readCacheCLIDirectory)
+	gone, old := filepath.Join(t.TempDir(), "gone"), now.Add(-2*time.Hour)
+	for i := range readCacheGlobalCleanupMaxEntries + 8 {
+		dir := filepath.Join(cli, fmt.Sprint("ended-", i))
+		require.NoError(t, os.MkdirAll(dir, 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, readCacheCLIStateFile), []byte(gone), 0o600))
+		require.NoError(t, os.Chtimes(dir, old, old))
+	}
+	for _, left := range []int{8, 0} {
+		require.NoError(t, RemoveCLIReadCache(filepath.Join(t.TempDir(), "other")))
+		entries, err := os.ReadDir(cli)
+		require.NoError(t, err)
+		require.Len(t, entries, left)
 	}
 }

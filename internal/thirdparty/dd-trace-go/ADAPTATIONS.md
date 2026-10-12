@@ -801,12 +801,17 @@ will, and the read cache hands the responses to them.
   `cli`, identified by the state directory, instead of their parent process.
   CI scopes, which both already share, stay. The entries must outlast a build
   of minutes, so the scope's TTL is an hour, and they live in the scope's own
-  directory, `cli-<hash>` in the shared one (`readCacheSubdirectory`,
+  directory, `cli/<hash>` in the shared one (`readCacheSubdirectory`,
   `readCachePathsIn`), which ddto removes once the worker has exited
   (`RemoveCLIReadCache`); the shared directory's cleanup skips directories.
-  `RemoveCLIReadCache` also removes, up to the cleanup's bound, the `cli-`
-  directories unchanged for longer than the TTL, which a killed ddto or a
-  reboot left with expired entries only.
+  The worker's `NewCLIClient` records the invocation's state directory there
+  (`prepareCLIReadCache`, file `state`). `RemoveCLIReadCache` then also
+  removes, examining and removing a bounded number per call, the `cli/`
+  directories of invocations that a reboot ended: their recorded state
+  directory, which ddto removes last, is gone, and they did not change for
+  longer than the TTL, as when machines share the cache directory. A running
+  invocation keeps its state directory, and so its entries; so does a killed
+  ddto, whose state directory also stays.
   They stay in the user's cache directory, not the state directory: test
   processes may read them while Go's test log is active, and the state
   directory can lie in the module.
@@ -849,7 +854,8 @@ runtime keep their own requests and scopes.
 
 Checks: `TestCLIReadCacheScopeIdentity`, `TestCLITestProcessClients`,
 `TestCLIReadCacheLastsTheInvocation`,
-`TestRemoveCLIReadCacheRemovesAbandonedDirectories`,
+`TestRemoveCLIReadCacheRemovesEndedInvocations`,
+`TestRemoveCLIReadCacheBoundsRemovals`,
 `TestReadCacheWaiterStopsWithContext`,
 `TestTestRuntimeVersionMatchesBinaries`, which builds a binary under each
 `GOEXPERIMENT` case, `TestExperimentSeparator`,

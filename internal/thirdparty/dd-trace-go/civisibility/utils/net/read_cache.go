@@ -49,6 +49,12 @@ const (
 	// readCacheScopeCLI scopes unidentified local runs by ddto's invocation,
 	// whose Git worker and test processes have different parents.
 	readCacheScopeCLI = "cli"
+	// readCacheCLIDirectory holds, in the shared directory, one directory of
+	// entries per ddto invocation.
+	readCacheCLIDirectory = "cli"
+	// readCacheCLIStateFile records, in an invocation's directory, its state
+	// directory, which ddto removes once the invocation has ended.
+	readCacheCLIStateFile = "state"
 
 	// readCacheEndpointSettings names the settings cache endpoint.
 	readCacheEndpointSettings = "settings"
@@ -97,6 +103,9 @@ type (
 		Source []string
 		Hash   string
 		TTL    time.Duration
+		// stateDir is the state directory of ddto's invocation, in the cli
+		// scope.
+		stateDir string
 	}
 
 	// readCacheEndpointScope identifies the cacheable endpoint and semantic request payload.
@@ -247,16 +256,33 @@ func cliReadCacheScopeIdentity(identity readCacheScopeIdentity, dir string) read
 		return identity
 	}
 	values := []readCacheIdentityValue{{Name: "cli_state", Value: dir}}
-	return newReadCacheScopeIdentityFromValues(readCacheScopeCLI, time.Hour, values)
+	identity = newReadCacheScopeIdentityFromValues(readCacheScopeCLI, time.Hour, values)
+	identity.stateDir = dir
+	return identity
 }
 
 // readCacheSubdirectory returns the directory, in the shared one, of the
-// identity's entries: ddto's invocation keeps its own.
+// identity's entries: each ddto invocation keeps its own.
 func readCacheSubdirectory(identity readCacheScopeIdentity) string {
 	if identity.Kind != readCacheScopeCLI {
 		return ""
 	}
-	return "cli-" + identity.Hash
+	return filepath.Join(readCacheCLIDirectory, identity.Hash)
+}
+
+// prepareCLIReadCache creates the directory of the invocation's entries and
+// records its state directory there, so that a later cleanup knows when the
+// invocation has ended. ddto's Git worker calls it before any test process
+// uses its state.
+func prepareCLIReadCache(identity readCacheScopeIdentity) error {
+	dir, err := readCacheDirectory(readCacheSubdirectory(identity))
+	if err != nil {
+		return err
+	}
+	if err := ensureReadCacheDir(dir); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, readCacheCLIStateFile), []byte(identity.stateDir), 0o600)
 }
 
 // RemoveCLIReadCache removes the read-cache entries of ddto's invocation
@@ -264,36 +290,46 @@ func readCacheSubdirectory(identity readCacheScopeIdentity) string {
 // It also removes those of invocations that ended without removing theirs.
 func RemoveCLIReadCache(stateDir string) error {
 	identity := cliReadCacheScopeIdentity(readCacheScopeIdentity{Kind: readCacheScopeLocal}, stateDir)
-	subdir := readCacheSubdirectory(identity)
-	if subdir == "" {
+	if identity.Kind != readCacheScopeCLI {
 		return nil
 	}
-	dir, err := readCacheDirectory(subdir)
+	dir, err := readCacheDirectory(readCacheSubdirectory(identity))
 	if err != nil {
 		return err
 	}
-	defer removeAbandonedCLIReadCaches(filepath.Dir(dir), identity.TTL)
+	defer removeEndedCLIReadCaches(filepath.Dir(dir), identity.TTL)
 	return os.RemoveAll(dir)
 }
 
-// removeAbandonedCLIReadCaches removes, in the shared directory, the
-// directories of invocations that a kill or a reboot ended before ddto removed
-// them. A directory unchanged for longer than the scope's TTL holds only
-// expired entries; a running invocation recreates its directory if it writes
-// again. Like the global cleanup, it removes a bounded number per call.
-func removeAbandonedCLIReadCaches(shared string, ttl time.Duration) {
-	entries, err := os.ReadDir(shared)
+// removeEndedCLIReadCaches removes, in root, the entries of invocations that a
+// reboot ended before ddto removed them: their recorded state directory, which
+// ddto removes last, is gone, and nothing changed in them for longer than the
+// TTL, as when machines share the cache directory. A running invocation keeps
+// its state directory, so its entries stay, and so do those of a killed ddto,
+// whose state directory stays too. Like the global cleanup, it examines and
+// removes a bounded number of directories per call.
+func removeEndedCLIReadCaches(root string, ttl time.Duration) {
+	f, err := os.Open(root)
 	if err != nil {
 		return
 	}
+	entries, _ := f.ReadDir(2 * readCacheGlobalCleanupMaxEntries)
+	_ = f.Close()
 	removed := 0
 	for _, entry := range entries {
 		if removed == readCacheGlobalCleanupMaxEntries {
 			return
 		}
-		path := filepath.Join(shared, entry.Name())
-		if entry.IsDir() && strings.HasPrefix(entry.Name(), "cli-") && readCachePathOlderThan(path, ttl) {
-			_ = os.RemoveAll(path)
+		dir := filepath.Join(root, entry.Name())
+		state, err := os.ReadFile(filepath.Join(dir, readCacheCLIStateFile))
+		if err != nil || len(state) == 0 {
+			continue
+		}
+		if _, err := os.Stat(string(state)); !os.IsNotExist(err) {
+			continue
+		}
+		if readCachePathOlderThan(dir, ttl) {
+			_ = os.RemoveAll(dir)
 			removed++
 		}
 	}

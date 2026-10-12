@@ -123,7 +123,8 @@ func TestMiniCLIStateRequestsAhead(t *testing.T) {
 	intake := &featureIntake{}
 	server := newServer(http.HandlerFunc(intake.handler))
 	defer server.Close()
-	env := featureEnv(t, server.URL)
+	cache := t.TempDir()
+	env := featureEnv(t, server.URL, "XDG_CACHE_HOME="+cache)
 
 	// Alone, the test process makes each request.
 	if out, stderr, code := command(t, dir, env, bin, "-test.run=^TestPass$"); code != 0 {
@@ -140,6 +141,18 @@ func TestMiniCLIStateRequestsAhead(t *testing.T) {
 	proceed := startWorker(t, dir, driver, env, state, dir)
 	// No test process has started: the worker requests on its own.
 	intake.wait(t, map[string]int{"known": 1, "skippable": 1, "management": 1})
+	// It records its state directory with its read-cache entries, so that a
+	// later invocation can tell when it has ended. Only Linux takes the user
+	// cache directory from XDG_CACHE_HOME.
+	if runtime.GOOS == "linux" {
+		records, err := filepath.Glob(filepath.Join(cache, "dd-trace-go", "civisibility-read-cache", "cli", "*", "state"))
+		if err != nil || len(records) != 1 {
+			t.Fatalf("records %v, %v", records, err)
+		}
+		if recorded, err := os.ReadFile(records[0]); err != nil || string(recorded) != state {
+			t.Fatalf("recorded %q, %v; want %q", recorded, err, state)
+		}
+	}
 	if out, stderr, code := command(t, dir, append(env, "DDTO_GIT_STATE="+state), bin, "-test.run=^TestPass$"); code != 0 {
 		t.Fatalf("fixture: %d %s %s", code, out, stderr)
 	}
@@ -259,14 +272,12 @@ func TestMiniCLIStateSharedRequests(t *testing.T) {
 	// The invocation's read-cache entries go with it. Only Linux takes the
 	// user cache directory from XDG_CACHE_HOME.
 	if runtime.GOOS == "linux" {
-		entries, err := os.ReadDir(filepath.Join(cache, "dd-trace-go", "civisibility-read-cache"))
+		entries, err := os.ReadDir(filepath.Join(cache, "dd-trace-go", "civisibility-read-cache", "cli"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, entry := range entries {
-			if strings.HasPrefix(entry.Name(), "cli-") {
-				t.Fatalf("ddto left the invocation's read cache %s", entry.Name())
-			}
+		if len(entries) != 0 {
+			t.Fatalf("ddto left the invocation's read cache %s", entries[0].Name())
 		}
 	}
 	// ddto described the test processes, with their packages' modules.
