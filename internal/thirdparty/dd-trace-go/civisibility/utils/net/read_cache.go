@@ -862,7 +862,7 @@ func readCacheGlobalCleanup(dir string) {
 		switch {
 		case strings.HasSuffix(entry.Name(), ".json"):
 			if readCacheJSONFileExpired(path) {
-				removeReadCacheFile(path)
+				removeExpiredReadCacheEntry(path)
 			}
 		case strings.HasSuffix(entry.Name(), ".lock"):
 			if stale, _ := readCacheLockIsStale(path); stale {
@@ -873,6 +873,22 @@ func readCacheGlobalCleanup(dir string) {
 				removeReadCacheFile(path)
 			}
 		}
+	}
+}
+
+// removeExpiredReadCacheEntry removes the expired entry at path under its
+// key's lock, which a writer holds while it publishes the entry, so that it
+// does not remove an entry that a writer has just renewed. With the lock
+// taken by a writer, it leaves the entry.
+func removeExpiredReadCacheEntry(path string) {
+	cacheKey := strings.TrimSuffix(filepath.Base(path), ".json")
+	owner, err := newReadCacheLockOwner(strings.TrimSuffix(path, ".json")+".lock", cacheKey)
+	if err != nil || tryCreateReadCacheLock(owner) != readCacheLockAcquired {
+		return
+	}
+	defer releaseReadCacheLock(owner)
+	if readCacheJSONFileExpired(path) {
+		removeReadCacheFile(path)
 	}
 }
 

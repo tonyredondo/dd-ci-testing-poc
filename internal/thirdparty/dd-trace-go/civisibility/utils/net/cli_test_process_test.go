@@ -208,15 +208,43 @@ func TestRemoveCLIReadCacheReachesEveryDirectory(t *testing.T) {
 		return len(entries)
 	}
 
+	// The first batch, in the directory's order, may hold the expired
+	// directories or not; the fresh ones stay either way.
 	require.NoError(t, RemoveCLIReadCache("/state"))
-	require.True(t, count() >= readCacheCLICleanupMaxDirectories, "a fresh entry was removed")
+	for i := range readCacheCLICleanupMaxDirectories {
+		_, err := os.Stat(filepath.Join(cli, fmt.Sprint("fresh-", i), "entry.json"))
+		require.NoError(t, err)
+	}
+	left := count()
+	// Once every entry has expired, a call removes the bounded number of
+	// directories, and the next one the rest.
 	now = now.Add(2 * time.Hour)
 	require.NoError(t, RemoveCLIReadCache("/state"))
-	// Every entry has expired: a call removes the bounded number of
-	// directories, and the next one the rest.
-	require.Equal(t, 2, count())
+	require.Equal(t, left-readCacheCLICleanupMaxDirectories, count())
 	require.NoError(t, RemoveCLIReadCache("/state"))
 	require.Equal(t, 0, count())
+}
+
+// The cleanup removes an expired entry under its key's lock: a writer that
+// holds the lock is renewing the entry, which stays.
+func TestReadCacheCleanupLeavesAnEntryBeingRenewed(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	setReadCacheHooksForTest(t, t.TempDir(), &now, 111, 222)
+	paths, err := readCachePathsIn("", "renewed")
+	require.NoError(t, err)
+	writeCLIEntry(t, paths.Dir, "renewed.json", now.Add(-2*time.Hour), time.Hour)
+	writeCLIEntry(t, paths.Dir, "expired.json", now.Add(-2*time.Hour), time.Hour)
+	writer, status := acquireReadCacheLock(paths, "renewed")
+	require.Equal(t, readCacheLockAcquired, status)
+
+	readCacheGlobalCleanup(paths.Dir)
+	_, err = os.Stat(paths.CacheFile)
+	require.NoError(t, err, "the cleanup removed an entry under a writer's lock")
+	_, err = os.Stat(filepath.Join(paths.Dir, "expired.json"))
+	require.True(t, os.IsNotExist(err))
+	_, err = os.Stat(filepath.Join(paths.Dir, "expired.lock"))
+	require.True(t, os.IsNotExist(err), "the cleanup left its lock")
+	releaseReadCacheLock(writer)
 }
 
 // The cleanup can remove an invocation's empty directory after a process

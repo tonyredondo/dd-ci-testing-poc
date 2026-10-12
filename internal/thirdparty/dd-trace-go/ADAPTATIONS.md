@@ -813,7 +813,11 @@ will, and the read cache hands the responses to them.
   entries do not expire. A process holds a lock file in the directory while it
   writes, so the directory cannot go under it, and `tryCreateReadCacheLock`
   creates the directory again if the cleanup removed it, empty, after the
-  process computed its paths.
+  process computed its paths. The cleanup now removes an expired entry under
+  its key's lock (`removeExpiredReadCacheEntry`), which writers hold while
+  they publish, and leaves it when a writer holds the lock: upstream, a
+  cleanup could remove an entry that a writer had just renewed, which this
+  change would otherwise extend to other invocations' directories.
   They stay in the user's cache directory, not the state directory: test
   processes may read them while Go's test log is active, and the state
   directory can lie in the module.
@@ -859,6 +863,7 @@ Checks: `TestCLIReadCacheScopeIdentity`, `TestCLITestProcessClients`,
 `TestRemoveCLIReadCacheRemovesExpiredEntries`,
 `TestRemoveCLIReadCacheReachesEveryDirectory`,
 `TestReadCacheLockRecreatesRemovedDirectory`,
+`TestReadCacheCleanupLeavesAnEntryBeingRenewed`,
 `TestReadCacheWaiterStopsWithContext`,
 `TestTestRuntimeVersionMatchesBinaries`, which builds a binary under each
 `GOEXPERIMENT` case, `TestExperimentSeparator`,
