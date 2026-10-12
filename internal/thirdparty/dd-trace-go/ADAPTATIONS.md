@@ -1084,8 +1084,12 @@ Checks: `TestSharedParallelLeaseAttemptsRecordTheirEnd`,
 `TestSequentialAttemptsRecordNoParallelEnd`, `TestParallelStopHookOnlyForMini`,
 `TestToolchainTestingDeclaresParallelStop` and
 `TestMiniInProcessRetryKeepsAllocsPerRun`. This package's own tests run without
-the overlay, so `TestAdditionalFeatureSelectorDoesNotAllocate` measures
-allocations without `testing.AllocsPerRun`.
+the overlay, so `TestSharedParallelLeaseAttemptsRecordTheirEnd` and
+`TestProcessRetryParityFreshRunnerSharesRootParallelLeaseAcrossSequentialAttempts`
+leave the accounting unbalanced for the rest of the binary. The package's
+allocation checks therefore use its `allocsPerRun` helper instead of
+`testing.AllocsPerRun`, which would panic with `-count` above one or with
+`-shuffle`. `TestPackageTestsMeasureAllocationsWithHelper` keeps it that way.
 
 ## Per-test allocations
 

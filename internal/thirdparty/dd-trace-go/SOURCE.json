@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "62105d45ed766ce52a76cae6c5b83342355058a14383e0a5725cf7987a6cf075",
+      "sha256": "0cb59f4fccc60863535aef3f587b470ac7ce600e3089d675c24330fe9bc9d92a",
       "role": "local"
     },
     {
@@ -443,7 +443,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/error_capture_test.go",
-      "sha256": "fc2c3ddd606209cc71a57f1b7ef61459c2b6ead0056b071953d4209f41a89d53",
+      "sha256": "950cc3218f5f02559b0ee0dc405432fe2fd69d3891f728b9cdc4e28ea91f5b9b",
       "role": "local"
     },
     {
@@ -2082,7 +2082,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/native_context_test.go",
-      "sha256": "2d6c49c44f820720f2cd2b518032ea0c9c6614a3331c0461c470c4462170bf02",
+      "sha256": "3a7db0187e9da13bd866c65ca69756943f89bda76d3254bd5041e142af1ae2fa",
       "role": "local"
     },
     {
@@ -2263,6 +2263,11 @@
     {
       "path": "civisibility/utils/net/read_cache_process_nolinux.go",
       "sha256": "20e61978eee5a8dd6bfb70a23dc44d8c26416a8d552b0097898e632c981fc7ed",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/integrations/gotesting/allocs_per_run_test.go",
+      "sha256": "359fc666a1bce1d4fbcb582b54c0052fb145fb86916cb31984766d36017bca99",
       "role": "local"
     }
   ],
