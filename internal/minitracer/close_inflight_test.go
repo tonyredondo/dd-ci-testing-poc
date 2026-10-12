@@ -105,6 +105,59 @@ func TestCloseDrainsBacklogConcurrently(t *testing.T) {
 	}
 }
 
+// With every slot taken by background deliveries, Close's partial batch waits
+// for them instead of becoming a ninth concurrent request.
+func TestCloseWaitsForAFreeSendSlot(t *testing.T) {
+	recorder := &log.RecordLogger{}
+	t.Cleanup(log.UseLogger(recorder))
+	level := log.GetLevel()
+	t.Cleanup(func() { log.SetLevel(level) })
+	log.SetLevel(log.LevelDebug)
+	var received deliveries
+	var active, peak atomic.Int32
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := active.Add(1)
+		defer active.Add(-1)
+		for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
+		}
+		select {
+		case <-release:
+		case <-time.After(2 * time.Second):
+		}
+		received.record(t, r)
+		w.WriteHeader(202)
+	}))
+	defer server.Close()
+	client, err := New(Config{MaxEvents: 2, Transport: citransport.Config{Endpoint: server.URL}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2*maxConcurrentSends + 1 {
+		span, _ := client.StartSpan(context.Background(), "test", SpanType("test"))
+		span.Finish()
+	}
+	waitFor(t, func() bool { return active.Load() == maxConcurrentSends })
+	// Leave time for a request beyond the bound to arrive.
+	time.AfterFunc(100*time.Millisecond, func() { close(release) })
+	if err := client.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if delivered := received.distinct(t); delivered != 2*maxConcurrentSends+1 || client.DroppedEvents() != 0 {
+		t.Fatalf("delivered=%d dropped=%d of %d", delivered, client.DroppedEvents(), 2*maxConcurrentSends+1)
+	}
+	if p := peak.Load(); p != maxConcurrentSends {
+		t.Fatalf("concurrent requests: %d", p)
+	}
+	logs := strings.Join(recorder.Logs(), "\n")
+	for _, want := range []string{"final drain batches=1 in_flight=8 senders=0", "final drain batches=1 in_flight=0 senders=1"} {
+		if !strings.Contains(logs, want) {
+			t.Fatalf("missing %q:\n%s", want, logs)
+		}
+	}
+	waitForNoDrainWorkers(t)
+}
+
 func TestCloseReportsFailedBackgroundDelivery(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -162,28 +162,30 @@ func TestTestifyDependencyImports(t *testing.T) {
 }
 
 // A standard-library test import, which cannot reach Testify, goleak or the
-// SDK, needs no library query: only the other unknown imports remain, also
-// dotless paths that $GOROOT/src does not hold as a directory, and paths with
-// a dot in their first element, which are never standard.
+// SDK, needs no library query: only the other unknown imports remain. Those
+// include dotless paths whose $GOROOT/src directory is missing or holds no .go
+// file, such as archive, which a module can then provide, and paths with a dot
+// in their first element, which are never standard.
 func TestTestifyDependencyImportsLeaveOutStandardLibrary(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "src")
-	for _, dir := range []string{"testing", "net/http/httptest", "testing/fstest", "example.com/testkit", "localkit"} {
-		if err := os.MkdirAll(filepath.Join(src, filepath.FromSlash(dir)), 0o700); err != nil {
+	for _, file := range []string{"testing/testing.go", "net/http/httptest/server.go", "testing/fstest/mapfs.go", "example.com/testkit/kit.go", "archive/tar/tar.go", "localkit/helper", "localkit/doc/README"} {
+		path := filepath.Join(src, filepath.FromSlash(file))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(src, "localkit", "helper"), nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
 	packages := []goPackage{
 		{ImportPath: "testing", Dir: filepath.Join(src, "testing")},
-		{ImportPath: "example.com/client", TestImports: []string{"net/http/httptest", "example.com/testkit", "localkit/helper", "localkit/other"}, XTestImports: []string{"testing/fstest"}},
+		{ImportPath: "example.com/client", TestImports: []string{"net/http/httptest", "example.com/testkit", "archive", "localkit/helper", "localkit/doc", "localkit/other"}, XTestImports: []string{"testing/fstest"}},
 	}
 	query := func() []string {
 		paths, _, _ := testifyDependencyImports(packages, clientImports(packages, newPackageGraph(packages)))
 		return paths
 	}
-	if paths, want := query(), []string{"example.com/testkit", "localkit/helper", "localkit/other"}; !slices.Equal(paths, want) {
+	if paths, want := query(), []string{"archive", "example.com/testkit", "localkit/doc", "localkit/helper", "localkit/other"}; !slices.Equal(paths, want) {
 		t.Fatalf("imports = %v; want %v", paths, want)
 	}
 	if _, _, standard := testifyDependencyImports(packages, clientImports(packages, newPackageGraph(packages))); standard != 2 {

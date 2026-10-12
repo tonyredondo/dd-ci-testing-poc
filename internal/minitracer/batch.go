@@ -298,23 +298,28 @@ type drain struct {
 //
 // Without background senders, in deferred mode and once Close has stopped
 // them in ordinary mode, the caller sends together with drainWorker
-// goroutines, up to maxConcurrentSends deliveries with those still in flight.
-// They all finish before it returns: no delivery goroutine outlives a
-// checkpoint, Flush or Close. Payloads sent together can arrive in any order.
+// goroutines, up to maxConcurrentSends deliveries with those still in flight;
+// with no free slot it sends nothing, and its flush waits for them before
+// draining again. They all finish before it returns: no delivery goroutine
+// outlives a checkpoint, Flush or Close. Payloads sent together can arrive in
+// any order.
 func (c *Client) drainLocked(ctx context.Context, perBatchTimeout bool) error {
 	d := &drain{ctx: ctx, perBatchTimeout: perBatchTimeout}
 	var workers sync.WaitGroup
 	c.mu.Lock()
-	extra := 0
+	senders := 1
 	if c.deferUntilIdle || c.closed {
-		extra = min(len(c.ready), maxConcurrentSends-c.inflight) - 1
+		senders = min(len(c.ready), maxConcurrentSends-c.inflight)
 	}
 	ready, inflight, closed := len(c.ready), c.inflight, c.closed
 	c.mu.Unlock()
 	if closed && log.DebugEnabled() {
-		log.Debug("ci mini tracer: final drain batches=%d in_flight=%d senders=%d", ready, inflight, max(extra, 0)+1)
+		log.Debug("ci mini tracer: final drain batches=%d in_flight=%d senders=%d", ready, inflight, max(senders, 0))
 	}
-	for i := 0; i < extra; i++ {
+	if senders <= 0 {
+		return nil
+	}
+	for i := 1; i < senders; i++ {
 		workers.Add(1)
 		go c.drainWorker(d, &workers)
 	}

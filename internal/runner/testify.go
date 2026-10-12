@@ -169,8 +169,10 @@ func testifyDependencyImports(packages []goPackage, imported map[string]bool) ([
 }
 
 // standardLibraryImport reports whether path names a standard-library package,
-// by Go's rule: its first element has no dot, and gorootSrc, $GOROOT/src,
-// holds it. Without gorootSrc it reports false, which keeps path in the query.
+// by Go's rule: its first element has no dot, and its directory in gorootSrc,
+// $GOROOT/src, holds a .go file. A directory without one, such as archive,
+// lets a module provide the package. Without gorootSrc it reports false, which
+// keeps path in the query.
 func standardLibraryImport(path, gorootSrc string) bool {
 	if gorootSrc == "" {
 		return false
@@ -178,8 +180,16 @@ func standardLibraryImport(path, gorootSrc string) bool {
 	if first, _, _ := strings.Cut(path, "/"); strings.Contains(first, ".") {
 		return false
 	}
-	info, err := os.Stat(filepath.Join(gorootSrc, filepath.FromSlash(path)))
-	return err == nil && info.IsDir()
+	entries, err := os.ReadDir(filepath.Join(gorootSrc, filepath.FromSlash(path)))
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".go") {
+			return true
+		}
+	}
+	return false
 }
 
 func prepareLibraryCompile(plan *LibraryEntry, args []string) ([]string, func(), error) {

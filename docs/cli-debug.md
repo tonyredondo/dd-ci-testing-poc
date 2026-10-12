@@ -100,7 +100,7 @@ Mini records these additional durations under the same debug setting:
 | `test-cycle: send finished` | One payload delivery, including admission pauses, compression, HTTP attempts, backoff and request-body/connection cleanup; in Bazel file mode, conversion and file writing |
 | `ci mini tracer: flush finished` | The process-wide client's flush, including waiting for other sends and serializing/delivering queued events |
 | `ci mini tracer: close finished` | The process-wide client's terminal close and final delivery |
-| `ci mini tracer: final drain` | The batches left for `Close`, the deliveries still in flight and how many senders send them |
+| `ci mini tracer: final drain` | The batches left for `Close`, the deliveries still in flight and how many senders send them; none while all eight slots are in flight, after which `Close` drains again |
 | `ci mini tracer: batch encoded` | A test-cycle payload's events, the size its batch accounted for and its encoded size, before the send |
 | `civisibility: session close finished` | Waiting for the session lock, closing modules, finishing the session event and flushing the tracer |
 | `civisibility: shutdown barriers finished` | Deferred-delivery drain and all pre-close barriers |
