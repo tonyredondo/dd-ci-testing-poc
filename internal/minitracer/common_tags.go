@@ -189,9 +189,20 @@ func prepareCommonMetadata(base map[string]map[string]string, events ciEvents) (
 }
 
 func isCIEventKind(kind string) bool {
+	return ciEventKindIndex(kind) >= 0
+}
+
+// ciEventKindIndex numbers the test-event kinds, or returns -1.
+func ciEventKindIndex(kind string) int {
 	switch kind {
-	case "test", "test_session_end", "test_module_end", "test_suite_end":
-		return true
+	case "test":
+		return 0
+	case "test_session_end":
+		return 1
+	case "test_module_end":
+		return 2
+	case "test_suite_end":
+		return 3
 	}
-	return false
+	return -1
 }

@@ -47,7 +47,8 @@ type readyBatch struct {
 // event breaks that, only worst applies until the batch is sealed.
 type batchBytes struct {
 	worst, shared int
-	snapshots     map[string]*CommonTags // Of each event kind.
+	snapshots     [4]*CommonTags // Of each test-event kind, by ciEventKindIndex,
+	seen          [4]bool        // when the batch holds that kind.
 	unshared      bool
 }
 
@@ -75,12 +76,12 @@ func (b *batchBytes) sharedWith(event *ciEvent, size int, overrides bool) (int, 
 	if b.unshared {
 		return 0, false
 	}
-	if !isCIEventKind(event.Type) {
+	kind := ciEventKindIndex(event.Type)
+	if kind < 0 {
 		return b.shared + size, true
 	}
-	snapshot, seen := b.snapshots[event.Type]
-	switch {
-	case overrides || seen && snapshot != event.common:
+	switch seen := b.seen[kind]; {
+	case overrides || seen && b.snapshots[kind] != event.common:
 		return 0, false
 	case seen && event.common != nil:
 		return b.shared + size - event.common.entrySize(event.Type), true
@@ -92,17 +93,13 @@ func (b *batchBytes) add(event *ciEvent, size int, overrides bool) {
 	shared, ok := b.sharedWith(event, size, overrides)
 	b.worst += size
 	b.shared, b.unshared = shared, !ok
-	if ok {
-		if b.snapshots == nil {
-			b.snapshots = make(map[string]*CommonTags, 4)
-		}
-		b.snapshots[event.Type] = event.common
+	if kind := ciEventKindIndex(event.Type); kind >= 0 {
+		b.snapshots[kind], b.seen[kind] = event.common, true
 	}
 }
 
 func (b *batchBytes) reset() {
-	b.worst, b.shared, b.unshared = 0, 0, false
-	clear(b.snapshots)
+	*b = batchBytes{}
 }
 
 // add never performs network I/O. A full batch is sealed for the background
