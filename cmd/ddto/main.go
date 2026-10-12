@@ -50,8 +50,8 @@ func main() {
 		// in front of a go command, or any other, is transparent.
 		os.Exit(runner.ExecCommand(os.Args[1:]))
 	}
+	runner.DebugCommand(form.Name)
 	cli, args, err := runner.ParseCLIArgs(form.Args)
-	cli.Command = form.Name
 	if err != nil {
 		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR:", err)
 		os.Exit(2)

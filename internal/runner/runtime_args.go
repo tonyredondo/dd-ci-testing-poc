@@ -23,9 +23,6 @@ type CLIOptions struct {
 	// (--keep-ci-state); KeepCIStateZip, if set, archives it there instead.
 	KeepCIState    bool
 	KeepCIStateZip string
-	// Command names the form that ran go test, such as "go -C test", for
-	// debug logs.
-	Command string
 }
 
 // DefaultCLIOptions are the options without any ddto flag.

@@ -154,11 +154,14 @@ build-only observation.
 ## Commands other than go test
 
 ddto runs any other command unchanged. With `DD_TRACE_DEBUG=true`, it logs on
-`stderr` which program it started and how, before the program's own output.
-The lines name the command and count its arguments; they never show them.
+`stderr` which program it started and how. The lines name the command and
+count its arguments; they never show them. A test form logs its name,
+`command="go -C test"` for example, before ddto parses its own options.
 
 On Unix, ddto replaces itself with the program, searching `PATH` as the
-platform's `execvp` does:
+platform's `execvp` does. Its lines come before the program's output. They
+go to a duplicate of `stderr`, so a reader that already closed it does not
+end ddto before the program starts:
 
 ```text
 … TestOptimization.build v0.0.0 DEBUG: +40µs pass-through command="go" args=2
@@ -170,8 +173,10 @@ platform's `execvp` does:
 
 Each `exec path` line is a candidate, and a `failed` line follows each
 candidate that did not start. The last `exec path` line without one is the
-program that runs. `shell=/bin/sh` marks an executable file without a `#!`
-line, which `/bin/sh` runs.
+program that runs. `shell=/bin/sh reason="exec format error"` marks a file that
+the kernel could not start, such as a script without `#!`, which `/bin/sh`
+then runs. `skip path_entry=… bytes=…` marks a `PATH` entry too long for the
+libc, which it does not search.
 
 On Windows, ddto starts the program in a job and waits for it:
 
@@ -184,7 +189,9 @@ On Windows, ddto starts the program in a job and waits for it:
 
 `caller_command_line=true` means the program received ddto's command line
 after `ddto` as written. `job=false` means no job was available, so the program
-would outlive a terminated ddto.
+would outlive a terminated ddto; a preceding `job unavailable step=create|limits|assign`
+line says which call failed. The program runs once it is resumed, so its
+first output can come before `started`.
 
 ## Keeping the CI state
 

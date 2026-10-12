@@ -102,6 +102,30 @@ func TestCLIPassesOtherCommandsThrough(t *testing.T) {
 		if _, stderr, code := command(t, dir, debugEnv, driver, "ddto-no-such-command"); code != 127 || !strings.Contains(stderr, "pass-through search path_entries=") || !strings.Contains(stderr, "/ddto-no-such-command\" failed error=") {
 			t.Fatalf("the debug log of a failed search: %d %q", code, stderr)
 		}
+		// A PATH entry too long for the libc is skipped, and logged.
+		longEnv := append(debugEnv[:len(debugEnv):len(debugEnv)], "PATH=/"+strings.Repeat("a", 4096)+":"+filepath.Dir(program))
+		if _, stderr, code := command(t, dir, longEnv, driver, filepath.Base(program), "0"); code != 0 || !strings.Contains(stderr, "pass-through skip path_entry=0 bytes=4097") {
+			t.Fatalf("the debug log of a skipped entry: %d %q", code, stderr)
+		}
+		// A debug line to a stderr that nobody reads does not end ddto
+		// before the command: Go ends a process for that only on fd 2.
+		for _, name := range []string{"true", driver} {
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			r.Close()
+			cmd := exec.Command(name)
+			if name == driver {
+				cmd.Args = append(cmd.Args, "true")
+			}
+			cmd.Dir, cmd.Env, cmd.Stderr = dir, debugEnv, w
+			err = cmd.Run()
+			w.Close()
+			if err != nil {
+				t.Fatalf("%s with a closed stderr: %v", cmd.Args, err)
+			}
+		}
 	}
 
 	for _, missing := range []string{"ddto-no-such-command", filepath.Join(t.TempDir(), "ddto-no-such-command")} {
@@ -134,6 +158,9 @@ func TestCLIPassesOtherCommandsThrough(t *testing.T) {
 		if out, stderr, code := command(t, dir, env, driver, script, "one"); code != 7 || out != "script one\n" {
 			t.Fatalf("a script without #!: %d %q %q; want its output and 7", code, out, stderr)
 		}
+		if _, stderr, code := command(t, dir, append(env[:len(env):len(env)], "DD_TRACE_DEBUG=true"), driver, script, "one"); code != 7 || !strings.Contains(stderr, `shell=/bin/sh reason="exec format error"`) {
+			t.Fatalf("the debug log of a script without #!: %d %q", code, stderr)
+		}
 		lookupThroughPath(t, env, driver, program, filepath.Dir(notExecutable))
 	}
 	if _, stderr, code := command(t, dir, env, driver); code != 2 || !strings.Contains(stderr, "usage: ddto") {
@@ -145,6 +172,10 @@ func TestCLIPassesOtherCommandsThrough(t *testing.T) {
 // before test.
 func TestCLIGoTestIsTest(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
+	// The debug log names the form even when ddto's own options are invalid.
+	if _, stderr, code := command(t, dir, testEnv("DD_TRACE_DEBUG=true"), driver, "go", "-C", dir, "test", "--runtime=broken"); code != 2 || !strings.Contains(stderr, `command="go -C test"`) {
+		t.Fatalf("an invalid option: %d %q", code, stderr)
+	}
 	elsewhere := t.TempDir()
 	for _, form := range [][]string{{"test"}, {"go", "test"}, {"go", "-C", dir, "test"}} {
 		receiver := &capture{}
@@ -158,7 +189,7 @@ func TestCLIGoTestIsTest(t *testing.T) {
 		}
 		out, stderr, code := command(t, cwd, env, driver, append(form, "--runtime=mini", "-count=1", "-run=^TestPass$", ".")...)
 		server.Close()
-		if code != 0 || !strings.Contains(out, "ok") || len(form) > 2 && !strings.Contains(stderr, `command="go -C test" runtime=mini`) {
+		if code != 0 || !strings.Contains(out, "ok") || len(form) > 2 && !strings.Contains(stderr, `command="go -C test"`) {
 			t.Fatalf("ddto %v: %d\n%s\n%s", form, code, out, stderr)
 		}
 		receiver.mu.Lock()

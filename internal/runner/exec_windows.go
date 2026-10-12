@@ -85,13 +85,13 @@ func runInJob(args []string, cmdline string, breakaway bool, failed int, debug *
 		Sys:   &syscall.SysProcAttr{CmdLine: cmdline},
 	}
 	started := time.Now()
-	process, job, err := startInJob(path, args, attr, breakaway)
+	process, job, err := startInJob(path, args, attr, breakaway, debug)
 	if err != nil {
 		debug.printf("pass-through start path=%q failed error=%q", path, err.Error())
 		fmt.Fprintln(os.Stderr, err)
 		return failed
 	}
-	debug.printf("pass-through started path=%q job=%t breakaway=%t", path, job != 0, breakaway)
+	debug.printf("pass-through started path=%q job=%t breakaway=%t", path, job != 0, breakaway && job != 0)
 	defer syscall.CloseHandle(process)
 	code, err := waitProcess(process)
 	if job != 0 {
@@ -131,13 +131,14 @@ const jobObjectLimitBreakawayOK = 0x00000800
 // startInJob starts path suspended, so it runs no code before it belongs to a
 // job that kills it when closed, then resumes it. Where no job is available,
 // it runs without one. It returns the process's handle.
-func startInJob(path string, args []string, attr *syscall.ProcAttr, breakaway bool) (syscall.Handle, windows.Handle, error) {
+func startInJob(path string, args []string, attr *syscall.ProcAttr, breakaway bool, debug *cliDebug) (syscall.Handle, windows.Handle, error) {
 	start := func() (syscall.Handle, uint32, error) {
 		pid, handle, err := syscall.StartProcess(path, args, attr)
 		return syscall.Handle(handle), uint32(pid), err
 	}
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
+		debug.printf("pass-through job unavailable step=create error=%q", err.Error())
 		process, _, err := start()
 		return process, 0, err
 	}
@@ -147,6 +148,7 @@ func startInJob(path string, args []string, attr *syscall.ProcAttr, breakaway bo
 		limits.BasicLimitInformation.LimitFlags |= jobObjectLimitBreakawayOK
 	}
 	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&limits)), uint32(unsafe.Sizeof(limits))); err != nil {
+		debug.printf("pass-through job unavailable step=limits error=%q", err.Error())
 		_ = windows.CloseHandle(job)
 		process, _, err := start()
 		return process, 0, err
@@ -158,6 +160,7 @@ func startInJob(path string, args []string, attr *syscall.ProcAttr, breakaway bo
 		return 0, 0, err
 	}
 	if err := windows.AssignProcessToJobObject(job, windows.Handle(process)); err != nil {
+		debug.printf("pass-through job unavailable step=assign error=%q", err.Error())
 		_ = windows.CloseHandle(job)
 		job = 0
 	}
