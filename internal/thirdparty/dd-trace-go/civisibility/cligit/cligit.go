@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -163,7 +164,11 @@ func Run(dir, runtimeID string, uploadWait time.Duration, input io.Reader, resul
 		// No test process needs the search or the requests any more. The
 		// search's git commands end, interrupted or killed, only while this
 		// process runs.
-		log.Debug("civisibility: CLI requests ahead not needed: go test exited before a test process used the state [started:%t]", requests != nil)
+		if ctx.Err() != nil {
+			log.Debug("civisibility: CLI requests ahead stopped: ddto stopped the worker [reason:%s started:%t]", cli.stopReason(), requests != nil)
+		} else {
+			log.Debug("civisibility: CLI requests ahead not needed: go test exited before a test process used the state [started:%t]", requests != nil)
+		}
 		cancel()
 		if search != nil {
 			_, _ = search()
@@ -419,7 +424,7 @@ func requestFeatures(client int, c featureClient) {
 	settings, err := c.GetSettings()
 	switch {
 	case err != nil:
-		log.Debug("civisibility: CLI request ahead settings failed [client:%d duration:%s error:%s]", client, time.Since(started).Round(time.Microsecond), err.Error())
+		log.Debug("civisibility: CLI request ahead settings failed [client:%d duration:%s error:%s]", client, time.Since(started).Round(time.Microsecond), redactError(err))
 		return
 	case settings == nil:
 		log.Debug("civisibility: CLI request ahead settings empty [client:%d]", client)
@@ -434,7 +439,7 @@ func requestFeatures(client int, c featureClient) {
 	var wg sync.WaitGroup
 	result := func(name string, err error) {
 		if err != nil {
-			log.Debug("civisibility: CLI request ahead %s failed [client:%d error:%s]", name, client, err.Error())
+			log.Debug("civisibility: CLI request ahead %s failed [client:%d error:%s]", name, client, redactError(err))
 		}
 	}
 	if settings.KnownTestsEnabled {
@@ -448,6 +453,15 @@ func requestFeatures(client int, c featureClient) {
 	}
 	wg.Wait()
 	log.Debug("civisibility: CLI requests ahead finished [client:%d known_tests:%t skippable:%t test_management:%t duration:%s]", client, settings.KnownTestsEnabled, settings.TestsSkipping, testManagement, time.Since(started).Round(time.Microsecond))
+}
+
+// urlUserinfo matches the user and password of a URL, which an error such as
+// url.Error repeats.
+var urlUserinfo = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.-]*://)[^/?#\s"'@]*@`)
+
+// redactError returns err's message without the credentials of a URL in it.
+func redactError(err error) string {
+	return urlUserinfo.ReplaceAllString(err.Error(), "${1}[redacted]@")
 }
 
 // searchAhead starts the upload's first commit search; the returned function

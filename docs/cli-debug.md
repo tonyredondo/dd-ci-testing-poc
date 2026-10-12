@@ -177,9 +177,10 @@ The worker, in `worker.log`:
 | `civisibility: CLI test description [packages:… goarch:… runs_every_test:…]` | The description it read |
 | `civisibility: CLI requests ahead started [trigger:… go_version:… clients:… after:…]` | It started requesting: `runs_every_test` while go test builds, `linking` when go test linked a test binary, `used` when a test process started first. `clients` counts the services it requests for; `after` is the time since it started waiting |
 | `civisibility: CLI requests ahead finished [client:… known_tests:… skippable:… test_management:… duration:…]` | One client's requests, with the features that the settings enabled |
-| `civisibility: CLI request ahead settings failed`, `… known tests failed`, … | A request failed; test processes request it again themselves |
+| `civisibility: CLI request ahead settings failed`, `… known tests failed`, … | A request failed; test processes request it again themselves. The error hides a URL's user and password |
 | `civisibility: CLI requests ahead stop: the settings require Git` | The settings change after the upload, so test processes request after it |
 | `civisibility: CLI requests ahead not needed: …` | go test exited before any test process used the state, as when every result came from its cache; `started` tells whether requests had begun and were cancelled |
+| `civisibility: CLI requests ahead stopped: ddto stopped the worker [reason:…]` | ddto stopped the worker first, for a `signal` or `timeout` |
 
 Test processes, in their output, and the worker:
 
@@ -188,7 +189,7 @@ Test processes, in their output, and the worker:
 | `civisibility.read_cache: invocation scope [directory:cli/… ttl:1h0m0s]` | The process shares ddto's invocation's cache |
 | `civisibility.read_cache: hit [endpoint:… key:… scope:cli]` | The response was there, usually from the worker |
 | `civisibility.read_cache: hit after wait [… waited:…]` | Another process was requesting it; this one waited for its response |
-| `civisibility.read_cache: miss [… duration:… cacheable:… error:…]` | This process requested it itself. In a test process with `scope:cli`, the worker's request differed or had not started |
+| `civisibility.read_cache: miss [… duration:… cacheable:… error:…]` | This process requested it itself. `cacheable` says whether the response may be stored; a store that fails logs its own line, such as `temp write failed` or `rename failed`. In a test process with `scope:cli`, the worker's request differed, had not started, failed, or was not stored |
 | `civisibility.coverage: module from ddto's test description` or `… from go list [… duration:…]` | Where per-test coverage found the test package's module |
 
 A test process prints its output only with `-v` or when a test fails.

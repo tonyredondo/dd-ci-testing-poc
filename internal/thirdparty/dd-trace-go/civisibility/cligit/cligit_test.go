@@ -6,9 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,6 +25,7 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/impactedtests"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/net"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 )
 
 type fakeClient struct {
@@ -502,6 +505,11 @@ func TestRunWaitsForTheStoppedSearch(t *testing.T) {
 	for _, end := range []string{Stop + " signal", Exited} {
 		t.Run(end, func(t *testing.T) {
 			t.Cleanup(utils.ResetHandedCLIGitStateForTesting)
+			// The debug log tells a stopped worker from an unused state.
+			t.Setenv("DD_TRACE_DEBUG", "true")
+			logs := new(log.RecordLogger)
+			t.Cleanup(log.UseLogger(logs))
+			t.Cleanup(func() { log.SetLevel(log.LevelWarn) })
 			clients := make(chan *slowSearchClient, 1)
 			original := newClient
 			newClient = func(ctx context.Context, _, _ string) (client, appTelemetry) {
@@ -542,6 +550,13 @@ func TestRunWaitsForTheStoppedSearch(t *testing.T) {
 			}
 			if !search.finished.Load() {
 				t.Fatal("the worker exited before its stopped search")
+			}
+			want := "CLI requests ahead not needed: go test exited before a test process used the state [started:true]"
+			if end != Exited {
+				want = "CLI requests ahead stopped: ddto stopped the worker [reason:signal started:true]"
+			}
+			if !strings.Contains(strings.Join(logs.Logs(), "\n"), want) {
+				t.Fatalf("the debug log lacks %q:\n%s", want, strings.Join(logs.Logs(), "\n"))
 			}
 		})
 	}
@@ -952,4 +967,42 @@ func TestRunRequestsWhenGoTestLinks(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
+}
+
+// The worker's debug lines show request errors without a URL's credentials,
+// which url.Error repeats.
+func TestRequestAheadErrorsHideURLCredentials(t *testing.T) {
+	err := fmt.Errorf("settings: %w", &url.Error{Op: "Post", URL: "https://ci:SYNTHETIC_SECRET@intake.example/%zz?x=1", Err: errors.New("invalid URL escape")})
+	got := redactError(err)
+	if strings.Contains(got, "SYNTHETIC_SECRET") || !strings.Contains(got, "https://[redacted]@intake.example/") || !strings.Contains(got, "invalid URL escape") {
+		t.Fatalf("redactError = %q", got)
+	}
+	if got := redactError(errors.New("unexpected status code 403")); got != "unexpected status code 403" {
+		t.Fatalf("redactError changed a message without a URL: %q", got)
+	}
+
+	t.Setenv("DD_TRACE_DEBUG", "true")
+	log.SetLevel(log.LevelDebug)
+	t.Cleanup(func() { log.SetLevel(log.LevelWarn) })
+	logs := new(log.RecordLogger)
+	t.Cleanup(log.UseLogger(logs))
+	requestFeatures(0, failingFeatures{err})
+	all := strings.Join(logs.Logs(), "\n")
+	if strings.Contains(all, "SYNTHETIC_SECRET") || !strings.Contains(all, "CLI request ahead settings failed [client:0") {
+		t.Fatalf("the debug log of a failed request: %s", all)
+	}
+}
+
+// failingFeatures fails its settings request with err.
+type failingFeatures struct{ err error }
+
+func (f failingFeatures) GetSettings() (*net.SettingsResponseData, error) { return nil, f.err }
+func (f failingFeatures) GetKnownTests() (*net.KnownTestsResponseData, error) {
+	return nil, f.err
+}
+func (f failingFeatures) GetSkippableTests() (*net.SkippableTestsResponse, error) {
+	return nil, f.err
+}
+func (f failingFeatures) GetTestManagementTests() (*net.TestManagementTestsResponseDataModules, error) {
+	return nil, f.err
 }
