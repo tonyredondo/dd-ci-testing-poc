@@ -55,8 +55,8 @@ for the Git metadata, the repository upload and the base-branch discovery,
 through a Git worker that the CLI starts once,
 [#31](https://github.com/tonyredondo/dd-ci-testing-poc/pull/31) for the GitHub
 Actions job ID, and [#34](https://github.com/tonyredondo/dd-ci-testing-poc/pull/34) for the settings, known tests,
-skippable tests and test management data, requested while `go test` builds,
-and each package's module for coverage. Item 51 is a smaller step in the same
+skippable tests and test management data, requested while `go test` builds
+when it runs every test package, and each package's module for coverage. Item 51 is a smaller step in the same
 direction.
 
 ### CLI and build path
@@ -610,8 +610,8 @@ poll interval at 10–20 ms: a poll is one stat and a failed open. Expect 0–10
 less per wait normally and 2 s less per waiter when the owner is slow. The
 cache format is shared with dd-trace-go binaries, so keep it compatible. In
 `ddto test`, [#34](https://github.com/tonyredondo/dd-ci-testing-poc/pull/34) starts these requests in the Git
-worker while `go test` builds, so a binary waits only for the rest of a
-request that is already under way.
+worker, while `go test` builds when it runs every test package, so a binary
+waits only for the rest of a request that is already under way.
 
 ## 49. Read-cache expiry fields
 

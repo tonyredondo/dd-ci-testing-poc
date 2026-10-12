@@ -59,6 +59,7 @@ func (f *featureIntake) handler(w http.ResponseWriter, r *http.Request) {
 		endpoint = "management"
 		fmt.Fprint(w, `{"data":{"id":"poc","type":"ci_app_libraries_tests_request","attributes":{"modules":{}}}}`)
 	case strings.HasSuffix(r.URL.Path, "/search_commits"):
+		endpoint = "search"
 		fmt.Fprint(w, `{"data":[]}`)
 	default:
 		w.WriteHeader(http.StatusAccepted)
@@ -107,11 +108,26 @@ func (f *featureIntake) wait(t *testing.T, want map[string]int) {
 // first test when the settings enable every feature.
 var featureEndpoints = []string{"settings", "known", "skippable", "management"}
 
+// featureEnv isolates the read cache in a new user cache directory and keeps
+// Go's build and test cache, which go env reports, warm and shared.
 func featureEnv(t *testing.T, url string, extra ...string) []string {
 	t.Helper()
+	goCache.once.Do(func() {
+		out, err := exec.Command("go", "env", "GOCACHE").Output()
+		goCache.dir, goCache.err = strings.TrimSpace(string(out)), err
+	})
+	if goCache.err != nil {
+		t.Fatal(goCache.err)
+	}
 	scratch := t.TempDir()
 	return testEnv(append([]string{"DD_CIVISIBILITY_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=false", "DD_TRACE_AGENT_URL=" + url,
-		"DD_GIT_REPOSITORY_URL=", "DD_GIT_COMMIT_SHA=", "XDG_CACHE_HOME=" + scratch}, extra...)...)
+		"DD_GIT_REPOSITORY_URL=", "DD_GIT_COMMIT_SHA=", "XDG_CACHE_HOME=" + scratch, "GOCACHE=" + goCache.dir}, extra...)...)
+}
+
+var goCache struct {
+	once sync.Once
+	dir  string
+	err  error
 }
 
 // ddto's Git worker requests, while go test builds, what a test process
@@ -178,12 +194,15 @@ func startWorker(t *testing.T, dir, driver string, env []string, state string, d
 	if code != 0 {
 		t.Fatalf("go env: %s", stderr)
 	}
+	// Every test process runs, as with -count=1, so the worker requests
+	// while go test builds.
 	tests := struct {
-		GOARCH   string `json:"goarch"`
-		Packages []struct {
+		GOARCH        string `json:"goarch"`
+		RunsEveryTest bool   `json:"runs_every_test"`
+		Packages      []struct {
 			Dir string `json:"dir"`
 		} `json:"packages"`
-	}{GOARCH: runtime.GOARCH}
+	}{GOARCH: runtime.GOARCH, RunsEveryTest: true}
 	for _, d := range dirs {
 		tests.Packages = append(tests.Packages, struct {
 			Dir string `json:"dir"`
@@ -242,13 +261,28 @@ func TestMiniCLIStateSharedRequests(t *testing.T) {
 	server := newServer(http.HandlerFunc(intake.handler))
 	defer server.Close()
 	archive, cache := filepath.Join(t.TempDir(), "state.zip"), t.TempDir()
-	run := func(env []string) (map[string]int, map[string]int) {
+	runCached := func(env []string, args ...string) (string, map[string]int, map[string]int) {
 		t.Helper()
-		out, stderr, code := command(t, dir, env, driver, "test", "--runtime=mini", "--keep-ci-state="+archive, "-count=1", "-run=^Test(Pass|Sub)$", ".", "./sub")
+		args = append([]string{"test", "--runtime=mini", "--keep-ci-state=" + archive}, args...)
+		out, stderr, code := command(t, dir, env, driver, args...)
 		if code != 0 {
 			t.Fatalf("ddto test: %d %s %s", code, out, stderr)
 		}
-		return intake.take()
+		counts, services := intake.take()
+		return out, counts, services
+	}
+	run := func(env []string) (map[string]int, map[string]int) {
+		t.Helper()
+		_, counts, services := runCached(env, "-count=1", "-run=^Test(Pass|Sub)$", ".", "./sub")
+		return counts, services
+	}
+
+	// When every result comes from Go's test cache, nothing is requested.
+	// The sub package's result can be cached, as in TestMiniCLITelemetry.
+	cachedEnv := featureEnv(t, server.URL)
+	runCached(cachedEnv, "-run=^TestSub$", "./sub")
+	if out, counts, _ := runCached(cachedEnv, "-run=^TestSub$", "./sub"); !strings.Contains(out, "(cached)") || len(counts) != 0 {
+		t.Fatalf("a cached run made requests %v:\n%s", counts, out)
 	}
 
 	counts, _ := run(featureEnv(t, server.URL, "XDG_CACHE_HOME="+cache))

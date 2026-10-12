@@ -130,8 +130,18 @@ func Run(dir, runtimeID string, uploadWait time.Duration, input io.Reader, resul
 	tests := utils.HandedCLITests()
 	c = asTestProcesses(c, goVersion, tests)
 	uploadEnabled := infra.BoolEnv(constants.CIVisibilityGitUploadEnabledEnvironmentVariable, true)
-	search := searchAhead(c, uploadEnabled)
-	requests := requestAhead(testProcessClients(c, goVersion, tests))
+	var search func() (*gitupload.SearchCommitsResponse, error)
+	var requests func()
+	requestNow := func() {
+		search = searchAhead(c, uploadEnabled)
+		requests = requestAhead(testProcessClients(c, goVersion, tests))
+	}
+	// While go test builds, the worker requests for the test processes only
+	// if every one of them runs: a run whose results all come from Go's test
+	// cache sends no request.
+	if tests != nil && tests.RunsEveryTest {
+		requestNow()
+	}
 	if !waitUsed(ctx, dir, cli.exited) {
 		// No test process needs the search or the requests any more. The
 		// search's git commands end, interrupted or killed, only while this
@@ -140,8 +150,13 @@ func Run(dir, runtimeID string, uploadWait time.Duration, input io.Reader, resul
 		if search != nil {
 			_, _ = search()
 		}
-		requests()
+		if requests != nil {
+			requests()
+		}
 		return nil
+	}
+	if requests == nil {
+		requestNow()
 	}
 	utils.FetchCLIHeadCommit()
 	if app != nil {

@@ -188,3 +188,40 @@ func TestRaceOption(t *testing.T) {
 		}
 	}
 }
+
+// go test takes no result from its cache in local directory mode, or when its
+// test binaries get an argument outside the cacheable flags, from the command
+// line or GOFLAGS. Only then does the Git worker request for the test
+// processes before one starts.
+func TestRunsEveryTest(t *testing.T) {
+	for _, tc := range []struct {
+		args    []string
+		goflags string
+		want    bool
+	}{
+		{[]string{"./..."}, "", false},
+		{nil, "", true},
+		{[]string{"-v", "-run", "^TestA$", "-race", "-json", "-coverprofile=c.out", "-timeout=1m", "./..."}, "", false},
+		{[]string{"-count=1", "./..."}, "", true},
+		{[]string{"-test.count=2", "./..."}, "", true},
+		{[]string{"-test.run=X", "./..."}, "", false},
+		{[]string{"-bench=.", "./..."}, "", true},
+		{[]string{"-shuffle=on", "./..."}, "", true},
+		{[]string{"-custom", "./..."}, "", true},
+		{[]string{"./...", "-custom"}, "", true},
+		{[]string{"./...", "-args", "value"}, "", true},
+		{[]string{"./...", "-args"}, "", false},
+		{[]string{"./...", "--", "value"}, "", true},
+		{[]string{"./...", "-v", "value"}, "", true},
+		{[]string{"./..."}, "-count=1", true},
+		{[]string{"./..."}, "-v -race", false},
+	} {
+		opts, err := parseOptions(tc.args, tc.goflags)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if opts.runsEveryTest != tc.want {
+			t.Errorf("go test %v with GOFLAGS=%q: runsEveryTest = %t, want %t", tc.args, tc.goflags, opts.runsEveryTest, tc.want)
+		}
+	}
+}

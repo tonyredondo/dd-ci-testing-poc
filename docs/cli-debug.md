@@ -170,7 +170,7 @@ ddto test --keep-ci-state=ci-state.zip ./...    # prints: INFO: archived the CI 
 | `used` | Present when a test process used the state |
 | `upload.json` | The repository upload's result, or why it failed or stopped |
 | `impacted.json` | The impacted-tests base commit and modified files, or why they were not computed |
-| `tests.json` | `ddto`'s description of the test processes: their architecture and each test package's directory and module |
+| `tests.json` | `ddto`'s description of the test processes: their architecture, whether `go test` runs every test package without its result cache, and each test package's directory and module |
 | `telemetry-failure-*` | Telemetry requests that a test process could not deliver |
 | `worker.log` | The worker's own log; add `DD_TRACE_DEBUG=true` for its debug lines |
 | `ddto.json` | `ddto`'s view: whether it handed the state over and why, the upload timeout, how the worker ended (`exited`, `stopped` or `killed`), the stop reason and how long `ddto` waited after `go test` |

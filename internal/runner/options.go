@@ -56,6 +56,12 @@ var goTestFlags = map[string]flagSpec{
 // testBinaryFlags are also accepted with go test's "test." prefix.
 var testBinaryFlags = words("artifacts bench benchmem benchtime blockprofile blockprofilerate count coverprofile cpu cpuprofile failfast fullpath fuzz fuzzminimizetime fuzztime list memprofile memprofilerate mutexprofile mutexprofilefraction outputdir parallel run short shuffle skip timeout trace v")
 
+// cacheableTestFlags are the test binary flags with which go test may still
+// take a package's result from its cache (go help test). Go has only added to
+// this set, so it lists the newest supported Go's: a flag outside it disables
+// the cache in every version.
+var cacheableTestFlags = words("benchtime coverprofile cpu failfast fullpath list outputdir parallel run short skip timeout v")
+
 func words(s string) map[string]bool {
 	m := map[string]bool{}
 	for _, w := range strings.Fields(s) {
@@ -97,6 +103,10 @@ type options struct {
 	// compileOnly and printOnly record -c and -n; with either, go test runs
 	// no test binary.
 	compileOnly, printOnly bool
+	// runsEveryTest reports that go test takes no result from its cache: it
+	// runs in local directory mode, or the test binaries get an argument
+	// outside the cacheable flags.
+	runsEveryTest bool
 	// workfile applies only to preparation children, never os.Setenv.
 	workfile         string
 	environment      *goEnvironment
@@ -158,6 +168,7 @@ func parseOptions(args []string, goflags string) (options, error) {
 		if err := o.apply(canonical, value); err != nil {
 			return o, err
 		}
+		o.noteTestFlag(canonical)
 	}
 	o.chdir, args = chdirFlag(args)
 	var packages []string
@@ -169,6 +180,7 @@ func parseOptions(args []string, goflags string) (options, error) {
 			if arg == "--" {
 				// The terminator and everything after it go to the test binary.
 				o.arguments = append(o.arguments, argument{raw: args})
+				o.runsEveryTest = len(args) > 1 || o.runsEveryTest
 				break
 			}
 			arg = arg[1:]
@@ -188,6 +200,7 @@ func parseOptions(args []string, goflags string) (options, error) {
 					continue
 				}
 				o.arguments = append(o.arguments, argument{raw: args})
+				o.runsEveryTest = true
 				break
 			}
 			inPackages = true
@@ -203,10 +216,14 @@ func parseOptions(args []string, goflags string) (options, error) {
 			if packages == nil {
 				packages = []string{}
 			}
+			// Go hands what follows -args, and an unknown flag, to the test
+			// binary.
 			if raw == "-args" || raw == "--args" {
 				o.arguments = append(o.arguments, argument{raw: args})
+				o.runsEveryTest = len(args) > 1 || o.runsEveryTest
 				break
 			}
+			o.runsEveryTest = true
 			o.arguments = append(o.arguments, argument{raw: args[:1]})
 			args = args[1:]
 			afterFlagWithoutValue = !hasValue
@@ -228,6 +245,7 @@ func parseOptions(args []string, goflags string) (options, error) {
 		if err := o.apply(canonical, value); err != nil {
 			return o, err
 		}
+		o.noteTestFlag(canonical)
 		if spec.list {
 			o.buildFlags = append(o.buildFlags, args[:width]...)
 		}
@@ -235,11 +253,21 @@ func parseOptions(args []string, goflags string) (options, error) {
 		args = args[width:]
 	}
 	if len(packages) == 0 {
+		// Local directory mode caches no result.
+		o.runsEveryTest = true
 		packages = []string{"."}
 	}
 	o.packages = packages
 	o.fileMode = strings.HasSuffix(packages[0], ".go")
 	return o, nil
+}
+
+// noteTestFlag records that a test binary flag outside the cacheable ones
+// keeps go test from taking results from its cache.
+func (o *options) noteTestFlag(name string) {
+	if testBinaryFlags[name] && !cacheableTestFlags[name] {
+		o.runsEveryTest = true
+	}
 }
 
 // chdirFlag handles -C exactly where cmd/go accepts it: first after "test".

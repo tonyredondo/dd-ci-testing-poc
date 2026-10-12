@@ -510,15 +510,25 @@ func TestRunWaitsForTheStoppedSearch(t *testing.T) {
 				return search, nil
 			}
 			t.Cleanup(func() { newClient = original })
+			// Every test process runs, so the worker searches while go test
+			// builds.
+			dir := t.TempDir()
+			if err := utils.WriteCLIGitStateFile(dir, utils.CLITestsFile, utils.CLITests{RunsEveryTest: true}); err != nil {
+				t.Fatal(err)
+			}
 			input, cli := io.Pipe()
 			defer cli.Close()
 			done := make(chan error, 1)
-			go func() { done <- Run(t.TempDir(), "", time.Minute, input, newResults(), nil) }()
+			go func() { done <- Run(dir, "", time.Minute, input, newResults(), nil) }()
 			if _, err := io.WriteString(cli, Proceed+" go1.99.0\n"); err != nil {
 				t.Fatal(err)
 			}
 			search := <-clients
-			<-search.started
+			select {
+			case <-search.started:
+			case <-time.After(30 * time.Second):
+				t.Fatal("the worker did not search while go test built")
+			}
 			if _, err := io.WriteString(cli, end+"\n"); err != nil {
 				t.Fatal(err)
 			}
@@ -735,9 +745,9 @@ func TestRunRequestsAheadForTestProcesses(t *testing.T) {
 				return view
 			}
 			dir := t.TempDir()
-			// ddto describes the test processes before it tells the worker
-			// to proceed.
-			if err := utils.WriteCLIGitStateFile(dir, utils.CLITestsFile, utils.CLITests{GOARCH: "arm64", Packages: []utils.CLITestPackage{{Dir: "/pkg"}}}); err != nil {
+			// ddto describes the test processes, which all run, before it
+			// tells the worker to proceed.
+			if err := utils.WriteCLIGitStateFile(dir, utils.CLITestsFile, utils.CLITests{GOARCH: "arm64", RunsEveryTest: true, Packages: []utils.CLITestPackage{{Dir: "/pkg"}}}); err != nil {
 				t.Fatal(err)
 			}
 			input, cli := io.Pipe()
@@ -791,10 +801,14 @@ func TestRunWaitsForItsStoppedRequests(t *testing.T) {
 	request := &featureFake{}
 	testProcessClients = func(client, string, *utils.CLITests) []featureClient { return []featureClient{request} }
 	t.Cleanup(func() { newClient, testProcessClients = original, originalClients })
+	dir := t.TempDir()
+	if err := utils.WriteCLIGitStateFile(dir, utils.CLITestsFile, utils.CLITests{RunsEveryTest: true}); err != nil {
+		t.Fatal(err)
+	}
 	input, cli := io.Pipe()
 	defer cli.Close()
 	done := make(chan error, 1)
-	go func() { done <- Run(t.TempDir(), "", time.Minute, input, newResults(), nil) }()
+	go func() { done <- Run(dir, "", time.Minute, input, newResults(), nil) }()
 	request.ctx = <-contexts
 	if _, err := io.WriteString(cli, Proceed+" go1.99.0\n"+Exited+"\n"); err != nil {
 		t.Fatal(err)
@@ -862,5 +876,38 @@ func TestWorkerRequestsAsTestProcesses(t *testing.T) {
 	defer mu.Unlock()
 	if len(requests) != 1 || requests[0]["runtime.version"] != "go1.99.0" || requests[0]["os.architecture"] != "arm64" {
 		t.Fatalf("settings requests %v", requests)
+	}
+}
+
+// When every result may come from Go's test cache, the worker requests nothing
+// before a test process uses its state: a run whose results all come from the
+// cache sends no request. Once a test process starts, the worker searches the
+// commits and requests for the test processes.
+func TestRunRequestsNothingWhileResultsMayBeCached(t *testing.T) {
+	gitRepository(t)
+	t.Cleanup(utils.ResetHandedCLIGitStateForTesting)
+	original, originalClients, originalView := newClient, testProcessClients, asTestProcesses
+	newClient = func(context.Context, string, string) (client, appTelemetry) { return &fakeClient{}, nil }
+	t.Cleanup(func() { newClient, testProcessClients, asTestProcesses = original, originalClients, originalView })
+	for _, used := range []bool{false, true} {
+		utils.ResetHandedCLIGitStateForTesting()
+		request := &featureFake{}
+		testProcessClients = func(client, string, *utils.CLITests) []featureClient { return []featureClient{request} }
+		view := &fakeClient{}
+		asTestProcesses = func(client, string, *utils.CLITests) client { return view }
+		dir := usedState(t)
+		if !used {
+			dir = t.TempDir()
+		}
+		if err := utils.WriteCLIGitStateFile(dir, utils.CLITestsFile, utils.CLITests{Packages: []utils.CLITestPackage{{Dir: "/pkg"}}}); err != nil {
+			t.Fatal(err)
+		}
+		if err := Run(dir, "", time.Minute, strings.NewReader(Proceed+" go1.99.0\n"+Exited+"\n"), newResults(), nil); err != nil {
+			t.Fatal(err)
+		}
+		searches, _ := view.counts()
+		if requested := len(request.requests()) > 0; requested != used || (used && searches != 1) {
+			t.Fatalf("used %t: requests %v, searches %d", used, request.requests(), searches)
+		}
 	}
 }

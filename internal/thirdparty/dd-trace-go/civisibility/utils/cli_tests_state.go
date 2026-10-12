@@ -21,6 +21,11 @@ const CLITestsFile = "tests.json"
 type CLITests struct {
 	// GOARCH is the test binaries' architecture.
 	GOARCH string `json:"goarch,omitempty"`
+	// RunsEveryTest reports that go test takes no result from its cache, so
+	// that each test package's process runs. Otherwise every result may come
+	// from the cache, and the worker requests nothing before a test process
+	// uses its state.
+	RunsEveryTest bool `json:"runs_every_test,omitempty"`
 	// Packages are the packages that have tests.
 	Packages []CLITestPackage `json:"packages"`
 }

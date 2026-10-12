@@ -630,10 +630,13 @@ initializes.
   (`computeAnalyzer`).
 
 The worker writes the record before ddto starts go test. It searches the
-backend's commits while go test builds, a read-only request, and requests
-what test processes request before their first test (see
-[Requests from ddto's CLI](#requests-from-ddtos-cli)), but unshallows, packs
-and uploads only after a test process marks the state `used`. Its settings
+backend's commits, a read-only request, and requests what test processes
+request before their first test (see
+[Requests from ddto's CLI](#requests-from-ddtos-cli)): while go test builds
+when go test runs every test package, otherwise once a test process marks the
+state `used`, so that a run whose results all come from Go's test cache sends
+no request. It unshallows, packs and uploads only after a test process marks
+the state `used`. Its settings
 decide the impacted-tests state after the upload. When go test takes every
 result from its cache, no process uses the state and the worker cancels its
 commit search and requests, waits for them and exits without changing the
@@ -793,8 +796,9 @@ will, and the read cache hands the responses to them.
 - ddto writes `tests.json`
   ([`civisibility/utils/cli_tests_state.go`](civisibility/utils/cli_tests_state.go))
   before it tells the worker to proceed: the test binaries' `GOARCH`, from its
-  `go env`, and each test package's directory, module path and module
-  directory, from its package query. `HandedCLITests` reads it in the worker
+  `go env`, whether go test runs every test package (`RunsEveryTest`, below),
+  and each test package's directory, module path and module directory, from
+  its package query. `HandedCLITests` reads it in the worker
   and in test processes; `ResetHandedCLIGitStateForTesting` also forgets it.
 - `cliReadCacheScopeIdentity` (`utils/net/read_cache.go`) gives the worker,
   and test processes that use its state, the scope of ddto's invocation, kind
@@ -861,11 +865,19 @@ differ, ddto takes the canonical list from `go tool compile -V`, about 6 ms, and
 appends it as the linker does (`testRuntimeVersion` in
 `internal/runner/environment.go`).
 
-Like the commit search, these requests are read-only and start before a test
-process uses the state, so a run whose results all come from Go's test cache
-sends the settings request too, which go test's exit cancels. Test processes
-outside the worker's checkout, binaries run outside `ddto test` and the SDK
-runtime keep their own requests and scopes.
+A run whose results all come from Go's test cache sends no request. ddto
+parses go test's arguments as go test does (`internal/runner/options.go`) and
+records in `tests.json` whether go test runs every test package
+(`RunsEveryTest`): in local directory mode, or when a test binary gets an
+argument outside go test's cacheable flags, such as `-count=1` or one after
+`-args`, from the command line or `GOFLAGS`. Only then does the worker search
+the commits and request while go test builds; otherwise it does both once a
+test process uses its state, when that process requests too, and the read
+cache still gives the later ones the responses. The cacheable flags are the
+newest supported Go's: Go has only added to them, so a flag outside them
+disables the cache in every version. Test processes outside the worker's
+checkout, binaries run outside `ddto test` and the SDK runtime keep their own
+requests and scopes.
 
 Checks: `TestCLIReadCacheScopeIdentity`, `TestCLITestProcessClients`,
 `TestCLIReadCacheLastsTheInvocation`,
@@ -880,12 +892,14 @@ Checks: `TestCLIReadCacheScopeIdentity`, `TestCLITestProcessClients`,
 `GOEXPERIMENT` case, `TestExperimentSeparator`,
 `TestCodeOwnersPackageService`, `TestCLITestPackageModule`,
 `TestRunRequestsAheadForTestProcesses`, `TestRunWaitsForItsStoppedRequests`,
+`TestRunRequestsNothingWhileResultsMayBeCached`, `TestRunsEveryTest`,
 `TestWorkerRequestsAsTestProcesses`,
 `integration/TestMiniCLIStateRequestsAhead`, which runs the worker and then
 a test process that makes no request of its own, also with services from
 CODEOWNERS, and `integration/TestMiniCLIStateSharedRequests`, which checks one
-request per endpoint, or per service, in a `ddto test` run, also with
-`GOEXPERIMENT`, ddto's `tests.json` and the removed cache directory.
+request per endpoint, or per service, in a `ddto test` run that runs every
+test, also with `GOEXPERIMENT`, none in a run whose results all come from the
+cache, ddto's `tests.json` and the removed cache directory.
 
 ## Testify method names
 

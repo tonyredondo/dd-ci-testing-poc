@@ -102,9 +102,11 @@ branch and compute the diff. `ddto` starts a worker, `ddto ci-git-worker`, in
 the invocation's directory while it prepares the build. The worker reads the
 Git metadata before `go test` starts and hands it, through
 `DDTO_GIT_STATE`, to the test processes of the same checkout, which then run
-no Git command for it. While `go test` builds, the worker compares the local
-commits with the backend's, a read-only request. Once a test process starts,
-it uploads the missing commits once and, if the settings enable impacted
+no Git command for it. When `go test` runs every test package, as with
+`-count=1`, the worker compares the local commits with the backend's while
+`go test` builds, a read-only request; otherwise it waits for a test process
+to start, so that a run whose results all come from Go's test cache sends no
+request. Once a test process starts, it uploads the missing commits once and, if the settings enable impacted
 tests, computes the base commit and the modified files once; test processes
 wait for those results where they used to wait for their own work. When every
 result comes from Go's test cache, no test process starts and the worker
@@ -129,17 +131,16 @@ exits. It also logs, as telemetry, its failures and the requests that test
 processes could not deliver. A run whose results all come from the cache
 sends no telemetry.
 
-While `go test` builds, the worker also requests what each test process
-requests before its first test: the settings and, as they enable them, the
+Then the worker also requests what each test process requests before its
+first test: the settings and, as they enable them, the
 known tests, skippable tests and test management data, with the test
 processes' Go version and architecture and for each service that their
 packages report. The read cache, whose local scope is the invocation for the
 worker and the test processes, hands them the responses, so the first test
-starts without waiting for the network. A test process whose request differs
-makes it itself. `ddto` also hands each test package's module to the test
+starts without waiting for the network when `go test` runs every test
+package. A test process whose request differs makes it itself. `ddto` also hands each test package's module to the test
 processes, which then start no `go list` for per-test coverage, LCOV reports
-or backfill. A run whose results all come from the cache still sends the
-settings request, as it searches commits, and `go test`'s exit cancels it.
+or backfill.
 
 A `go test -exec` program, or the `go_$GOOS_$GOARCH_exec` helper that Go uses
 when cross-compiling, starts before the test binary. `ddto` runs it through
