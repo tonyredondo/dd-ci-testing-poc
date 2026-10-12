@@ -62,7 +62,6 @@ Ordered by the expected effect on a `ddto test` run's wall time, then by cost.
 | Order | Change | Where it can help | Complexity |
 | --- | --- | --- | --- |
 | 23 | Charge the shared common snapshot once per batch | Up to about 60% more test-cycle requests per binary | Medium to high |
-| 14 | Leave standard-library imports out of library discovery | Part of a 28–80 ms query in most invocations | Low |
 | 15 | Overlap the Orchestrion tool lookup with preparation | 0.5–2 s in Orchestrion modes of large modules | Low to medium |
 | 39 | Parse selected sources concurrently at startup | Parsing the files of every known test with EFD and impacted tests | Medium |
 | 51 | Store known tests per module in the read cache | 10–25 ms of CPU and megabytes per binary with 100,000 tests | Medium to high |
@@ -193,29 +192,6 @@ phase of `createCITagsMap`, when the service name does not depend on Git, and
 combining compatible messages at exit would address them. Those binaries run
 alone or, under `ddto test`, with a `-exec` launcher, which keeps ddto from
 handing them the worker's state.
-
-## 14. Standard-library imports in library discovery
-
-Any test import missing from the selected packages' dependencies becomes a
-request in `internal/runner/testify.go:139-155` and switches the second query
-in `libraries.go:46-75` to `-deps`. That includes standard-library packages,
-whose closure can never reach Testify, goleak or the SDK. A fixture whose tests
-import only `net/http/httptest` resolves 197 standard packages in 51–81 ms;
-preparation took 132–148 ms, against about 56 ms without the query. In an
-83-module workspace any `go list` costs at least 0.24 s, and this query took
-367 ms.
-
-In Gin at `b7d8275`, the query had six pending imports, resolved 250 packages
-and took 28–31 ms of a 93 ms preparation. Testify's packages among those
-imports still need it, so measure what leaving out the standard library saves
-there.
-
-Leave standard-library paths out of the request, using Go's rule: the first
-path element has no dot and `$GOROOT/src/<path>` exists, where `$GOROOT/src` is
-the parent of `testing`'s directory. External helpers and unknown imports
-from other modules stay in the query. Merging the query into the main one with
-`-test` is not a general improvement: dd-go took 23.7 s merged, against 17.1 s
-plus 0.83 s with separate queries.
 
 ## 15. Orchestrion tool lookup in parallel
 
