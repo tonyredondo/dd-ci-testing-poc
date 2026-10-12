@@ -890,7 +890,14 @@ func removeExpiredReadCacheEntry(path string) {
 		return
 	}
 	defer releaseReadCacheLock(owner)
-	if readCacheJSONFileExpired(path) {
+	removeExpiredEntryAsOwner(owner, path)
+}
+
+// removeExpiredEntryAsOwner removes the expired entry at path if owner still
+// holds its key's lock, as writeReadCacheEntry checks before it publishes:
+// another process may have replaced the lock as stale.
+func removeExpiredEntryAsOwner(owner *readCacheLockOwner, path string) {
+	if readCacheJSONFileExpired(path) && readCacheLockOwnerStillValid(owner) {
 		removeReadCacheFile(path)
 	}
 }

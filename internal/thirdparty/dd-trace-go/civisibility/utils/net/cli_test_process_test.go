@@ -282,3 +282,30 @@ func TestReadCacheCleanupReplacesStaleLocks(t *testing.T) {
 		require.True(t, os.IsNotExist(err), path)
 	}
 }
+
+// The cleanup removes an expired entry only while it still holds the key's
+// lock: another process may have replaced it as stale, and a writer may then
+// renew the entry.
+func TestReadCacheCleanupRemovesOnlyAsLockOwner(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	setReadCacheHooksForTest(t, t.TempDir(), &now, 111, 222)
+	paths, err := readCachePathsIn("", "replaced")
+	require.NoError(t, err)
+	writeCLIEntry(t, paths.Dir, "replaced.json", now.Add(-2*time.Hour), time.Hour)
+	cleaner, status := acquireReadCacheLock(paths, "replaced")
+	require.Equal(t, readCacheLockAcquired, status)
+	replacement := fmt.Sprintf(`{"pid":333,"created_at_unix_nano":%d,"cache_key":"replaced","owner_nonce":"other"}`, now.UnixNano())
+	require.NoError(t, os.WriteFile(paths.LockFile, []byte(replacement), 0o600))
+
+	removeExpiredEntryAsOwner(cleaner, paths.CacheFile)
+	_, err = os.Stat(paths.CacheFile)
+	require.NoError(t, err, "a cleaner that lost the lock removed the entry")
+
+	require.NoError(t, os.Remove(paths.LockFile))
+	owner, status := acquireReadCacheLock(paths, "replaced")
+	require.Equal(t, readCacheLockAcquired, status)
+	removeExpiredEntryAsOwner(owner, paths.CacheFile)
+	releaseReadCacheLock(owner)
+	_, err = os.Stat(paths.CacheFile)
+	require.True(t, os.IsNotExist(err))
+}

@@ -816,7 +816,9 @@ will, and the read cache hands the responses to them.
   process computed its paths. The cleanup now removes an expired entry under
   its key's lock (`removeExpiredReadCacheEntry`, through
   `acquireReadCacheLock`, which replaces a stale lock), which writers hold
-  while they publish, and leaves it when a writer holds the lock: upstream, a
+  while they publish, and removes it only while it still holds the lock, as
+  `writeReadCacheEntry` checks before it publishes; it leaves the entry when
+  a writer holds the lock. Upstream, a
   cleanup could remove an entry that a writer had just renewed, which this
   change would otherwise extend to other invocations' directories.
   They stay in the user's cache directory, not the state directory: test
@@ -866,6 +868,7 @@ Checks: `TestCLIReadCacheScopeIdentity`, `TestCLITestProcessClients`,
 `TestReadCacheLockRecreatesRemovedDirectory`,
 `TestReadCacheCleanupLeavesAnEntryBeingRenewed`,
 `TestReadCacheCleanupReplacesStaleLocks`,
+`TestReadCacheCleanupRemovesOnlyAsLockOwner`,
 `TestReadCacheWaiterStopsWithContext`,
 `TestTestRuntimeVersionMatchesBinaries`, which builds a binary under each
 `GOEXPERIMENT` case, `TestExperimentSeparator`,
