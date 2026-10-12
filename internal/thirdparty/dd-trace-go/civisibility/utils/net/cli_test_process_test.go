@@ -148,3 +148,27 @@ func TestReadCacheWaiterStopsWithContext(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, 1, sleeps)
 }
+
+// An invocation that ended without removing its entries, as a killed ddto
+// does, leaves a directory that the next invocation removes once its entries
+// expired; another invocation's recent directory stays.
+func TestRemoveCLIReadCacheRemovesAbandonedDirectories(t *testing.T) {
+	now := time.Now()
+	root := t.TempDir()
+	setReadCacheHooksForTest(t, root, &now, 111, 222)
+	shared := filepath.Join(root, "dd-trace-go", "civisibility-read-cache")
+	for _, name := range []string{"cli-abandoned", "cli-running", "unrelated"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(shared, name), 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(shared, name, "entry.json"), nil, 0o600))
+	}
+	old := now.Add(-2 * time.Hour)
+	for _, name := range []string{"cli-abandoned", "unrelated"} {
+		require.NoError(t, os.Chtimes(filepath.Join(shared, name), old, old))
+	}
+
+	require.NoError(t, RemoveCLIReadCache("/state"))
+	for name, kept := range map[string]bool{"cli-abandoned": false, "cli-running": true, "unrelated": true} {
+		_, err := os.Stat(filepath.Join(shared, name))
+		require.Equal(t, kept, err == nil, name)
+	}
+}

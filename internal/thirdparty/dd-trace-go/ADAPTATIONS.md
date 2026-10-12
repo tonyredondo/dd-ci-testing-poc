@@ -804,6 +804,9 @@ will, and the read cache hands the responses to them.
   directory, `cli-<hash>` in the shared one (`readCacheSubdirectory`,
   `readCachePathsIn`), which ddto removes once the worker has exited
   (`RemoveCLIReadCache`); the shared directory's cleanup skips directories.
+  `RemoveCLIReadCache` also removes, up to the cleanup's bound, the `cli-`
+  directories unchanged for longer than the TTL, which a killed ddto or a
+  reboot left with expired entries only.
   They stay in the user's cache directory, not the state directory: test
   processes may read them while Go's test log is active, and the state
   directory can lie in the module.
@@ -845,7 +848,9 @@ outside the worker's checkout, binaries run outside `ddto test` and the SDK
 runtime keep their own requests and scopes.
 
 Checks: `TestCLIReadCacheScopeIdentity`, `TestCLITestProcessClients`,
-`TestCLIReadCacheLastsTheInvocation`, `TestReadCacheWaiterStopsWithContext`,
+`TestCLIReadCacheLastsTheInvocation`,
+`TestRemoveCLIReadCacheRemovesAbandonedDirectories`,
+`TestReadCacheWaiterStopsWithContext`,
 `TestTestRuntimeVersionMatchesBinaries`, which builds a binary under each
 `GOEXPERIMENT` case, `TestExperimentSeparator`,
 `TestCodeOwnersPackageService`, `TestCLITestPackageModule`,
