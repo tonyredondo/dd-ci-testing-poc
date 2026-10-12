@@ -145,6 +145,14 @@ func TestCLIPassesOtherCommandsThrough(t *testing.T) {
 		if _, stderr, code := command(t, dir, env, driver, ""); code != 127 {
 			t.Fatalf("an empty command name: %d %q; want 127", code, stderr)
 		}
+		// The search skips a PATH entry longer than PATH_MAX, as glibc does,
+		// and finds nothing in such entries alone.
+		long := "/" + strings.Repeat("a", 4096)
+		for path, want := range map[string]int{long + string(os.PathListSeparator) + filepath.Join(relative, "bin"): 3, long: 127} {
+			if _, stderr, code := command(t, dir, append(env[:len(env):len(env)], "PATH="+path), driver, "passthrough-relative", "3"); code != want {
+				t.Fatalf("with a long PATH entry: %d %q; want %d", code, stderr, want)
+			}
+		}
 		// The search goes past a PATH directory that cannot be searched, and
 		// reports it if the command is nowhere else.
 		if os.Geteuid() != 0 {
