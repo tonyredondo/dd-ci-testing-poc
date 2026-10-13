@@ -216,6 +216,7 @@ func TestResolveExecProgram(t *testing.T) {
 		{"maybe run relative to the directory", "rel" + sep + bin, "execerrdot=0#y", []string{"prog"}, "", errUnknownProgram},
 		{"absolute with a GODEBUG pattern", bin, "execerrdot=0#y", []string{"prog"}, program, nil},
 		{"path", bin, "", []string{filepath.Join("sub", "prog")}, filepath.Join("sub", "prog"), nil},
+		{"empty name", bin, "", []string{""}, "", errNoCommand},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("PATH", tc.path)

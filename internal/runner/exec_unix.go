@@ -32,6 +32,8 @@ func ExecWithCallerEnvironment(path string, args []string) int {
 	}
 	if err == nil {
 		err = syscall.Exec(path, args, os.Environ())
+		// As os.StartProcess reports it to go test.
+		err = &os.PathError{Op: "fork/exec", Path: path, Err: err}
 	}
 	fmt.Fprintln(os.Stderr, err)
 	return 2

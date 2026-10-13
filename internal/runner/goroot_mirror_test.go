@@ -754,6 +754,7 @@ func TestWrapExecProgram(t *testing.T) {
 		{"without a launcher", Plan{gorootMirror: mirror}, options{exec: "prog"}, "", false},
 		{"a path", Plan{gorootMirror: mirror, mini: true}, options{exec: "./prog"}, "'test-exec' './prog' './prog'", false},
 		{"no program", Plan{gorootMirror: mirror, mini: true}, options{exec: " "}, "", false},
+		{"an empty name", Plan{gorootMirror: mirror, mini: true}, options{exec: "''"}, "", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := wrapExecProgram(&tc.plan, tc.opts, t.TempDir())

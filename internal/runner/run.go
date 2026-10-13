@@ -846,6 +846,9 @@ func wrapExecProgram(plan *Plan, opts options, dir string) error {
 	return nil
 }
 
+// errNoCommand is go test's error for an empty -exec program name.
+var errNoCommand = errors.New("exec: no command")
+
 // resolveExecProgram returns the path of the -exec program in words, looked up
 // as go test does: on the caller's PATH from dir, go test's working directory.
 // test-exec would look it up after restoring the toolchain's bin first in
@@ -854,6 +857,9 @@ func wrapExecProgram(plan *Plan, opts options, dir string) error {
 // for a program that go test cannot run, or would run relative to dir: only go
 // test itself reproduces those.
 func resolveExecProgram(dir string, words []string) (string, error) {
+	if words[0] == "" {
+		return "", errNoCommand
+	}
 	if filepath.Base(words[0]) != words[0] {
 		return words[0], nil
 	}

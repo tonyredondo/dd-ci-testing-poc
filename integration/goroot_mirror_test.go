@@ -151,6 +151,23 @@ func sameExecutorView(t *testing.T, dir string, env, ciEnv []string, goCommand, 
 
 var execFailure = regexp.MustCompile(`(?m)^exec: "[^"]+": .*$`)
 
+var startFailure = regexp.MustCompile(`(?m)^(?:exec: |fork/exec ).*$`)
+
+// sameStartFailure checks that ddto reports an -exec program that cannot
+// start as go test does.
+func sameStartFailure(t *testing.T, dir string, env, ciEnv []string, goCommand, driver string, args ...string) {
+	t.Helper()
+	nativeOut, nativeErr, code := command(t, dir, env, goCommand, args...)
+	want := startFailure.FindString(nativeOut + nativeErr)
+	if code != 1 || want == "" {
+		t.Fatalf("native %v: exit %d\n%s%s", args, code, nativeOut, nativeErr)
+	}
+	out, stderr, code := command(t, dir, ciEnv, driver, args...)
+	if code != 1 || startFailure.FindString(out+stderr) != want {
+		t.Fatalf("ddto %v: exit %d, want %q\n%s%s", args, code, want, out, stderr)
+	}
+}
+
 // sameExecFailure checks that ddto, like go test, reports an -exec program
 // that go test cannot run, rather than running another one: it runs go test
 // natively. Each command is a program and its arguments.
@@ -403,6 +420,14 @@ func runMirroredToolchain(t *testing.T, dir string, env []string, goCommand, cac
 	relative := func(env []string) []string { return prependPATH(prependPATH(env, executors), "bin") }
 	args := []string{"test", "-C", filepath.Base(dir), "-count=1", "-exec=ddtoexec", "./..."}
 	sameExecFailure(t, filepath.Dir(dir), relative(env), relative(ciEnv), append([]string{goCommand}, args...), append([]string{driver}, args...))
+	// A -exec path that cannot start fails as natively.
+	sameStartFailure(t, dir, env, ciEnv, goCommand, driver, "test", "-count=1", "-exec="+filepath.Join(".", "missing"), "./...")
+	if runtime.GOOS != "windows" {
+		if err := os.WriteFile(filepath.Join(dir, "notexec"), nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+		sameStartFailure(t, dir, env, ciEnv, goCommand, driver, "test", "-count=1", "-exec=./notexec", "./...")
+	}
 	if after := treeModes(t, modcache); !sameModes(before, after) {
 		t.Fatal("the module cache's files changed")
 	}
