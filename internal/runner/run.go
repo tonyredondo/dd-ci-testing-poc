@@ -68,6 +68,8 @@ type Plan struct {
 	compilerCache     []string
 	// workspaceLock keeps a cached vendor workspace from being pruned.
 	workspaceLock *os.File
+	// gorootMirror runs go from a mirror of a toolchain in GOMODCACHE.
+	gorootMirror *gorootMirror
 	// execHelper is the cross-compilation program Go would run test binaries
 	// with; execWrapper restores the caller's Go settings before a -exec program.
 	execHelper  string
@@ -89,22 +91,28 @@ type Plan struct {
 // savedEnvironment records the caller's values of the Go settings that go test
 // receives from this plan instead.
 func (p Plan) savedEnvironment() []string {
-	if p.Workfile == "" {
-		return nil
+	var saved []string
+	if p.Workfile != "" {
+		saved = append(saved, goenv.Save("GOWORK"))
+		if p.moduleWorkspace {
+			saved = append(saved, goenv.Save("GOFLAGS"))
+		}
 	}
-	saved := []string{goenv.Save("GOWORK")}
-	if p.moduleWorkspace {
-		saved = append(saved, goenv.Save("GOFLAGS"))
+	// Only Mini's test runtime restores them; SDK tests see the mirror.
+	if p.gorootMirror != nil && p.mini {
+		saved = append(saved, p.gorootMirror.saved...)
 	}
 	return saved
 }
 
-// Release lets other runs prune the plan's cached vendor workspace. Call it
-// after all go processes using the plan finish, before removing Dir.
+// Release lets other runs prune the plan's cached vendor workspace and
+// toolchain mirror, and restores this process's environment. Call it after
+// all go processes using the plan finish, before removing Dir.
 func (p Plan) Release() {
 	if p.workspaceLock != nil {
 		_ = p.workspaceLock.Close()
 	}
+	p.gorootMirror.release()
 }
 
 // Prepare creates a complete plan before native Go compilation starts. Callers
@@ -217,6 +225,14 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	}
 	if !supportsGoToolchain(opts.environment.GOVERSION) {
 		return plan, fmt.Errorf("ddto requires Go 1.25 or newer; selected toolchain is %q", opts.environment.GOVERSION)
+	}
+	if needsGOROOTMirror(opts.environment) {
+		// Go rejects overlays beneath GOMODCACHE, where GOTOOLCHAIN keeps
+		// downloaded toolchains: run go from a mirror of that GOROOT.
+		plan.gorootMirror, e = prepareGOROOTMirror(ctx, opts.environment, dir, debug)
+		if e != nil {
+			return plan, &gorootMirrorError{e}
+		}
 	}
 	plan.testLauncher = opts.exec != "" || opts.environment.GOOS != opts.environment.GOHOSTOS || opts.environment.GOARCH != opts.environment.GOHOSTARCH
 	plan.goVersion, plan.goExperiment = opts.environment.GOVERSION, opts.environment.GOEXPERIMENT
@@ -386,6 +402,9 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	if selectedRuntime == nil || native == nil {
 		return plan, fmt.Errorf("missing testing or selected CI runtime package")
 	}
+	if e := checkTestingGOROOT(native.Dir, opts.environment, plan.gorootMirror); e != nil {
+		return plan, e
+	}
 	rewritten, e := transformTesting(native, replacements, debug)
 	if e != nil {
 		return plan, e
@@ -454,7 +473,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	// Go keys cached test results on its own environment, which holds the
 	// temporary workspace, while tests see the caller's values. Keying the test
 	// binaries on those values keeps a cached result from outliving them.
-	if plan.Workfile != "" && opts.exec == "" {
+	if len(plan.savedEnvironment()) != 0 && opts.exec == "" {
 		plan.execHelper = crossExecHelper(opts.environment)
 	}
 	// Go caches by binary content, so the fingerprint must reach the binary.
@@ -666,6 +685,12 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		debug.printf("preparation interrupted")
 		return interruptedStatus(interrupted)
 	}
+	if mirrorErr := (*gorootMirrorError)(nil); errors.As(err, &mirrorErr) {
+		// The toolchain is supported; only ddto's instrumentation is not.
+		fmt.Fprintln(stderr, version.BuildLogPrefix+" WARN:", err, "- running go test without CI Visibility")
+		debug.printf("instrumentation bypass goroot_mirror=unavailable")
+		return runGo(ctx, cwd, append([]string{"test"}, args...), nil, signals, stdin, stdout, stderr)
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, version.BuildLogPrefix+" ERROR:", err)
 		return 2
@@ -720,7 +745,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 	// A -exec program, or Go's cross-compilation helper, starts before the test
 	// binary can restore the caller's Go settings. Go already disables result
 	// caching for those runs, so ddto's wrapper restores them first.
-	if plan.Workfile != "" && (opts.exec != "" || plan.execHelper != "") {
+	if len(plan.savedEnvironment()) != 0 && (opts.exec != "" || plan.execHelper != "") {
 		words := []string{plan.execHelper}
 		if opts.exec != "" {
 			if words, err = splitFlags(opts.exec); err != nil {
@@ -738,11 +763,12 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		}
 	}
 	forwarded := goTestArguments(plan, opts, tool)
+	// The test runtime's goenv/restore package gives test processes the
+	// caller's values before any client package can start a go command.
+	env = append(env, plan.savedEnvironment()...)
 	if plan.Workfile != "" {
 		// The temporary workspace belongs to the build, including chained tools.
-		// The test runtime's goenv/restore package gives test processes the
-		// caller's values before any client package can start a go command.
-		env = append(append(env, plan.savedEnvironment()...), "GOWORK="+plan.Workfile)
+		env = append(env, "GOWORK="+plan.Workfile)
 		if plan.moduleWorkspace {
 			env = append(env, "GOFLAGS="+plan.workspaceGoFlags)
 		}

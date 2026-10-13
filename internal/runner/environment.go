@@ -42,13 +42,14 @@ func goDebugDefault(version string) string {
 
 type goEnvironment struct {
 	GOMOD, GOWORK, GOMODCACHE, GOVERSION string
+	GOROOT                               string
 	GOOS, GOARCH, GOHOSTOS, GOHOSTARCH   string
 	// GOEXPERIMENT is the setting as go env reports it, not canonical.
 	GOEXPERIMENT string
 }
 
 func readGoEnvironment(ctx context.Context, dir string) (*goEnvironment, error) {
-	out, err := goTool(ctx, dir, nil, "env", "-json", "GOMOD", "GOWORK", "GOMODCACHE", "GOVERSION", "GOOS", "GOARCH", "GOHOSTOS", "GOHOSTARCH", "GOEXPERIMENT")
+	out, err := goTool(ctx, dir, nil, "env", "-json", "GOMOD", "GOWORK", "GOMODCACHE", "GOVERSION", "GOROOT", "GOOS", "GOARCH", "GOHOSTOS", "GOHOSTARCH", "GOEXPERIMENT")
 	if err != nil {
 		return nil, err
 	}

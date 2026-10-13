@@ -65,8 +65,26 @@ stream Go's diagnostics on `stderr`. The CLI never searches other checkouts or
 substitutes a different cached version. A development binary with neither
 sources nor a published version needs a client replacement.
 
-Use a Go toolchain installed outside `GOMODCACHE`; Go prohibits overlays within
-that cache, including downloaded toolchains. Mini requires Go 1.25 or newer;
+A toolchain that `GOTOOLCHAIN` downloads lives in `GOMODCACHE`, where Go rejects
+every overlay entry, including the rewritten `testing` sources. `ddto test` then
+runs go from a mirror of that toolchain in the user cache, under `ddto/goroots`:
+the same files, hard-linked where the filesystem allows and copied otherwise,
+always copied on Windows, where deleting a read-only hard link would clear the
+module cache file's attribute. Copies write the bytes: on btrfs, a reflinked
+GOROOT made the next `go list` wait about 25 s. The first run with a toolchain
+builds its mirror, in about 0.2 s with links and a few seconds with copies, and
+relinks its test binaries: link cache keys include GOROOT, while standard
+packages keep their compiled archives. Gin's first run took 3.4 s with links
+and 6.8 s with copies, against 1.0 s for later runs, which reuse the mirror,
+check a few of its files, and cost the same as a toolchain outside
+`GOMODCACHE`. A mirror unused for 14 days is removed; a run holds a shared
+lock while it uses one. Mini's test runtime restores the `GOROOT` and `PATH`
+that tests see natively, including the toolchain's `bin` first in `PATH`, so
+tests that run `go` get the same toolchain. `runtime.GOROOT()` and standard
+library paths in stack traces name the mirror; tests of the SDK runtime also
+see its `GOROOT` and `PATH`. When no mirror is possible, for example because the
+user cache lies in `GOMODCACHE`, the module or the toolchain, `ddto test` warns
+and runs `go test` without CI Visibility. Mini requires Go 1.25 or newer;
 preparation checks the toolchain selected by Go. A client declaring Go 1.21
 keeps that language version, including its loop-variable semantics and timer
 defaults. A module without a `go` directive keeps Go 1.16 semantics and
@@ -78,7 +96,8 @@ native Go.
 The temporary `go.work`, and the `GOFLAGS` adapted for it, apply only to the
 `go test` command that `ddto` starts, including the build tools it runs or
 chains, such as a user's `-toolexec`. In the test process, Mini's
-`internal/goenv/restore` package restores the caller's `GOWORK` and `GOFLAGS`.
+`internal/goenv/restore` package restores the caller's `GOWORK` and `GOFLAGS`,
+and with a toolchain mirror the native `GOROOT` and `PATH`.
 It imports only `syscall` through `goenv`, and its path sorts before `os`, so Go
 initializes it before `os`, and therefore before any package that starts
 commands through `os/exec`, including dependencies that do not import `testing`. Commands started by tests, or by
@@ -162,8 +181,8 @@ for the same caller environment.
 
 Known limitation: a dependency that imports `syscall` but not `os` can
 initialize before the restore package when its import path sorts first. If it
-reads `GOWORK` or `GOFLAGS` through `syscall` during initialization, it sees
-`ddto`'s values. Ordinary code reads them through `os`, and starts commands
+reads `GOWORK`, `GOFLAGS`, `GOROOT` or `PATH` through `syscall` during
+initialization, it sees `ddto`'s values. Ordinary code reads them through `os`, and starts commands
 through `os/exec`, after the restore.
 
 Mini uses native Go 1.25 APIs. `internal/compat` contains only `AsType` and
