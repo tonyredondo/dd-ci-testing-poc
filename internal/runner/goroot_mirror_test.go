@@ -333,7 +333,15 @@ func TestGOROOTMirrorPruning(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(abandoned, "src"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Link(filepath.Join(env.GOROOT, "VERSION"), filepath.Join(abandoned, "src", "VERSION")); err != nil && goruntime.GOOS != "windows" {
+	// Staging holds what a mirror would: links, and read-only copies on Windows.
+	staged := filepath.Join(abandoned, "src", "VERSION")
+	var err error
+	if goruntime.GOOS == "windows" {
+		err = os.WriteFile(staged, []byte("go1.99.0\n"), 0444)
+	} else {
+		err = os.Link(filepath.Join(env.GOROOT, "VERSION"), staged)
+	}
+	if err != nil {
 		t.Fatal(err)
 	}
 	// A creator that holds its key's lock is still building its staging.
@@ -393,56 +401,162 @@ func TestGOROOTMirrorRejectsProtectedCache(t *testing.T) {
 	}
 }
 
-// Test processes see the GOROOT and PATH that go test gives them natively,
-// while this process runs the mirror's go.
-func TestUseGOROOTMirrorEnvironment(t *testing.T) {
+// Test processes see the GOROOT that go test gives them natively: the
+// caller's when its go is the toolchain, even through a link; unset after a
+// switch to a go<version> on PATH; the toolchain's after a download switch.
+// This process's environment never changes.
+func TestGOROOTMirrorEnvironment(t *testing.T) {
 	env := fakeModuleCacheToolchain(t)
 	mirror := filepath.Join(t.TempDir(), "mirror")
-	callerPath := strings.Join([]string{"/caller/bin", "/usr/bin"}, string(os.PathListSeparator))
 	sep := string(os.PathListSeparator)
-
-	// Switched: the caller's go is another toolchain, which hands GOROOT on.
-	t.Setenv("PATH", callerPath)
-	os.Unsetenv("GOROOT")
-	saved, undo, err := useGOROOTMirror(mirror, env.GOROOT)
-	if err != nil {
+	exe := ""
+	if goruntime.GOOS == "windows" {
+		exe = ".exe"
+	}
+	toolchainBin := filepath.Join(env.GOROOT, "bin")
+	other := t.TempDir()
+	if err := os.WriteFile(filepath.Join(other, "go"+exe), []byte("other"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{
-		goenv.SaveValue("GOROOT", env.GOROOT, true),
-		goenv.SaveValue("PATH", filepath.Join(env.GOROOT, "bin")+sep+callerPath, true),
-	}
-	if strings.Join(saved, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("saved %q; want %q", saved, want)
-	}
-	if got := os.Getenv("PATH"); got != filepath.Join(mirror, "bin")+sep+callerPath {
-		t.Fatalf("PATH=%q", got)
-	}
-	if _, set := os.LookupEnv("GOROOT"); set {
-		t.Fatal("GOROOT set although the caller left it unset")
-	}
-	undo()
-	if os.Getenv("PATH") != callerPath {
-		t.Fatalf("PATH not restored: %q", os.Getenv("PATH"))
-	}
-
-	// Direct: the caller runs that toolchain's go; its own GOROOT stays.
-	direct := filepath.Join(env.GOROOT, "bin") + sep + callerPath
-	t.Setenv("PATH", direct)
 	t.Setenv("GOROOT", "/caller/goroot")
-	saved, undo, err = useGOROOTMirror(mirror, env.GOROOT)
+	cases := []struct {
+		name      string
+		path      string
+		goroot    string
+		gorootSet bool
+	}{
+		{"downloaded switch", other, env.GOROOT, true},
+		{"direct", toolchainBin, "/caller/goroot", true},
+	}
+	if goruntime.GOOS != "windows" {
+		linked := t.TempDir()
+		if err := os.Symlink(filepath.Join(toolchainBin, "go"), filepath.Join(linked, "go")); err != nil {
+			t.Fatal(err)
+		}
+		named := t.TempDir()
+		if err := os.Symlink(filepath.Join(toolchainBin, "go"), filepath.Join(named, env.GOVERSION)); err != nil {
+			t.Fatal(err)
+		}
+		cases = append(cases,
+			struct {
+				name      string
+				path      string
+				goroot    string
+				gorootSet bool
+			}{"direct through a link", linked, "/caller/goroot", true},
+			struct {
+				name      string
+				path      string
+				goroot    string
+				gorootSet bool
+			}{"go<version> on PATH", other + sep + named, "", false})
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("PATH", tc.path)
+			saved, toolchain := gorootMirrorEnvironment(mirror, env)
+			want := []string{
+				goenv.SaveValue("GOROOT", tc.goroot, tc.gorootSet),
+				goenv.SaveValue("PATH", toolchainBin+sep+tc.path, true),
+			}
+			if strings.Join(saved, "\n") != strings.Join(want, "\n") {
+				t.Fatalf("saved %q; want %q", saved, want)
+			}
+			if toolchain.path != filepath.Join(mirror, "bin", "go"+exe) || toolchain.env[0] != "GOROOT="+mirror ||
+				toolchain.env[1] != "PATH="+filepath.Join(mirror, "bin")+sep+tc.path {
+				t.Fatalf("toolchain %+v", toolchain)
+			}
+			if os.Getenv("PATH") != tc.path || os.Getenv("GOROOT") != "/caller/goroot" {
+				t.Fatal("the process environment changed")
+			}
+		})
+	}
+}
+
+// A plan's go commands run the mirror's go with its GOROOT and PATH, and keep
+// the PWD that os/exec computes for their directory; other commands are
+// unchanged.
+func TestGoCommandUsesThePlansToolchain(t *testing.T) {
+	dir := t.TempDir()
+	plain := goCommand(context.Background(), dir, "version")
+	if filepath.Base(plain.Args[0]) != "go" || plain.Env != nil || plain.Dir != dir {
+		t.Fatalf("without a mirror: %v env=%v dir=%s", plain.Args, plain.Env, plain.Dir)
+	}
+	mirror := &gorootMirror{toolchain: goToolchain{path: "/mirror/bin/go", root: "/mirror", env: []string{"GOROOT=/mirror", "PATH=/mirror/bin"}}}
+	cmd := goCommand(withGoToolchain(context.Background(), mirror), dir, "version")
+	env := strings.Join(cmd.Env, "\n")
+	if cmd.Path != "/mirror/bin/go" || !strings.Contains(env, "GOROOT=/mirror") || !strings.Contains(env, "PATH=/mirror/bin") {
+		t.Fatalf("with a mirror: %s %v", cmd.Path, cmd.Env)
+	}
+	if goruntime.GOOS != "windows" && !strings.Contains(env, "PWD=") {
+		t.Fatal("PWD lost")
+	}
+}
+
+// Each plan holds its own lease: releasing one keeps another's mirror.
+func TestGOROOTMirrorOverlappingPlans(t *testing.T) {
+	env := fakeModuleCacheToolchain(t)
+	cache := useTestUserCache(t)
+	a, err := prepareGOROOTMirror(context.Background(), env, t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved[0] != goenv.SaveValue("GOROOT", "/caller/goroot", true) {
-		t.Fatalf("saved %q", saved[0])
+	b, err := prepareGOROOTMirror(context.Background(), env, t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if os.Getenv("GOROOT") != mirror {
-		t.Fatalf("GOROOT=%q; the caller's would select the module cache", os.Getenv("GOROOT"))
+	defer b.release()
+	a.release()
+	stale := time.Now().Add(-gorootMirrorRetention - time.Hour)
+	if err := os.Chtimes(b.root, stale, stale); err != nil {
+		t.Fatal(err)
 	}
-	undo()
-	if os.Getenv("GOROOT") != "/caller/goroot" || os.Getenv("PATH") != direct {
-		t.Fatal("environment not restored")
+	pruneGOROOTMirrors(filepath.Join(cache, "ddto", "goroots"), "another-key")
+	if !validGOROOTMirror(b.root, env) {
+		t.Fatal("a plan's mirror was pruned after another plan released it")
+	}
+}
+
+// Cancellation stops preparation; only a mirror failure runs go test natively.
+func TestFallsBackToNativeGo(t *testing.T) {
+	mirrorErr := &gorootMirrorError{errors.New("no mirror")}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, tc := range []struct {
+		ctx  context.Context
+		err  error
+		want bool
+	}{
+		{context.Background(), mirrorErr, true},
+		{context.Background(), errors.New("other"), false},
+		{context.Background(), &gorootMirrorError{context.Canceled}, false},
+		{context.Background(), &gorootMirrorError{context.DeadlineExceeded}, false},
+		{canceled, mirrorErr, false},
+	} {
+		if got := fallsBackToNativeGo(tc.ctx, tc.err); got != tc.want {
+			t.Errorf("fallsBackToNativeGo(%v) = %t", tc.err, got)
+		}
+	}
+}
+
+// A module nested in a repository protects the repository: a user cache
+// beside the module would leave files in the checkout.
+func TestGOROOTMirrorProtectsTheCheckout(t *testing.T) {
+	env := fakeModuleCacheToolchain(t)
+	repo := t.TempDir()
+	module := filepath.Join(repo, "services", "api")
+	if err := os.MkdirAll(module, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	env.GOMOD = filepath.Join(module, "go.mod")
+	previous := userCacheDir
+	userCacheDir = func() (string, error) { return filepath.Join(repo, ".cache"), nil }
+	defer func() { userCacheDir = previous }()
+	if _, _, err := gorootMirrorLocation(env, module); err == nil {
+		t.Fatal("a cache in the module's checkout was accepted")
 	}
 }
 

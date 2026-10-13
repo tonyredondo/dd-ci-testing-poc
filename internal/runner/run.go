@@ -233,6 +233,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		if e != nil {
 			return plan, &gorootMirrorError{e}
 		}
+		ctx = withGoToolchain(ctx, plan.gorootMirror)
 	}
 	plan.testLauncher = opts.exec != "" || opts.environment.GOOS != opts.environment.GOHOSTOS || opts.environment.GOARCH != opts.environment.GOHOSTARCH
 	plan.goVersion, plan.goExperiment = opts.environment.GOVERSION, opts.environment.GOEXPERIMENT
@@ -311,11 +312,10 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		}()
 		listArgs := append([]string{"list", "-e", "-json=Dir,Name,ImportPath,Standard,DepOnly,GoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,Module,Error"}, opts.buildFlags...)
 		listArgs = append(listArgs, patterns...)
-		cmd := exec.CommandContext(ctx, "go", listArgs...)
-		// Keep Env nil: os/exec then sets PWD to dir, so go list reports
+		// Keep Env from os/exec, which sets PWD to dir, so go list reports
 		// package directories with the spelling of dir, even through symbolic
 		// links. Relative patterns are matched against that same spelling.
-		cmd.Dir = dir
+		cmd := goCommand(ctx, dir, listArgs...)
 		if opts.workfile != "" {
 			cmd.Env = append(cmd.Environ(), "GOWORK="+opts.workfile)
 			if plan.moduleWorkspace {
@@ -685,7 +685,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		debug.printf("preparation interrupted")
 		return interruptedStatus(interrupted)
 	}
-	if mirrorErr := (*gorootMirrorError)(nil); errors.As(err, &mirrorErr) {
+	if fallsBackToNativeGo(ctx, err) {
 		// The toolchain is supported; only ddto's instrumentation is not.
 		fmt.Fprintln(stderr, version.BuildLogPrefix+" WARN:", err, "- running go test without CI Visibility")
 		debug.printf("instrumentation bypass goroot_mirror=unavailable")
@@ -695,6 +695,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		fmt.Fprintln(stderr, version.BuildLogPrefix+" ERROR:", err)
 		return 2
 	}
+	ctx = withGoToolchain(ctx, plan.gorootMirror)
 	for _, warning := range plan.Warnings {
 		fmt.Fprintln(stderr, version.BuildLogPrefix+" WARN:", warning)
 	}
@@ -751,6 +752,13 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 			if words, err = splitFlags(opts.exec); err != nil {
 				fmt.Fprintln(stderr, version.BuildLogPrefix+" ERROR: invalid -exec:", err)
 				return 2
+			}
+			// go test resolves the program on the caller's PATH; test-exec
+			// starts it after restoring the toolchain's bin first in PATH.
+			if plan.gorootMirror != nil && !strings.ContainsAny(words[0], `/\`) {
+				if path, e := exec.LookPath(words[0]); e == nil {
+					words[0] = path
+				}
 			}
 		}
 		executable, e := os.Executable()
@@ -867,6 +875,16 @@ func runGo(ctx context.Context, dir string, args, envOverrides []string, signals
 	command := []string{"go"}
 	if launcher, ok := ctx.Value(goLauncherKey{}).(goLauncher); ok {
 		command = launcher.command
+	}
+	if toolchain, ok := ctx.Value(goToolchainKey{}).(goToolchain); ok {
+		// A launcher finds go on PATH; go itself runs from the mirror. Test
+		// processes then get the mirror's bin first in PATH from go test.
+		mirrored := toolchain.env
+		if command[0] == "go" {
+			command = append([]string{toolchain.path}, command[1:]...)
+			mirrored = mirrored[:1]
+		}
+		envOverrides = append(append([]string(nil), mirrored...), envOverrides...)
 	}
 	argv := append(append([]string(nil), command[1:]...), args...)
 	cmd := exec.Command(command[0], argv...)

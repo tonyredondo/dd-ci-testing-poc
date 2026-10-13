@@ -83,8 +83,8 @@ that tests see natively, including the toolchain's `bin` first in `PATH`, so
 tests that run `go` get the same toolchain. `runtime.GOROOT()` and standard
 library paths in stack traces name the mirror; tests of the SDK runtime also
 see its `GOROOT` and `PATH`. When no mirror is possible, for example because the
-user cache lies in `GOMODCACHE`, the module or the toolchain, `ddto test` warns
-and runs `go test` without CI Visibility. Mini requires Go 1.25 or newer;
+user cache lies in `GOMODCACHE`, the toolchain, or the module or its checkout,
+`ddto test` warns and runs `go test` without CI Visibility. Mini requires Go 1.25 or newer;
 preparation checks the toolchain selected by Go. A client declaring Go 1.21
 keeps that language version, including its loop-variable semantics and timer
 defaults. A module without a `go` directive keeps Go 1.16 semantics and

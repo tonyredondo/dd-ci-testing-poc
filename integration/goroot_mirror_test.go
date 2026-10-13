@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -32,12 +33,13 @@ func TestToolchainEnvironment(t *testing.T) {
 	}
 	first := strings.SplitN(os.Getenv("PATH"), string(os.PathListSeparator), 2)[0]
 	goroot, set := os.LookupEnv("GOROOT")
-	t.Logf("TOOLCHAIN goroot_env=%q goroot_set=%t first_path=%q lookpath=%q go_env=%q runtime=%q",
+	t.Logf("TOOLCHAIN goroot_env=%q goroot_set=%t first_path=%q lookpath=%q go_env=%q runtime=%q END",
 		goroot, set, first, goPath, strings.TrimSpace(string(out)), runtime.GOROOT())
 }
 `
 
-var toolchainLine = regexp.MustCompile(`TOOLCHAIN goroot_env="(.*)" goroot_set=(\w+) first_path="(.*)" lookpath="(.*)" go_env="(.*)" runtime="(.*)"`)
+// Values are %q-quoted, so Windows paths arrive with escaped backslashes.
+var toolchainLine = regexp.MustCompile(`TOOLCHAIN goroot_env=("(?:[^"\\]|\\.)*") goroot_set=(\w+) first_path=("(?:[^"\\]|\\.)*") lookpath=("(?:[^"\\]|\\.)*") go_env=("(?:[^"\\]|\\.)*") runtime=("(?:[^"\\]|\\.)*") END`)
 
 type toolchainView struct{ gorootEnv, gorootSet, firstPath, lookPath, goEnv, runtime string }
 
@@ -47,7 +49,14 @@ func parseToolchainView(t *testing.T, output string) toolchainView {
 	if m == nil {
 		t.Fatalf("no toolchain line:\n%s", output)
 	}
-	return toolchainView{m[1], m[2], m[3], m[4], m[5], m[6]}
+	unquote := func(quoted string) string {
+		value, err := strconv.Unquote(quoted)
+		if err != nil {
+			t.Fatalf("%s: %v", quoted, err)
+		}
+		return value
+	}
+	return toolchainView{unquote(m[1]), m[2], unquote(m[3]), unquote(m[4]), unquote(m[5]), unquote(m[6])}
 }
 
 // isolatedUserCache points os.UserCacheDir at cache on every platform, and
@@ -70,8 +79,8 @@ func cloneToolchain(t *testing.T, modcache string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fields := strings.Fields(string(out))
-	source := fields[0]
+	fields := strings.Split(strings.TrimSpace(string(out)), "\n")
+	source := strings.TrimSpace(fields[0])
 	// Released versions are path-safe; a distribution's, such as
 	// go1.27.0-X:nodwarf5, would split PATH at its colon.
 	version := strings.Map(func(r rune) rune {
@@ -79,7 +88,7 @@ func cloneToolchain(t *testing.T, modcache string) string {
 			return '_'
 		}
 		return r
-	}, fields[1])
+	}, strings.TrimSpace(fields[1]))
 	target := filepath.Join(modcache, "golang.org", "toolchain@v0.0.1-"+version+"."+runtime.GOOS+"-"+runtime.GOARCH)
 	link := runtime.GOOS != "windows"
 	err = filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
@@ -219,6 +228,19 @@ func runMirroredToolchain(t *testing.T, dir string, env []string, goCommand, cac
 			t.Errorf("tests see %+v; natively %+v", got, native)
 		}
 	}
+	// Under -trimpath the linker records no GOROOT; runtime.GOROOT() comes
+	// from the environment that go test starts tests with.
+	nativeOut, nativeErr, code := command(t, dir, env, goCommand, "test", "-count=1", "-v", "-trimpath", "./...")
+	if code != 0 {
+		t.Fatalf("native -trimpath: %s%s", nativeOut, nativeErr)
+	}
+	trimmedOut, trimmedErr, code := command(t, dir, ciEnv, driver, "test", "-count=1", "-v", "-trimpath", "./...")
+	if code != 0 {
+		t.Fatalf("ddto -trimpath: %s%s", trimmedOut, trimmedErr)
+	}
+	if parseToolchainView(t, nativeOut).runtime != "" && parseToolchainView(t, trimmedOut).runtime == "" {
+		t.Fatal("runtime.GOROOT() lost under -trimpath")
+	}
 	receiver.sideMu.Lock()
 	events := 0
 	for path, n := range receiver.requests {
@@ -266,14 +288,21 @@ func TestMiniGOROOTMirrorUnavailableRunsGoTest(t *testing.T) {
 		"GOMODCACHE="+modcache, "GOTOOLCHAIN=local", "GOPROXY=off")...)
 	dir := gorootMirrorFixtureDir(t)
 	driver := sharedDriver(t, "..")
-	for _, fail := range []bool{false, true} {
-		if fail {
+	for _, tc := range []struct {
+		fail   bool
+		status int
+		output string
+	}{{false, 0, "TOOLCHAIN goroot_env="}, {true, 1, "--- FAIL: TestFails"}} {
+		if tc.fail {
 			writeBuildFixture(t, dir, map[string]string{"fail_test.go": "package mirror\nimport \"testing\"\nfunc TestFails(t *testing.T) { t.Fatal(\"fails\") }\n"})
 		}
-		_, _, native := command(t, dir, env, filepath.Join(goroot, "bin", executableName("go")), "test", "-count=1", "./...")
-		out, stderr, code := command(t, dir, env, driver, "test", "-count=1", "./...")
-		if code != native || !strings.Contains(stderr, "running go test without CI Visibility") {
-			t.Fatalf("fail=%t: exit %d, native %d:\n%s%s", fail, code, native, out, stderr)
+		nativeOut, nativeErr, native := command(t, dir, env, filepath.Join(goroot, "bin", executableName("go")), "test", "-count=1", "-v", "./...")
+		if native != tc.status || !strings.Contains(nativeOut, tc.output) {
+			t.Fatalf("native fail=%t: exit %d:\n%s%s", tc.fail, native, nativeOut, nativeErr)
+		}
+		out, stderr, code := command(t, dir, env, driver, "test", "-count=1", "-v", "./...")
+		if code != tc.status || !strings.Contains(out, tc.output) || !strings.Contains(stderr, "running go test without CI Visibility") {
+			t.Fatalf("fail=%t: exit %d, native %d:\n%s%s", tc.fail, code, native, out, stderr)
 		}
 	}
 }

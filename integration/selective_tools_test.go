@@ -63,6 +63,7 @@ import _ "github.com/DataDog/dd-trace-go/v2/ddtrace/tracer"
 				t.Fatal(err)
 			}
 			defer os.RemoveAll(plan.Dir)
+			defer plan.Release()
 			data, err := os.ReadFile(plan.File)
 			if err != nil {
 				t.Fatal(err)
@@ -159,6 +160,7 @@ func TestTestifyContractInvalidatesOnlyTestingDependents(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(plan.Dir)
+	defer plan.Release()
 	data, err := os.ReadFile(plan.File)
 	if err != nil {
 		t.Fatal(err)

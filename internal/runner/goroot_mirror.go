@@ -38,33 +38,63 @@ var gorootMirrorLink = os.Link
 // gorootMirrorLockOpened lets tests interleave other runs with a waiting one.
 var gorootMirrorLockOpened = func() {}
 
-// gorootMirror is the mirror one ddto test uses.
+// gorootMirror is the mirror one plan uses. Each plan holds its own lease;
+// this process's environment never changes.
 type gorootMirror struct {
 	root string
-	// lock is held shared while this run's go commands use the mirror, so a
+	// lock is held shared while the plan's go commands use the mirror, so a
 	// pruner cannot remove it.
 	lock *os.File
 	// saved are the DDTO_ORIGINAL_ entries for the GOROOT and PATH that test
 	// processes would see natively.
 	saved []string
-	// undo restores this process's PATH and GOROOT.
-	undo func()
+	// toolchain runs the plan's go commands from the mirror.
+	toolchain goToolchain
 }
 
-// release undoes the mirror's environment and lets pruners remove it. Call it
-// after every go command of the run has finished.
+// release lets pruners remove the mirror. Call it after every go command of
+// the plan has finished.
 func (m *gorootMirror) release() {
-	if m == nil {
-		return
-	}
-	if m.undo != nil {
-		m.undo()
-		m.undo = nil
-	}
-	if m.lock != nil {
+	if m != nil && m.lock != nil {
 		_ = m.lock.Close()
 		m.lock = nil
 	}
+}
+
+// goToolchain is the go command that a plan runs instead of the caller's,
+// with GOROOT set for it, and PATH for launchers such as Orchestrion that
+// find go on PATH. GOROOT is always set: under -trimpath the linker records no
+// default, and test processes read runtime.GOROOT() from their environment.
+type goToolchain struct {
+	path string
+	root string
+	env  []string // GOROOT, then PATH.
+}
+
+type goToolchainKey struct{}
+
+func withGoToolchain(ctx context.Context, mirror *gorootMirror) context.Context {
+	if mirror == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, goToolchainKey{}, mirror.toolchain)
+}
+
+// goCommand runs go in dir: the caller's, or the plan's mirror in ctx. With a
+// mirror, Env holds the caller's environment, including the PWD that os/exec
+// adds for dir, followed by the mirror's GOROOT and PATH.
+func goCommand(ctx context.Context, dir string, args ...string) *exec.Cmd {
+	toolchain, mirrored := ctx.Value(goToolchainKey{}).(goToolchain)
+	name := "go"
+	if mirrored {
+		name = toolchain.path
+	}
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
+	if mirrored {
+		cmd.Env = append(cmd.Environ(), toolchain.env...)
+	}
+	return cmd
 }
 
 type gorootMirrorRecord struct {
@@ -150,6 +180,12 @@ func gorootMirrorLocation(env *goEnvironment, dir string) (parent, key string, e
 			protected = append(protected, filepath.Dir(file))
 		}
 	}
+	// A nested module's repository also holds directories beside the module.
+	for _, path := range append([]string(nil), protected[2:]...) {
+		if root := enclosingCheckout(path); root != "" {
+			protected = append(protected, root)
+		}
+	}
 	for _, path := range protected {
 		if path != "" && filePathHasPrefix(resolved, resolvedPath(path)) {
 			return "", "", fmt.Errorf("user cache directory %s lies within %s", parent, path)
@@ -163,6 +199,23 @@ func gorootMirrorLocation(env *goEnvironment, dir string) (parent, key string, e
 		return '_'
 	}, env.GOVERSION)
 	return parent, name + "-" + hex.EncodeToString(sum[:8]), nil
+}
+
+// enclosingCheckout returns the nearest directory at or above dir that holds a
+// version-control checkout, or "".
+func enclosingCheckout(dir string) string {
+	for current := resolvedPath(dir); ; {
+		for _, marker := range []string{".git", ".hg", ".jj", ".svn"} {
+			if _, err := os.Lstat(filepath.Join(current, marker)); err == nil {
+				return current
+			}
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return ""
+		}
+		current = parent
+	}
 }
 
 // validGOROOTMirror reports a complete mirror of env's toolchain: its record,
@@ -467,19 +520,28 @@ func removeUnusedGOROOTMirror(parent, key string, cutoff time.Time) {
 	}
 }
 
-// switchedToolchain reports whether the caller's go switched to goroot's
-// toolchain rather than being it: the switch hands that toolchain GOROOT.
-func switchedToolchain(goroot string) bool {
-	path, err := exec.LookPath("go")
-	if err != nil {
-		return true
+// resolvedExecutable resolves symbolic links in an executable's path, as the
+// go command does to find its GOROOT.
+func resolvedExecutable(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
 	}
-	bin, err := filepath.EvalSymlinks(filepath.Dir(path))
-	if err != nil {
-		return true
+	return filepath.Clean(path)
+}
+
+// nativeGOROOT returns the GOROOT that test processes see without ddto. The
+// caller's go may be the toolchain itself, which keeps the caller's GOROOT.
+// Otherwise it switched: to a go<version> command on PATH, which runs with
+// GOROOT unset, or to a downloaded toolchain, which receives its GOROOT.
+func nativeGOROOT(goroot, goversion, exe string) (string, bool) {
+	toolchain := resolvedExecutable(filepath.Join(goroot, "bin", "go"+exe))
+	if caller, err := exec.LookPath("go"); err == nil && resolvedExecutable(caller) == toolchain {
+		return os.LookupEnv("GOROOT")
 	}
-	native, err := filepath.EvalSymlinks(filepath.Join(goroot, "bin"))
-	return err != nil || bin != native
+	if named, err := exec.LookPath(goversion); err == nil && resolvedExecutable(named) == toolchain {
+		return "", false
+	}
+	return goroot, true
 }
 
 func prependPath(dir, list string) string {
@@ -489,44 +551,27 @@ func prependPath(dir, list string) string {
 	return dir + string(os.PathListSeparator) + list
 }
 
-// useGOROOTMirror makes this process's go commands, and those of a launcher
-// such as Orchestrion, run the mirror's go, through PATH and, when the caller
-// sets it, GOROOT. It returns the GOROOT and PATH that go test would give test
-// processes natively: the switched-to toolchain's GOROOT, or the caller's,
-// and that toolchain's bin before the caller's PATH. Mini's test runtime
-// restores them before any package initializes.
-func useGOROOTMirror(root, goroot string) (saved []string, undo func(), err error) {
-	callerPath, pathSet := os.LookupEnv("PATH")
-	callerGOROOT, gorootSet := os.LookupEnv("GOROOT")
-	nativeGOROOT, nativeSet := callerGOROOT, gorootSet
-	if switchedToolchain(goroot) {
-		nativeGOROOT, nativeSet = goroot, true
+// gorootMirrorEnvironment returns the go command that runs from the mirror at
+// root, and the GOROOT and PATH that go test would give test processes
+// natively: nativeGOROOT's, and that toolchain's bin before the caller's PATH.
+// Mini's test runtime restores them before any package initializes.
+func gorootMirrorEnvironment(root string, env *goEnvironment) (saved []string, toolchain goToolchain) {
+	exe := ""
+	if env.GOHOSTOS == "windows" {
+		exe = ".exe"
 	}
+	callerPath := os.Getenv("PATH")
+	native, nativeSet := nativeGOROOT(env.GOROOT, env.GOVERSION, exe)
 	saved = []string{
-		goenv.SaveValue("GOROOT", nativeGOROOT, nativeSet),
-		goenv.SaveValue("PATH", prependPath(filepath.Join(goroot, "bin"), callerPath), true),
+		goenv.SaveValue("GOROOT", native, nativeSet),
+		goenv.SaveValue("PATH", prependPath(filepath.Join(env.GOROOT, "bin"), callerPath), true),
 	}
-	undo = func() {
-		if pathSet {
-			_ = os.Setenv("PATH", callerPath)
-		} else {
-			_ = os.Unsetenv("PATH")
-		}
-		if gorootSet {
-			_ = os.Setenv("GOROOT", callerGOROOT)
-		}
+	toolchain = goToolchain{
+		path: filepath.Join(root, "bin", "go"+exe),
+		root: root,
+		env:  []string{"GOROOT=" + root, "PATH=" + prependPath(filepath.Join(root, "bin"), callerPath)},
 	}
-	if err := os.Setenv("PATH", prependPath(filepath.Join(root, "bin"), callerPath)); err != nil {
-		undo()
-		return nil, nil, err
-	}
-	if gorootSet {
-		if err := os.Setenv("GOROOT", root); err != nil {
-			undo()
-			return nil, nil, err
-		}
-	}
-	return saved, undo, nil
+	return saved, toolchain
 }
 
 // checkTestingGOROOT rejects a testing package that Go would not accept an
@@ -542,8 +587,8 @@ func checkTestingGOROOT(testingDir string, env *goEnvironment, mirror *gorootMir
 	return nil
 }
 
-// prepareGOROOTMirror selects the mirror for a module-cache toolchain and
-// switches this process's go commands to it.
+// prepareGOROOTMirror selects the mirror for a module-cache toolchain. The
+// plan's go commands use it through withGoToolchain.
 func prepareGOROOTMirror(ctx context.Context, env *goEnvironment, dir string, debug *cliDebug) (*gorootMirror, error) {
 	phase := debug.start("goroot mirror")
 	root, lock, err := ensureGOROOTMirror(ctx, env, dir, debug)
@@ -551,10 +596,14 @@ func prepareGOROOTMirror(ctx context.Context, env *goEnvironment, dir string, de
 	if err != nil {
 		return nil, err
 	}
-	saved, undo, err := useGOROOTMirror(root, env.GOROOT)
-	if err != nil {
-		lock.Close()
-		return nil, err
-	}
-	return &gorootMirror{root: root, lock: lock, saved: saved, undo: undo}, nil
+	saved, toolchain := gorootMirrorEnvironment(root, env)
+	return &gorootMirror{root: root, lock: lock, saved: saved, toolchain: toolchain}, nil
+}
+
+// fallsBackToNativeGo reports a mirror failure after which go test runs
+// natively. Cancellation stops instead.
+func fallsBackToNativeGo(ctx context.Context, err error) bool {
+	var mirrorErr *gorootMirrorError
+	return errors.As(err, &mirrorErr) && ctx.Err() == nil &&
+		!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
 }

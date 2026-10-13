@@ -74,8 +74,7 @@ func testRuntimeVersion(ctx context.Context, dir, goVersion, goExperiment string
 		return goVersion
 	}
 	phase := debug.start("test runtime version")
-	cmd := exec.CommandContext(ctx, "go", "tool", "compile", "-V")
-	cmd.Dir = dir
+	cmd := goCommand(ctx, dir, "tool", "compile", "-V")
 	cmd.Env = append(cmd.Environ(), "GOFLAGS=", "GOEXPERIMENT="+goExperiment)
 	out, err := cmd.Output()
 	phase.finish(err)
