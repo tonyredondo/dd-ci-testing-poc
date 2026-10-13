@@ -864,17 +864,10 @@ func resolveExecProgram(dir string, words []string) (string, error) {
 	if filepath.Base(path) == path {
 		return lookPathFrom(dir, path)
 	}
-	// exec.Cmd resolves a Windows path rooted on the current drive, or
-	// relative to a drive's current directory, from go test's process, whose
-	// directory is dir: only another drive's directory is unknown here.
-	switch volume := filepath.VolumeName(path); {
-	case filepath.IsAbs(path):
-	case volume == "" && os.IsPathSeparator(path[0]):
-		path = filepath.VolumeName(dir) + path
-	case volume == "":
-	case strings.EqualFold(volume, filepath.VolumeName(dir)):
-		path = filepath.Join(dir, path[len(volume):])
-	default:
+	// exec.Cmd finds a Windows path rooted on the current drive, or relative
+	// to a drive's current directory, from go test's process, and starts it
+	// from the package directory: only go test reproduces both.
+	if !filepath.IsAbs(path) && (filepath.VolumeName(path) != "" || os.IsPathSeparator(path[0])) {
 		return "", &exec.Error{Name: path, Err: errUnknownProgram}
 	}
 	return path, nil

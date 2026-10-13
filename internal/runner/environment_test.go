@@ -313,9 +313,8 @@ func TestExperimentSeparator(t *testing.T) {
 }
 
 // Windows forms that depend on a process's drives: a -exec path rooted on the
-// current drive or relative to its directory resolves from go test's
-// directory, while another drive's directory, which only Go's own process
-// knows, leaves the run to go test.
+// current drive or relative to a drive's directory, and a PATH entry relative
+// to another drive's directory, leave the run to go test.
 func TestWindowsProgramForms(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		return
@@ -326,17 +325,13 @@ func TestWindowsProgramForms(t *testing.T) {
 	if strings.EqualFold(volume, other) {
 		other = "Y:"
 	}
-	for _, tc := range []struct{ path, want string }{
-		{`\executors\prog`, volume + `\executors\prog`},
-		{volume + `prog`, filepath.Join(dir, "prog")},
-		{`sub\prog`, `sub\prog`},
-	} {
-		if got, err := resolveExecProgram(dir, []string{tc.path}); err != nil || got != tc.want {
-			t.Fatalf("resolveExecProgram(%q) = %q, %v; want %q", tc.path, got, err, tc.want)
+	for _, path := range []string{`\executors\prog.exe`, volume + `prog.exe`, other + `prog.exe`} {
+		if _, err := resolveExecProgram(dir, []string{path}); !errors.Is(err, errUnknownProgram) {
+			t.Fatalf("resolveExecProgram(%q): %v", path, err)
 		}
 	}
-	if _, err := resolveExecProgram(dir, []string{other + "prog"}); !errors.Is(err, errUnknownProgram) {
-		t.Fatalf("resolveExecProgram(%sprog): %v", other, err)
+	if got, err := resolveExecProgram(dir, []string{`sub\prog`}); err != nil || got != `sub\prog` {
+		t.Fatalf(`resolveExecProgram(sub\prog) = %q, %v`, got, err)
 	}
 	// Go rejects . and .. before it searches; joined to a PATH entry, they
 	// would otherwise find a program beside it with a PATHEXT extension.
