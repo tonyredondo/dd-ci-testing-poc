@@ -54,6 +54,11 @@ var errUnknownProgram = errors.New("looked up through a PATH entry or GODEBUG se
 // one that Go would run relative to dir returns errRelativeProgram, and a
 // lookup that ddto cannot reproduce returns errUnknownProgram.
 func lookPathFrom(dir, file string) (string, error) {
+	// Names that exec.LookPath rejects before it searches.
+	switch file {
+	case "", ".", "..":
+		return "", &exec.Error{Name: file, Err: exec.ErrNotFound}
+	}
 	windows := runtime.GOOS == "windows"
 	refuse, known := execErrDot()
 	// relativeMatch is the result for a match relative to dir that Go would

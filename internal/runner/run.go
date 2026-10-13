@@ -861,6 +861,11 @@ func resolveExecProgram(dir string, words []string) (string, error) {
 		return "", errNoCommand
 	}
 	if filepath.Base(words[0]) != words[0] {
+		// exec.Cmd looks a path relative to a drive's current directory up
+		// from go test's process: only go test reproduces that.
+		if filepath.VolumeName(words[0]) != "" && !filepath.IsAbs(words[0]) {
+			return "", &exec.Error{Name: words[0], Err: errUnknownProgram}
+		}
 		return words[0], nil
 	}
 	return lookPathFrom(dir, words[0])

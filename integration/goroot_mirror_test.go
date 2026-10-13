@@ -151,10 +151,10 @@ func sameExecutorView(t *testing.T, dir string, env, ciEnv []string, goCommand, 
 
 var execFailure = regexp.MustCompile(`(?m)^exec: "[^"]+": .*$`)
 
-var startFailure = regexp.MustCompile(`(?m)^(?:exec: |fork/exec ).*$`)
+var startFailure = regexp.MustCompile(`(?m)^fork/exec .*$`)
 
-// sameStartFailure checks that ddto reports an -exec program that cannot
-// start as go test does.
+// sameStartFailure checks that ddto's wrapper reports an -exec path that
+// cannot start as go test does.
 func sameStartFailure(t *testing.T, dir string, env, ciEnv []string, goCommand, driver string, args ...string) {
 	t.Helper()
 	nativeOut, nativeErr, code := command(t, dir, env, goCommand, args...)
@@ -163,7 +163,7 @@ func sameStartFailure(t *testing.T, dir string, env, ciEnv []string, goCommand, 
 		t.Fatalf("native %v: exit %d\n%s%s", args, code, nativeOut, nativeErr)
 	}
 	out, stderr, code := command(t, dir, ciEnv, driver, args...)
-	if code != 1 || startFailure.FindString(out+stderr) != want {
+	if code != 1 || startFailure.FindString(out+stderr) != want || strings.Contains(stderr, "running go test without CI Visibility") {
 		t.Fatalf("ddto %v: exit %d, want %q\n%s%s", args, code, want, out, stderr)
 	}
 }
@@ -421,7 +421,12 @@ func runMirroredToolchain(t *testing.T, dir string, env []string, goCommand, cac
 	args := []string{"test", "-C", filepath.Base(dir), "-count=1", "-exec=ddtoexec", "./..."}
 	sameExecFailure(t, filepath.Dir(dir), relative(env), relative(ciEnv), append([]string{goCommand}, args...), append([]string{driver}, args...))
 	// A -exec path that cannot start fails as natively.
-	sameStartFailure(t, dir, env, ciEnv, goCommand, driver, "test", "-count=1", "-exec="+filepath.Join(".", "missing"), "./...")
+	missing := "./missing"
+	if runtime.GOOS == "windows" {
+		// With an extension that PATHEXT lists, Windows also starts it as given.
+		missing = `.\missing.exe`
+	}
+	sameStartFailure(t, dir, env, ciEnv, goCommand, driver, "test", "-count=1", "-exec="+missing, "./...")
 	if runtime.GOOS != "windows" {
 		if err := os.WriteFile(filepath.Join(dir, "notexec"), nil, 0600); err != nil {
 			t.Fatal(err)

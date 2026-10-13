@@ -217,6 +217,8 @@ func TestResolveExecProgram(t *testing.T) {
 		{"absolute with a GODEBUG pattern", bin, "execerrdot=0#y", []string{"prog"}, program, nil},
 		{"path", bin, "", []string{filepath.Join("sub", "prog")}, filepath.Join("sub", "prog"), nil},
 		{"empty name", bin, "", []string{""}, "", errNoCommand},
+		{"dot", bin, "", []string{"."}, "", exec.ErrNotFound},
+		{"dot dot", bin, "", []string{".."}, "", exec.ErrNotFound},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("PATH", tc.path)
@@ -311,10 +313,30 @@ func TestExperimentSeparator(t *testing.T) {
 }
 
 // A PATH entry relative to another drive's current directory names a
-// directory that only Go's own process knows.
+// directory that only Go's own process knows, and so does a -exec path
+// relative to a drive's current directory.
 func TestLookPathFromOtherDrive(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		return
+	}
+	if _, err := resolveExecProgram(t.TempDir(), []string{"C:prog"}); !errors.Is(err, errUnknownProgram) {
+		t.Fatalf("resolveExecProgram(C:prog): %v", err)
+	}
+	// Go rejects . and .. before it searches; joined to a PATH entry, they
+	// would otherwise find a program beside it with a PATHEXT extension.
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "tools"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "tools.com"), nil, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", filepath.Join(root, "tools"))
+	t.Setenv("NoDefaultCurrentDirectoryInExePath", "")
+	for _, name := range []string{".", ".."} {
+		if _, err := lookPathFrom(t.TempDir(), name); !errors.Is(err, exec.ErrNotFound) {
+			t.Fatalf("lookPathFrom(%q): %v", name, err)
+		}
 	}
 	dir := t.TempDir()
 	other := "Z:"
