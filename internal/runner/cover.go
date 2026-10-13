@@ -115,7 +115,12 @@ func translateCoverInputs(overlay string, args []string) ([]string, error) {
 	return result, nil
 }
 
-func toolCommand(executable, overlay, mode string) (string, error) {
+// toolCommand returns go's -toolexec value: the wrapper executable, given
+// ddto's executable, or else ddto's tool-overlay command.
+func toolCommand(executable, wrapper, overlay, mode string) (string, error) {
+	if wrapper != "" {
+		return quoteToolWords([]string{wrapper, executable, mode, overlay})
+	}
 	return quoteToolWords([]string{executable, "tool-overlay", mode, overlay})
 }
 

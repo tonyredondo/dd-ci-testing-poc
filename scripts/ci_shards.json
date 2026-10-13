@@ -85,6 +85,7 @@
       "TestTestifyMovedCallSitesInFormattedDiagnostics",
       "TestTestifyVersionGuardWithWarmVendoredSources",
       "TestToolBypassHasNativeIdentityAndExit",
+      "TestToolWrapperLifecycle",
       "TestToolBypassProcessReplacement",
       "TestWorkspaceCommandPreservesLogicalWorkingDirectory"
     ],

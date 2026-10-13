@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"testing"
 )
@@ -12,6 +13,18 @@ import (
 // The directory is created on first use: helper processes that re-execute this
 // binary exit without returning from m.Run, so they must not create one.
 func TestMain(m *testing.M) {
+	// The tool wrapper's tests run this binary as ddto or as a tool: it prints
+	// its arguments, one per line, and exits with the requested status.
+	if os.Getenv(fakeToolEnv) == "1" {
+		if os.Getenv(fakeToolPIDEnv) == "1" {
+			fmt.Println("pid=" + strconv.Itoa(os.Getpid()))
+		}
+		for _, arg := range os.Args[1:] {
+			fmt.Println(arg)
+		}
+		code, _ := strconv.Atoi(os.Getenv(fakeToolExitEnv))
+		os.Exit(code)
+	}
 	var (
 		once     sync.Once
 		cache    string

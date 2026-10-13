@@ -70,6 +70,10 @@ type Plan struct {
 	workspaceLock *os.File
 	// gorootMirror runs go from a mirror of a toolchain in GOMODCACHE.
 	gorootMirror *gorootMirror
+	// environment is the go environment that preparation read.
+	environment *goEnvironment
+	// toolWrapperLock keeps the -toolexec wrapper executable from pruners.
+	toolWrapperLock *os.File
 	// execHelper is the cross-compilation program Go would run test binaries
 	// with, without -exec; execWrapper restores the caller's Go settings before
 	// a -exec program.
@@ -114,6 +118,9 @@ func (p Plan) Release() {
 		_ = p.workspaceLock.Close()
 	}
 	p.gorootMirror.release()
+	if p.toolWrapperLock != nil {
+		_ = p.toolWrapperLock.Close()
+	}
 }
 
 // GoCommand returns the go command for builds that use this plan, and the
@@ -231,6 +238,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		}
 	}()
 	opts.environment, e = readGoEnvironment(ctx, dir)
+	plan.environment = opts.environment
 	if e != nil {
 		return plan, e
 	}
@@ -755,7 +763,13 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 			fmt.Fprintln(stderr, e)
 			return 2
 		}
-		if tool, e = toolCommand(executable, plan.File, plan.toolMode()); e != nil {
+		wrapper := ""
+		if path, lock, e := ensureToolWrapper(ctx, plan.environment, dir, debug); e != nil {
+			debug.printf("tool wrapper state=unavailable error=%q", e.Error())
+		} else {
+			wrapper, plan.toolWrapperLock = path, lock
+		}
+		if tool, e = toolCommand(executable, wrapper, plan.File, plan.toolMode()); e != nil {
 			fmt.Fprintln(stderr, e)
 			return 2
 		}
