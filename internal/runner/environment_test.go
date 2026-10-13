@@ -312,15 +312,31 @@ func TestExperimentSeparator(t *testing.T) {
 	}
 }
 
-// A PATH entry relative to another drive's current directory names a
-// directory that only Go's own process knows, and so does a -exec path
-// relative to a drive's current directory.
-func TestLookPathFromOtherDrive(t *testing.T) {
+// Windows forms that depend on a process's drives: a -exec path rooted on the
+// current drive or relative to its directory resolves from go test's
+// directory, while another drive's directory, which only Go's own process
+// knows, leaves the run to go test.
+func TestWindowsProgramForms(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		return
 	}
-	if _, err := resolveExecProgram(t.TempDir(), []string{"C:prog"}); !errors.Is(err, errUnknownProgram) {
-		t.Fatalf("resolveExecProgram(C:prog): %v", err)
+	dir := t.TempDir()
+	volume := filepath.VolumeName(dir)
+	other := "Z:"
+	if strings.EqualFold(volume, other) {
+		other = "Y:"
+	}
+	for _, tc := range []struct{ path, want string }{
+		{`\executors\prog`, volume + `\executors\prog`},
+		{volume + `prog`, filepath.Join(dir, "prog")},
+		{`sub\prog`, `sub\prog`},
+	} {
+		if got, err := resolveExecProgram(dir, []string{tc.path}); err != nil || got != tc.want {
+			t.Fatalf("resolveExecProgram(%q) = %q, %v; want %q", tc.path, got, err, tc.want)
+		}
+	}
+	if _, err := resolveExecProgram(dir, []string{other + "prog"}); !errors.Is(err, errUnknownProgram) {
+		t.Fatalf("resolveExecProgram(%sprog): %v", other, err)
 	}
 	// Go rejects . and .. before it searches; joined to a PATH entry, they
 	// would otherwise find a program beside it with a PATHEXT extension.
@@ -337,11 +353,6 @@ func TestLookPathFromOtherDrive(t *testing.T) {
 		if _, err := lookPathFrom(t.TempDir(), name); !errors.Is(err, exec.ErrNotFound) {
 			t.Fatalf("lookPathFrom(%q): %v", name, err)
 		}
-	}
-	dir := t.TempDir()
-	other := "Z:"
-	if strings.EqualFold(filepath.VolumeName(dir), other) {
-		other = "Y:"
 	}
 	t.Setenv("PATH", other+"tools")
 	if _, err := lookPathFrom(dir, "prog"); !errors.Is(err, errUnknownProgram) {

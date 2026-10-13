@@ -852,23 +852,32 @@ var errNoCommand = errors.New("exec: no command")
 // resolveExecProgram returns the path of the -exec program in words, looked up
 // as go test does: on the caller's PATH from dir, go test's working directory.
 // test-exec would look it up after restoring the toolchain's bin first in
-// PATH, from the package directory. A path, which go test starts relative to
-// the package directory, stays as given. It fails
+// PATH, from the package directory. A relative path, which go test starts
+// from the package directory, stays as given. It fails
 // for a program that go test cannot run, or would run relative to dir: only go
 // test itself reproduces those.
 func resolveExecProgram(dir string, words []string) (string, error) {
 	if words[0] == "" {
 		return "", errNoCommand
 	}
-	if filepath.Base(words[0]) != words[0] {
-		// exec.Cmd looks a path relative to a drive's current directory up
-		// from go test's process: only go test reproduces that.
-		if filepath.VolumeName(words[0]) != "" && !filepath.IsAbs(words[0]) {
-			return "", &exec.Error{Name: words[0], Err: errUnknownProgram}
-		}
-		return words[0], nil
+	path := words[0]
+	if filepath.Base(path) == path {
+		return lookPathFrom(dir, path)
 	}
-	return lookPathFrom(dir, words[0])
+	// exec.Cmd resolves a Windows path rooted on the current drive, or
+	// relative to a drive's current directory, from go test's process, whose
+	// directory is dir: only another drive's directory is unknown here.
+	switch volume := filepath.VolumeName(path); {
+	case filepath.IsAbs(path):
+	case volume == "" && os.IsPathSeparator(path[0]):
+		path = filepath.VolumeName(dir) + path
+	case volume == "":
+	case strings.EqualFold(volume, filepath.VolumeName(dir)):
+		path = filepath.Join(dir, path[len(volume):])
+	default:
+		return "", &exec.Error{Name: path, Err: errUnknownProgram}
+	}
+	return path, nil
 }
 
 // prepareInterruptibly cancels package resolution when a signal arrives. The
