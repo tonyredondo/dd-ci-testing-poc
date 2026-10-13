@@ -30,7 +30,8 @@ func TestConstantsMatchTheirOwners(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first, _, _ := strings.Cut(string(mod), "\n"); first != "module "+toolwrap.MiniModule {
+	// A Windows checkout may end lines with CRLF.
+	if first, _, _ := strings.Cut(string(mod), "\n"); strings.TrimSuffix(first, "\r") != "module "+toolwrap.MiniModule {
 		t.Errorf("go.mod starts with %q, not module %s", first, toolwrap.MiniModule)
 	}
 }

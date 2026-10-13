@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"testing"
@@ -18,8 +19,10 @@ func TestMain(m *testing.M) {
 	// its arguments, one per line, and exits with the requested status.
 	if os.Getenv(fakeToolEnv) == "1" {
 		if os.Getenv(fakeToolOrphanEnv) == "1" {
-			// A child that keeps this process's output after it exits.
+			// A child that keeps this process's output after it exits. It
+			// runs elsewhere: Windows keeps a process's working directory.
 			child := exec.Command(os.Args[0])
+			child.Dir = filepath.Dir(os.Args[0])
 			child.Env = append(os.Environ(), fakeToolOrphanEnv+"=", fakeToolSleepEnv+"=20s")
 			child.Stdout, child.Stderr = os.Stdout, os.Stderr
 			if err := child.Start(); err != nil {
