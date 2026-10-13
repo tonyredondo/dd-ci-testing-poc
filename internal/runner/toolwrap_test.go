@@ -30,6 +30,8 @@ const (
 	// exit; fakeToolSleepEnv makes it sleep first.
 	fakeToolOrphanEnv = "DDTO_TOOLWRAP_FAKE_TOOL_ORPHAN"
 	fakeToolSleepEnv  = "DDTO_TOOLWRAP_FAKE_TOOL_SLEEP"
+	// fakeToolOrphansEnv names the file that lists those children.
+	fakeToolOrphansEnv = "DDTO_TOOLWRAP_FAKE_TOOL_ORPHANS"
 )
 
 func testGoEnvironment(t *testing.T) *goEnvironment {
@@ -428,6 +430,21 @@ func TestToolWrapperDoesNotWaitForLeftoverProcesses(t *testing.T) {
 	}
 	t.Setenv(fakeToolEnv, "1")
 	t.Setenv(fakeToolOrphanEnv, "1")
+	orphans := filepath.Join(t.TempDir(), "orphans")
+	t.Setenv(fakeToolOrphansEnv, orphans)
+	t.Cleanup(func() {
+		data, _ := os.ReadFile(orphans)
+		for _, field := range strings.Fields(string(data)) {
+			pid, err := strconv.Atoi(field)
+			if err != nil {
+				continue
+			}
+			if process, err := os.FindProcess(pid); err == nil {
+				_ = process.Kill()
+				_, _ = process.Wait()
+			}
+		}
+	})
 	started := time.Now()
 	if validToolWrapper(t.Context(), self, toolWrapperKey()) {
 		t.Fatal("a leftover's output passed the check")

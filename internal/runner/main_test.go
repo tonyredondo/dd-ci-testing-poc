@@ -28,6 +28,12 @@ func TestMain(m *testing.M) {
 			if err := child.Start(); err != nil {
 				os.Exit(3)
 			}
+			// The test ends the child: Windows cannot remove a running
+			// test binary.
+			if file, err := os.OpenFile(os.Getenv(fakeToolOrphansEnv), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
+				fmt.Fprintln(file, child.Process.Pid)
+				file.Close()
+			}
 			os.Exit(0)
 		}
 		if sleep, err := time.ParseDuration(os.Getenv(fakeToolSleepEnv)); err == nil {
