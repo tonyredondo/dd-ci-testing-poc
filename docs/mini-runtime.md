@@ -382,7 +382,7 @@ Text profiles stay in some cases:
 - the test binary links `plugin`;
 - the coverage selection could instrument a standard or Mini package, such
   as `-coverpkg=testing`;
-- the hook finds blocks whose text-profile result is ambiguous.
+- Mini finds blocks whose text-profile result is ambiguous.
 
 The [adaptation record](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md#per-test-coverage-counters-in-memory)
 lists every case.

@@ -200,26 +200,40 @@ When ddto's `testing` overlay registers its hook (`instrument.CoverageHook`),
 [`civisibility/integrations/gotesting/coverage/memory_coverage.go`](civisibility/integrations/gotesting/coverage/memory_coverage.go)
 reads the counters in memory instead. The hook compiles against the
 toolchain's own `internal/coverage` packages and registers through the pushed
-linkname `registerTestingCoverage`.
+linkname `registerTestingCoverage`. It only exposes what those packages hold:
+- the decoded meta-data of every registered package: the counter segment
+  offsets, each package's counter mode, granularity and path, and each
+  function's name, file, literal flag and units;
+- a copy of every counter segment, made with atomic loads, and the number of
+  registered packages;
+- the toolchain's `cformat` rendering of such a copy as a text profile.
 
-- **Layout.** Once per process, before the first capture, the hook renders the
-  layout of the text profile that the teardown would write: the same units,
-  merges, package order and block order. Each capture then copies the counter
-  segments and yields one count per layout entry. A test's coverage is every
-  entry whose count grew, mapped to files and line bitmaps by the same
+- **Layout.** Once per process, before the first capture,
+  `buildCoverageLayout` lays out the text profile that the teardown would
+  write, as its `processPod` and `cformat` do:
+  - units with a parent are omitted;
+  - units with the same file, function, literal flag and position merge;
+  - packages are in import path order, and each package's blocks are sorted
+    by file and position.
+
+  Each capture then maps the counter segments to one count per layout entry,
+  adding merged units without overflowing as `cformat` does. A test's coverage
+  is every entry whose count grew, mapped to files and line bitmaps by the same
   `coveredLines` code as the text path.
 - **Validation before use.** The process keeps text profiles unless the
-  hook's text profile, with every count at its maximum, reads back through
+  toolchain's rendering with every count at its maximum reads back through
   `parseCoverProfileText` (the text path's own parser, split out of
   `readCoverProfile`) as exactly the layout's blocks in order.
 - **When text profiles stay.** The process also keeps them on 32-bit targets,
-  when the counter mode is not count or atomic, and when the hook refuses:
+  when the counter mode is not count or atomic, and when the meta-data has:
   - a counter mode or granularity clash;
   - a file name with a line break;
   - two blocks sharing a position in a file, where the text path's result
-    depends on map order.
+    depends on map order;
+  - a malformed stream.
 
-  A capture that sees new meta-data fails its collector and turns the
+  A capture whose package count or counter segments do not match the layout,
+  as when meta-data is registered later, fails its collector and turns the
   in-memory path off for later baselines.
 - **Collectors.** `testCoverage`'s capture and load methods choose the backend
   when the baseline is taken, so test, retry and process collectors share it.
@@ -236,9 +250,11 @@ linkname `registerTestingCoverage`.
   rendered with the toolchain's `cformat`, and logs whether both agree.
 
 Checks:
-- **Unit tests:** `TestMemoryCoverageMatchesTextProfiles`,
-  `TestMemoryCoverageRefusals`, `TestMemoryCoverageBudget`,
-  `TestMemoryCoverageCaptureFailure` and `TestMemoryCoverageProcessSegments`.
+- **Unit tests:** `TestBuildCoverageLayout`,
+  `TestBuildCoverageLayoutRefusals`, `TestCoverageLayoutCounts`,
+  `TestMemoryCoverageMatchesTextProfiles`, `TestMemoryCoverageRefusals`,
+  `TestMemoryCoverageBudget`, `TestMemoryCoverageCaptureFailure` and
+  `TestMemoryCoverageProcessSegments`.
 - **Integration:** `TestMiniPerTestCoverageInMemory` compares per-test coverage
   with text profiles in count, atomic and race builds, and a build that keeps
   text profiles. The coverage parity cases compare it with the SDK reference.

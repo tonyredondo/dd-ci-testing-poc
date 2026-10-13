@@ -19,9 +19,10 @@ func TestCoverageHookMatchesMiniRegistration(t *testing.T) {
 // keeps text profiles instead of failing to link.
 func TestCoverageHookRuntimeErrorRejectsOtherRuntimes(t *testing.T) {
 	for name, source := range map[string]string{
-		"missing":   "package coverage\nfunc other() {}\n",
-		"signature": "package coverage\nfunc registerTestingCoverage(func() ([]string, []uint32, []byte, string), func([]uint32) ([]uint32, bool), func([]uint32, []uint32) ([]uint32, bool)) {}\n",
-		"method":    "package coverage\ntype r struct{}\nfunc (r) registerTestingCoverage(func() ([]string, []uint32, []byte, string), func([]uint32) ([]uint32, bool), func([]uint32, []uint32) ([]uint32, bool), func([]uint32) []byte) {}\n",
+		"missing":    "package coverage\nfunc other() {}\n",
+		"parameters": "package coverage\nfunc registerTestingCoverage(func() ([]string, []uint32, string), func([]uint32) ([]uint32, int)) {}\n",
+		"result":     "package coverage\nfunc registerTestingCoverage(func() ([]string, []uint32, string), func([]uint32) ([]uint32, bool), func([]uint32) []byte) {}\n",
+		"method":     "package coverage\ntype r struct{}\nfunc (r) registerTestingCoverage(func() ([]string, []uint32, string), func([]uint32) ([]uint32, int), func([]uint32) []byte) {}\n",
 	} {
 		dir := t.TempDir()
 		if err := os.WriteFile(filepath.Join(dir, "coverage.go"), []byte(source), 0600); err != nil {
@@ -30,6 +31,14 @@ func TestCoverageHookRuntimeErrorRejectsOtherRuntimes(t *testing.T) {
 		if err := CoverageHookRuntimeError(dir); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+	dir := t.TempDir()
+	source := "package coverage\nfunc registerTestingCoverage(meta func() ([]string, []uint32, string), counters func([]uint32) ([]uint32, int), profile func([]uint32) []byte) {}\n"
+	if err := os.WriteFile(filepath.Join(dir, "coverage.go"), []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := CoverageHookRuntimeError(dir); err != nil {
+		t.Errorf("named parameters: %v", err)
 	}
 }
 

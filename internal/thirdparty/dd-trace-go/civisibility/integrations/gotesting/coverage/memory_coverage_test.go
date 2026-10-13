@@ -6,63 +6,139 @@
 package coverage
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
 )
 
-// fakeTestingCoverage registers a hook over three blocks in two files whose
-// counts the test sets. counters copies the counts; counts returns the copy.
-type fakeTestingCoverage struct {
-	files   []string
-	entries []uint32
-	counts  []uint32
-	text    string
-	refuse  string
-	failed  bool
+type fakeUnit [6]uint32 // StLine, StCol, EnLine, EnCol, NxStmts, Parent
+
+type fakeFunc struct {
+	name, file string
+	lit        bool
+	units      []fakeUnit
 }
 
-func newFakeTestingCoverage() *fakeTestingCoverage {
-	f := &fakeTestingCoverage{
-		files: []string{"example.com/app/a.go", "example.com/app/b.go"},
-		entries: []uint32{
-			0, 3, 2, 5, 3, 2,
-			0, 7, 1, 9, 2, 1,
-			1, 4, 1, 6, 10, 3,
-		},
-		counts: []uint32{0, 0, 0},
-	}
-	f.text = f.profile(nil)
-	return f
+type fakePackage struct {
+	mode, granularity, path string
+	funcs                   []fakeFunc
 }
 
-// profile renders the text profile for counts, or with every count at its
-// maximum for nil.
-func (f *fakeTestingCoverage) profile(counts []uint32) string {
-	var b strings.Builder
-	b.WriteString("mode: atomic\n")
-	for i := 0; i < len(f.entries)/6; i++ {
-		e := f.entries[i*6:]
-		count := ^uint32(0)
-		if counts != nil {
-			count = counts[i]
+// fakeMeta encodes packages as the hook's meta does, with the runtime's
+// counter segment offsets.
+func fakeMeta(pkgs []fakePackage) ([]string, []uint32) {
+	var strs []string
+	index := map[string]uint32{}
+	str := func(s string) uint32 {
+		i, ok := index[s]
+		if !ok {
+			i = uint32(len(strs))
+			index[s] = i
+			strs = append(strs, s)
 		}
-		fmt.Fprintf(&b, "%s:%d.%d,%d.%d %d %d\n", f.files[e[0]], e[1], e[2], e[3], e[4], e[5], count)
+		return i
 	}
-	return b.String()
+	records := []uint32{0, 1, 2, 3, uint32(len(pkgs))}
+	for _, p := range pkgs {
+		records = append(records, str(p.mode), str(p.granularity), str(p.path), uint32(len(p.funcs)))
+		for _, f := range p.funcs {
+			lit := uint32(0)
+			if f.lit {
+				lit = 1
+			}
+			records = append(records, str(f.name), str(f.file), lit, uint32(len(f.units)))
+			for _, u := range f.units {
+				records = append(records, u[:]...)
+			}
+		}
+	}
+	return strs, records
+}
+
+// fakeSegments copies counters as the hook's counters does: one segment per
+// package, holding each function that has run as its header and counters,
+// and zeros for a function that has not (nil).
+func fakeSegments(counters [][][]uint32) []uint32 {
+	var raw []uint32
+	for slot, funcs := range counters {
+		var segment []uint32
+		for fn, ctrs := range funcs {
+			if ctrs == nil {
+				segment = append(segment, 0, 0, 0, 0)
+				continue
+			}
+			segment = append(segment, uint32(len(ctrs)), uint32(slot+1), uint32(fn))
+			segment = append(segment, ctrs...)
+		}
+		raw = append(append(raw, uint32(len(segment))), segment...)
+	}
+	return raw
+}
+
+// memoryPackages registers b before a, which sorts first; a's slots repeat
+// unit 3.2,5.3 of First, which merges. Units with a parent and a
+// registration-only package have no blocks.
+var memoryPackages = []fakePackage{
+	{"atomic", "perblock", "example.com/b", []fakeFunc{
+		{"B", "example.com/b/b.go", false, []fakeUnit{{4, 1, 6, 10, 3, 0}}},
+	}},
+	{"atomic", "perblock", "example.com/a", []fakeFunc{
+		{"Second", "example.com/a/a.go", false, []fakeUnit{{7, 1, 9, 2, 1, 0}, {8, 1, 8, 4, 1, 1}}},
+		{"First", "example.com/a/a.go", false, []fakeUnit{{3, 2, 5, 3, 2, 0}}},
+	}},
+	{"regonly", "perblock", "example.com/c", nil},
+	{"atomic", "perblock", "example.com/a", []fakeFunc{
+		{"First", "example.com/a/a.go", false, []fakeUnit{{3, 2, 5, 3, 2, 0}}},
+	}},
+}
+
+// memoryText is the text profile that cformat renders for memoryPackages
+// with every count at its maximum.
+const memoryText = "mode: atomic\n" +
+	"example.com/a/a.go:3.2,5.3 2 4294967295\n" +
+	"example.com/a/a.go:7.1,9.2 1 4294967295\n" +
+	"example.com/b/b.go:4.1,6.10 3 4294967295\n"
+
+// fakeTestingCoverage registers a hook over packages, with counters that the
+// test sets per package slot and function.
+type fakeTestingCoverage struct {
+	pkgs     []fakePackage
+	text     string
+	refuse   string
+	counters [][][]uint32
+	slots    int
 }
 
 func (f *fakeTestingCoverage) register() {
 	registerTestingCoverage(
-		func() ([]string, []uint32, []byte, string) { return f.files, f.entries, []byte(f.text), f.refuse },
-		func(dst []uint32) ([]uint32, bool) { return append(dst[:0], f.counts...), !f.failed },
-		func(raw, dst []uint32) ([]uint32, bool) { return append(dst[:0], raw...), true },
-		func(raw []uint32) []byte { return []byte(f.profile(raw)) },
+		func() ([]string, []uint32, string) {
+			strs, records := fakeMeta(f.pkgs)
+			return strs, records, f.refuse
+		},
+		func(dst []uint32) ([]uint32, int) { return append(dst[:0], fakeSegments(f.counters)...), f.slots },
+		func([]uint32) []byte { return []byte(f.text) },
 	)
+}
+
+// renameFile renames a file in the packages and the text profile.
+func (f *fakeTestingCoverage) renameFile(from, to string) {
+	pkgs := slices.Clone(f.pkgs)
+	for i := range pkgs {
+		pkgs[i].funcs = slices.Clone(pkgs[i].funcs)
+		for j := range pkgs[i].funcs {
+			if pkgs[i].funcs[j].file == from {
+				pkgs[i].funcs[j].file = to
+			}
+		}
+	}
+	f.pkgs = pkgs
+	f.text = strings.ReplaceAll(f.text, from+":", to+":")
 }
 
 func setUpMemoryCoverage(t *testing.T) *fakeTestingCoverage {
@@ -70,9 +146,122 @@ func setUpMemoryCoverage(t *testing.T) *fakeTestingCoverage {
 	ResetForTesting()
 	t.Cleanup(ResetForTesting)
 	mode = "atomic"
-	f := newFakeTestingCoverage()
+	f := &fakeTestingCoverage{
+		pkgs:     memoryPackages,
+		text:     memoryText,
+		counters: [][][]uint32{{nil}, {nil, nil}, {}, {nil}},
+		slots:    len(memoryPackages),
+	}
 	f.register()
 	return f
+}
+
+// The layout holds the text profile's blocks in its order, and maps each
+// unit to its block.
+func TestBuildCoverageLayout(t *testing.T) {
+	setUpMemoryCoverage(t)
+	strs, records := fakeMeta(memoryPackages)
+	layout, refusal := buildCoverageLayout(strs, records, "atomic")
+	require.Empty(t, refusal)
+	require.Equal(t, [4]int{0, 1, 2, 3}, layout.offsets)
+	require.Equal(t, 4, layout.slots)
+	require.Equal(t, []string{"example.com/a/a.go", "example.com/b/b.go"}, layout.files)
+	require.Equal(t, []uint32{0, 3, 2, 5, 3, 2, 0, 7, 1, 9, 2, 1, 1, 4, 1, 6, 10, 3}, layout.entries)
+	// b.B; a.Second's units, the second with a parent; a.First twice.
+	require.Equal(t, []int32{2, 1, -1, 0, 0}, layout.units)
+	require.Equal(t, [][]layoutFunc{{{0, 1}}, {{1, 2}, {3, 1}}, {}, {{4, 1}}}, layout.funcs)
+	require.True(t, layout.matchesTextProfile([]byte(memoryText)))
+
+	// Units of other functions or literals at the same position are distinct
+	// blocks, which share a position.
+	for name, other := range map[string]fakeFunc{
+		"function": {"Other", "example.com/a/a.go", false, []fakeUnit{{3, 2, 5, 3, 2, 0}}},
+		"literal":  {"First", "example.com/a/a.go", true, []fakeUnit{{3, 2, 5, 3, 2, 0}}},
+	} {
+		strs, records := fakeMeta(append(slices.Clone(memoryPackages), fakePackage{"atomic", "perblock", "example.com/a", []fakeFunc{other}}))
+		layout, refusal := buildCoverageLayout(strs, records, "atomic")
+		require.Nil(t, layout, name)
+		require.Equal(t, "blocks share a position", refusal, name)
+	}
+}
+
+// Meta-data that the text path rejects, reads otherwise or resolves by map
+// order has no layout, and neither has a malformed stream.
+func TestBuildCoverageLayoutRefusals(t *testing.T) {
+	unit := []fakeUnit{{1, 1, 2, 2, 1, 0}}
+	for name, tc := range map[string]struct {
+		pkgs    []fakePackage
+		refusal string
+	}{
+		"mode clash":  {[]fakePackage{{"atomic", "perblock", "a", nil}, {"count", "perblock", "b", nil}}, "counter mode clash"},
+		"granularity": {[]fakePackage{{"atomic", "perfunc", "a", nil}}, "counter granularity"},
+		"other mode":  {[]fakePackage{{"testmain", "perblock", "t", nil}, {"count", "perblock", "a", nil}}, "counter mode count"},
+		"no mode":     {[]fakePackage{{"testmain", "perblock", "a", nil}}, "counter mode "},
+		"line feed":   {[]fakePackage{{"atomic", "perblock", "a", []fakeFunc{{"F", "a/x\ny.go", false, unit}}}}, "file name with a line break"},
+		"return":      {[]fakePackage{{"atomic", "perblock", "a", []fakeFunc{{"F", "a/x\ry.go", false, unit}}}}, "file name with a line break"},
+		"statements": {[]fakePackage{{"atomic", "perblock", "a", []fakeFunc{
+			{"F", "a/a.go", false, unit},
+			{"F", "a/a.go", false, []fakeUnit{{1, 1, 2, 2, 2, 0}}},
+		}}}, "blocks share a position"},
+		"packages": {[]fakePackage{
+			{"atomic", "perblock", "a", []fakeFunc{{"F", "a/a.go", false, unit}}},
+			{"atomic", "perblock", "b", []fakeFunc{{"F", "a/a.go", false, unit}}},
+		}, "blocks share a position"},
+	} {
+		strs, records := fakeMeta(tc.pkgs)
+		layout, refusal := buildCoverageLayout(strs, records, "atomic")
+		require.Nil(t, layout, name)
+		require.Equal(t, tc.refusal, refusal, name)
+	}
+
+	malformed := errCoverageMetaData.Error()
+	strs, records := fakeMeta(memoryPackages)
+	for cut := range records {
+		layout, refusal := buildCoverageLayout(strs, records[:cut], "atomic")
+		require.Nil(t, layout)
+		require.Equal(t, malformed, refusal, "records cut at %d", cut)
+	}
+	for name, records := range map[string][]uint32{
+		"trailing records": append(slices.Clone(records), 0),
+		"slots":            {0, 1, 2, 3, 1 << 20},
+		"functions":        {0, 1, 2, 3, 1, 0, 1, 2, 1 << 20},
+	} {
+		var start, end runtime.MemStats
+		runtime.ReadMemStats(&start)
+		_, refusal := buildCoverageLayout(strs, records, "atomic")
+		runtime.ReadMemStats(&end)
+		require.Equal(t, malformed, refusal, name)
+		require.Greater(t, uint64(1<<20), end.TotalAlloc-start.TotalAlloc, "%s: allocated for counts beyond the stream", name)
+	}
+	_, refusal := buildCoverageLayout(strs[:len(strs)-1], records, "atomic")
+	require.Equal(t, malformed, refusal, "missing string")
+}
+
+// Counts sum merged units without overflowing and skip units without a
+// block; copies that do not match the layout fail.
+func TestCoverageLayoutCounts(t *testing.T) {
+	strs, records := fakeMeta(memoryPackages)
+	layout, refusal := buildCoverageLayout(strs, records, "atomic")
+	require.Empty(t, refusal)
+	counts, ok := layout.counts(fakeSegments([][][]uint32{{{5}}, {{7, 9}, {2}}, {}, {{3}}}), nil)
+	require.True(t, ok)
+	require.Equal(t, []uint32{5, 7, 5}, counts)
+	counts, ok = layout.counts(fakeSegments([][][]uint32{{nil}, {nil, {^uint32(0) - 1}}, {}, {{4}}}), counts)
+	require.True(t, ok)
+	require.Equal(t, []uint32{^uint32(0), 0, 0}, counts, "saturated, and the rest cleared")
+	for name, raw := range map[string][]uint32{
+		"truncated segment":  {5, 1, 1, 0},
+		"truncated header":   {2, 0, 1},
+		"standard package":   {4, 1, 0, 0, 5},
+		"hard-coded package": {4, 1, ^uint32(0), 0, 5},
+		"unknown package":    {4, 1, 5, 0, 5},
+		"unknown function":   {4, 1, 1, 1, 5},
+		"too few counters":   {4, 1, 2, 0, 5},
+		"counters overflow":  {4, 2, 1, 0, 5},
+	} {
+		_, ok := layout.counts(raw, nil)
+		require.False(t, ok, name)
+	}
 }
 
 // A collector reads the counters in memory and finds the files and lines
@@ -80,49 +269,50 @@ func setUpMemoryCoverage(t *testing.T) *fakeTestingCoverage {
 // releases its baseline.
 func TestMemoryCoverageMatchesTextProfiles(t *testing.T) {
 	f := setUpMemoryCoverage(t)
-	f.counts = []uint32{2, 0, 5}
-	before := append([]uint32(nil), f.counts...)
-	collector := &testCoverage{testFile: "example.com/app/a_test.go"}
+	f.counters = [][][]uint32{{{2}}, {nil, nil}, {}, {{1}}}
+	collector := &testCoverage{testFile: "example.com/a/a_test.go"}
 	require.NoError(t, collector.collectCoverageBeforeTestExecution())
 	require.NotNil(t, collector.memory, "in-memory collector")
 	require.Equal(t, int64(12), memoryCoverage.held.Load())
-	f.counts = []uint32{3, 1, 5}
+	f.counters = [][][]uint32{{{2}}, {{1, 0}, nil}, {}, {{2}}}
 	require.NoError(t, collector.collectCoverageAfterTestExecution())
 	require.Zero(t, memoryCoverage.held.Load(), "baseline released")
 	require.True(t, collector.loadCoverageData())
 
-	beforeProfile, err := parseCoverProfileText([]byte(f.profile(before)))
+	before, err := parseCoverProfileText([]byte("mode: atomic\nexample.com/a/a.go:3.2,5.3 2 1\nexample.com/a/a.go:7.1,9.2 1 0\nexample.com/b/b.go:4.1,6.10 3 2\n"))
 	require.NoError(t, err)
-	afterProfile, err := parseCoverProfileText([]byte(f.profile(f.counts)))
+	after, err := parseCoverProfileText([]byte("mode: atomic\nexample.com/a/a.go:3.2,5.3 2 2\nexample.com/a/a.go:7.1,9.2 1 1\nexample.com/b/b.go:4.1,6.10 3 2\n"))
 	require.NoError(t, err)
-	require.Equal(t, coveredFilesBetween(collector.testFile, beforeProfile, afterProfile), collector.filesCovered)
+	require.Equal(t, coveredFilesBetween(collector.testFile, before, after), collector.filesCovered)
 	require.Len(t, collector.filesCovered, 2, "the test file and a.go")
 }
 
-// The process keeps text profiles when the hook refuses, when its layout does
-// not read back from its text profile as the same blocks, when settings turn
-// it off, and for a counter mode without per-test coverage.
+// The process keeps text profiles without the hook, for a counter mode
+// without per-test coverage, when settings turn it off, when the hook or the
+// layout refuses, and when the text profile does not read as the layout.
 func TestMemoryCoverageRefusals(t *testing.T) {
 	for name, change := range map[string]func(t *testing.T, f *fakeTestingCoverage){
-		"hook refusal":   func(t *testing.T, f *fakeTestingCoverage) { f.refuse = "blocks share a position" },
-		"reordered text": func(t *testing.T, f *fakeTestingCoverage) { f.entries[1], f.entries[7] = f.entries[7], f.entries[1] },
+		"no hook":        func(t *testing.T, f *fakeTestingCoverage) { resetMemoryCoverageForTesting() },
+		"set mode":       func(t *testing.T, f *fakeTestingCoverage) { mode = "set" },
+		"settings":       func(t *testing.T, f *fakeTestingCoverage) { t.Setenv(coverageInMemoryEnv, "false") },
+		"hook refusal":   func(t *testing.T, f *fakeTestingCoverage) { f.refuse = "meta-data: malformed" },
+		"layout refusal": func(t *testing.T, f *fakeTestingCoverage) { f.renameFile("example.com/b/b.go", "example.com/b/b\n.go") },
+		"reordered text": func(t *testing.T, f *fakeTestingCoverage) { f.text = strings.Replace(f.text, "3.2,5.3", "7.1,9.2", 1) },
 		"missing block": func(t *testing.T, f *fakeTestingCoverage) {
-			f.text = strings.Join(strings.SplitN(f.text, "\n", 4)[:3], "\n") + "\n"
+			f.text = strings.TrimSuffix(f.text, "4.1,6.10 3 4294967295\n")
 		},
-		"line break": func(t *testing.T, f *fakeTestingCoverage) {
-			f.files[1] = "example.com/app/b\nc.go"
-			f.text = f.profile(nil)
+		"file": func(t *testing.T, f *fakeTestingCoverage) { f.text = strings.Replace(f.text, "b/b.go", "b/c.go", 1) },
+		"statements": func(t *testing.T, f *fakeTestingCoverage) {
+			f.text = strings.Replace(f.text, " 3 4294967295", " 4 4294967295", 1)
 		},
-		"statements": func(t *testing.T, f *fakeTestingCoverage) { f.entries[5] = 9 },
+		"count": func(t *testing.T, f *fakeTestingCoverage) {
+			f.text = strings.Replace(f.text, " 3 4294967295", " 3 1", 1)
+		},
 		"wrong mode": func(t *testing.T, f *fakeTestingCoverage) {
 			f.text = strings.Replace(f.text, "mode: atomic", "mode: count", 1)
 		},
-		"settings": func(t *testing.T, f *fakeTestingCoverage) { t.Setenv(coverageInMemoryEnv, "false") },
-		"set mode": func(t *testing.T, f *fakeTestingCoverage) { mode = "set" },
-		"no hook":  func(t *testing.T, f *fakeTestingCoverage) { resetMemoryCoverageForTesting() },
 		"oversized line": func(t *testing.T, f *fakeTestingCoverage) {
-			f.files[0] = strings.Repeat("a", 70000) + ".go"
-			f.text = f.profile(nil)
+			f.renameFile("example.com/b/b.go", "example.com/b/"+strings.Repeat("b", 70000)+".go")
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -131,8 +321,9 @@ func TestMemoryCoverageRefusals(t *testing.T) {
 			require.False(t, memoryCoverageReady())
 		})
 	}
-	setUpMemoryCoverage(t)
-	require.True(t, memoryCoverageReady(), "the unchanged hook")
+	f := setUpMemoryCoverage(t)
+	f.renameFile("example.com/b/b.go", "example.com/b/"+strings.Repeat("b", 1000)+".go")
+	require.True(t, memoryCoverageReady(), "a renamed file")
 }
 
 // Over the budget for baselines, a collector uses text profiles, and its
@@ -143,56 +334,72 @@ func TestMemoryCoverageBudget(t *testing.T) {
 	written := 0
 	tearDown = func(profile, _ string) (string, error) {
 		written++
-		return "", os.WriteFile(profile, []byte("mode: atomic\nexample.com/app/a.go:3.2,5.3 2 1\n"), 0o600)
+		return "", os.WriteFile(profile, []byte(memoryText), 0o600)
 	}
-	memoryCoverage.once.Do(initMemoryCoverage)
-	memoryCoverage.held.Store(memoryCoverageBudget - 4)
-	collector := &testCoverage{testFile: "example.com/app/a_test.go"}
+	require.True(t, memoryCoverageReady())
+	memoryCoverage.held.Store(memoryCoverageBudget - 11)
+	collector := &testCoverage{testFile: "example.com/a/a_test.go"}
 	require.NoError(t, collector.collectCoverageBeforeTestExecution())
 	require.Nil(t, collector.memory)
-	require.Equal(t, int64(memoryCoverageBudget-4), memoryCoverage.held.Load())
+	require.Equal(t, int64(memoryCoverageBudget-11), memoryCoverage.held.Load())
 	require.NoError(t, collector.collectCoverageAfterTestExecution())
 	require.Equal(t, 2, written)
 	require.FileExists(t, filepath.Join(temporaryDir, filepath.Base(collector.postCoverageFilename)))
+
+	memoryCoverage.held.Store(memoryCoverageBudget - 12)
+	collector = &testCoverage{testFile: "example.com/a/a_test.go"}
+	require.NoError(t, collector.collectCoverageBeforeTestExecution())
+	require.NotNil(t, collector.memory, "a baseline that fits exactly")
 }
 
 // A capture that does not match the layout fails the collector, releases its
 // baseline and keeps later collectors on text profiles.
 func TestMemoryCoverageCaptureFailure(t *testing.T) {
-	f := setUpMemoryCoverage(t)
-	collector := &testCoverage{testFile: "example.com/app/a_test.go"}
-	require.NoError(t, collector.collectCoverageBeforeTestExecution())
-	f.failed = true
-	require.Error(t, collector.collectCoverageAfterTestExecution())
-	require.Zero(t, memoryCoverage.held.Load())
-	require.False(t, memoryCoverageReady())
+	for name, change := range map[string]func(f *fakeTestingCoverage){
+		"registered package": func(f *fakeTestingCoverage) { f.slots++ },
+		"unknown function":   func(f *fakeTestingCoverage) { f.counters = [][][]uint32{{nil, {1}}} },
+	} {
+		f := setUpMemoryCoverage(t)
+		collector := &testCoverage{testFile: "example.com/a/a_test.go"}
+		require.NoError(t, collector.collectCoverageBeforeTestExecution(), name)
+		require.Equal(t, int64(12), memoryCoverage.held.Load(), name)
+		change(f)
+		require.Error(t, collector.collectCoverageAfterTestExecution(), name)
+		require.Zero(t, memoryCoverage.held.Load(), name)
+		require.False(t, memoryCoverageReady(), name)
 
-	f = setUpMemoryCoverage(t)
-	f.failed = true
-	collector = &testCoverage{testFile: "example.com/app/a_test.go"}
-	require.Error(t, collector.collectCoverageBeforeTestExecution())
-	require.NotNil(t, collector.memory)
-	require.Zero(t, memoryCoverage.held.Load())
-	require.Error(t, collector.collectCoverageAfterTestExecution())
+		f = setUpMemoryCoverage(t)
+		change(f)
+		collector = &testCoverage{testFile: "example.com/a/a_test.go"}
+		require.Error(t, collector.collectCoverageBeforeTestExecution(), name)
+		require.NotNil(t, collector.memory, name)
+		require.Zero(t, memoryCoverage.held.Load(), name)
+		require.Error(t, collector.collectCoverageAfterTestExecution(), name)
+	}
 }
 
-// Process collectors pause and resume through the same captures, and each
-// segment releases its baseline.
+// Process collectors pause and resume through the same captures, each
+// segment releases its baseline, and coverage while paused is excluded.
 func TestMemoryCoverageProcessSegments(t *testing.T) {
 	f := setUpMemoryCoverage(t)
-	collector := BeginProcessTestCoverage("example.com/app/a_test.go")
+	collector := BeginProcessTestCoverage("example.com/a/a_test.go")
 	require.NotNil(t, collector)
-	f.counts = []uint32{1, 0, 0}
+	f.counters = [][][]uint32{{nil}, {nil, {1}}, {}, {nil}}
 	collector.Pause()
 	require.Zero(t, memoryCoverage.held.Load())
-	f.counts = []uint32{5, 0, 0}
+	f.counters = [][][]uint32{{nil}, {{1, 0}, {1}}, {}, {nil}}
 	collector.Resume()
-	f.counts = []uint32{5, 0, 2}
+	require.Equal(t, int64(12), memoryCoverage.held.Load())
+	f.counters = [][][]uint32{{{3}}, {{1, 0}, {1}}, {}, {nil}}
 	files := collector.Finish()
 	require.Zero(t, memoryCoverage.held.Load())
-	names := []string{}
-	for _, file := range files {
-		names = append(names, file.Name)
+
+	var want coveredLines
+	for _, block := range []coverProfileBlock{
+		{fileName: "example.com/a/a.go", coverageBlock: coverageBlock{startLine: 3, startCol: 2, endLine: 5, endCol: 3, numStmt: 2}},
+		{fileName: "example.com/b/b.go", coverageBlock: coverageBlock{startLine: 4, startCol: 1, endLine: 6, endCol: 10, numStmt: 3}},
+	} {
+		want.add(&block)
 	}
-	require.Len(t, names, 3, "the test file, a.go from the first segment and b.go from the second: %v", names)
+	require.Equal(t, mergeProcessTestCoverageFiles(nil, want.files(utils.GetRelativePathFromCITagsSourceRoot("example.com/a/a_test.go"))), files)
 }
