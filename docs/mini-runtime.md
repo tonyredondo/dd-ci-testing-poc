@@ -373,9 +373,11 @@ records these deliberate differences and its normalization rules.
 Per-test coverage, in count or atomic mode, reads the coverage counters in
 memory through a hook that `ddto` adds to `testing`. Each test's covered lines
 are the same as with the two text profiles per test that the SDK writes and
-reads back. Without those, a Gin package with `-coverpkg=./...
--covermode=atomic` runs in 0.42 s instead of 3.68 s, and test processes print
-native go test's `coverage:` lines instead of one per capture.
+reads back. Without those, Gin's packages with `-coverpkg=./...
+-covermode=atomic` run in 0.55 s instead of 6.3 s at 4 CPUs, and test
+processes print native go test's `coverage:` lines instead of one per capture.
+The [optimization plan](optimization-plan.md#phase-2-per-test-coverage-in-memory-item-8)
+has the measurements.
 
 Text profiles stay in some cases:
 - the toolchain or the selected Mini lacks what the hook uses;
