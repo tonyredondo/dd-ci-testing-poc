@@ -276,7 +276,14 @@ func TestCoverageLayoutCounts(t *testing.T) {
 	counts, ok = layout.counts(fakeSegments([][][]uint32{{nil}, {nil, {^uint32(0) - 1}}, {}, {{4}}}), counts)
 	require.True(t, ok)
 	require.Equal(t, []uint32{^uint32(0), 0, 0}, counts, "saturated, and the rest cleared")
+	// Functions without a positive counter are skipped before their IDs are
+	// read, as one that starts running during a copy may have only part of its
+	// header.
+	counts, ok = layout.counts([]uint32{13, 1, 0, 0, 0, 2, 9, 7, 0, 0, 1, 1, 0, 6}, counts)
+	require.True(t, ok)
+	require.Equal(t, []uint32{0, 0, 6}, counts)
 	for name, raw := range map[string][]uint32{
+		"truncated counters": {5, 3, 0, 0, 0},
 		"truncated segment":  {5, 1, 1, 0},
 		"truncated header":   {2, 0, 1},
 		"standard package":   {4, 1, 0, 0, 5},
@@ -312,6 +319,21 @@ func TestMemoryCoverageMatchesTextProfiles(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, coveredFilesBetween(collector.testFile, before, after), collector.filesCovered)
 	require.Len(t, collector.filesCovered, 2, "the test file and a.go")
+}
+
+// A process without coverable units still captures each test, which then
+// covers only its test file.
+func TestMemoryCoverageEmptyLayout(t *testing.T) {
+	f := setUpMemoryCoverage(t)
+	f.pkgs = []fakePackage{{"atomic", "perblock", "example.com/e", nil}}
+	f.text, f.counters, f.slots = "mode: atomic\n", [][][]uint32{{}}, 1
+	collector := &testCoverage{testFile: "example.com/e/e_test.go"}
+	require.NoError(t, collector.collectCoverageBeforeTestExecution())
+	require.NotNil(t, collector.memory, "in-memory collector")
+	require.NoError(t, collector.collectCoverageAfterTestExecution())
+	require.True(t, collector.loadCoverageData())
+	require.Equal(t, coveredFilesBetween(collector.testFile, coverProfile{}, coverProfile{}), collector.filesCovered)
+	require.True(t, memoryCoverageReady())
 }
 
 // The process keeps text profiles without the hook, for a counter mode

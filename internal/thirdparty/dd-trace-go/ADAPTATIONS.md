@@ -217,8 +217,10 @@ linkname `registerTestingCoverage`. It only exposes what those packages hold:
     by file and position.
 
   Each capture then maps the counter segments to one count per layout entry,
-  adding merged units without overflowing as `cformat` does. A test's coverage
-  is every entry whose count grew, mapped to files and line bitmaps by the same
+  adding merged units without overflowing as `cformat` does. As `cfile` does,
+  it skips a function without a positive counter before reading its IDs: a
+  function that starts running during the copy may have written only part of
+  its header. A test's coverage is every entry whose count grew, mapped to files and line bitmaps by the same
   `coveredLines` code as the text path.
 - **Validation before use.** The process keeps text profiles unless the
   toolchain's rendering with every count at its maximum reads back through
@@ -250,14 +252,17 @@ linkname `registerTestingCoverage`. It only exposes what those packages hold:
   rendered with the toolchain's `cformat`, and logs whether both agree.
 
 Checks:
-- **Unit tests:** `TestBuildCoverageLayout`,
+- **Unit tests:** `TestBuildCoverageLayout`, `TestBuildCoverageLayoutOrder`,
   `TestBuildCoverageLayoutRefusals`, `TestCoverageLayoutCounts`,
-  `TestMemoryCoverageMatchesTextProfiles`, `TestMemoryCoverageRefusals`,
+  `TestMemoryCoverageMatchesTextProfiles`, `TestMemoryCoverageEmptyLayout`,
+  `TestMemoryCoverageRefusals`,
   `TestMemoryCoverageBudget`, `TestMemoryCoverageCaptureFailure` and
   `TestMemoryCoverageProcessSegments`.
 - **Integration:** `TestMiniPerTestCoverageInMemory` compares per-test coverage
-  with text profiles in count, atomic and race builds, and a build that keeps
-  text profiles. The coverage parity cases compare it with the SDK reference.
+  with text profiles, and with the debug comparison, in count, atomic and race
+  builds, and checks a build that keeps text profiles.
+  `TestMiniPerTestCoverageRefusesPlugins` keeps them when a test imports
+  `plugin`. The coverage parity cases compare it with the SDK reference.
 - **Prototype:** the oracle agreed on all 731 collectors of Gin, Chi and both
   Testify subjects.
 

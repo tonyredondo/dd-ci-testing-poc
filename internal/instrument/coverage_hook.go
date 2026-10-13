@@ -111,18 +111,22 @@ func __dd_civisibility_coverageProfile(raw []uint32) []byte {
 			}
 			ctrs := int(segment[i+int(coverage.NumCtrsOffset)])
 			pkg := int32(segment[i+int(coverage.PkgIdOffset)])
+			fn := segment[i+int(coverage.FuncIdOffset)]
 			start := i + int(coverage.FirstCtrOffset)
-			if pkg <= 0 || start+ctrs > len(segment) {
+			if start+ctrs > len(segment) {
 				return nil
 			}
 			counters := segment[start : start+ctrs]
+			i = start + ctrs - 1
 			for _, v := range counters {
 				if v != 0 {
-					live[pkfunc{int(pkg) - 1, segment[i+int(coverage.FuncIdOffset)]}] = counters
+					if pkg <= 0 {
+						return nil
+					}
+					live[pkfunc{int(pkg) - 1, fn}] = counters
 					break
 				}
 			}
-			i = start + ctrs - 1
 		}
 	}
 	mode := coverage.CounterMode(coverage.CtrModeInvalid)

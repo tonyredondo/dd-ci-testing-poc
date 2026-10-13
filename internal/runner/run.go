@@ -486,7 +486,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		if plan.gorootMirror != nil {
 			goroots = []string{plan.gorootMirror.root, opts.environment.GOROOT}
 		}
-		refusal := coverageHookRefusal(dir, opts, runtimePackage, goroots, listed, testPlugin)
+		refusal := coverageHookRefusal(dir, opts, runtimePackage, goroots, listed, testPlugin, replacements)
 		debug.printf("per-test coverage in_memory_hook=%t reason=%q", refusal == "", refusal)
 		if refusal == "" {
 			if e = add(filepath.Join(native.Dir, "zz_dd_ci_visibility_coverage.go"), instrument.CoverageHook); e != nil {

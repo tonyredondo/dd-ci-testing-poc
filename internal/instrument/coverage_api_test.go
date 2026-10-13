@@ -15,7 +15,20 @@ import (
 
 // The hook's registration matches Mini's own coverage package.
 func TestCoverageHookMatchesMiniRegistration(t *testing.T) {
-	if err := CoverageHookRuntimeError(filepath.Join("..", "thirdparty", "dd-trace-go", "civisibility", "integrations", "gotesting", "coverage")); err != nil {
+	dir := filepath.Join("..", "thirdparty", "dd-trace-go", "civisibility", "integrations", "gotesting", "coverage")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources := map[string][]byte{}
+	for _, entry := range entries {
+		if name := entry.Name(); strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") {
+			if sources[name], err = os.ReadFile(filepath.Join(dir, name)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := CoverageHookRuntimeError(sources); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -29,21 +42,16 @@ func TestCoverageHookRuntimeErrorRejectsOtherRuntimes(t *testing.T) {
 		"result":     "package coverage\nfunc registerTestingCoverage(func() ([]string, []uint32, string), func([]uint32) ([]uint32, bool), func([]uint32) []byte) {}\n",
 		"method":     "package coverage\ntype r struct{}\nfunc (r) registerTestingCoverage(func() ([]string, []uint32, string), func([]uint32) ([]uint32, int), func([]uint32) []byte) {}\n",
 	} {
-		dir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(dir, "coverage.go"), []byte(source), 0600); err != nil {
-			t.Fatal(err)
-		}
-		if err := CoverageHookRuntimeError(dir); err == nil {
+		if err := CoverageHookRuntimeError(map[string][]byte{"coverage.go": []byte(source)}); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
-	dir := t.TempDir()
 	source := "package coverage\nfunc registerTestingCoverage(meta func() ([]string, []uint32, string), counters func([]uint32) ([]uint32, int), profile func([]uint32) []byte) {}\n"
-	if err := os.WriteFile(filepath.Join(dir, "coverage.go"), []byte(source), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := CoverageHookRuntimeError(dir); err != nil {
+	if err := CoverageHookRuntimeError(map[string][]byte{"coverage.go": []byte(source)}); err != nil {
 		t.Errorf("named parameters: %v", err)
+	}
+	if err := CoverageHookRuntimeError(nil); err == nil {
+		t.Error("no sources: accepted")
 	}
 }
 

@@ -77,9 +77,10 @@ func CoverageHookToolchainError(goroot string) error {
 	return nil
 }
 
-// CoverageHookRuntimeError reports why the coverage package in dir, from the
-// selected runtime, cannot receive CoverageHook's registration, or nil.
-func CoverageHookRuntimeError(dir string) error {
+// CoverageHookRuntimeError reports why the selected runtime's coverage
+// package, given as the sources that the build compiles, cannot receive
+// CoverageHook's registration, or nil.
+func CoverageHookRuntimeError(sources map[string][]byte) error {
 	file, err := parser.ParseFile(token.NewFileSet(), "", CoverageHook, parser.SkipObjectResolution)
 	if err != nil {
 		return err
@@ -93,7 +94,7 @@ func CoverageHookRuntimeError(dir string) error {
 	if want == "" {
 		return errors.New("the coverage hook declares no registration")
 	}
-	have, err := goDeclarations(dir, nil)
+	have, err := sourceDeclarations(sources)
 	if err != nil {
 		return err
 	}
@@ -104,9 +105,7 @@ func CoverageHookRuntimeError(dir string) error {
 }
 
 // goDeclarations renders the declarations of the package in dir, or of files
-// there: functions and methods with their parameter and result types, struct
-// fields of named types and of package variables, named types, constants and
-// linkname directives.
+// there, as sourceDeclarations does.
 func goDeclarations(dir string, files []string) (map[string]bool, error) {
 	if files == nil {
 		entries, err := os.ReadDir(dir)
@@ -119,10 +118,27 @@ func goDeclarations(dir string, files []string) (map[string]bool, error) {
 			}
 		}
 	}
+	sources := make(map[string][]byte, len(files))
+	for _, name := range files {
+		path := filepath.Join(dir, name)
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		sources[path] = src
+	}
+	return sourceDeclarations(sources)
+}
+
+// sourceDeclarations renders the declarations of a package's sources:
+// functions and methods with their parameter and result types, struct fields
+// of named types and of package variables, named types, constants and
+// linkname directives.
+func sourceDeclarations(sources map[string][]byte) (map[string]bool, error) {
 	decls := map[string]bool{}
 	fset := token.NewFileSet()
-	for _, name := range files {
-		file, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.ParseComments|parser.SkipObjectResolution)
+	for name, src := range sources {
+		file, err := parser.ParseFile(fset, name, src, parser.ParseComments|parser.SkipObjectResolution)
 		if err != nil {
 			return nil, err
 		}

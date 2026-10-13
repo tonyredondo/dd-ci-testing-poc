@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -20,7 +21,8 @@ const miniCoveragePackage = miniModule + "/internal/thirdparty/dd-trace-go/civis
 // toolchain and the selected Mini must also declare what the hook uses.
 // listed holds every package that the package query returned; testPlugin
 // reports package plugin among dependencies of test imports outside it.
-func coverageHookRefusal(dir string, opts options, runtimePackage string, goroots []string, listed []goPackage, testPlugin bool) string {
+// replacements is the overlay that the build uses.
+func coverageHookRefusal(dir string, opts options, runtimePackage string, goroots []string, listed []goPackage, testPlugin bool, replacements map[string]string) string {
 	var coverage *goPackage
 	for i := range listed {
 		p := &listed[i]
@@ -62,7 +64,24 @@ func coverageHookRefusal(dir string, opts options, runtimePackage string, goroot
 	if err := instrument.CoverageHookToolchainError(goroots[0]); err != nil {
 		return err.Error()
 	}
-	if err := instrument.CoverageHookRuntimeError(coverage.Dir); err != nil {
+	// The registration must be in the files that the build compiles.
+	sources := map[string][]byte{}
+	for _, name := range coverage.GoFiles {
+		path := filepath.Join(coverage.Dir, name)
+		actual, replaced := replacements[path]
+		if !replaced {
+			actual = path
+		} else if actual == "" {
+			// The overlay deletes the file.
+			continue
+		}
+		src, err := os.ReadFile(actual)
+		if err != nil {
+			return err.Error()
+		}
+		sources[path] = src
+	}
+	if err := instrument.CoverageHookRuntimeError(sources); err != nil {
 		return err.Error()
 	}
 	return ""
@@ -72,7 +91,7 @@ func coverageHookRefusal(dir string, opts options, runtimePackage string, goroot
 // select a standard package or a package of the Mini module, in miniDir.
 // Unclear patterns count as reaching it.
 func coverPatternReachesCollector(pattern, dir, miniDir string, miniMain bool, goroots []string) bool {
-	if pattern == "work" || pattern == "tool" {
+	if pattern == "work" {
 		// Main-module packages, which are Mini's only in its own module.
 		return miniMain
 	}
@@ -99,8 +118,8 @@ func coverPatternReachesCollector(pattern, dir, miniDir string, miniMain bool, g
 	}
 	first, _, _ := strings.Cut(pattern, "/")
 	if !strings.Contains(first, ".") || strings.Contains(first, "...") {
-		// Standard packages, like the all, std and cmd patterns, have no dot in
-		// their first element.
+		// Standard packages have no dot in their first element, nor have the
+		// all, std, cmd and tool patterns: tool directives may name any package.
 		return true
 	}
 	literal, wildcard := pattern, false

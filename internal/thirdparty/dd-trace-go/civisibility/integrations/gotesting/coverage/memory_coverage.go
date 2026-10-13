@@ -314,8 +314,13 @@ func (l *coverageLayout) matchesTextProfile(text []byte) bool {
 // overflowing as cformat does. It fails for a copy that it cannot map.
 func (l *coverageLayout) counts(raw, dst []uint32) ([]uint32, bool) {
 	n := len(l.entries) / 6
-	dst = slices.Grow(dst[:0], n)[:n]
-	clear(dst)
+	if dst == nil || cap(dst) < n {
+		// Non-nil even for an empty layout: a nil baseline means no capture.
+		dst = make([]uint32, n)
+	} else {
+		dst = dst[:n]
+		clear(dst)
+	}
 	for len(raw) > 0 {
 		size := int(raw[0])
 		if 1+size > len(raw) {
@@ -332,9 +337,20 @@ func (l *coverageLayout) counts(raw, dst []uint32) ([]uint32, bool) {
 			}
 			ctrs, pkg, fn := int(segment[i+l.offsets[0]]), int32(segment[i+l.offsets[1]]), segment[i+l.offsets[2]]
 			start := i + l.offsets[3]
+			if start+ctrs > len(segment) {
+				return dst, false
+			}
+			counters := segment[start : start+ctrs]
+			i = start + ctrs - 1
+			// As cfile does, a function without a positive counter is skipped
+			// before its IDs are read: one that starts running during the copy
+			// may have written only part of its header.
+			if !slices.ContainsFunc(counters, func(v uint32) bool { return v != 0 }) {
+				continue
+			}
 			// Coverage of standard packages, which use other package IDs, is
 			// never read in memory.
-			if pkg <= 0 || int(pkg) > len(l.funcs) || int(fn) >= len(l.funcs[pkg-1]) || start+ctrs > len(segment) {
+			if pkg <= 0 || int(pkg) > len(l.funcs) || int(fn) >= len(l.funcs[pkg-1]) {
 				return dst, false
 			}
 			f := l.funcs[pkg-1][fn]
@@ -345,13 +361,12 @@ func (l *coverageLayout) counts(raw, dst []uint32) ([]uint32, bool) {
 				if entry < 0 {
 					continue
 				}
-				if sum := dst[entry] + segment[start+u]; sum >= dst[entry] {
+				if sum := dst[entry] + counters[u]; sum >= dst[entry] {
 					dst[entry] = sum
 				} else {
 					dst[entry] = ^uint32(0)
 				}
 			}
-			i = start + ctrs - 1
 		}
 	}
 	return dst, true

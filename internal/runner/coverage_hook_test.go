@@ -1,9 +1,11 @@
 package runner
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -20,7 +22,7 @@ func TestCoverPatternReachesCollector(t *testing.T) {
 		reaches  bool
 	}{
 		{"all", false, true}, {"std", false, true}, {"cmd", false, true},
-		{"work", false, false}, {"work", true, true}, {"tool", false, false}, {"tool", true, true},
+		{"work", false, false}, {"work", true, true}, {"tool", false, true}, {"tool", true, true},
 		{"internal/...", false, true}, {".../coverage/...", false, true}, {"...", false, true}, {"testing", false, true},
 		{"github.com/...", false, true}, {"github.com/tonyredondo/...", false, true}, {"github.com/tonyredondo/dd-ci-testing-poc", false, true},
 		{"github.com/tonyredondo/dd-ci-testing-poc/internal/...", false, true}, {"github.com/tonyredondo/dd-ci-testing-poc...", false, true},
@@ -81,16 +83,27 @@ func TestCoverageHookRefusal(t *testing.T) {
 		Main               bool
 		Replace            *struct{ Path, Dir, Version string }
 	}{Path: "example.com/app", Dir: "/client", Main: true}
+	coverageDir := filepath.Join(repo, "internal", "thirdparty", "dd-trace-go", "civisibility", "integrations", "gotesting", "coverage")
+	entries, err := os.ReadDir(coverageDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var coverageFiles []string
+	for _, entry := range entries {
+		if name := entry.Name(); strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") {
+			coverageFiles = append(coverageFiles, name)
+		}
+	}
 	base := func() []goPackage {
 		return []goPackage{
 			{ImportPath: "example.com/app", Dir: "/client", Module: clientModule, TestGoFiles: []string{"app_test.go"}, Imports: []string{"fmt"}},
 			{ImportPath: "testing", Standard: true, TestGoFiles: []string{"testing_test.go"}},
 			{ImportPath: miniPackage, Module: miniModuleInfo, DepOnly: true},
-			{ImportPath: miniCoveragePackage, Dir: filepath.Join(repo, "internal", "thirdparty", "dd-trace-go", "civisibility", "integrations", "gotesting", "coverage"), Module: miniModuleInfo, DepOnly: true},
+			{ImportPath: miniCoveragePackage, Dir: coverageDir, GoFiles: slices.Clone(coverageFiles), Module: miniModuleInfo, DepOnly: true},
 		}
 	}
 	refusal := func(opts options, listed []goPackage, testPlugin bool) string {
-		return coverageHookRefusal("/client", opts, miniPackage, []string{goroot}, listed, testPlugin)
+		return coverageHookRefusal("/client", opts, miniPackage, []string{goroot}, listed, testPlugin, nil)
 	}
 	if got := refusal(options{coverage: true}, base(), false); got != "" {
 		t.Fatalf("client package under test refused: %s", got)
@@ -158,7 +171,7 @@ func TestCoverageHookRefusal(t *testing.T) {
 		},
 		"runtime without registration": func() (options, []goPackage, bool) {
 			listed := base()
-			listed[3].Dir = filepath.Join(repo, "internal", "runner")
+			listed[3].Dir, listed[3].GoFiles = filepath.Join(repo, "internal", "runner"), []string{"coverage_hook.go"}
 			return options{coverage: true}, listed, false
 		},
 	}
@@ -169,7 +182,39 @@ func TestCoverageHookRefusal(t *testing.T) {
 		}
 	}
 	// testing is built from the first root: the GOROOT mirror when there is one.
-	if got := coverageHookRefusal("/client", options{coverage: true}, miniPackage, []string{t.TempDir(), goroot}, base(), false); got == "" {
+	if got := coverageHookRefusal("/client", options{coverage: true}, miniPackage, []string{t.TempDir(), goroot}, base(), false, nil); got == "" {
 		t.Error("toolchain without the hook's declarations: accepted")
+	}
+
+	// The registration must be in a file that the build compiles, as the
+	// overlay has it.
+	listed = base()
+	listed[3].GoFiles = slices.DeleteFunc(listed[3].GoFiles, func(name string) bool { return name == "memory_coverage.go" })
+	if got := refusal(options{coverage: true}, listed, false); got == "" {
+		t.Error("registration in a file the build excludes: accepted")
+	}
+	registration := filepath.Join(coverageDir, "memory_coverage.go")
+	src, err := os.ReadFile(registration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	same, without := filepath.Join(t.TempDir(), "same.go"), filepath.Join(t.TempDir(), "without.go")
+	if err := os.WriteFile(same, src, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(without, []byte("package coverage\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	overlaid := func(path, to string) string {
+		return coverageHookRefusal("/client", options{coverage: true}, miniPackage, []string{goroot}, base(), false, map[string]string{path: to})
+	}
+	if got := overlaid(registration, same); got != "" {
+		t.Errorf("overlay with the registration refused: %s", got)
+	}
+	if got := overlaid(filepath.Join(coverageDir, "process_coverage.go"), ""); got != "" {
+		t.Errorf("overlay deleting another file refused: %s", got)
+	}
+	if overlaid(registration, without) == "" || overlaid(registration, "") == "" {
+		t.Error("overlay without the registration's file: accepted")
 	}
 }
