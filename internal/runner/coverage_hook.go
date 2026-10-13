@@ -21,7 +21,7 @@ const miniCoveragePackage = miniModule + "/internal/thirdparty/dd-trace-go/civis
 // listed holds every package that the package query returned; testPlugin
 // reports package plugin among dependencies of test imports outside it.
 func coverageHookRefusal(dir string, opts options, runtimePackage string, goroots []string, listed []goPackage, testPlugin bool) string {
-	var mini, coverage *goPackage
+	var coverage *goPackage
 	for i := range listed {
 		p := &listed[i]
 		if p.ImportPath == "plugin" || testPlugin {
@@ -34,14 +34,11 @@ func coverageHookRefusal(dir string, opts options, runtimePackage string, goroot
 				}
 			}
 		}
-		if p.Module != nil && p.Module.Path == miniModule && mini == nil {
-			mini = p
-		}
 		if p.ImportPath == miniCoveragePackage {
 			coverage = p
 		}
 	}
-	if mini == nil || coverage == nil {
+	if coverage == nil || coverage.Module == nil {
 		return "runtime packages not listed"
 	}
 	if len(opts.coverPatterns) == 0 {
@@ -58,7 +55,7 @@ func coverageHookRefusal(dir string, opts options, runtimePackage string, goroot
 		}
 	}
 	for _, pattern := range opts.coverPatterns {
-		if coverPatternReachesCollector(pattern, dir, mini.Module.Dir, mini.Module.Main, goroots) {
+		if coverPatternReachesCollector(pattern, dir, coverage.Module.Dir, coverage.Module.Main, goroots) {
 			return "coverage selection may instrument " + pattern
 		}
 	}
@@ -75,10 +72,7 @@ func coverageHookRefusal(dir string, opts options, runtimePackage string, goroot
 // select a standard package or a package of the Mini module, in miniDir.
 // Unclear patterns count as reaching it.
 func coverPatternReachesCollector(pattern, dir, miniDir string, miniMain bool, goroots []string) bool {
-	switch pattern {
-	case "all", "std", "cmd":
-		return true
-	case "work", "tool":
+	if pattern == "work" || pattern == "tool" {
 		// Main-module packages, which are Mini's only in its own module.
 		return miniMain
 	}
@@ -105,7 +99,8 @@ func coverPatternReachesCollector(pattern, dir, miniDir string, miniMain bool, g
 	}
 	first, _, _ := strings.Cut(pattern, "/")
 	if !strings.Contains(first, ".") || strings.Contains(first, "...") {
-		// Standard packages have no dot in their first element.
+		// Standard packages, like the all, std and cmd patterns, have no dot in
+		// their first element.
 		return true
 	}
 	literal, wildcard := pattern, false
@@ -118,5 +113,5 @@ func coverPatternReachesCollector(pattern, dir, miniDir string, miniMain bool, g
 // withinDir reports whether path is dir or lies below it.
 func withinDir(path, dir string) bool {
 	rel, err := filepath.Rel(dir, path)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

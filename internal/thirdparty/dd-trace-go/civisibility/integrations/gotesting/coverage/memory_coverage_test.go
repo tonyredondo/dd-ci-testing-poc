@@ -185,6 +185,33 @@ func TestBuildCoverageLayout(t *testing.T) {
 	}
 }
 
+// Blocks are sorted as cformat sorts them: by file, then start line, end
+// line, start column and end column. Blocks share a position only when every
+// coordinate and the file match.
+func TestBuildCoverageLayoutOrder(t *testing.T) {
+	strs, records := fakeMeta([]fakePackage{{"atomic", "perblock", "example.com/s", []fakeFunc{
+		{"Z", "example.com/s/z.go", false, []fakeUnit{{3, 5, 4, 1, 8, 0}}},
+		{"Y", "example.com/s/y.go", false, []fakeUnit{
+			{3, 4, 6, 1, 1, 0}, {3, 2, 6, 9, 2, 0}, {3, 5, 4, 1, 3, 0}, {3, 2, 6, 4, 4, 0},
+			{2, 5, 4, 1, 5, 0}, {3, 5, 6, 1, 6, 0}, {3, 2, 6, 1, 7, 0},
+		}},
+	}}})
+	layout, refusal := buildCoverageLayout(strs, records, "atomic")
+	require.Empty(t, refusal)
+	require.Equal(t, []string{"example.com/s/y.go", "example.com/s/z.go"}, layout.files)
+	require.Equal(t, []uint32{
+		0, 2, 5, 4, 1, 5,
+		0, 3, 5, 4, 1, 3,
+		0, 3, 2, 6, 1, 7,
+		0, 3, 2, 6, 4, 4,
+		0, 3, 2, 6, 9, 2,
+		0, 3, 4, 6, 1, 1,
+		0, 3, 5, 6, 1, 6,
+		1, 3, 5, 4, 1, 8,
+	}, layout.entries)
+	require.Equal(t, []int32{7, 5, 4, 1, 3, 0, 6, 2}, layout.units)
+}
+
 // Meta-data that the text path rejects, reads otherwise or resolves by map
 // order has no layout, and neither has a malformed stream.
 func TestBuildCoverageLayoutRefusals(t *testing.T) {
@@ -292,12 +319,26 @@ func TestMemoryCoverageMatchesTextProfiles(t *testing.T) {
 // layout refuses, and when the text profile does not read as the layout.
 func TestMemoryCoverageRefusals(t *testing.T) {
 	for name, change := range map[string]func(t *testing.T, f *fakeTestingCoverage){
-		"no hook":        func(t *testing.T, f *fakeTestingCoverage) { resetMemoryCoverageForTesting() },
-		"set mode":       func(t *testing.T, f *fakeTestingCoverage) { mode = "set" },
+		"no hook": func(t *testing.T, f *fakeTestingCoverage) { resetMemoryCoverageForTesting() },
+		"set mode": func(t *testing.T, f *fakeTestingCoverage) {
+			// The layout would match: set mode's flags are not counts.
+			mode = "set"
+			f.pkgs = slices.Clone(f.pkgs)
+			for i := range f.pkgs {
+				if f.pkgs[i].mode == "atomic" {
+					f.pkgs[i].mode = "set"
+				}
+			}
+			f.text = strings.Replace(f.text, "mode: atomic", "mode: set", 1)
+		},
 		"settings":       func(t *testing.T, f *fakeTestingCoverage) { t.Setenv(coverageInMemoryEnv, "false") },
 		"hook refusal":   func(t *testing.T, f *fakeTestingCoverage) { f.refuse = "meta-data: malformed" },
 		"layout refusal": func(t *testing.T, f *fakeTestingCoverage) { f.renameFile("example.com/b/b.go", "example.com/b/b\n.go") },
 		"reordered text": func(t *testing.T, f *fakeTestingCoverage) { f.text = strings.Replace(f.text, "3.2,5.3", "7.1,9.2", 1) },
+		"start line":     func(t *testing.T, f *fakeTestingCoverage) { f.text = strings.Replace(f.text, "3.2,5.3", "4.2,5.3", 1) },
+		"start column":   func(t *testing.T, f *fakeTestingCoverage) { f.text = strings.Replace(f.text, "3.2,5.3", "3.1,5.3", 1) },
+		"end line":       func(t *testing.T, f *fakeTestingCoverage) { f.text = strings.Replace(f.text, "3.2,5.3", "3.2,6.3", 1) },
+		"end column":     func(t *testing.T, f *fakeTestingCoverage) { f.text = strings.Replace(f.text, "3.2,5.3", "3.2,5.4", 1) },
 		"missing block": func(t *testing.T, f *fakeTestingCoverage) {
 			f.text = strings.TrimSuffix(f.text, "4.1,6.10 3 4294967295\n")
 		},
@@ -368,13 +409,19 @@ func TestMemoryCoverageCaptureFailure(t *testing.T) {
 		require.Zero(t, memoryCoverage.held.Load(), name)
 		require.False(t, memoryCoverageReady(), name)
 
+		// A collector without a baseline fails even when its after-capture
+		// would succeed.
 		f = setUpMemoryCoverage(t)
+		valid := *f
 		change(f)
 		collector = &testCoverage{testFile: "example.com/a/a_test.go"}
 		require.Error(t, collector.collectCoverageBeforeTestExecution(), name)
 		require.NotNil(t, collector.memory, name)
 		require.Zero(t, memoryCoverage.held.Load(), name)
+		*f = valid
+		memoryCoverage.enabled.Store(true)
 		require.Error(t, collector.collectCoverageAfterTestExecution(), name)
+		require.Zero(t, memoryCoverage.held.Load(), name)
 	}
 }
 

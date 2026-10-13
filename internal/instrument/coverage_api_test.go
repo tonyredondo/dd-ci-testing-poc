@@ -1,6 +1,11 @@
 package instrument
 
 import (
+	"go/ast"
+	"go/importer"
+	"go/parser"
+	"go/token"
+	"go/types"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,6 +44,83 @@ func TestCoverageHookRuntimeErrorRejectsOtherRuntimes(t *testing.T) {
 	}
 	if err := CoverageHookRuntimeError(dir); err != nil {
 		t.Errorf("named parameters: %v", err)
+	}
+}
+
+// coverageHookAPI lists every toolchain declaration that CoverageHook uses,
+// so that a toolchain without one keeps text profiles instead of failing to
+// build testing.
+func TestCoverageHookAPICoversItsUses(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "zz_dd_ci_visibility_coverage.go", CoverageHook, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := &types.Info{Uses: map[*ast.Ident]types.Object{}, Selections: map[*ast.SelectorExpr]*types.Selection{}}
+	config := types.Config{Importer: importer.ForCompiler(fset, "source", nil)}
+	if _, err := config.Check("testing", fset, []*ast.File{file}, info); err != nil {
+		t.Fatal(err)
+	}
+	declares := func(path string, prefixes ...string) bool {
+		for _, decl := range coverageHookAPI[path] {
+			for _, prefix := range prefixes {
+				if strings.HasPrefix(decl, prefix) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	owner := func(typ types.Type) string {
+		if pointer, ok := typ.(*types.Pointer); ok {
+			typ = pointer.Elem()
+		}
+		if named, ok := typ.(*types.Named); ok {
+			return named.Obj().Name()
+		}
+		return ""
+	}
+	checked := 0
+	for sel, selection := range info.Selections {
+		obj := selection.Obj()
+		if obj.Pkg() == nil || coverageHookAPI[obj.Pkg().Path()] == nil {
+			continue
+		}
+		checked++
+		path, name, recv := obj.Pkg().Path(), obj.Name(), owner(selection.Recv())
+		if recv == "" {
+			// A field of a package variable, such as rtcov.Meta.List.
+			if ident, ok := ast.Unparen(sel.X).(*ast.SelectorExpr); ok {
+				recv = ident.Sel.Name
+			}
+		}
+		if !declares(path, "field "+recv+"."+name+" ", "func ("+recv+") "+name+"(", "func (*"+recv+") "+name+"(") {
+			t.Errorf("coverageHookAPI lacks %s.%s of %s", recv, name, path)
+		}
+	}
+	for ident, obj := range info.Uses {
+		if obj.Pkg() == nil || coverageHookAPI[obj.Pkg().Path()] == nil || obj.Parent() != obj.Pkg().Scope() {
+			continue
+		}
+		checked++
+		path, name := obj.Pkg().Path(), obj.Name()
+		var prefixes []string
+		switch obj.(type) {
+		case *types.Func:
+			prefixes = []string{"func " + name + "("}
+		case *types.Const:
+			prefixes = []string{"const " + name}
+		case *types.TypeName:
+			prefixes = []string{"type " + name + " ", "field " + name + "."}
+		case *types.Var:
+			prefixes = []string{"field " + name + "."}
+		}
+		if !declares(path, prefixes...) {
+			t.Errorf("coverageHookAPI lacks %s of %s, used at %s", name, path, fset.Position(ident.Pos()))
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no uses checked")
 	}
 }
 

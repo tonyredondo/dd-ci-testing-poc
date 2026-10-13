@@ -2,6 +2,7 @@ package integration
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -56,9 +57,10 @@ func TestCoveredRetry(t *testing.T) {
 
 // Per-test coverage reads the counters in memory when ddto adds its testing
 // hook. Each test's coverage is the same as with text profiles, in count and
-// atomic modes and under -race, and test processes print only native go
-// test's coverage lines. A coverage selection that instruments testing keeps
-// text profiles.
+// atomic modes and under -race, also by the debug comparison with the
+// toolchain's text profiles of the same counters, and test processes print
+// only native go test's coverage lines. A coverage selection that instruments
+// testing keeps text profiles.
 func TestMiniPerTestCoverageInMemory(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
 	writeBuildFixture(t, dir, map[string]string{"memory_cov.go": coverageMemoryLibrary, "memory_cov_test.go": coverageMemoryTests})
@@ -98,9 +100,13 @@ func TestMiniPerTestCoverageInMemory(t *testing.T) {
 				return normalizedMiniCoverage(t, &got.miniWireCapture), lines, exec
 			}
 			policy := policySettings{Coverage: true, Retry: true}
-			memory, memoryLines, exec := run(policy)
+			memory, memoryLines, exec := run(policy, "DD_CIVISIBILITY_INTERNAL_COVERAGE_ORACLE=true")
 			if got := strings.Contains(exec.stderr, "per-test coverage in memory: true"); got != build.memory {
 				t.Fatalf("in memory=%t, want %t:\n%s", got, build.memory, exec.stderr)
+			}
+			matches, mismatches := strings.Count(exec.stderr, " match=true "), strings.Count(exec.stderr, " match=false ")
+			if build.memory && (matches == 0 || mismatches != 0) {
+				t.Fatalf("debug comparison: %d matches, %d mismatches:\n%s", matches, mismatches, exec.stderr)
 			}
 			text, textLines, _ := run(policy, "DD_CIVISIBILITY_INTERNAL_COVERAGE_IN_MEMORY=false")
 			if len(memory) == 0 || !slices.Equal(memory, text) {
@@ -111,5 +117,29 @@ func TestMiniPerTestCoverageInMemory(t *testing.T) {
 				t.Fatalf("coverage lines: in memory %d, text profiles %d, without per-test coverage %d", memoryLines, textLines, plainLines)
 			}
 		})
+	}
+}
+
+// A test binary that can load plugins keeps text profiles: a plugin registers
+// coverage meta-data after the layout is built. Here only a test imports the
+// package that uses plugin.
+func TestMiniPerTestCoverageRefusesPlugins(t *testing.T) {
+	dir, driver := prepareMiniFixture(t)
+	if err := os.Mkdir(filepath.Join(dir, "loader"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	writeBuildFixture(t, dir, map[string]string{
+		"memory_cov.go":    coverageMemoryLibrary,
+		"loader/loader.go": "package loader\n\nimport \"plugin\"\n\nfunc Open(path string) error {\n\t_, err := plugin.Open(path)\n\treturn err\n}\n",
+		"loader_test.go":   "package fixture_test\n\nimport (\n\t\"testing\"\n\n\t\"example.com/dd-ci-testing-fixture/loader\"\n)\n\nfunc TestLoader(t *testing.T) { _ = loader.Open }\n",
+	})
+	bin := filepath.Join(t.TempDir(), executableName("plugin.test"))
+	out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false", "DD_TRACE_DEBUG=true"), driver,
+		"test", "--runtime=mini", "-c", "-o", bin, "-covermode=atomic", "-coverpkg=./...", ".")
+	if code != 0 {
+		t.Fatal(out, stderr)
+	}
+	if want := `per-test coverage in_memory_hook=false reason="plugin"`; !strings.Contains(stderr, want) {
+		t.Fatalf("build log lacks %q:\n%s", want, stderr)
 	}
 }

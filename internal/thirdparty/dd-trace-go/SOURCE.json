@@ -2277,7 +2277,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/coverage/memory_coverage_test.go",
-      "sha256": "bd86109864da119ae52cc36359fc863f44d32f5b3e7bc2f8bf4605d53aecd943",
+      "sha256": "9dbbcfc5c830b710f74ca8258d3bab0ba766a1c2f441d87c35e52ea85e585b1a",
       "role": "local"
     }
   ],
