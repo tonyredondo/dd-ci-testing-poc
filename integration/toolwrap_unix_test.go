@@ -91,8 +91,14 @@ func TestToolWrapperWaitStopsOnSignal(t *testing.T) {
 	go func() { exited <- cmd.Wait() }()
 	select {
 	case err := <-exited:
-		if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 128+int(syscall.SIGINT) {
-			t.Fatalf("exit %v, want status %d", err, 128+int(syscall.SIGINT))
+		// ddto re-raises the signal after cleanup, or exits with its status
+		// where the signal is ignored.
+		var status syscall.WaitStatus
+		if exit, ok := err.(*exec.ExitError); ok {
+			status, _ = exit.Sys().(syscall.WaitStatus)
+		}
+		if err == nil || !(status.Signaled() && status.Signal() == syscall.SIGINT || status.Exited() && status.ExitStatus() == 128+int(syscall.SIGINT)) {
+			t.Fatalf("exit %v, want SIGINT or status %d", err, 128+int(syscall.SIGINT))
 		}
 	case <-time.After(30 * time.Second):
 		_ = cmd.Process.Kill()
