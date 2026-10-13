@@ -27,6 +27,10 @@ import (
 // toolWrapperCheckTimeout bounds the key check of a wrapper executable.
 const toolWrapperCheckTimeout = 10 * time.Second
 
+// toolWrapperBuildEnv follows the build's environment; tests use it to build
+// an executable that the host cannot run.
+var toolWrapperBuildEnv []string
+
 // ensureToolWrapper returns ddto's wrapper executable for env's host and its
 // lock, held shared while the plan's builds may run it so that pruners keep
 // it. It builds a missing or unusable executable with the plan's go, under
@@ -128,6 +132,7 @@ func buildToolWrapper(ctx context.Context, env *goEnvironment, parent, key, root
 	cmd := goCommand(ctx, src, "build", "-buildvcs=false", "-ldflags=-s -w", "-o", executable, ".")
 	cmd.Env = append(cmd.Environ(), "GOOS="+env.GOHOSTOS, "GOARCH="+env.GOHOSTARCH,
 		"GOFLAGS=", "GOWORK=off", "GO111MODULE=on", "GOTOOLCHAIN=local")
+	cmd.Env = append(cmd.Env, toolWrapperBuildEnv...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("building the tool wrapper: %w: %s", err, bytes.TrimSpace(output))
 	}

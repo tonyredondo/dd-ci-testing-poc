@@ -38,13 +38,25 @@ func TestToolWrapperLifecycle(t *testing.T) {
 	run := func(cache, wantState string) string {
 		t.Helper()
 		env := testEnv(append(isolatedUserCache(t, cache), "DD_CIVISIBILITY_ENABLED=false", "DD_TRACE_DEBUG=true")...)
-		out, stderr, code := command(t, dir, env, driver, "test", "--runtime=mini", "-count=1", "-coverpkg=testing,./...", "-covermode=atomic", ".")
+		// -x shows the fixture's compile, whose directory is new, through
+		// the -toolexec wrapper.
+		out, stderr, code := command(t, dir, env, driver, "test", "--runtime=mini", "-count=1", "-x", "-coverpkg=testing,./...", "-covermode=atomic", ".")
 		if code != 0 {
 			t.Fatal(out, stderr)
 		}
 		logs := cliDebugLines(stderr)
 		if !strings.Contains(logs, "tool wrapper state="+wantState) || !strings.Contains(logs, "tool selection testify=false goleak=false cover=true") {
 			t.Fatalf("want tool wrapper state=%s:\n%s", wantState, logs)
+		}
+		var trace []string
+		for _, line := range strings.Split(stderr, "\n") {
+			if !strings.Contains(line, " DEBUG: ") {
+				trace = append(trace, line)
+			}
+		}
+		x := strings.Join(trace, "\n")
+		if wrapped := strings.Contains(x, toolwrap.Executable); wrapped != (wantState != "unavailable") || !ddtoToolexecMode(x, "cover") {
+			t.Fatalf("state %s, but the wrapper executable ran=%t:\n%s", wantState, wrapped, x)
 		}
 		return out
 	}

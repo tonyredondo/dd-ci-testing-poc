@@ -3,6 +3,7 @@ package runner
 import (
 	"bytes"
 	"context"
+	"debug/buildinfo"
 	"errors"
 	"os"
 	"os/exec"
@@ -85,6 +86,11 @@ func TestToolWrapperCreatesAndReuses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Reusing it refreshes its time, which keeps pruners away.
+	stale := time.Now().Add(-gorootMirrorRetention - time.Hour)
+	if err := os.Chtimes(filepath.Dir(path), stale, stale); err != nil {
+		t.Fatal(err)
+	}
 	log.Reset()
 	again, lock, err := ensureToolWrapper(t.Context(), env, ".", debug)
 	if err != nil {
@@ -97,6 +103,9 @@ func TestToolWrapperCreatesAndReuses(t *testing.T) {
 	}
 	if again != path || !os.SameFile(before, after) || !after.ModTime().Equal(before.ModTime()) || !strings.Contains(log.String(), "tool wrapper state=reused") {
 		t.Fatalf("not reused: %s:\n%s", again, log.String())
+	}
+	if root, err := os.Stat(filepath.Dir(path)); err != nil || !root.ModTime().After(stale.Add(time.Hour)) {
+		t.Fatalf("reuse did not refresh the time: %v", err)
 	}
 }
 
@@ -141,8 +150,27 @@ func TestToolWrapperRebuildsUnusableExecutable(t *testing.T) {
 func TestToolWrapperBuildFailure(t *testing.T) {
 	cache := useTestUserCache(t)
 	ctx := context.WithValue(t.Context(), goToolchainKey{}, goToolchain{path: filepath.Join(t.TempDir(), "missing-go")})
-	if _, _, err := ensureToolWrapper(ctx, testGoEnvironment(t), ".", nil); err == nil {
-		t.Fatal("a build without go succeeded")
+	if _, _, err := ensureToolWrapper(ctx, testGoEnvironment(t), ".", nil); err == nil || !strings.Contains(err.Error(), "building the tool wrapper") {
+		t.Fatal("a build without go:", err)
+	}
+	entries, err := os.ReadDir(filepath.Join(cache, "ddto", "toolwraps"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), ".lock") {
+			t.Errorf("left %s", entry.Name())
+		}
+	}
+}
+
+// An executable that the host cannot run is not published.
+func TestToolWrapperUnrunnableBuild(t *testing.T) {
+	cache := useTestUserCache(t)
+	toolWrapperBuildEnv = []string{"GOOS=plan9", "GOARCH=amd64"}
+	defer func() { toolWrapperBuildEnv = nil }()
+	if _, _, err := ensureToolWrapper(t.Context(), testGoEnvironment(t), ".", nil); err == nil || !strings.Contains(err.Error(), "does not run") {
+		t.Fatal("an executable for another platform:", err)
 	}
 	entries, err := os.ReadDir(filepath.Join(cache, "ddto", "toolwraps"))
 	if err != nil {
@@ -169,7 +197,7 @@ func TestToolWrapperBuildsForTheHost(t *testing.T) {
 	}
 	t.Setenv("GOOS", goos)
 	t.Setenv("GOARCH", goarch)
-	t.Setenv("GOFLAGS", "-mod=vendor")
+	t.Setenv("GOFLAGS", "-mod=invalid")
 	t.Setenv("GOWORK", filepath.Join(t.TempDir(), "missing.work"))
 	t.Setenv("GOTOOLCHAIN", "go1.999.0")
 	t.Setenv("GO111MODULE", "off")
@@ -180,6 +208,15 @@ func TestToolWrapperBuildsForTheHost(t *testing.T) {
 	lock.Close()
 	if !validToolWrapper(t.Context(), path, toolWrapperKey()) {
 		t.Fatal("wrapper does not run on the host")
+	}
+	info, err := buildinfo.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, setting := range info.Settings {
+		if setting.Key == "GOOS" && setting.Value != env.GOHOSTOS || setting.Key == "GOARCH" && setting.Value != env.GOHOSTARCH {
+			t.Fatalf("built for %s=%s", setting.Key, setting.Value)
+		}
 	}
 }
 
@@ -342,12 +379,12 @@ func TestToolWrapperRuns(t *testing.T) {
 		}
 	})
 	for name, args := range map[string][]string{
-		"invalid mode":      {"/ddto", "unknown", "/plan.json", self},
-		"missing arguments": {"/ddto", "testify", "/plan.json"},
+		"invalid tool mode":              {"/ddto", "unknown", "/plan.json", self},
+		"invalid tool wrapper arguments": {"/ddto", "testify", "/plan.json"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, stderr, code := runToolWrapper(t, wrapper, args, fake...)
-			if code != 2 || !strings.Contains(stderr, version.BuildLogPrefix+" ERROR") {
+			if code != 2 || !strings.Contains(stderr, version.BuildLogPrefix+" ERROR: "+name) {
 				t.Fatalf("exit %d:\n%s", code, stderr)
 			}
 		})
