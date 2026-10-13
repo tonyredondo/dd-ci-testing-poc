@@ -24,8 +24,13 @@ import (
 // The executable runs ddto for the invocations that need the plan. ddto itself
 // stays the wrapper when the executable cannot be built or run.
 
-// toolWrapperCheckTimeout bounds the key check of a wrapper executable.
-const toolWrapperCheckTimeout = 10 * time.Second
+const (
+	// toolWrapperCheckTimeout bounds the key check of a wrapper executable.
+	toolWrapperCheckTimeout = 10 * time.Second
+	// toolWrapperWaitDelay bounds the wait for output after the key check or
+	// the build ends, or after a signal cancels it.
+	toolWrapperWaitDelay = time.Second
+)
 
 // toolWrapperBuildEnv follows the build's environment; tests use it to build
 // an executable that the host cannot run.
@@ -56,6 +61,8 @@ func ensureToolWrapper(ctx context.Context, env *goEnvironment, dir string, debu
 		return path, lock, nil
 	}
 	lock.Close()
+	// The exclusive lock waits for runs that use another executable here.
+	debug.printf("tool wrapper state=stale path=%q", path)
 	if lock, err = holdGOROOTMirrorLock(ctx, root+".lock", true); err != nil {
 		return "", nil, err
 	}
@@ -99,7 +106,10 @@ func toolWrapperName(goos string) string {
 func validToolWrapper(ctx context.Context, path, sum string) bool {
 	ctx, cancel := context.WithTimeout(ctx, toolWrapperCheckTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, path, toolwrap.KeyFlag).Output()
+	cmd := exec.CommandContext(ctx, path, toolwrap.KeyFlag)
+	// A process that it leaves holding the output does not hold the check.
+	cmd.WaitDelay = toolWrapperWaitDelay
+	out, err := cmd.Output()
 	return err == nil && strings.TrimSpace(string(out)) == sum
 }
 
@@ -133,6 +143,7 @@ func buildToolWrapper(ctx context.Context, env *goEnvironment, parent, key, root
 	cmd.Env = append(cmd.Environ(), "GOOS="+env.GOHOSTOS, "GOARCH="+env.GOHOSTARCH,
 		"GOFLAGS=", "GOWORK=off", "GO111MODULE=on", "GOTOOLCHAIN=local")
 	cmd.Env = append(cmd.Env, toolWrapperBuildEnv...)
+	cmd.WaitDelay = toolWrapperWaitDelay
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("building the tool wrapper: %w: %s", err, bytes.TrimSpace(output))
 	}

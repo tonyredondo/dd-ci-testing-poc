@@ -763,13 +763,24 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 			fmt.Fprintln(stderr, e)
 			return 2
 		}
-		wrapper := ""
-		if path, lock, e := ensureToolWrapper(ctx, plan.environment, dir, debug); e != nil {
-			debug.printf("tool wrapper state=unavailable error=%q", e.Error())
-		} else {
-			wrapper, plan.toolWrapperLock = path, lock
+		// Building the wrapper, or waiting for another run to, is preparation:
+		// a signal stops it before go test starts.
+		var wrapper string
+		var lock *os.File
+		interrupted := interruptibly(ctx, signals, func(ctx context.Context) {
+			wrapper, lock, e = ensureToolWrapper(ctx, plan.environment, dir, debug)
+		})
+		if interrupted != nil {
+			if lock != nil {
+				lock.Close()
+			}
+			debug.printf("preparation interrupted")
+			return interruptedStatus(interrupted)
 		}
-		if tool, e = toolCommand(executable, wrapper, plan.File, plan.toolMode()); e != nil {
+		if e != nil {
+			debug.printf("tool wrapper state=unavailable error=%q", e.Error())
+		}
+		if tool, e = selectToolCommand(&plan, executable, wrapper, lock, debug); e != nil {
 			fmt.Fprintln(stderr, e)
 			return 2
 		}
@@ -908,7 +919,16 @@ func resolveExecProgram(dir string, words []string) (string, error) {
 
 // prepareInterruptibly cancels package resolution when a signal arrives. The
 // watcher has stopped before returning, so later signals reach go test.
-func prepareInterruptibly(ctx context.Context, dir string, opts options, runtime Runtime, signals <-chan os.Signal, progress io.Writer) (Plan, os.Signal, error) {
+func prepareInterruptibly(ctx context.Context, dir string, opts options, runtime Runtime, signals <-chan os.Signal, progress io.Writer) (plan Plan, interrupted os.Signal, err error) {
+	interrupted = interruptibly(ctx, signals, func(ctx context.Context) {
+		plan, err = prepare(ctx, dir, opts, runtime, progress)
+	})
+	return plan, interrupted, err
+}
+
+// interruptibly runs fn with a context that the first signal from signals
+// cancels, and returns that signal, or nil.
+func interruptibly(ctx context.Context, signals <-chan os.Signal, fn func(context.Context)) os.Signal {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var interrupted os.Signal
@@ -921,10 +941,10 @@ func prepareInterruptibly(ctx context.Context, dir string, opts options, runtime
 		case <-stop:
 		}
 	}()
-	plan, err := prepare(ctx, dir, opts, runtime, progress)
+	fn(ctx)
 	close(stop)
 	<-stopped
-	return plan, interrupted, err
+	return interrupted
 }
 
 // goTestArguments keeps the user's arguments in order. Our overlay already

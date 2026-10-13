@@ -71,8 +71,9 @@ The log records:
   worker's link signal, plus whether the client supplied its own `toolexec`.
 - With a selective tool, its wrapper executable: `tool wrapper
   state=created` with the build's duration, `reused`, or `unavailable` with the
-  error, when ddto itself is the wrapper. See
-  [the bypass](testify.md#the-bypass-and-cache-contract).
+  error, when ddto itself is the wrapper. `state=stale` comes first when ddto
+  must rebuild it, and waits for runs that still use the old one; a signal ends
+  that wait. See [the bypass](testify.md#the-bypass-and-cache-contract).
 - When the Git worker requests for the test processes, and why: see
   [Requests ahead](#requests-ahead).
 - Native `go test` duration and exit code, followed by the whole CLI duration

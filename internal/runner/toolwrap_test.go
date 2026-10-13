@@ -26,6 +26,10 @@ const (
 	fakeToolExitEnv = "DDTO_TOOLWRAP_FAKE_TOOL_EXIT"
 	// fakeToolPIDEnv also makes it print its process ID first.
 	fakeToolPIDEnv = "DDTO_TOOLWRAP_FAKE_TOOL_PID"
+	// fakeToolOrphanEnv makes it start a child that keeps its output, and
+	// exit; fakeToolSleepEnv makes it sleep first.
+	fakeToolOrphanEnv = "DDTO_TOOLWRAP_FAKE_TOOL_ORPHAN"
+	fakeToolSleepEnv  = "DDTO_TOOLWRAP_FAKE_TOOL_SLEEP"
 )
 
 func testGoEnvironment(t *testing.T) *goEnvironment {
@@ -411,5 +415,114 @@ func TestPlanReleaseClosesToolWrapperLock(t *testing.T) {
 	Plan{toolWrapperLock: lock}.Release()
 	if err := tryLockFile(other, true); err != nil {
 		t.Fatal("lock still held after Release:", err)
+	}
+}
+
+// A process that the key check or the build leaves holding their output
+// delays them by at most toolWrapperWaitDelay.
+func TestToolWrapperDoesNotWaitForLeftoverProcesses(t *testing.T) {
+	useTestUserCache(t)
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(fakeToolEnv, "1")
+	t.Setenv(fakeToolOrphanEnv, "1")
+	started := time.Now()
+	if validToolWrapper(t.Context(), self, toolWrapperKey()) {
+		t.Fatal("a leftover's output passed the check")
+	}
+	ctx := context.WithValue(t.Context(), goToolchainKey{}, goToolchain{path: self})
+	if _, _, err := ensureToolWrapper(ctx, testGoEnvironment(t), ".", nil); err == nil {
+		t.Fatal("a build that left a process succeeded")
+	}
+	if elapsed := time.Since(started); elapsed > 10*time.Second {
+		t.Fatalf("waited %s for leftover processes", elapsed)
+	}
+}
+
+// Waiting for another run's build ends with the context, as a signal ends it.
+func TestToolWrapperWaitIsInterruptible(t *testing.T) {
+	useTestUserCache(t)
+	env := testGoEnvironment(t)
+	path := ensureTestToolWrapper(t)
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("stale"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	// Another run uses the stale executable.
+	held, err := holdGOROOTMirrorLock(t.Context(), filepath.Dir(path)+".lock", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	signals := make(chan os.Signal, 1)
+	done := make(chan os.Signal)
+	var ensureErr error
+	go func() {
+		done <- interruptibly(t.Context(), signals, func(ctx context.Context) {
+			_, _, ensureErr = ensureToolWrapper(ctx, env, ".", nil)
+		})
+	}()
+	time.Sleep(100 * time.Millisecond)
+	signals <- os.Interrupt
+	select {
+	case interrupted := <-done:
+		if interrupted != os.Interrupt || !errors.Is(ensureErr, context.Canceled) {
+			t.Fatalf("interrupted=%v err=%v", interrupted, ensureErr)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the wait ignored the signal")
+	}
+}
+
+// A wrapper path that go's -toolexec cannot quote leaves ddto as the wrapper
+// and releases the executable.
+func TestSelectToolCommand(t *testing.T) {
+	plan := &Plan{File: "/plan.json", testify: true}
+	for _, tc := range []struct {
+		wrapper string
+		want    []string
+	}{
+		{"/cache/ddto-toolwrap", []string{"/cache/ddto-toolwrap", "/ddto", "testify", "/plan.json"}},
+		{`/cache/it's "x"/ddto-toolwrap`, []string{"/ddto", "tool-overlay", "testify", "/plan.json"}},
+		{"", []string{"/ddto", "tool-overlay", "testify", "/plan.json"}},
+	} {
+		path := filepath.Join(t.TempDir(), "wrapper.lock")
+		lock, err := holdGOROOTMirrorLock(t.Context(), path, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		plan.toolWrapperLock = nil
+		if tc.wrapper == "" {
+			lock.Close()
+			lock = nil
+		}
+		tool, err := selectToolCommand(plan, "/ddto", tc.wrapper, lock, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		words, err := splitFlags(tool)
+		if err != nil || strings.Join(words, "|") != strings.Join(tc.want, "|") {
+			t.Fatalf("%q: %q, %v", tc.wrapper, words, err)
+		}
+		if kept := plan.toolWrapperLock != nil; kept != (tc.want[0] == tc.wrapper) {
+			t.Fatalf("%q: lock kept=%t", tc.wrapper, kept)
+		}
+		if lock != nil && plan.toolWrapperLock == nil {
+			other, err := os.OpenFile(path, os.O_RDWR, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tryLockFile(other, true); err != nil && !errors.Is(err, errors.ErrUnsupported) {
+				t.Errorf("%q: lock still held: %v", tc.wrapper, err)
+			}
+			other.Close()
+		}
+		if plan.toolWrapperLock != nil {
+			plan.toolWrapperLock.Close()
+		}
 	}
 }

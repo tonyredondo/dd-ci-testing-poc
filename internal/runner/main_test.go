@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 )
 
 // TestMain keeps persistent vendor workspaces out of the developer's cache.
@@ -16,6 +17,19 @@ func TestMain(m *testing.M) {
 	// The tool wrapper's tests run this binary as ddto or as a tool: it prints
 	// its arguments, one per line, and exits with the requested status.
 	if os.Getenv(fakeToolEnv) == "1" {
+		if os.Getenv(fakeToolOrphanEnv) == "1" {
+			// A child that keeps this process's output after it exits.
+			child := exec.Command(os.Args[0])
+			child.Env = append(os.Environ(), fakeToolOrphanEnv+"=", fakeToolSleepEnv+"=20s")
+			child.Stdout, child.Stderr = os.Stdout, os.Stderr
+			if err := child.Start(); err != nil {
+				os.Exit(3)
+			}
+			os.Exit(0)
+		}
+		if sleep, err := time.ParseDuration(os.Getenv(fakeToolSleepEnv)); err == nil {
+			time.Sleep(sleep)
+		}
 		if os.Getenv(fakeToolPIDEnv) == "1" {
 			fmt.Println("pid=" + strconv.Itoa(os.Getpid()))
 		}
