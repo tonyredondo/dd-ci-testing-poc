@@ -483,7 +483,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	// Go keys cached test results on its own environment, which holds the
 	// temporary workspace, while tests see the caller's values. Keying the test
 	// binaries on those values keeps a cached result from outliving them.
-	if len(plan.savedEnvironment()) != 0 && opts.exec == "" {
+	if len(plan.savedEnvironment()) != 0 && opts.exec == "" && !opts.compileOnly && !opts.printOnly {
 		if plan.execHelper, e = crossExecHelper(opts.environment, dir); e != nil {
 			return plan, &nativeGoError{"exec_helper=relative", e}
 		}
@@ -801,12 +801,21 @@ func fallsBackToNativeGo(ctx context.Context, err error) bool {
 		!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
 }
 
-// wrapExecProgram sets the plan's -exec wrapper. A -exec program, or Go's
-// cross-compilation helper, starts before the test binary can restore the
-// caller's Go settings. Go already disables result caching for those runs, so
-// ddto's wrapper restores them first.
+// wrapExecProgram sets what replaces the plan's -exec program. A -exec
+// program, or Go's cross-compilation helper, starts before the test binary can
+// restore the caller's Go settings. Go already disables result caching for
+// those runs, so ddto's wrapper restores them first. A launcher such as
+// Orchestrion runs go with a mirror's bin first in PATH, where go would look
+// the program up, so ddto passes the caller's program by its path.
 func wrapExecProgram(plan *Plan, opts options, dir string) error {
-	if len(plan.savedEnvironment()) == 0 || opts.exec == "" && plan.execHelper == "" {
+	restore := len(plan.savedEnvironment()) != 0
+	pin := plan.gorootMirror != nil && plan.launcher != nil
+	if !restore && !pin || opts.exec == "" && plan.execHelper == "" {
+		return nil
+	}
+	// Only runs that start test binaries start the program.
+	runs := !opts.compileOnly && !opts.printOnly
+	if !restore && !runs {
 		return nil
 	}
 	words := []string{plan.execHelper}
@@ -815,12 +824,16 @@ func wrapExecProgram(plan *Plan, opts options, dir string) error {
 		if words, err = splitFlags(opts.exec); err != nil {
 			return fmt.Errorf("invalid -exec: %w", err)
 		}
-		// Only runs that start test binaries start the program.
-		if !opts.compileOnly && !opts.printOnly {
+		if runs {
 			if words, err = resolveExecProgram(dir, words); err != nil {
 				return &nativeGoError{"exec_program=unresolved", err}
 			}
 		}
+	}
+	if !restore {
+		var err error
+		plan.execWrapper, err = quoteToolWords(words)
+		return err
 	}
 	executable, err := os.Executable()
 	if err != nil {

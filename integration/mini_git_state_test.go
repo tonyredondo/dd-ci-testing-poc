@@ -519,7 +519,7 @@ func TestMiniGitStateStopsUploadCleanly(t *testing.T) {
 		"DD_INSTRUMENTATION_TELEMETRY_ENABLED=true", "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=true", "DD_GIT_REPOSITORY_URL=", "DD_GIT_COMMIT_SHA=",
 		"TMPDIR="+temp, "TMP="+temp, "TEMP="+temp, "POC_UPLOAD_STARTED_URL="+server.URL+"/upload-started")
 	archive := filepath.Join(t.TempDir(), "ci-state.zip")
-	out, stderr, code, wall := commandWithTiming(t, dir, env, driver, "test", "--runtime=mini", "--git-upload-timeout=1s", "--keep-ci-state="+archive, "-run=^(TestPass|TestWaitForUpload)$", ".")
+	out, stderr, code := command(t, dir, env, driver, "test", "--runtime=mini", "--git-upload-timeout=1s", "--keep-ci-state="+archive, "-run=^(TestPass|TestWaitForUpload)$", ".")
 	if code != 0 {
 		t.Fatalf("ddto test: %d %s %s", code, out, stderr)
 	}
@@ -527,9 +527,6 @@ func TestMiniGitStateStopsUploadCleanly(t *testing.T) {
 	case <-sending:
 	default:
 		t.Fatal("the upload never sent its pack file")
-	}
-	if wall > 30*time.Second {
-		t.Fatalf("ddto waited %s for a stopped upload", wall)
 	}
 	if !strings.Contains(stderr, "archived the CI state in "+archive) {
 		t.Fatalf("stderr %q", stderr)
@@ -551,9 +548,13 @@ func TestMiniGitStateStopsUploadCleanly(t *testing.T) {
 	var summary struct {
 		Worker     string `json:"worker"`
 		StopReason string `json:"stop_reason"`
+		Waited     string `json:"waited_after_go_test"`
 	}
 	if err := json.Unmarshal(files["ddto.json"], &summary); err != nil || summary.Worker != "stopped" || summary.StopReason != "timeout" {
 		t.Fatalf("ddto.json %s, %v", files["ddto.json"], err)
+	}
+	if waited, err := time.ParseDuration(summary.Waited); err != nil || waited > 30*time.Second {
+		t.Fatalf("ddto waited %s for a stopped upload: %v", summary.Waited, err)
 	}
 	var upload struct{ Error string }
 	if err := json.Unmarshal(files["upload.json"], &upload); err != nil || upload.Error != "ddto stopped the repository upload: timeout" {

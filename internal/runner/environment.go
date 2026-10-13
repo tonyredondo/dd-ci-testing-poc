@@ -26,13 +26,13 @@ const (
 // test binaries with when it cross-compiles and no -exec is given. go test
 // looks it up from dir, its working directory, and runs the binaries directly
 // without one that it would run. It fails for a helper that go test would run
-// through a path relative to dir.
+// through a path relative to dir, or that ddto cannot look up as go test does.
 func crossExecHelper(environment *goEnvironment, dir string) (string, error) {
 	if environment.GOOS == environment.GOHOSTOS && environment.GOARCH == environment.GOHOSTARCH {
 		return "", nil
 	}
 	path, err := lookPathFrom(dir, "go_"+environment.GOOS+"_"+environment.GOARCH+"_exec")
-	if err != nil && !errors.Is(err, errRelativeProgram) {
+	if errors.Is(err, exec.ErrNotFound) || errors.Is(err, exec.ErrDot) {
 		return "", nil
 	}
 	return path, err
@@ -42,22 +42,36 @@ func crossExecHelper(environment *goEnvironment, dir string) (string, error) {
 // to its working directory, as GODEBUG=execerrdot=0 allows.
 var errRelativeProgram = errors.New("found relative to the current directory, which GODEBUG=execerrdot=0 allows")
 
+// errUnknownProgram is a lookup that ddto cannot reproduce: through a PATH
+// entry relative to another drive's current directory, or with an execerrdot
+// setting that GODEBUG limits to some call stacks.
+var errUnknownProgram = errors.New("looked up through a PATH entry or GODEBUG setting that ddto cannot reproduce")
+
 // lookPathFrom looks file up on PATH as exec.LookPath does with dir as the
 // current directory, where go test looks up -exec programs and the
 // cross-compilation helper after -C. It returns the absolute path of the file
 // that Go would run. A file that Go would refuse to run returns exec.ErrDot,
-// and one that Go would run relative to dir returns errRelativeProgram.
+// one that Go would run relative to dir returns errRelativeProgram, and a
+// lookup that ddto cannot reproduce returns errUnknownProgram.
 func lookPathFrom(dir, file string) (string, error) {
 	windows := runtime.GOOS == "windows"
-	refuse := execErrDot()
+	refuse, known := execErrDot()
+	// relativeMatch is the result for a match relative to dir that Go would
+	// not refuse.
+	relativeMatch := func() error {
+		if !known {
+			return &exec.Error{Name: file, Err: errUnknownProgram}
+		}
+		return &exec.Error{Name: file, Err: errRelativeProgram}
+	}
 	// pending is a match relative to dir, which Go refuses unless, on
 	// Windows, PATH later names the same file absolutely.
 	var pending string
 	if _, skip := os.LookupEnv("NoDefaultCurrentDirectoryInExePath"); windows && !skip {
 		// Windows searches the current directory first.
 		if f, err := exec.LookPath(filepath.Join(dir, file)); err == nil {
-			if !refuse {
-				return "", &exec.Error{Name: file, Err: errRelativeProgram}
+			if !refuse || !known {
+				return "", relativeMatch()
 			}
 			pending = f
 		}
@@ -73,7 +87,18 @@ func lookPathFrom(dir, file string) (string, error) {
 		relative := !filepath.IsAbs(entry)
 		candidate := filepath.Join(entry, file)
 		if relative {
-			candidate = filepath.Join(dir, candidate)
+			switch volume := filepath.VolumeName(entry); {
+			case volume != "" && !strings.EqualFold(volume, filepath.VolumeName(dir)):
+				// Relative to that drive's own current directory.
+				return "", &exec.Error{Name: file, Err: errUnknownProgram}
+			case volume != "":
+				candidate = filepath.Join(dir, candidate[len(volume):])
+			case os.IsPathSeparator(entry[0]):
+				// Rooted on the current drive, on Windows.
+				candidate = filepath.VolumeName(dir) + candidate
+			default:
+				candidate = filepath.Join(dir, candidate)
+			}
 		}
 		f, err := exec.LookPath(candidate)
 		switch {
@@ -83,8 +108,8 @@ func lookPathFrom(dir, file string) (string, error) {
 			return "", &exec.Error{Name: file, Err: exec.ErrDot}
 		case !relative:
 			return f, nil
-		case !refuse:
-			return "", &exec.Error{Name: file, Err: errRelativeProgram}
+		case !refuse || !known:
+			return "", relativeMatch()
 		case !windows:
 			return "", &exec.Error{Name: file, Err: exec.ErrDot}
 		case pending == "":
@@ -98,15 +123,16 @@ func lookPathFrom(dir, file string) (string, error) {
 }
 
 // execErrDot reports whether Go refuses programs found relative to the
-// current directory: unless GODEBUG's last execerrdot setting is 0.
-func execErrDot() bool {
+// current directory: unless GODEBUG's last execerrdot setting is 0. A setting
+// for the call stacks that a pattern selects, value#pattern, is not known.
+func execErrDot() (refuse, known bool) {
 	value := ""
 	for _, setting := range strings.Split(os.Getenv("GODEBUG"), ",") {
 		if name, v, ok := strings.Cut(setting, "="); ok && name == "execerrdot" {
 			value = v
 		}
 	}
-	return value != "0"
+	return value != "0", !strings.Contains(value, "#")
 }
 
 // sameLink reports whether a and b name the same file, without following a

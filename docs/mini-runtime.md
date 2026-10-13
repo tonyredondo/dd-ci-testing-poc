@@ -82,7 +82,9 @@ lock while it uses one. Mini's test runtime restores the `GOROOT` and `PATH`
 that tests see natively, including the toolchain's `bin` first in `PATH`, so
 tests that run `go` get the same toolchain. `runtime.GOROOT()` and standard
 library paths in stack traces name the mirror; tests of the SDK runtime also
-see its `GOROOT` and `PATH`. When no mirror is possible, for example because the
+see its `GOROOT` and `PATH`. A launcher such as Orchestrion finds the mirror's
+`go` first in `PATH`, so `ddto` passes it a `-exec` program by the path that
+`go test` would use. When no mirror is possible, for example because the
 user cache lies in `GOMODCACHE`, the toolchain, or the module or its checkout,
 `ddto test` warns and runs `go test` without CI Visibility. Mini requires Go 1.25 or newer;
 preparation checks the toolchain selected by Go. A client declaring Go 1.21

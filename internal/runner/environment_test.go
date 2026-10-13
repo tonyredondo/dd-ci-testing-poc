@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -88,6 +89,10 @@ func TestCrossExecHelperMatchesGoTest(t *testing.T) {
 	if _, err := crossExecHelper(cross, work); !errors.Is(err, errRelativeProgram) {
 		t.Fatalf("a relative helper that go test runs: %v", err)
 	}
+	t.Setenv("GODEBUG", "execerrdot=0#y")
+	if _, err := crossExecHelper(cross, work); !errors.Is(err, errUnknownProgram) {
+		t.Fatalf("a relative helper that go test may run: %v", err)
+	}
 }
 
 // writeProgram creates an executable named prog in dir.
@@ -134,6 +139,10 @@ func TestLookPathFromMatchesLookPath(t *testing.T) {
 		{"dot", []string{from}, "."},
 		{"dot, then the same directory", []string{from}, "." + sep + from},
 		{"dot, then another directory", []string{from, abs}, "." + sep + abs},
+		// Rooted on the current drive on Windows; absolute elsewhere.
+		{"rooted entry", []string{abs}, abs[len(filepath.VolumeName(abs)):]},
+		// Relative to the current drive's directory on Windows.
+		{"drive-relative entry", []string{filepath.Join(from, "rel"), abs}, filepath.VolumeName(from) + "rel" + sep + abs},
 	} {
 		for _, godebug := range []string{"", "execerrdot=1", "execerrdot=0", "execerrdot=0,execerrdot=1"} {
 			for _, noDot := range []bool{false, true} {
@@ -204,6 +213,8 @@ func TestResolveExecProgram(t *testing.T) {
 		{"missing", bin, "", []string{"missing"}, nil, exec.ErrNotFound},
 		{"relative to the directory", "rel" + sep + bin, "", []string{"prog"}, nil, exec.ErrDot},
 		{"run relative to the directory", "rel" + sep + bin, "execerrdot=0", []string{"prog"}, nil, errRelativeProgram},
+		{"maybe run relative to the directory", "rel" + sep + bin, "execerrdot=0#y", []string{"prog"}, nil, errUnknownProgram},
+		{"absolute with a GODEBUG pattern", bin, "execerrdot=0#y", []string{"prog"}, []string{program}, nil},
 		{"path", bin, "", []string{filepath.Join("sub", "prog")}, []string{filepath.Join("sub", "prog")}, nil},
 		{"empty", bin, "", nil, nil, nil},
 	} {
@@ -296,5 +307,22 @@ func TestExperimentSeparator(t *testing.T) {
 		if base, experiments, _ := cutExperiments(value); base != want[0] || experiments != want[1] {
 			t.Errorf("cutExperiments(%q) = %q, %q", value, base, experiments)
 		}
+	}
+}
+
+// A PATH entry relative to another drive's current directory names a
+// directory that only Go's own process knows.
+func TestLookPathFromOtherDrive(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	dir := t.TempDir()
+	other := "Z:"
+	if strings.EqualFold(filepath.VolumeName(dir), other) {
+		other = "Y:"
+	}
+	t.Setenv("PATH", other+"tools")
+	if _, err := lookPathFrom(dir, "prog"); !errors.Is(err, errUnknownProgram) {
+		t.Fatalf("lookPathFrom: %v", err)
 	}
 }

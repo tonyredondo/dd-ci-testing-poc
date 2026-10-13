@@ -434,6 +434,11 @@ func TestMiniGOROOTMirrorDirectToolchain(t *testing.T) {
 	copyExecutable(t, filepath.Join(executors, executableName(helper)), filepath.Join(dir, "bin", executableName(helper)))
 	relativeEnv := append(prependPATH(crossEnv, "bin"), "GODEBUG=execerrdot=0")
 	sameExecutorView(t, dir, relativeEnv, append(relativeEnv, "DD_CIVISIBILITY_ENABLED=false"), goCommand, sharedDriver(t, ".."), "test", "-count=1", "-v", "./...")
+	// With -c, go test runs no test binary, and the helper does not matter.
+	out, stderr, code := command(t, dir, append(relativeEnv, "DD_CIVISIBILITY_ENABLED=false"), sharedDriver(t, ".."), "test", "-c", "-o", filepath.Join(t.TempDir(), executableName("mirror.test")), ".")
+	if code != 0 || strings.Contains(stderr, "running go test without CI Visibility") {
+		t.Fatalf("-c with a relative helper: exit %d\n%s%s", code, out, stderr)
+	}
 	// An -exec program missing from the caller's PATH stays missing, although
 	// the toolchain's bin, first in the tests' PATH, has one by that name.
 	alone := t.TempDir()

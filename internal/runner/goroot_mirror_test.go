@@ -727,4 +727,38 @@ func TestWrapExecProgram(t *testing.T) {
 			}
 		})
 	}
+	// A launcher runs go with the mirror's bin first in PATH. Without values to
+	// restore, as with the SDK runtime, ddto passes the caller's program by
+	// its path instead of wrapping it.
+	bin := t.TempDir()
+	exe := ""
+	if goruntime.GOOS == "windows" {
+		exe = ".exe"
+	}
+	program := filepath.Join(bin, "prog"+exe)
+	if err := os.WriteFile(program, []byte("#!/bin/sh\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	launcher := &goLauncher{command: []string{"/orchestrion", "go"}}
+	for _, tc := range []struct {
+		name    string
+		plan    Plan
+		opts    options
+		wrapper string
+		native  bool
+	}{
+		{"launcher", Plan{gorootMirror: mirror, launcher: launcher}, options{exec: "prog -x"}, "'" + program + "' '-x'", false},
+		{"launcher, missing", Plan{gorootMirror: mirror, launcher: launcher}, options{exec: "missing"}, "", true},
+		{"launcher with -c", Plan{gorootMirror: mirror, launcher: launcher}, options{exec: "missing", compileOnly: true}, "", false},
+		{"without a launcher", Plan{gorootMirror: mirror}, options{exec: "prog"}, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := wrapExecProgram(&tc.plan, tc.opts, t.TempDir())
+			var native *nativeGoError
+			if errors.As(err, &native) != tc.native || !tc.native && err != nil || tc.plan.execWrapper != tc.wrapper {
+				t.Fatalf("wrapExecProgram: %v, wrapper %q", err, tc.plan.execWrapper)
+			}
+		})
+	}
 }
