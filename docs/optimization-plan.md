@@ -142,10 +142,11 @@ difference from native, and the documented limitation is removed.
     about 25 s.
 - **What tests see.** Mini restores the native `GOROOT` and `PATH`; the SDK
   runtime and `runtime.GOROOT()` see the mirror.
-- **Measured.** Gin's `ddto test -count=1 ./...` takes 1.016 s with the mirror,
-  against 1.017 s for a toolchain outside `GOMODCACHE`. The first run takes
-  3.4 s with links and 6.8 s with copies: creating the mirror plus relinking,
-  because link cache keys include GOROOT.
+- **Measured,** with the audit fixes. Gin's `ddto test -count=1 ./...` takes
+  1.026 s with the mirror, against 1.024 s for a toolchain outside
+  `GOMODCACHE`; before the fixes, 1.020 s and 1.028 s, within noise. The first
+  run takes 3.4 s with links and 6.8 s with copies: creating the mirror plus
+  relinking, because link cache keys include GOROOT.
 
 ## Phase 2: per-test coverage in memory (item 8)
 
