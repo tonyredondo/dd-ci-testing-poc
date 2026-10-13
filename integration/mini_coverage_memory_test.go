@@ -64,6 +64,17 @@ func TestCoveredRetry(t *testing.T) {
 func TestMiniPerTestCoverageInMemory(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
 	writeBuildFixture(t, dir, map[string]string{"memory_cov.go": coverageMemoryLibrary, "memory_cov_test.go": coverageMemoryTests})
+	t.Run("no-coverage", func(t *testing.T) {
+		bin := filepath.Join(t.TempDir(), executableName("plain.test"))
+		out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false", "DD_TRACE_DEBUG=true"), driver,
+			"test", "--runtime=mini", "-c", "-o", bin, ".")
+		if code != 0 {
+			t.Fatal(out, stderr)
+		}
+		if strings.Contains(stderr, "in_memory_hook") {
+			t.Fatalf("hook considered without coverage:\n%s", stderr)
+		}
+	})
 	for _, build := range []struct {
 		name   string
 		flags  []string
