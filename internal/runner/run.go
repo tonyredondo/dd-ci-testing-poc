@@ -115,6 +115,16 @@ func (p Plan) Release() {
 	p.gorootMirror.release()
 }
 
+// GoCommand returns the go command for builds that use this plan, and the
+// environment entries it needs: a mirrored toolchain's go and its GOROOT, or
+// go and none.
+func (p Plan) GoCommand() (name string, env []string) {
+	if p.gorootMirror == nil {
+		return "go", nil
+	}
+	return p.gorootMirror.toolchain.path, p.gorootMirror.toolchain.env[:1]
+}
+
 // Prepare creates a complete plan before native Go compilation starts. Callers
 // own the plan directory and must remove it, and call Release, after all
 // compiler processes finish.
@@ -474,7 +484,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	// temporary workspace, while tests see the caller's values. Keying the test
 	// binaries on those values keeps a cached result from outliving them.
 	if len(plan.savedEnvironment()) != 0 && opts.exec == "" {
-		plan.execHelper = crossExecHelper(opts.environment)
+		plan.execHelper = crossExecHelper(opts.environment, dir)
 	}
 	// Go caches by binary content, so the fingerprint must reach the binary.
 	callerEnvironment := ""
@@ -748,26 +758,23 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 	// caching for those runs, so ddto's wrapper restores them first.
 	if len(plan.savedEnvironment()) != 0 && (opts.exec != "" || plan.execHelper != "") {
 		words := []string{plan.execHelper}
+		wrap := true
 		if opts.exec != "" {
 			if words, err = splitFlags(opts.exec); err != nil {
 				fmt.Fprintln(stderr, version.BuildLogPrefix+" ERROR: invalid -exec:", err)
 				return 2
 			}
-			// go test resolves the program on the caller's PATH; test-exec
-			// starts it after restoring the toolchain's bin first in PATH.
-			if plan.gorootMirror != nil && !strings.ContainsAny(words[0], `/\`) {
-				if path, e := exec.LookPath(words[0]); e == nil {
-					words[0] = path
-				}
+			words, wrap = resolveExecProgram(dir, words)
+		}
+		if wrap {
+			executable, e := os.Executable()
+			if e == nil {
+				plan.execWrapper, e = quoteToolWords(append([]string{executable, "test-exec"}, words...))
 			}
-		}
-		executable, e := os.Executable()
-		if e == nil {
-			plan.execWrapper, e = quoteToolWords(append([]string{executable, "test-exec"}, words...))
-		}
-		if e != nil {
-			fmt.Fprintln(stderr, version.BuildLogPrefix+" ERROR:", e)
-			return 2
+			if e != nil {
+				fmt.Fprintln(stderr, version.BuildLogPrefix+" ERROR:", e)
+				return 2
+			}
 		}
 	}
 	forwarded := goTestArguments(plan, opts, tool)
@@ -792,6 +799,22 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		ctx = context.WithValue(ctx, goLauncherKey{}, *plan.launcher)
 	}
 	return runGo(ctx, dir, forwarded, env, gitWorker.relaySignals(signals), stdin, stdout, stderr)
+}
+
+// resolveExecProgram looks the -exec program name up as go test does: on the
+// caller's PATH from dir, go test's working directory. test-exec would look it
+// up after restoring the toolchain's bin first in PATH, from the package
+// directory. It reports false for a program that go test cannot run: go test
+// then reports that itself, without ddto's wrapper.
+func resolveExecProgram(dir string, words []string) ([]string, bool) {
+	if len(words) == 0 || filepath.Base(words[0]) != words[0] {
+		return words, true
+	}
+	path, err := lookPathFrom(dir, words[0])
+	if err != nil {
+		return words, false
+	}
+	return append([]string{path}, words[1:]...), true
 }
 
 // prepareInterruptibly cancels package resolution when a signal arrives. The

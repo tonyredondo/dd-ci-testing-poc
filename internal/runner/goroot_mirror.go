@@ -182,9 +182,7 @@ func gorootMirrorLocation(env *goEnvironment, dir string) (parent, key string, e
 	}
 	// A nested module's repository also holds directories beside the module.
 	for _, path := range append([]string(nil), protected[2:]...) {
-		if root := enclosingCheckout(path); root != "" {
-			protected = append(protected, root)
-		}
+		protected = append(protected, enclosingCheckouts(path)...)
 	}
 	for _, path := range protected {
 		if path != "" && filePathHasPrefix(resolved, resolvedPath(path)) {
@@ -201,10 +199,23 @@ func gorootMirrorLocation(env *goEnvironment, dir string) (parent, key string, e
 	return parent, name + "-" + hex.EncodeToString(sum[:8]), nil
 }
 
+// enclosingCheckouts returns the nearest directories at or above dir that
+// hold a version-control checkout, along dir as given and along its resolved
+// path: a symbolic link in a checkout can lead out of it.
+func enclosingCheckouts(dir string) []string {
+	var roots []string
+	for _, start := range []string{filepath.Clean(dir), resolvedPath(dir)} {
+		if root := enclosingCheckout(start); root != "" {
+			roots = append(roots, root)
+		}
+	}
+	return roots
+}
+
 // enclosingCheckout returns the nearest directory at or above dir that holds a
 // version-control checkout, or "".
 func enclosingCheckout(dir string) string {
-	for current := resolvedPath(dir); ; {
+	for current := dir; ; {
 		for _, marker := range []string{".git", ".hg", ".jj", ".svn"} {
 			if _, err := os.Lstat(filepath.Join(current, marker)); err == nil {
 				return current
@@ -529,16 +540,30 @@ func resolvedExecutable(path string) string {
 	return filepath.Clean(path)
 }
 
+// sameExecutable reports whether a and b are the same file, also through
+// symbolic or hard links.
+func sameExecutable(a, b string) bool {
+	if resolvedExecutable(a) == resolvedExecutable(b) {
+		return true
+	}
+	ai, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	bi, err := os.Stat(b)
+	return err == nil && os.SameFile(ai, bi)
+}
+
 // nativeGOROOT returns the GOROOT that test processes see without ddto. The
 // caller's go may be the toolchain itself, which keeps the caller's GOROOT.
 // Otherwise it switched: to a go<version> command on PATH, which runs with
 // GOROOT unset, or to a downloaded toolchain, which receives its GOROOT.
 func nativeGOROOT(goroot, goversion, exe string) (string, bool) {
-	toolchain := resolvedExecutable(filepath.Join(goroot, "bin", "go"+exe))
-	if caller, err := exec.LookPath("go"); err == nil && resolvedExecutable(caller) == toolchain {
+	toolchain := filepath.Join(goroot, "bin", "go"+exe)
+	if caller, err := exec.LookPath("go"); err == nil && sameExecutable(caller, toolchain) {
 		return os.LookupEnv("GOROOT")
 	}
-	if named, err := exec.LookPath(goversion); err == nil && resolvedExecutable(named) == toolchain {
+	if named, err := exec.LookPath(goversion); err == nil && sameExecutable(named, toolchain) {
 		return "", false
 	}
 	return goroot, true

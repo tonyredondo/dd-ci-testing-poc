@@ -114,6 +114,23 @@ func sameExecutorView(t *testing.T, dir string, env, ciEnv []string, goCommand, 
 	}
 }
 
+var execFailure = regexp.MustCompile(`(?m)^exec: "[^"]+": .*$`)
+
+// sameExecFailure checks that ddto, like go test, reports an -exec program
+// that go test cannot run, rather than running another one.
+func sameExecFailure(t *testing.T, dir string, env, ciEnv []string, goCommand, driver string, args ...string) {
+	t.Helper()
+	nativeOut, nativeErr, code := command(t, dir, env, goCommand, args...)
+	native := execFailure.FindString(nativeOut + nativeErr)
+	if code != 1 || native == "" {
+		t.Fatalf("native %v: exit %d\n%s%s", args, code, nativeOut, nativeErr)
+	}
+	out, stderr, code := command(t, dir, ciEnv, driver, args...)
+	if code != 1 || execFailure.FindString(out+stderr) != native {
+		t.Fatalf("ddto %v: exit %d, want %q\n%s%s", args, code, native, out, stderr)
+	}
+}
+
 // Values are %q-quoted, so Windows paths arrive with escaped backslashes.
 var toolchainLine = regexp.MustCompile(`TOOLCHAIN goroot_env=("(?:[^"\\]|\\.)*") goroot_set=(\w+) first_path=("(?:[^"\\]|\\.)*") lookpath=("(?:[^"\\]|\\.)*") go_env=("(?:[^"\\]|\\.)*") runtime=("(?:[^"\\]|\\.)*") END`)
 
@@ -342,6 +359,13 @@ func runMirroredToolchain(t *testing.T, dir string, env []string, goCommand, cac
 	if !strings.Contains(out, "(cached)") {
 		t.Fatalf("result not cached:\n%s", out)
 	}
+	// go test looks -exec programs up from -C's directory, where a relative
+	// PATH entry matches one that Go refuses to run, ahead of the same name
+	// elsewhere on PATH.
+	executors = buildExecutor(t, "ddtoexec")
+	copyExecutable(t, filepath.Join(executors, executableName("ddtoexec")), filepath.Join(dir, "bin", executableName("ddtoexec")))
+	relative := func(env []string) []string { return prependPATH(prependPATH(env, executors), "bin") }
+	sameExecFailure(t, filepath.Dir(dir), relative(env), relative(ciEnv), goCommand, driver, "test", "-C", filepath.Base(dir), "-count=1", "-exec=ddtoexec", "./...")
 	if after := treeModes(t, modcache); !sameModes(before, after) {
 		t.Fatal("the module cache's files changed")
 	}
@@ -367,6 +391,12 @@ func TestMiniGOROOTMirrorDirectToolchain(t *testing.T) {
 	crossEnv := append(prependPATH(env, executors), "GOARCH="+cross, "CGO_ENABLED=0")
 	ciEnv := append(crossEnv, "DD_CIVISIBILITY_ENABLED=false")
 	sameExecutorView(t, dir, crossEnv, ciEnv, goCommand, sharedDriver(t, ".."), "test", "-count=1", "-v", "./...")
+	// An -exec program missing from the caller's PATH stays missing, although
+	// the toolchain's bin, first in the tests' PATH, has one by that name.
+	alone := t.TempDir()
+	copyExecutable(t, goCommand, filepath.Join(alone, executableName("go")))
+	aloneEnv := append(append([]string(nil), env...), "PATH="+alone, "GOROOT="+goroot, "CGO_ENABLED=0")
+	sameExecFailure(t, dir, aloneEnv, append(aloneEnv, "DD_CIVISIBILITY_ENABLED=false"), filepath.Join(alone, executableName("go")), sharedDriver(t, ".."), "test", "-count=1", "-exec=gofmt", "./...")
 }
 
 // switchingGo stands for a module-cache toolchain whose go list switches to

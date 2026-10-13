@@ -430,6 +430,17 @@ func TestGOROOTMirrorEnvironment(t *testing.T) {
 		{"downloaded switch", other, env.GOROOT, true},
 		{"direct", toolchainBin, "/caller/goroot", true},
 	}
+	// A hard link is the same executable under another name.
+	hardLinked := t.TempDir()
+	if err := os.Link(filepath.Join(toolchainBin, "go"+exe), filepath.Join(hardLinked, env.GOVERSION+exe)); err != nil {
+		t.Fatal(err)
+	}
+	cases = append(cases, struct {
+		name      string
+		path      string
+		goroot    string
+		gorootSet bool
+	}{"go<version> hard link on PATH", other + sep + hardLinked, "", false})
 	if goruntime.GOOS != "windows" {
 		linked := t.TempDir()
 		if err := os.Symlink(filepath.Join(toolchainBin, "go"), filepath.Join(linked, "go")); err != nil {
@@ -609,6 +620,38 @@ func TestGOROOTMirrorProtectsTheCheckout(t *testing.T) {
 	defer func() { userCacheDir = previous }()
 	if _, _, err := gorootMirrorLocation(env, module); err == nil {
 		t.Fatal("a cache in the module's checkout was accepted")
+	}
+	// A symbolic link in the checkout can lead to a module outside it.
+	if goruntime.GOOS == "windows" {
+		return
+	}
+	linked := filepath.Join(repo, "linked")
+	if err := os.Symlink(t.TempDir(), linked); err != nil {
+		t.Fatal(err)
+	}
+	env.GOMOD = filepath.Join(linked, "go.mod")
+	if _, _, err := gorootMirrorLocation(env, linked); err == nil {
+		t.Fatal("a cache in the checkout of a linked module was accepted")
+	}
+	// And a link outside the checkout can lead into it.
+	outside := filepath.Join(t.TempDir(), "outside")
+	if err := os.Symlink(module, outside); err != nil {
+		t.Fatal(err)
+	}
+	env.GOMOD = filepath.Join(outside, "go.mod")
+	if _, _, err := gorootMirrorLocation(env, outside); err == nil {
+		t.Fatal("a cache in the checkout of a module reached through a link was accepted")
+	}
+}
+
+// Builds that use a plan run its toolchain: the mirror's go with its GOROOT.
+func TestPlanGoCommand(t *testing.T) {
+	if name, env := (Plan{}).GoCommand(); name != "go" || env != nil {
+		t.Fatalf("without a mirror: %s %v", name, env)
+	}
+	mirror := &gorootMirror{toolchain: goToolchain{path: "/mirror/bin/go", root: "/mirror", env: []string{"GOROOT=/mirror", "PATH=/mirror/bin"}}}
+	if name, env := (Plan{gorootMirror: mirror}).GoCommand(); name != "/mirror/bin/go" || !slices.Equal(env, []string{"GOROOT=/mirror"}) {
+		t.Fatalf("with a mirror: %s %v", name, env)
 	}
 }
 

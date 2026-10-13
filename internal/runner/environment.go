@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/version"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -19,16 +22,65 @@ const (
 )
 
 // crossExecHelper returns the go_$GOOS_$GOARCH_exec program that go test runs
-// test binaries with when it cross-compiles and no -exec is given.
-func crossExecHelper(environment *goEnvironment) string {
+// test binaries with when it cross-compiles and no -exec is given. go test
+// looks it up from dir, its working directory.
+func crossExecHelper(environment *goEnvironment, dir string) string {
 	if environment.GOOS == environment.GOHOSTOS && environment.GOARCH == environment.GOHOSTARCH {
 		return ""
 	}
-	path, err := exec.LookPath("go_" + environment.GOOS + "_" + environment.GOARCH + "_exec")
+	path, err := lookPathFrom(dir, "go_"+environment.GOOS+"_"+environment.GOARCH+"_exec")
 	if err != nil {
 		return ""
 	}
 	return path
+}
+
+// lookPathFrom finds file on PATH as exec.LookPath would with dir as the
+// current directory, where go test looks up -exec programs and the
+// cross-compilation helper after -C. A match relative to dir returns
+// exec.ErrDot: Go refuses to run it.
+func lookPathFrom(dir, file string) (string, error) {
+	windows := runtime.GOOS == "windows"
+	var dot string
+	if _, skip := os.LookupEnv("NoDefaultCurrentDirectoryInExePath"); windows && !skip {
+		// Windows searches the current directory first.
+		dot, _ = exec.LookPath(filepath.Join(dir, file))
+	}
+	for _, entry := range filepath.SplitList(os.Getenv("PATH")) {
+		if entry == "" && windows {
+			continue
+		}
+		// An empty entry is the current directory on Unix.
+		relative := !filepath.IsAbs(entry)
+		if relative {
+			entry = filepath.Join(dir, entry)
+		}
+		path, err := exec.LookPath(filepath.Join(entry, file))
+		if err != nil {
+			continue
+		}
+		// Go prefers PATH's spelling of the file that it found in the current
+		// directory, without an error.
+		if dot == "" && !relative || dot != "" && sameLink(dot, path) {
+			return path, nil
+		}
+		return "", &exec.Error{Name: file, Err: exec.ErrDot}
+	}
+	if dot != "" {
+		return "", &exec.Error{Name: file, Err: exec.ErrDot}
+	}
+	return "", &exec.Error{Name: file, Err: exec.ErrNotFound}
+}
+
+// sameLink reports whether a and b name the same file, without following a
+// final symbolic link, as exec.LookPath compares them.
+func sameLink(a, b string) bool {
+	ai, err := os.Lstat(a)
+	if err != nil {
+		return false
+	}
+	bi, err := os.Lstat(b)
+	return err == nil && os.SameFile(ai, bi)
 }
 
 // goDebugDefault returns the GODEBUG default=go1.N value for a Go version.
