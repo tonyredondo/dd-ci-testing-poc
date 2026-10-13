@@ -68,13 +68,48 @@ func main() {
 
 var executorLine = regexp.MustCompile(`(?m)^EXECUTOR .* END$`)
 
+// fakeOrchestrion runs go and toolexec commands as Orchestrion does, without
+// changing the code.
+const fakeOrchestrion = `package main
+
+import (
+	"os"
+	"os/exec"
+)
+
+func main() {
+	if len(os.Args) < 3 || os.Args[1] != "go" && os.Args[1] != "toolexec" {
+		os.Exit(2)
+	}
+	name, args := "go", os.Args[2:]
+	if os.Args[1] == "toolexec" {
+		name, args = os.Args[2], os.Args[3:]
+	}
+	cmd := exec.Command(name, args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		if exit, ok := err.(*exec.ExitError); ok {
+			os.Exit(exit.ExitCode())
+		}
+		os.Exit(1)
+	}
+}
+`
+
 // buildExecutor builds the executor under each of names in a new directory,
 // which it returns.
 func buildExecutor(t *testing.T, names ...string) string {
 	t.Helper()
+	return buildProgram(t, gorootMirrorExecutor, names...)
+}
+
+// buildProgram builds source under each of names in a new directory, which it
+// returns.
+func buildProgram(t *testing.T, program string, names ...string) string {
+	t.Helper()
 	source, dir := t.TempDir(), t.TempDir()
-	writeBuildFixture(t, source, map[string]string{"go.mod": "module example.com/executor\n\ngo 1.21\n", "main.go": gorootMirrorExecutor})
-	built := filepath.Join(source, executableName("executor"))
+	writeBuildFixture(t, source, map[string]string{"go.mod": "module example.com/program\n\ngo 1.21\n", "main.go": program})
+	built := filepath.Join(source, executableName("program"))
 	if out, stderr, code := command(t, source, testEnv("GOWORK=off", "GOTOOLCHAIN=local"), "go", "build", "-o", built, "."); code != 0 {
 		t.Fatal(out, stderr)
 	}
@@ -117,17 +152,18 @@ func sameExecutorView(t *testing.T, dir string, env, ciEnv []string, goCommand, 
 var execFailure = regexp.MustCompile(`(?m)^exec: "[^"]+": .*$`)
 
 // sameExecFailure checks that ddto, like go test, reports an -exec program
-// that go test cannot run, rather than running another one.
-func sameExecFailure(t *testing.T, dir string, env, ciEnv []string, goCommand, driver string, args ...string) {
+// that go test cannot run, rather than running another one: it runs go test
+// natively. Each command is a program and its arguments.
+func sameExecFailure(t *testing.T, dir string, env, ciEnv, native, ddto []string) {
 	t.Helper()
-	nativeOut, nativeErr, code := command(t, dir, env, goCommand, args...)
-	native := execFailure.FindString(nativeOut + nativeErr)
-	if code != 1 || native == "" {
-		t.Fatalf("native %v: exit %d\n%s%s", args, code, nativeOut, nativeErr)
+	nativeOut, nativeErr, code := command(t, dir, env, native[0], native[1:]...)
+	want := execFailure.FindString(nativeOut + nativeErr)
+	if code != 1 || want == "" {
+		t.Fatalf("native %v: exit %d\n%s%s", native, code, nativeOut, nativeErr)
 	}
-	out, stderr, code := command(t, dir, ciEnv, driver, args...)
-	if code != 1 || execFailure.FindString(out+stderr) != native {
-		t.Fatalf("ddto %v: exit %d, want %q\n%s%s", args, code, native, out, stderr)
+	out, stderr, code := command(t, dir, ciEnv, ddto[0], ddto[1:]...)
+	if code != 1 || execFailure.FindString(out+stderr) != want || !strings.Contains(stderr, "running go test without CI Visibility") {
+		t.Fatalf("ddto %v: exit %d, want %q\n%s%s", ddto, code, want, out, stderr)
 	}
 }
 
@@ -365,7 +401,8 @@ func runMirroredToolchain(t *testing.T, dir string, env []string, goCommand, cac
 	executors = buildExecutor(t, "ddtoexec")
 	copyExecutable(t, filepath.Join(executors, executableName("ddtoexec")), filepath.Join(dir, "bin", executableName("ddtoexec")))
 	relative := func(env []string) []string { return prependPATH(prependPATH(env, executors), "bin") }
-	sameExecFailure(t, filepath.Dir(dir), relative(env), relative(ciEnv), goCommand, driver, "test", "-C", filepath.Base(dir), "-count=1", "-exec=ddtoexec", "./...")
+	args := []string{"test", "-C", filepath.Base(dir), "-count=1", "-exec=ddtoexec", "./..."}
+	sameExecFailure(t, filepath.Dir(dir), relative(env), relative(ciEnv), append([]string{goCommand}, args...), append([]string{driver}, args...))
 	if after := treeModes(t, modcache); !sameModes(before, after) {
 		t.Fatal("the module cache's files changed")
 	}
@@ -387,16 +424,31 @@ func TestMiniGOROOTMirrorDirectToolchain(t *testing.T) {
 	if runtime.GOARCH == "amd64" {
 		cross = "arm64"
 	}
-	executors := buildExecutor(t, "go_"+runtime.GOOS+"_"+cross+"_exec")
+	helper := "go_" + runtime.GOOS + "_" + cross + "_exec"
+	executors := buildExecutor(t, helper)
 	crossEnv := append(prependPATH(env, executors), "GOARCH="+cross, "CGO_ENABLED=0")
 	ciEnv := append(crossEnv, "DD_CIVISIBILITY_ENABLED=false")
 	sameExecutorView(t, dir, crossEnv, ciEnv, goCommand, sharedDriver(t, ".."), "test", "-count=1", "-v", "./...")
+	// With GODEBUG=execerrdot=0, go test runs a helper that it finds relative
+	// to its directory, which ddto leaves to native go test.
+	copyExecutable(t, filepath.Join(executors, executableName(helper)), filepath.Join(dir, "bin", executableName(helper)))
+	relativeEnv := append(prependPATH(crossEnv, "bin"), "GODEBUG=execerrdot=0")
+	sameExecutorView(t, dir, relativeEnv, append(relativeEnv, "DD_CIVISIBILITY_ENABLED=false"), goCommand, sharedDriver(t, ".."), "test", "-count=1", "-v", "./...")
 	// An -exec program missing from the caller's PATH stays missing, although
 	// the toolchain's bin, first in the tests' PATH, has one by that name.
 	alone := t.TempDir()
 	copyExecutable(t, goCommand, filepath.Join(alone, executableName("go")))
 	aloneEnv := append(append([]string(nil), env...), "PATH="+alone, "GOROOT="+goroot, "CGO_ENABLED=0")
-	sameExecFailure(t, dir, aloneEnv, append(aloneEnv, "DD_CIVISIBILITY_ENABLED=false"), filepath.Join(alone, executableName("go")), sharedDriver(t, ".."), "test", "-count=1", "-exec=gofmt", "./...")
+	aloneCIEnv := append(aloneEnv, "DD_CIVISIBILITY_ENABLED=false")
+	args := []string{"test", "-count=1", "-exec=gofmt", "./..."}
+	driver := sharedDriver(t, "..")
+	sameExecFailure(t, dir, aloneEnv, aloneCIEnv, append([]string{filepath.Join(alone, executableName("go"))}, args...), append([]string{driver}, args...))
+	// Also through Orchestrion, which runs go from PATH, where ddto puts the
+	// mirror's bin first: ddto runs the caller's command.
+	orchestrion := buildProgram(t, fakeOrchestrion, "orchestrion")
+	withOrchestrion := func(env []string) []string { return prependPATH(env, orchestrion) }
+	sameExecFailure(t, dir, withOrchestrion(aloneEnv), withOrchestrion(aloneCIEnv),
+		append([]string{filepath.Join(orchestrion, executableName("orchestrion")), "go"}, args...), append([]string{driver, "orchestrion", "go"}, args...))
 }
 
 // switchingGo stands for a module-cache toolchain whose go list switches to

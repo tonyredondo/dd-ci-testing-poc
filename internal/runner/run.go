@@ -241,7 +241,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		// downloaded toolchains: run go from a mirror of that GOROOT.
 		plan.gorootMirror, e = prepareGOROOTMirror(ctx, opts.environment, dir, debug)
 		if e != nil {
-			return plan, &gorootMirrorError{e}
+			return plan, mirrorUnavailable(e)
 		}
 		ctx = withGoToolchain(ctx, plan.gorootMirror)
 	}
@@ -484,7 +484,9 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	// temporary workspace, while tests see the caller's values. Keying the test
 	// binaries on those values keeps a cached result from outliving them.
 	if len(plan.savedEnvironment()) != 0 && opts.exec == "" {
-		plan.execHelper = crossExecHelper(opts.environment, dir)
+		if plan.execHelper, e = crossExecHelper(opts.environment, dir); e != nil {
+			return plan, &nativeGoError{"exec_helper=relative", e}
+		}
 	}
 	// Go caches by binary content, so the fingerprint must reach the binary.
 	callerEnvironment := ""
@@ -690,15 +692,17 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 			plan.Release()
 			_ = os.RemoveAll(plan.Dir)
 		}()
+		err = wrapExecProgram(&plan, opts, dir)
 	}
 	if interrupted != nil {
 		debug.printf("preparation interrupted")
 		return interruptedStatus(interrupted)
 	}
-	if fallsBackToNativeGo(ctx, err) {
+	var native *nativeGoError
+	if errors.As(err, &native) && fallsBackToNativeGo(ctx, err) {
 		// The toolchain is supported; only ddto's instrumentation is not.
 		fmt.Fprintln(stderr, version.BuildLogPrefix+" WARN:", err, "- running go test without CI Visibility")
-		debug.printf("instrumentation bypass goroot_mirror=unavailable")
+		debug.printf("instrumentation bypass %s", native.bypass)
 		return runGo(ctx, cwd, append([]string{"test"}, args...), nil, signals, stdin, stdout, stderr)
 	}
 	if err != nil {
@@ -753,30 +757,6 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		}
 	}
 	debug.printf("tool selection testify=%t goleak=%t cover=%t user_toolexec=%t orchestrion=%t sdk_ci_gate=%t link_signal=%t", plan.testify, plan.goleak, plan.coverOverlay, opts.toolexec != "", plan.orchestrion, plan.sdkCI, plan.linkSignal)
-	// A -exec program, or Go's cross-compilation helper, starts before the test
-	// binary can restore the caller's Go settings. Go already disables result
-	// caching for those runs, so ddto's wrapper restores them first.
-	if len(plan.savedEnvironment()) != 0 && (opts.exec != "" || plan.execHelper != "") {
-		words := []string{plan.execHelper}
-		wrap := true
-		if opts.exec != "" {
-			if words, err = splitFlags(opts.exec); err != nil {
-				fmt.Fprintln(stderr, version.BuildLogPrefix+" ERROR: invalid -exec:", err)
-				return 2
-			}
-			words, wrap = resolveExecProgram(dir, words)
-		}
-		if wrap {
-			executable, e := os.Executable()
-			if e == nil {
-				plan.execWrapper, e = quoteToolWords(append([]string{executable, "test-exec"}, words...))
-			}
-			if e != nil {
-				fmt.Fprintln(stderr, version.BuildLogPrefix+" ERROR:", e)
-				return 2
-			}
-		}
-	}
 	forwarded := goTestArguments(plan, opts, tool)
 	// The test runtime's goenv/restore package gives test processes the
 	// caller's values before any client package can start a go command.
@@ -801,20 +781,69 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 	return runGo(ctx, dir, forwarded, env, gitWorker.relaySignals(signals), stdin, stdout, stderr)
 }
 
+// nativeGoError is a preparation failure after which ddto runs go test
+// natively, because it cannot reproduce what go test would do. bypass names
+// the reason in debug logs.
+type nativeGoError struct {
+	bypass string
+	err    error
+}
+
+func (e *nativeGoError) Error() string { return e.err.Error() }
+
+func (e *nativeGoError) Unwrap() error { return e.err }
+
+// fallsBackToNativeGo reports a failure after which go test runs natively.
+// Cancellation stops instead.
+func fallsBackToNativeGo(ctx context.Context, err error) bool {
+	var native *nativeGoError
+	return errors.As(err, &native) && ctx.Err() == nil &&
+		!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+}
+
+// wrapExecProgram sets the plan's -exec wrapper. A -exec program, or Go's
+// cross-compilation helper, starts before the test binary can restore the
+// caller's Go settings. Go already disables result caching for those runs, so
+// ddto's wrapper restores them first.
+func wrapExecProgram(plan *Plan, opts options, dir string) error {
+	if len(plan.savedEnvironment()) == 0 || opts.exec == "" && plan.execHelper == "" {
+		return nil
+	}
+	words := []string{plan.execHelper}
+	if opts.exec != "" {
+		var err error
+		if words, err = splitFlags(opts.exec); err != nil {
+			return fmt.Errorf("invalid -exec: %w", err)
+		}
+		// Only runs that start test binaries start the program.
+		if !opts.compileOnly && !opts.printOnly {
+			if words, err = resolveExecProgram(dir, words); err != nil {
+				return &nativeGoError{"exec_program=unresolved", err}
+			}
+		}
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	plan.execWrapper, err = quoteToolWords(append([]string{executable, "test-exec"}, words...))
+	return err
+}
+
 // resolveExecProgram looks the -exec program name up as go test does: on the
 // caller's PATH from dir, go test's working directory. test-exec would look it
 // up after restoring the toolchain's bin first in PATH, from the package
-// directory. It reports false for a program that go test cannot run: go test
-// then reports that itself, without ddto's wrapper.
-func resolveExecProgram(dir string, words []string) ([]string, bool) {
+// directory. It fails for a program that go test cannot run, or would run
+// relative to dir: only go test itself reproduces those.
+func resolveExecProgram(dir string, words []string) ([]string, error) {
 	if len(words) == 0 || filepath.Base(words[0]) != words[0] {
-		return words, true
+		return words, nil
 	}
 	path, err := lookPathFrom(dir, words[0])
 	if err != nil {
-		return words, false
+		return nil, err
 	}
-	return append([]string{path}, words[1:]...), true
+	return append([]string{path}, words[1:]...), nil
 }
 
 // prepareInterruptibly cancels package resolution when a signal arrives. The

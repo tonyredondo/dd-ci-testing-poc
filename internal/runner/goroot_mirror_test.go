@@ -582,7 +582,7 @@ func TestRunGoUsesThePlansToolchain(t *testing.T) {
 
 // Cancellation stops preparation; only a mirror failure runs go test natively.
 func TestFallsBackToNativeGo(t *testing.T) {
-	mirrorErr := &gorootMirrorError{errors.New("no mirror")}
+	mirrorErr := mirrorUnavailable(errors.New("no mirror"))
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
 	for _, tc := range []struct {
@@ -592,8 +592,8 @@ func TestFallsBackToNativeGo(t *testing.T) {
 	}{
 		{context.Background(), mirrorErr, true},
 		{context.Background(), errors.New("other"), false},
-		{context.Background(), &gorootMirrorError{context.Canceled}, false},
-		{context.Background(), &gorootMirrorError{context.DeadlineExceeded}, false},
+		{context.Background(), mirrorUnavailable(context.Canceled), false},
+		{context.Background(), mirrorUnavailable(context.DeadlineExceeded), false},
 		{canceled, mirrorErr, false},
 	} {
 		if got := fallsBackToNativeGo(tc.ctx, tc.err); got != tc.want {
@@ -683,7 +683,7 @@ func TestGOROOTMirrorCopiesForWindows(t *testing.T) {
 func TestCheckTestingGOROOT(t *testing.T) {
 	env := fakeModuleCacheToolchain(t)
 	mirror := &gorootMirror{root: filepath.Join(t.TempDir(), "mirror")}
-	var mirrorErr *gorootMirrorError
+	var native *nativeGoError
 	for _, tc := range []struct {
 		dir    string
 		mirror *gorootMirror
@@ -695,8 +695,36 @@ func TestCheckTestingGOROOT(t *testing.T) {
 		{filepath.Join(t.TempDir(), "other", "src", "testing"), mirror, false},
 	} {
 		err := checkTestingGOROOT(tc.dir, env, tc.mirror)
-		if (err == nil) != tc.ok || err != nil && !errors.As(err, &mirrorErr) {
+		if (err == nil) != tc.ok || err != nil && !errors.As(err, &native) {
 			t.Errorf("%s with mirror %t: %v", tc.dir, tc.mirror != nil, err)
 		}
+	}
+}
+
+// ddto wraps a -exec program only when it must restore the caller's settings
+// first. go test runs natively for a program that it cannot run, unless it
+// starts no test binary, as with -c or -n.
+func TestWrapExecProgram(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	mirror := &gorootMirror{saved: []string{goenv.SaveValue("PATH", "/bin", true)}}
+	for _, tc := range []struct {
+		name     string
+		plan     Plan
+		opts     options
+		fallback bool
+		wrapped  bool
+	}{
+		{"nothing to restore", Plan{}, options{exec: "missing"}, false, false},
+		{"run", Plan{gorootMirror: mirror, mini: true}, options{exec: "missing"}, true, false},
+		{"-c", Plan{gorootMirror: mirror, mini: true}, options{exec: "missing", compileOnly: true}, false, true},
+		{"-n", Plan{gorootMirror: mirror, mini: true}, options{exec: "missing", printOnly: true}, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := wrapExecProgram(&tc.plan, tc.opts, t.TempDir())
+			var native *nativeGoError
+			if errors.As(err, &native) != tc.fallback || !tc.fallback && err != nil || strings.Contains(tc.plan.execWrapper, "'missing'") != tc.wrapped {
+				t.Fatalf("wrapExecProgram: %v, wrapper %q", err, tc.plan.execWrapper)
+			}
+		})
 	}
 }

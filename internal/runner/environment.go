@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/version"
 	"os"
@@ -23,53 +24,89 @@ const (
 
 // crossExecHelper returns the go_$GOOS_$GOARCH_exec program that go test runs
 // test binaries with when it cross-compiles and no -exec is given. go test
-// looks it up from dir, its working directory.
-func crossExecHelper(environment *goEnvironment, dir string) string {
+// looks it up from dir, its working directory, and runs the binaries directly
+// without one that it would run. It fails for a helper that go test would run
+// through a path relative to dir.
+func crossExecHelper(environment *goEnvironment, dir string) (string, error) {
 	if environment.GOOS == environment.GOHOSTOS && environment.GOARCH == environment.GOHOSTARCH {
-		return ""
+		return "", nil
 	}
 	path, err := lookPathFrom(dir, "go_"+environment.GOOS+"_"+environment.GOARCH+"_exec")
-	if err != nil {
-		return ""
+	if err != nil && !errors.Is(err, errRelativeProgram) {
+		return "", nil
 	}
-	return path
+	return path, err
 }
 
-// lookPathFrom finds file on PATH as exec.LookPath would with dir as the
+// errRelativeProgram is a program that Go would run through a path relative
+// to its working directory, as GODEBUG=execerrdot=0 allows.
+var errRelativeProgram = errors.New("found relative to the current directory, which GODEBUG=execerrdot=0 allows")
+
+// lookPathFrom looks file up on PATH as exec.LookPath does with dir as the
 // current directory, where go test looks up -exec programs and the
-// cross-compilation helper after -C. A match relative to dir returns
-// exec.ErrDot: Go refuses to run it.
+// cross-compilation helper after -C. It returns the absolute path of the file
+// that Go would run. A file that Go would refuse to run returns exec.ErrDot,
+// and one that Go would run relative to dir returns errRelativeProgram.
 func lookPathFrom(dir, file string) (string, error) {
 	windows := runtime.GOOS == "windows"
-	var dot string
+	refuse := execErrDot()
+	// pending is a match relative to dir, which Go refuses unless, on
+	// Windows, PATH later names the same file absolutely.
+	var pending string
 	if _, skip := os.LookupEnv("NoDefaultCurrentDirectoryInExePath"); windows && !skip {
 		// Windows searches the current directory first.
-		dot, _ = exec.LookPath(filepath.Join(dir, file))
+		if f, err := exec.LookPath(filepath.Join(dir, file)); err == nil {
+			if !refuse {
+				return "", &exec.Error{Name: file, Err: errRelativeProgram}
+			}
+			pending = f
+		}
 	}
 	for _, entry := range filepath.SplitList(os.Getenv("PATH")) {
-		if entry == "" && windows {
-			continue
+		if entry == "" {
+			if windows {
+				continue
+			}
+			// An empty entry is the current directory on Unix.
+			entry = "."
 		}
-		// An empty entry is the current directory on Unix.
 		relative := !filepath.IsAbs(entry)
+		candidate := filepath.Join(entry, file)
 		if relative {
-			entry = filepath.Join(dir, entry)
+			candidate = filepath.Join(dir, candidate)
 		}
-		path, err := exec.LookPath(filepath.Join(entry, file))
-		if err != nil {
+		f, err := exec.LookPath(candidate)
+		switch {
+		case err != nil:
 			continue
+		case pending != "" && !sameLink(pending, f):
+			return "", &exec.Error{Name: file, Err: exec.ErrDot}
+		case !relative:
+			return f, nil
+		case !refuse:
+			return "", &exec.Error{Name: file, Err: errRelativeProgram}
+		case !windows:
+			return "", &exec.Error{Name: file, Err: exec.ErrDot}
+		case pending == "":
+			pending = f
 		}
-		// Go prefers PATH's spelling of the file that it found in the current
-		// directory, without an error.
-		if dot == "" && !relative || dot != "" && sameLink(dot, path) {
-			return path, nil
-		}
-		return "", &exec.Error{Name: file, Err: exec.ErrDot}
 	}
-	if dot != "" {
+	if pending != "" {
 		return "", &exec.Error{Name: file, Err: exec.ErrDot}
 	}
 	return "", &exec.Error{Name: file, Err: exec.ErrNotFound}
+}
+
+// execErrDot reports whether Go refuses programs found relative to the
+// current directory: unless GODEBUG's last execerrdot setting is 0.
+func execErrDot() bool {
+	value := ""
+	for _, setting := range strings.Split(os.Getenv("GODEBUG"), ",") {
+		if name, v, ok := strings.Cut(setting, "="); ok && name == "execerrdot" {
+			value = v
+		}
+	}
+	return value != "0"
 }
 
 // sameLink reports whether a and b name the same file, without following a

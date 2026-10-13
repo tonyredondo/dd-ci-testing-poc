@@ -171,8 +171,10 @@ A `go test -exec` program, or the `go_$GOOS_$GOARCH_exec` helper that Go uses
 when cross-compiling, starts before the test binary. `ddto` runs it through
 `ddto test-exec`, which restores the caller's values first; Go already
 disables result caching for such runs. `ddto` looks a program name up as Go
-does, on the caller's `PATH` from Go's working directory; a program that Go
-could not run is left to Go, which reports it. Arguments reach the program as Go parsed
+does, on the caller's `PATH` from Go's working directory. For a program that Go
+could not run, or would run through a path relative to that directory, as
+`GODEBUG=execerrdot=0` allows, `ddto` warns and runs native `go test`, which
+reports or runs it. Arguments reach the program as Go parsed
 them, including an unquoted argument with both quote characters. On Windows,
 where the wrapper cannot replace itself, the program runs in a job that ends it
 if Go terminates the wrapper on timeout, as Go would end the program itself.

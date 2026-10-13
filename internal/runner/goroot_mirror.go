@@ -104,15 +104,11 @@ type gorootMirrorRecord struct {
 	Copied    int    `json:"copied"`
 }
 
-// gorootMirrorError is a preparation failure that leaves a module-cache
+// mirrorUnavailable is a preparation failure that leaves a module-cache
 // toolchain without a usable mirror. ddto then runs go test natively.
-type gorootMirrorError struct{ err error }
-
-func (e *gorootMirrorError) Error() string {
-	return "toolchain in GOMODCACHE without a mirror: " + e.err.Error()
+func mirrorUnavailable(err error) error {
+	return &nativeGoError{"goroot_mirror=unavailable", fmt.Errorf("toolchain in GOMODCACHE without a mirror: %w", err)}
 }
-
-func (e *gorootMirrorError) Unwrap() error { return e.err }
 
 // filePathHasPrefix is cmd/go's str.HasFilePathPrefix, the rule by which Go
 // rejects an overlay entry beneath GOMODCACHE: volume names compare without
@@ -607,7 +603,7 @@ func checkTestingGOROOT(testingDir string, env *goEnvironment, mirror *gorootMir
 	dir := filepath.Clean(testingDir)
 	if env.GOMODCACHE != "" && filePathHasPrefix(dir, filepath.Clean(env.GOMODCACHE)) ||
 		mirror != nil && !filePathHasPrefix(dir, mirror.root) {
-		return &gorootMirrorError{fmt.Errorf("go selected testing from %s, outside a usable GOROOT", testingDir)}
+		return mirrorUnavailable(fmt.Errorf("go selected testing from %s, outside a usable GOROOT", testingDir))
 	}
 	return nil
 }
@@ -623,12 +619,4 @@ func prepareGOROOTMirror(ctx context.Context, env *goEnvironment, dir string, de
 	}
 	saved, toolchain := gorootMirrorEnvironment(root, env)
 	return &gorootMirror{root: root, lock: lock, saved: saved, toolchain: toolchain}, nil
-}
-
-// fallsBackToNativeGo reports a mirror failure after which go test runs
-// natively. Cancellation stops instead.
-func fallsBackToNativeGo(ctx context.Context, err error) bool {
-	var mirrorErr *gorootMirrorError
-	return errors.As(err, &mirrorErr) && ctx.Err() == nil &&
-		!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
 }
