@@ -187,6 +187,64 @@ assertions run unchanged through adapters. `BenchmarkCoverageProfileDiff`
 measures both algorithms. Integration: `TestMiniParallelAndRetryCoverageAttribution`,
 `TestMiniCoverageWithGlobalTimeChanges` and the coverage parity cases.
 
+## Per-test coverage counters in memory
+
+Upstream captures each test's coverage with testing/internal/testdeps'
+teardown before and after the test. Each capture writes meta-data and counter
+files, merges them, writes a text profile with one unbuffered `Fprintf` per
+unit, and prints `coverage: …` to the test binary's stdout. The per-test
+subtraction above then reads both profiles back. In Gin with
+`-coverpkg=./... -covermode=atomic`, this took 5.8 of 11.1 CPU-seconds.
+
+When ddto's `testing` overlay registers its hook (`instrument.CoverageHook`),
+[`civisibility/integrations/gotesting/coverage/memory_coverage.go`](civisibility/integrations/gotesting/coverage/memory_coverage.go)
+reads the counters in memory instead. The hook compiles against the
+toolchain's own `internal/coverage` packages and registers through the pushed
+linkname `registerTestingCoverage`.
+
+- **Layout.** Once per process, before the first capture, the hook renders the
+  layout of the text profile that the teardown would write: the same units,
+  merges, package order and block order. Each capture then copies the counter
+  segments and yields one count per layout entry. A test's coverage is every
+  entry whose count grew, mapped to files and line bitmaps by the same
+  `coveredLines` code as the text path.
+- **Validation before use.** The process keeps text profiles unless the
+  hook's text profile, with every count at its maximum, reads back through
+  `parseCoverProfileText` (the text path's own parser, split out of
+  `readCoverProfile`) as exactly the layout's blocks in order.
+- **When text profiles stay.** The process also keeps them on 32-bit targets,
+  when the counter mode is not count or atomic, and when the hook refuses:
+  - a counter mode or granularity clash;
+  - a file name with a line break;
+  - two blocks sharing a position in a file, where the text path's result
+    depends on map order.
+
+  A capture that sees new meta-data fails its collector and turns the
+  in-memory path off for later baselines.
+- **Collectors.** `testCoverage`'s capture and load methods choose the backend
+  when the baseline is taken, so test, retry and process collectors share it.
+  In-memory baselines are limited to 64 MiB for the whole process. Above that,
+  collectors use text profiles, and each baseline's reservation is released by
+  its after-capture or failure. Session coverage, LCOV reports, backfill and
+  aggregate process profiles keep the teardown.
+- **Visible changes.** In-memory captures print no `coverage:` lines: test
+  processes print native go test's. Upstream's per-test lines also made
+  `go test`'s summary show the first capture's percentage.
+- **Overrides.** `DD_CIVISIBILITY_INTERNAL_COVERAGE_IN_MEMORY=false` keeps text
+  profiles. `DD_CIVISIBILITY_INTERNAL_COVERAGE_ORACLE=true` also computes each
+  in-memory collector's result from text profiles of the same counters,
+  rendered with the toolchain's `cformat`, and logs whether both agree.
+
+Checks:
+- **Unit tests:** `TestMemoryCoverageMatchesTextProfiles`,
+  `TestMemoryCoverageRefusals`, `TestMemoryCoverageBudget`,
+  `TestMemoryCoverageCaptureFailure` and `TestMemoryCoverageProcessSegments`.
+- **Integration:** `TestMiniPerTestCoverageInMemory` compares per-test coverage
+  with text profiles in count, atomic and race builds, and a build that keeps
+  text profiles. The coverage parity cases compare it with the SDK reference.
+- **Prototype:** the oracle agreed on all 731 collectors of Gin, Chi and both
+  Testify subjects.
+
 ## Coverage module identity
 
 Upstream `InitializeCoverage` in

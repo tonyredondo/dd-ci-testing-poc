@@ -370,6 +370,23 @@ Cleanup-only coverage and duplicate Testify method identity also have direct
 Mini regression tests. The [comparison contract](ci-parity.md#comparison-contract)
 records these deliberate differences and its normalization rules.
 
+Per-test coverage, in count or atomic mode, reads the coverage counters in
+memory through a hook that `ddto` adds to `testing`. Each test's covered lines
+are the same as with the two text profiles per test that the SDK writes and
+reads back. Without those, a Gin package with `-coverpkg=./...
+-covermode=atomic` runs in 0.42 s instead of 3.68 s, and test processes print
+native go test's `coverage:` lines instead of one per capture.
+
+Text profiles stay in some cases:
+- the toolchain or the selected Mini lacks what the hook uses;
+- the test binary links `plugin`;
+- the coverage selection could instrument a standard or Mini package, such
+  as `-coverpkg=testing`;
+- the hook finds blocks whose text-profile result is ambiguous.
+
+The [adaptation record](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md#per-test-coverage-counters-in-memory)
+lists every case.
+
 With `-race`, `ddto` overlays Mini's sources with copies that mark each
 function declaration `//go:norace`, so the race detector does not instrument
 Mini's own memory accesses: with 2,000 empty tests, about 22 µs less per test.
