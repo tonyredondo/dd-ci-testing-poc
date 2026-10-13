@@ -216,6 +216,14 @@ func isolatedUserCache(t *testing.T, cache string) []string {
 	return []string{"XDG_CACHE_HOME=" + cache, "HOME=" + cache, "LOCALAPPDATA=" + cache, "GOCACHE=" + strings.TrimSpace(string(out))}
 }
 
+// userCacheIn is os.UserCacheDir under isolatedUserCache's environment.
+func userCacheIn(cache string) string {
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(cache, "Library", "Caches")
+	}
+	return cache
+}
+
 // cloneToolchain lays out the running toolchain as a downloaded one in a
 // module cache: hard links where possible, copies otherwise, and read-only
 // directories as Go leaves them.
@@ -237,7 +245,9 @@ func cloneToolchain(t *testing.T, modcache string) string {
 	}, strings.TrimSpace(fields[1]))
 	target := filepath.Join(modcache, "golang.org", "toolchain@v0.0.1-"+version+"."+runtime.GOOS+"-"+runtime.GOARCH)
 	link := runtime.GOOS != "windows"
-	err = filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
+	// A hosted toolchain's GOROOT can be a Windows junction, which Lstat
+	// reports as irregular unless the path ends in a separator.
+	err = filepath.WalkDir(source+string(filepath.Separator), func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -318,16 +328,21 @@ func treeModes(t *testing.T, root string) map[string]fs.FileMode {
 	return modes
 }
 
-func sameModes(a, b map[string]fs.FileMode) bool {
-	if len(a) != len(b) {
-		return false
-	}
+// changedModes lists the files whose modes differ between a and b, or that
+// only one has.
+func changedModes(a, b map[string]fs.FileMode) []string {
+	var changed []string
 	for path, mode := range a {
-		if b[path] != mode {
-			return false
+		if other, ok := b[path]; !ok || other != mode {
+			changed = append(changed, path)
 		}
 	}
-	return true
+	for path := range b {
+		if _, ok := a[path]; !ok {
+			changed = append(changed, path)
+		}
+	}
+	return changed
 }
 
 func gorootMirrorFixtureDir(t *testing.T) string {
@@ -365,7 +380,7 @@ func runMirroredToolchain(t *testing.T, dir string, env []string, goCommand, cac
 			t.Fatalf("run %d: exit %d, want %s:\n%s%s", i, code, want, out, stderr)
 		}
 		got := parseToolchainView(t, out)
-		mirrors := filepath.Join(cache, "ddto", "goroots")
+		mirrors := filepath.Join(userCacheIn(cache), "ddto", "goroots")
 		if !strings.HasPrefix(got.runtime, mirrors) {
 			t.Errorf("runtime.GOROOT %q is not a mirror in %s", got.runtime, mirrors)
 		}
@@ -433,8 +448,14 @@ func runMirroredToolchain(t *testing.T, dir string, env []string, goCommand, cac
 		}
 		sameStartFailure(t, dir, env, ciEnv, goCommand, driver, "test", "-count=1", "-exec=./notexec", "./...")
 	}
-	if after := treeModes(t, modcache); !sameModes(before, after) {
-		t.Fatal("the module cache's files changed")
+	// Provisioning runs go mod edit, which takes Go's own lock in the module
+	// cache, as other module commands do.
+	after := treeModes(t, modcache)
+	lock := filepath.Join(modcache, "cache", "lock")
+	delete(before, lock)
+	delete(after, lock)
+	if changed := changedModes(before, after); len(changed) != 0 {
+		t.Fatalf("the module cache's files changed: %v", changed)
 	}
 }
 
