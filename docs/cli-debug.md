@@ -43,9 +43,9 @@ The log records:
   a usable mirror, `instrumentation bypass goroot_mirror=unavailable` follows
   the warning, and native `go test` runs.
 - When ddto must wrap a `-exec` program or the cross-compilation helper and
-  cannot reproduce how `go test` finds it, `instrumentation bypass
-  exec_program=unresolved` or `exec_helper=relative` follows the warning, and
-  native `go test` runs.
+  cannot reproduce how `go test` finds or starts it, `instrumentation bypass
+  exec_program=unresolved`, `exec_program=unquotable` or `exec_helper=relative`
+  follows the warning, and native `go test` runs.
 - An early `resolve runtime module` probe when Mini is absent from the effective
   module text. It uses a temporary module and checksum file. An unknown module
   is an expected result; Go still resolves every package after provisioning.

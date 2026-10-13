@@ -71,7 +71,8 @@ type Plan struct {
 	// gorootMirror runs go from a mirror of a toolchain in GOMODCACHE.
 	gorootMirror *gorootMirror
 	// execHelper is the cross-compilation program Go would run test binaries
-	// with; execWrapper restores the caller's Go settings before a -exec program.
+	// with, without -exec; execWrapper restores the caller's Go settings before
+	// a -exec program.
 	execHelper  string
 	execWrapper string
 	// testLauncher reports that a -exec program or Go's cross-compilation
@@ -483,7 +484,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	// Go keys cached test results on its own environment, which holds the
 	// temporary workspace, while tests see the caller's values. Keying the test
 	// binaries on those values keeps a cached result from outliving them.
-	if len(plan.savedEnvironment()) != 0 && opts.exec == "" && !opts.compileOnly && !opts.printOnly {
+	if len(plan.savedEnvironment()) != 0 && !opts.execSet && !opts.compileOnly && !opts.printOnly {
 		if plan.execHelper, e = crossExecHelper(opts.environment, dir); e != nil {
 			return plan, &nativeGoError{"exec_helper=relative", e}
 		}
@@ -801,12 +802,13 @@ func fallsBackToNativeGo(ctx context.Context, err error) bool {
 		!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
 }
 
-// wrapExecProgram sets what replaces the plan's -exec program. A -exec
-// program, or Go's cross-compilation helper, starts before the test binary can
-// restore the caller's Go settings. Go already disables result caching for
-// those runs, so ddto's wrapper restores them first. A launcher such as
-// Orchestrion runs go with a mirror's bin first in PATH, where go would look
-// the program up, so ddto passes the caller's program by its path.
+// wrapExecProgram sets the wrapper that replaces the plan's -exec program. A
+// -exec program, or Go's cross-compilation helper, starts before the test
+// binary can restore the caller's Go settings. Go already disables result
+// caching for those runs, so ddto's wrapper restores them first. A launcher
+// such as Orchestrion runs go with a mirror's bin first in PATH, where go
+// would look the program up, so the wrapper also starts the caller's program
+// by its path.
 func wrapExecProgram(plan *Plan, opts options, dir string) error {
 	restore := len(plan.savedEnvironment()) != 0
 	pin := plan.gorootMirror != nil && plan.launcher != nil
@@ -818,45 +820,44 @@ func wrapExecProgram(plan *Plan, opts options, dir string) error {
 	if !restore && !runs {
 		return nil
 	}
-	words := []string{plan.execHelper}
+	path, words := plan.execHelper, []string{plan.execHelper}
 	if opts.exec != "" {
 		var err error
 		if words, err = splitFlags(opts.exec); err != nil {
 			return fmt.Errorf("invalid -exec: %w", err)
 		}
+		// Without a program, go test starts test binaries itself.
+		if len(words) == 0 {
+			return nil
+		}
 		if runs {
-			if words, err = resolveExecProgram(dir, words); err != nil {
+			if path, err = resolveExecProgram(dir, words); err != nil {
 				return &nativeGoError{"exec_program=unresolved", err}
 			}
 		}
-	}
-	if !restore {
-		var err error
-		plan.execWrapper, err = quoteToolWords(words)
-		return err
 	}
 	executable, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	plan.execWrapper, err = quoteToolWords(append([]string{executable, "test-exec"}, words...))
-	return err
+	if plan.execWrapper, err = quoteToolWords(append([]string{executable, "test-exec", path}, words...)); err != nil {
+		return &nativeGoError{"exec_program=unquotable", err}
+	}
+	return nil
 }
 
-// resolveExecProgram looks the -exec program name up as go test does: on the
-// caller's PATH from dir, go test's working directory. test-exec would look it
-// up after restoring the toolchain's bin first in PATH, from the package
-// directory. It fails for a program that go test cannot run, or would run
-// relative to dir: only go test itself reproduces those.
-func resolveExecProgram(dir string, words []string) ([]string, error) {
-	if len(words) == 0 || filepath.Base(words[0]) != words[0] {
-		return words, nil
+// resolveExecProgram returns the path of the -exec program in words, looked up
+// as go test does: on the caller's PATH from dir, go test's working directory.
+// test-exec would look it up after restoring the toolchain's bin first in
+// PATH, from the package directory. A path, which go test starts relative to
+// the package directory, stays as given. It fails
+// for a program that go test cannot run, or would run relative to dir: only go
+// test itself reproduces those.
+func resolveExecProgram(dir string, words []string) (string, error) {
+	if filepath.Base(words[0]) != words[0] {
+		return words[0], nil
 	}
-	path, err := lookPathFrom(dir, words[0])
-	if err != nil {
-		return nil, err
-	}
-	return append([]string{path}, words[1:]...), nil
+	return lookPathFrom(dir, words[0])
 }
 
 // prepareInterruptibly cancels package resolution when a signal arrives. The

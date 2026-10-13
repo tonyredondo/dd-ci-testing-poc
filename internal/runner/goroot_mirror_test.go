@@ -728,8 +728,8 @@ func TestWrapExecProgram(t *testing.T) {
 		})
 	}
 	// A launcher runs go with the mirror's bin first in PATH. Without values to
-	// restore, as with the SDK runtime, ddto passes the caller's program by
-	// its path instead of wrapping it.
+	// restore, as with the SDK runtime, the wrapper still starts the caller's
+	// program by its path, under the name that go test gives it.
 	bin := t.TempDir()
 	exe := ""
 	if goruntime.GOOS == "windows" {
@@ -742,23 +742,43 @@ func TestWrapExecProgram(t *testing.T) {
 	t.Setenv("PATH", bin)
 	launcher := &goLauncher{command: []string{"/orchestrion", "go"}}
 	for _, tc := range []struct {
-		name    string
-		plan    Plan
-		opts    options
-		wrapper string
-		native  bool
+		name   string
+		plan   Plan
+		opts   options
+		suffix string
+		native bool
 	}{
-		{"launcher", Plan{gorootMirror: mirror, launcher: launcher}, options{exec: "prog -x"}, "'" + program + "' '-x'", false},
+		{"launcher", Plan{gorootMirror: mirror, launcher: launcher}, options{exec: "prog -x"}, "'test-exec' '" + program + "' 'prog' '-x'", false},
 		{"launcher, missing", Plan{gorootMirror: mirror, launcher: launcher}, options{exec: "missing"}, "", true},
 		{"launcher with -c", Plan{gorootMirror: mirror, launcher: launcher}, options{exec: "missing", compileOnly: true}, "", false},
 		{"without a launcher", Plan{gorootMirror: mirror}, options{exec: "prog"}, "", false},
+		{"a path", Plan{gorootMirror: mirror, mini: true}, options{exec: "./prog"}, "'test-exec' './prog' './prog'", false},
+		{"no program", Plan{gorootMirror: mirror, mini: true}, options{exec: " "}, "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := wrapExecProgram(&tc.plan, tc.opts, t.TempDir())
 			var native *nativeGoError
-			if errors.As(err, &native) != tc.native || !tc.native && err != nil || tc.plan.execWrapper != tc.wrapper {
+			if errors.As(err, &native) != tc.native || !tc.native && err != nil ||
+				!strings.HasSuffix(tc.plan.execWrapper, tc.suffix) || (tc.suffix == "") != (tc.plan.execWrapper == "") {
 				t.Fatalf("wrapExecProgram: %v, wrapper %q", err, tc.plan.execWrapper)
 			}
 		})
+	}
+	// A path that the wrapper cannot quote leaves the run to go test.
+	if goruntime.GOOS == "windows" {
+		return
+	}
+	unquotable := filepath.Join(t.TempDir(), `it's "bin"`)
+	if err := os.Mkdir(unquotable, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(unquotable, "prog"), []byte("#!/bin/sh\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", unquotable)
+	plan := Plan{gorootMirror: mirror, mini: true}
+	var native *nativeGoError
+	if err := wrapExecProgram(&plan, options{exec: "prog"}, t.TempDir()); !errors.As(err, &native) {
+		t.Fatalf("an unquotable program: %v, wrapper %q", err, plan.execWrapper)
 	}
 }

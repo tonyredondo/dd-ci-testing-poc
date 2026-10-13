@@ -17,22 +17,24 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
-// ExecWithCallerEnvironment restores the caller's Go settings, then runs args
-// with the native streams and exit status: a go test -exec program sees what
-// native go test gives it, rather than ddto's temporary workspace.
+// ExecWithCallerEnvironment restores the caller's Go settings, then runs the
+// program at path, given its arguments in args after it, with the native
+// streams and exit status: a go test -exec program sees what native go test
+// gives it, rather than ddto's temporary workspace. args[0] is the program as
+// go test names it; an empty path looks it up.
 //
 // Native go test ends a timed-out program by terminating it, which here ends
 // only this wrapper. The program therefore runs in a job that kills it when
 // the wrapper's handle closes. Once the program exits, the job no longer kills
 // processes it left running: they outlive native go test as well. Console
 // interrupts reach the program directly, so the wrapper waits for its status.
-func ExecWithCallerEnvironment(args []string) int {
+func ExecWithCallerEnvironment(path string, args []string) int {
 	goenv.Restore()
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR: missing -exec program")
 		return 2
 	}
-	return runInJob(args, "", false, 2, nil)
+	return runInJob(path, args, "", false, 2, nil)
 }
 
 // ExecCommand runs args unchanged, with the native streams and exit status:
@@ -53,7 +55,7 @@ func ExecCommand(args []string) int {
 		cmdline = commandLineTail(commandLine())
 	}
 	debug.printf("pass-through caller_command_line=%t", cmdline != "")
-	return runInJob(args, cmdline, true, 126, debug)
+	return runInJob("", args, cmdline, true, 126, debug)
 }
 
 // commandLine is this process's command line.
@@ -66,18 +68,21 @@ func commandLine() string {
 	return syscall.UTF16ToString(unsafe.Slice(p, n))
 }
 
-// runInJob runs args, with cmdline as their command line if set, in a job that
+// runInJob runs the program at path, or args[0] looked up without one, with
+// args, and cmdline as their command line if set, in a job that
 // kills them if this wrapper ends first, and returns their exit status, or
 // failed if they do not start. With breakaway, the job lets them, and what
 // they leave running, start processes outside it (CREATE_BREAKAWAY_FROM_JOB).
 // They get this process's environment and standard streams as they are:
 // os/exec would add SYSTEMROOT and open NUL for a missing stream.
-func runInJob(args []string, cmdline string, breakaway bool, failed int, debug *cliDebug) int {
+func runInJob(path string, args []string, cmdline string, breakaway bool, failed int, debug *cliDebug) int {
 	signal.Notify(make(chan os.Signal, 1), os.Interrupt)
-	path, err := exec.LookPath(args[0])
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return failed
+	if path == "" {
+		var err error
+		if path, err = exec.LookPath(args[0]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return failed
+		}
 	}
 	attr := &syscall.ProcAttr{
 		Env:   syscall.Environ(),

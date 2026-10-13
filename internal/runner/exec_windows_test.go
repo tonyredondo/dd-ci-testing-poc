@@ -37,7 +37,7 @@ func TestExecHelperProcess(t *testing.T) {
 	switch os.Getenv("DDTO_EXEC_HELPER") {
 	case "wrapper":
 		os.Setenv("DDTO_EXEC_HELPER", os.Getenv("DDTO_EXEC_PROGRAM"))
-		os.Exit(ExecWithCallerEnvironment(self))
+		os.Exit(ExecWithCallerEnvironment("", self))
 	case "command":
 		os.Setenv("DDTO_EXEC_HELPER", os.Getenv("DDTO_EXEC_PROGRAM"))
 		os.Exit(ExecCommand(self))

@@ -206,23 +206,22 @@ func TestResolveExecProgram(t *testing.T) {
 		path    string
 		godebug string
 		words   []string
-		want    []string
+		want    string
 		err     error
 	}{
-		{"name", bin, "", []string{"prog", "-x"}, []string{program, "-x"}, nil},
-		{"missing", bin, "", []string{"missing"}, nil, exec.ErrNotFound},
-		{"relative to the directory", "rel" + sep + bin, "", []string{"prog"}, nil, exec.ErrDot},
-		{"run relative to the directory", "rel" + sep + bin, "execerrdot=0", []string{"prog"}, nil, errRelativeProgram},
-		{"maybe run relative to the directory", "rel" + sep + bin, "execerrdot=0#y", []string{"prog"}, nil, errUnknownProgram},
-		{"absolute with a GODEBUG pattern", bin, "execerrdot=0#y", []string{"prog"}, []string{program}, nil},
-		{"path", bin, "", []string{filepath.Join("sub", "prog")}, []string{filepath.Join("sub", "prog")}, nil},
-		{"empty", bin, "", nil, nil, nil},
+		{"name", bin, "", []string{"prog", "-x"}, program, nil},
+		{"missing", bin, "", []string{"missing"}, "", exec.ErrNotFound},
+		{"relative to the directory", "rel" + sep + bin, "", []string{"prog"}, "", exec.ErrDot},
+		{"run relative to the directory", "rel" + sep + bin, "execerrdot=0", []string{"prog"}, "", errRelativeProgram},
+		{"maybe run relative to the directory", "rel" + sep + bin, "execerrdot=0#y", []string{"prog"}, "", errUnknownProgram},
+		{"absolute with a GODEBUG pattern", bin, "execerrdot=0#y", []string{"prog"}, program, nil},
+		{"path", bin, "", []string{filepath.Join("sub", "prog")}, filepath.Join("sub", "prog"), nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("PATH", tc.path)
 			t.Setenv("GODEBUG", tc.godebug)
 			got, err := resolveExecProgram(dir, tc.words)
-			if !slices.Equal(got, tc.want) || !errors.Is(err, tc.err) || (err == nil) != (tc.err == nil) {
+			if got != tc.want || !errors.Is(err, tc.err) || (err == nil) != (tc.err == nil) {
 				t.Fatalf("resolveExecProgram = %q, %v; want %q, %v", got, err, tc.want, tc.err)
 			}
 		})

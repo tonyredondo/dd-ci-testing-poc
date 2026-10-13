@@ -54,7 +54,7 @@ import (
 func main() {
 	goroot, set := os.LookupEnv("GOROOT")
 	first := strings.SplitN(os.Getenv("PATH"), string(os.PathListSeparator), 2)[0]
-	fmt.Printf("EXECUTOR goroot_env=%q goroot_set=%t first_path=%q END\n", goroot, set, first)
+	fmt.Printf("EXECUTOR goroot_env=%q goroot_set=%t first_path=%q argv0=%q END\n", goroot, set, first, os.Args[0])
 	if strings.Contains(filepath.Base(os.Args[0]), "_exec") {
 		return
 	}
@@ -434,8 +434,14 @@ func TestMiniGOROOTMirrorDirectToolchain(t *testing.T) {
 	copyExecutable(t, filepath.Join(executors, executableName(helper)), filepath.Join(dir, "bin", executableName(helper)))
 	relativeEnv := append(prependPATH(crossEnv, "bin"), "GODEBUG=execerrdot=0")
 	sameExecutorView(t, dir, relativeEnv, append(relativeEnv, "DD_CIVISIBILITY_ENABLED=false"), goCommand, sharedDriver(t, ".."), "test", "-count=1", "-v", "./...")
+	// An empty -exec turns the helper off: go test runs the binaries itself.
+	nativeOut, nativeErr, nativeCode := command(t, dir, crossEnv, goCommand, "test", "-count=1", "-v", "-exec=", "./...")
+	out, stderr, code := command(t, dir, ciEnv, sharedDriver(t, ".."), "test", "-count=1", "-v", "-exec=", "./...")
+	if code != nativeCode || strings.Contains(nativeOut, "EXECUTOR") || strings.Contains(out, "EXECUTOR") {
+		t.Fatalf("-exec=: exit %d, natively %d\n%s%s\nnative:\n%s%s", code, nativeCode, out, stderr, nativeOut, nativeErr)
+	}
 	// With -c, go test runs no test binary, and the helper does not matter.
-	out, stderr, code := command(t, dir, append(relativeEnv, "DD_CIVISIBILITY_ENABLED=false"), sharedDriver(t, ".."), "test", "-c", "-o", filepath.Join(t.TempDir(), executableName("mirror.test")), ".")
+	out, stderr, code = command(t, dir, append(relativeEnv, "DD_CIVISIBILITY_ENABLED=false"), sharedDriver(t, ".."), "test", "-c", "-o", filepath.Join(t.TempDir(), executableName("mirror.test")), ".")
 	if code != 0 || strings.Contains(stderr, "running go test without CI Visibility") {
 		t.Fatalf("-c with a relative helper: exit %d\n%s%s", code, out, stderr)
 	}
