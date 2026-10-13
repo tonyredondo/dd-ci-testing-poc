@@ -190,17 +190,23 @@ func addFields(decls map[string]bool, owner string, structType *ast.StructType) 
 	}
 }
 
-// signature renders a function type's parameter and result types.
+// signature renders a function type's type parameter constraints, parameter
+// types and result types. A generic function provides no symbol until it is
+// instantiated, so it never matches a nongeneric one.
 func signature(fn *ast.FuncType) string {
+	typeParams := ""
+	if constraints := renderFields(fn.TypeParams); len(constraints) > 0 {
+		typeParams = "[" + strings.Join(constraints, ", ") + "]"
+	}
 	params := renderFields(fn.Params)
 	results := renderFields(fn.Results)
 	switch {
 	case len(results) == 0:
-		return "(" + strings.Join(params, ", ") + ")"
+		return typeParams + "(" + strings.Join(params, ", ") + ")"
 	case len(results) == 1 && fn.Results.List[0].Names == nil:
-		return "(" + strings.Join(params, ", ") + ") " + results[0]
+		return typeParams + "(" + strings.Join(params, ", ") + ") " + results[0]
 	default:
-		return "(" + strings.Join(params, ", ") + ") (" + strings.Join(results, ", ") + ")"
+		return typeParams + "(" + strings.Join(params, ", ") + ") (" + strings.Join(results, ", ") + ")"
 	}
 }
 

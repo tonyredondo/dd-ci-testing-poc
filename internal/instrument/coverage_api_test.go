@@ -41,6 +41,7 @@ func TestCoverageHookRuntimeErrorRejectsOtherRuntimes(t *testing.T) {
 		"parameters": "package coverage\nfunc registerTestingCoverage(func() ([]string, []uint32, string), func([]uint32) ([]uint32, int)) {}\n",
 		"result":     "package coverage\nfunc registerTestingCoverage(func() ([]string, []uint32, string), func([]uint32) ([]uint32, bool), func([]uint32) []byte) {}\n",
 		"method":     "package coverage\ntype r struct{}\nfunc (r) registerTestingCoverage(func() ([]string, []uint32, string), func([]uint32) ([]uint32, int), func([]uint32) []byte) {}\n",
+		"generic":    "package coverage\nfunc registerTestingCoverage[T any](func() ([]string, []uint32, string), func([]uint32) ([]uint32, int), func([]uint32) []byte) {}\n",
 	} {
 		if err := CoverageHookRuntimeError(map[string][]byte{"coverage.go": []byte(source)}); err == nil {
 			t.Errorf("%s: accepted", name)
