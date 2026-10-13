@@ -869,6 +869,11 @@ func resolveExecProgram(dir string, words []string) (string, error) {
 		return "", &exec.Error{Name: path, Err: errUnknownProgram}
 	}
 	if filepath.Base(path) == path {
+		// exec.LookPath takes a name with a slash, / alone, as a path that it
+		// checks itself.
+		if strings.ContainsRune(path, '/') {
+			return "", &exec.Error{Name: path, Err: errUnknownProgram}
+		}
 		return lookPathFrom(dir, path)
 	}
 	return path, nil

@@ -219,6 +219,7 @@ func TestResolveExecProgram(t *testing.T) {
 		{"empty name", bin, "", []string{""}, "", errNoCommand},
 		{"dot", bin, "", []string{"."}, "", exec.ErrNotFound},
 		{"dot dot", bin, "", []string{".."}, "", exec.ErrNotFound},
+		{"root", program, "", []string{"/"}, "", errUnknownProgram},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("PATH", tc.path)
