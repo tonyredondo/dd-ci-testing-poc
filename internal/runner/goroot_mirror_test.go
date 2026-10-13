@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -514,6 +516,56 @@ func TestGOROOTMirrorOverlappingPlans(t *testing.T) {
 	pruneGOROOTMirrors(filepath.Join(cache, "ddto", "goroots"), "another-key")
 	if !validGOROOTMirror(b.root, env) {
 		t.Fatal("a plan's mirror was pruned after another plan released it")
+	}
+	// Releasing the last plan lets pruning remove the mirror.
+	Plan{gorootMirror: b}.Release()
+	pruneGOROOTMirrors(filepath.Join(cache, "ddto", "goroots"), "another-key")
+	if _, err := os.Stat(b.root); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("a released mirror was kept: %v", err)
+	}
+}
+
+// Only Mini's test runtime restores the caller's GOROOT and PATH; SDK tests
+// get no saved values to leak.
+func TestSavedEnvironmentRestoresTheToolchainForMini(t *testing.T) {
+	mirror := &gorootMirror{saved: []string{goenv.SaveValue("GOROOT", "", false), goenv.SaveValue("PATH", "/bin", true)}}
+	if saved := (Plan{gorootMirror: mirror}).savedEnvironment(); len(saved) != 0 {
+		t.Fatalf("SDK runtime: %v", saved)
+	}
+	if saved := (Plan{gorootMirror: mirror, mini: true}).savedEnvironment(); !slices.Equal(saved, mirror.saved) {
+		t.Fatalf("Mini: %v", saved)
+	}
+}
+
+// TestRunGoHelperProcess prints the toolchain settings runGo started it with.
+func TestRunGoHelperProcess(t *testing.T) {
+	if os.Getenv("DDTO_RUN_GO_HELPER") != "1" {
+		return
+	}
+	goroot, set := os.LookupEnv("GOROOT")
+	fmt.Printf("GOROOT=%t:%s\nPATH=%s\n", set, goroot, os.Getenv("PATH"))
+	os.Exit(0)
+}
+
+// go runs from the mirror with its GOROOT and the caller's PATH, so that it
+// resolves an -exec program as natively. A launcher such as Orchestrion runs
+// go from PATH, so it also gets the mirror's bin first.
+func TestRunGoUsesThePlansToolchain(t *testing.T) {
+	t.Setenv("DDTO_RUN_GO_HELPER", "1")
+	callerPath := os.Getenv("PATH")
+	mirrorPath := prependPath(filepath.FromSlash("/mirror/bin"), callerPath)
+	mirror := &gorootMirror{toolchain: goToolchain{path: os.Args[0], root: "/mirror", env: []string{"GOROOT=/mirror", "PATH=" + mirrorPath}}}
+	ctx := withGoToolchain(context.Background(), mirror)
+	launched := context.WithValue(ctx, goLauncherKey{}, goLauncher{command: []string{os.Args[0]}})
+	for _, tc := range []struct {
+		ctx  context.Context
+		path string
+	}{{ctx, callerPath}, {launched, mirrorPath}} {
+		var out bytes.Buffer
+		code := runGo(tc.ctx, t.TempDir(), []string{"-test.run=^TestRunGoHelperProcess$"}, nil, nil, nil, &out, &out)
+		if want := "GOROOT=true:/mirror\nPATH=" + tc.path + "\n"; code != 0 || out.String() != want {
+			t.Fatalf("exit %d:\n%s\nwant:\n%s", code, out.String(), want)
+		}
 	}
 }
 

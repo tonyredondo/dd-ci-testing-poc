@@ -38,6 +38,82 @@ func TestToolchainEnvironment(t *testing.T) {
 }
 `
 
+// The executor stands for a go test -exec program, or Go's cross-compilation
+// helper, which only reports what it sees: those start before the test binary
+// can restore anything.
+const gorootMirrorExecutor = `package main
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+)
+
+func main() {
+	goroot, set := os.LookupEnv("GOROOT")
+	first := strings.SplitN(os.Getenv("PATH"), string(os.PathListSeparator), 2)[0]
+	fmt.Printf("EXECUTOR goroot_env=%q goroot_set=%t first_path=%q END\n", goroot, set, first)
+	if strings.Contains(filepath.Base(os.Args[0]), "_exec") {
+		return
+	}
+	cmd := exec.Command(os.Args[1], os.Args[2:]...)
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		os.Exit(1)
+	}
+}
+`
+
+var executorLine = regexp.MustCompile(`(?m)^EXECUTOR .* END$`)
+
+// buildExecutor builds the executor under each of names in a new directory,
+// which it returns.
+func buildExecutor(t *testing.T, names ...string) string {
+	t.Helper()
+	source, dir := t.TempDir(), t.TempDir()
+	writeBuildFixture(t, source, map[string]string{"go.mod": "module example.com/executor\n\ngo 1.21\n", "main.go": gorootMirrorExecutor})
+	built := filepath.Join(source, executableName("executor"))
+	if out, stderr, code := command(t, source, testEnv("GOWORK=off", "GOTOOLCHAIN=local"), "go", "build", "-o", built, "."); code != 0 {
+		t.Fatal(out, stderr)
+	}
+	for _, name := range names {
+		copyExecutable(t, built, filepath.Join(dir, executableName(name)))
+	}
+	return dir
+}
+
+// prependPATH puts dir first in env's PATH, the last entry, which applies.
+func prependPATH(env []string, dir string) []string {
+	env = append([]string(nil), env...)
+	for i := len(env) - 1; i >= 0; i-- {
+		if name, value, ok := strings.Cut(env[i], "="); ok && strings.EqualFold(name, "PATH") {
+			env[i] = name + "=" + dir + string(os.PathListSeparator) + value
+			return env
+		}
+	}
+	return append(env, "PATH="+dir)
+}
+
+// sameExecutorView runs go test natively and through ddto with args, and
+// checks that the executor sees the same toolchain settings.
+func sameExecutorView(t *testing.T, dir string, env, ciEnv []string, goCommand, driver string, args ...string) {
+	t.Helper()
+	nativeOut, nativeErr, code := command(t, dir, env, goCommand, args...)
+	if code != 0 {
+		t.Fatalf("native %v: %s%s", args, nativeOut, nativeErr)
+	}
+	out, stderr, code := command(t, dir, ciEnv, driver, args...)
+	if code != 0 {
+		t.Fatalf("ddto %v: %s%s", args, out, stderr)
+	}
+	native, got := executorLine.FindString(nativeOut), executorLine.FindString(out)
+	if native == "" || got != native {
+		t.Fatalf("%v: the executor sees %q; natively %q\n%s%s", args, got, native, out, stderr)
+	}
+}
+
 // Values are %q-quoted, so Windows paths arrive with escaped backslashes.
 var toolchainLine = regexp.MustCompile(`TOOLCHAIN goroot_env=("(?:[^"\\]|\\.)*") goroot_set=(\w+) first_path=("(?:[^"\\]|\\.)*") lookpath=("(?:[^"\\]|\\.)*") go_env=("(?:[^"\\]|\\.)*") runtime=("(?:[^"\\]|\\.)*") END`)
 
@@ -241,6 +317,10 @@ func runMirroredToolchain(t *testing.T, dir string, env []string, goCommand, cac
 	if parseToolchainView(t, nativeOut).runtime != "" && parseToolchainView(t, trimmedOut).runtime == "" {
 		t.Fatal("runtime.GOROOT() lost under -trimpath")
 	}
+	// go test resolves a bare -exec program on the caller's PATH, here before
+	// the toolchain's own gofmt, which comes first in the tests' PATH.
+	executors := buildExecutor(t, "gofmt")
+	sameExecutorView(t, dir, prependPATH(env, executors), prependPATH(ciEnv, executors), goCommand, driver, "test", "-count=1", "-v", "-exec=gofmt", "./...")
 	receiver.sideMu.Lock()
 	events := 0
 	for path, n := range receiver.requests {
@@ -274,7 +354,78 @@ func TestMiniGOROOTMirrorDirectToolchain(t *testing.T) {
 	cache := t.TempDir()
 	env := testEnv(append(isolatedUserCache(t, cache), "PATH="+filepath.Join(goroot, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GOMODCACHE="+modcache, "GOTOOLCHAIN=local", "GOPROXY=off")...)
-	runMirroredToolchain(t, gorootMirrorFixtureDir(t), env, filepath.Join(goroot, "bin", executableName("go")), cache, modcache)
+	goCommand := filepath.Join(goroot, "bin", executableName("go"))
+	dir := gorootMirrorFixtureDir(t)
+	runMirroredToolchain(t, dir, env, goCommand, cache, modcache)
+	// Without -exec, go test runs a cross-compiled test binary through
+	// go_$GOOS_$GOARCH_exec from PATH. The helper here only reports.
+	cross := "amd64"
+	if runtime.GOARCH == "amd64" {
+		cross = "arm64"
+	}
+	executors := buildExecutor(t, "go_"+runtime.GOOS+"_"+cross+"_exec")
+	crossEnv := append(prependPATH(env, executors), "GOARCH="+cross, "CGO_ENABLED=0")
+	ciEnv := append(crossEnv, "DD_CIVISIBILITY_ENABLED=false")
+	sameExecutorView(t, dir, crossEnv, ciEnv, goCommand, sharedDriver(t, ".."), "test", "-count=1", "-v", "./...")
+}
+
+// switchingGo stands for a module-cache toolchain whose go list switches to
+// another toolchain in the module cache, as after provisioning raises the Go
+// version: it reports packages from there whatever GOROOT it ran with.
+const switchingGo = `package main
+
+import (
+	"os"
+	"os/exec"
+)
+
+func main() {
+	if _, set := os.LookupEnv("GOROOT"); !set || len(os.Args) > 1 && os.Args[1] == "list" {
+		os.Setenv("GOROOT", os.Getenv("DDTO_TEST_SWITCH_GOROOT"))
+	}
+	cmd := exec.Command(os.Getenv("DDTO_TEST_REAL_GO"), os.Args[1:]...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		if exit, ok := err.(*exec.ExitError); ok {
+			os.Exit(exit.ExitCode())
+		}
+		os.Exit(1)
+	}
+}
+`
+
+// When go selects testing outside the mirror after all, ddto warns and runs go
+// test natively: Go would reject the overlay.
+func TestMiniGOROOTMirrorLaterToolchainRunsGoTest(t *testing.T) {
+	root, err := exec.Command("go", "env", "GOROOT").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	realGo := filepath.Join(strings.TrimSpace(string(root)), "bin", executableName("go"))
+	source := t.TempDir()
+	writeBuildFixture(t, source, map[string]string{"go.mod": "module example.com/switchinggo\n\ngo 1.21\n", "main.go": switchingGo})
+	built := filepath.Join(source, executableName("go"))
+	if out, stderr, code := command(t, source, testEnv("GOWORK=off", "GOTOOLCHAIN=local"), "go", "build", "-o", built, "."); code != 0 {
+		t.Fatal(out, stderr)
+	}
+	modcache := filepath.Join(t.TempDir(), "mod")
+	goroot := cloneToolchain(t, modcache)
+	bin := filepath.Join(goroot, "bin")
+	setDirectoriesWritable(bin, true)
+	// The clone's go is a link to the real one: replace the link only.
+	if err := os.Remove(filepath.Join(bin, executableName("go"))); err != nil {
+		t.Fatal(err)
+	}
+	copyExecutable(t, built, filepath.Join(bin, executableName("go")))
+	setDirectoriesWritable(bin, false)
+	cache := t.TempDir()
+	env := testEnv(append(isolatedUserCache(t, cache), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GOMODCACHE="+modcache, "GOTOOLCHAIN=local", "GOPROXY=off", "DDTO_TEST_SWITCH_GOROOT="+goroot, "DDTO_TEST_REAL_GO="+realGo)...)
+	dir := gorootMirrorFixtureDir(t)
+	out, stderr, code := command(t, dir, env, sharedDriver(t, ".."), "test", "-count=1", "-v", "./...")
+	if code != 0 || !strings.Contains(out, "TOOLCHAIN goroot_env=") || !strings.Contains(stderr, "outside a usable GOROOT - running go test without CI Visibility") {
+		t.Fatalf("exit %d:\n%s%s", code, out, stderr)
+	}
 }
 
 // Without a usable mirror location, ddto warns and runs go test natively,

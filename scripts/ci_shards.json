@@ -38,6 +38,7 @@
       "TestMiniFixtureRuntimeImportLineEndings",
       "TestMiniGOROOTMirrorDirectToolchain",
       "TestMiniGOROOTMirrorUnavailableRunsGoTest",
+      "TestMiniGOROOTMirrorLaterToolchainRunsGoTest",
       "TestMiniGitHubJobIDHandoff",
       "TestMiniGitHubJobIDNotHandedThroughExec",
       "TestMiniGitStateCacheWithTemporaryDirectoryInModule",
