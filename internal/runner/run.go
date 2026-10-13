@@ -861,14 +861,15 @@ func resolveExecProgram(dir string, words []string) (string, error) {
 		return "", errNoCommand
 	}
 	path := words[0]
-	if filepath.Base(path) == path {
-		return lookPathFrom(dir, path)
-	}
 	// exec.Cmd finds a Windows path rooted on the current drive, or relative
 	// to a drive's current directory, from go test's process, and starts it
-	// from the package directory: only go test reproduces both.
+	// from the package directory: only go test reproduces both. On Windows,
+	// \ alone is also its own base name.
 	if !filepath.IsAbs(path) && (filepath.VolumeName(path) != "" || os.IsPathSeparator(path[0])) {
 		return "", &exec.Error{Name: path, Err: errUnknownProgram}
+	}
+	if filepath.Base(path) == path {
+		return lookPathFrom(dir, path)
 	}
 	return path, nil
 }

@@ -325,7 +325,7 @@ func TestWindowsProgramForms(t *testing.T) {
 	if strings.EqualFold(volume, other) {
 		other = "Y:"
 	}
-	for _, path := range []string{`\executors\prog.exe`, volume + `prog.exe`, other + `prog.exe`} {
+	for _, path := range []string{`\executors\prog.exe`, `\`, volume + `prog.exe`, other + `prog.exe`} {
 		if _, err := resolveExecProgram(dir, []string{path}); !errors.Is(err, errUnknownProgram) {
 			t.Fatalf("resolveExecProgram(%q): %v", path, err)
 		}
