@@ -12,14 +12,16 @@ import (
 
 // A release executable carries the Mini runtime's sources and its tool
 // wrapper: it provisions Mini with no module proxy, no copy in GOMODCACHE and
-// no build of the wrapper, and reuses both on the next run.
+// no build of the wrapper, and reuses both on the next run. It reports the
+// release's version, which the wrapper's key includes.
 func TestReleaseExecutableIsSelfContained(t *testing.T) {
 	root, err := filepath.Abs("..")
 	if err != nil {
 		t.Fatal(err)
 	}
+	const tag = "v9.8.7-test"
 	dist := t.TempDir()
-	out, stderr, code := command(t, root, testEnv("GOFLAGS="), "go", "run", "./scripts/release", "-o", dist, "-target", runtime.GOOS+"/"+runtime.GOARCH)
+	out, stderr, code := command(t, root, testEnv("GOFLAGS="), "go", "run", "./scripts/release", "-version", tag, "-o", dist, "-target", runtime.GOOS+"/"+runtime.GOARCH)
 	if code != 0 {
 		t.Fatalf("release build: %d\n%s\n%s", code, out, stderr)
 	}
@@ -48,7 +50,13 @@ func TestReleaseExecutableIsSelfContained(t *testing.T) {
 		if code != 0 || !strings.Contains(out, "ok ") {
 			t.Fatalf("%s run: %d\n%s\n%s", state, code, out, stderr)
 		}
-		logs := cliDebugLines(stderr)
+		var debug []string
+		for _, line := range strings.Split(stderr, "\n") {
+			if strings.Contains(line, "TestOptimization.build "+tag+" DEBUG: ") {
+				debug = append(debug, line)
+			}
+		}
+		logs := strings.Join(debug, "\n")
 		wrapper := "tool wrapper state=reused"
 		if state == "created" {
 			wrapper = "tool wrapper state=created source=bundle"

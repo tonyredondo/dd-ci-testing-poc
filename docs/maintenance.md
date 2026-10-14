@@ -278,21 +278,22 @@ accepted.
 
 ## Releases
 
-A tag `vX.Y.Z` that matches `Number` in `internal/version` publishes the
-release executables. Change `Number` in
-[`internal/version/version.go`](../internal/version/version.go), merge it,
-then tag that commit and push the tag:
+Publish a GitHub release whose tag is a version, such as `v0.1.0` or
+`v0.1.0-rc.1`; GitHub creates the tag if it does not exist. The
+[release workflow](../.github/workflows/release.yml) then:
 
-```sh
-git tag v0.1.0 <commit>
-git push origin v0.1.0
-```
+1. Builds the executables at the tag with
+   `go run ./scripts/release -version <tag> -o dist`. `-version` sets `Number`
+   in [`internal/version`](../internal/version/version.go) through `-overlay`,
+   so the executables, their tool wrapper and the runtime sources they carry
+   report the release's version, and nothing is committed.
+2. Checks that the Linux executable starts and reports that version, and runs
+   [`install.sh`](../scripts/install.sh) against the built files.
+3. Attaches the executables, `install.sh` and `SHA256SUMS` to the release.
 
-The [release workflow](../.github/workflows/release.yml) rejects a tag that
-differs from `Number`, builds the executables with
-`go run ./scripts/release -o dist`, checks that the Linux one starts, and
-attaches them and `SHA256SUMS` to a GitHub release. A tag with a suffix, such
-as `v0.1.0-rc.1`, publishes a prerelease.
+Builds from source, with `go install` or a checkout, report the committed
+`Number`, `0.0.0`. `scripts/release` rejects a tag that is not
+`vMAJOR.MINOR.PATCH` with an optional prerelease.
 
 [`scripts/release`](../scripts/release/main.go) builds `ddto-<os>-<arch>` for
 Linux, macOS and Windows on `amd64` and `arm64`. Each executable carries the
@@ -308,8 +309,10 @@ not modified. Other builds carry neither and behave as before.
 compiles for a runtime package on each platform that `go tool dist list`
 names; a runtime package outside those directories needs a new entry in
 `runtimeDirs`. `TestReleaseExecutableIsSelfContained` builds the host's
-executable and runs it with an empty user cache and module cache and a module
-proxy that refuses every request.
+executable with a version and runs it with an empty user cache and module
+cache and a module proxy that refuses every request.
+`scripts/test_install.py` runs `install.sh` against a local server: a checked
+download, a checksum mismatch, the `go install` fallback and `GITHUB_PATH`.
 
 ## Verification before publication
 

@@ -15,20 +15,22 @@ versions.
 Shell examples use POSIX syntax. On Windows, use Git Bash or set environment
 variables with PowerShell; locally built executables can use a `.exe` suffix.
 
-Tests need an installed Go 1.25 or newer toolchain. Download `ddto` for your
-platform from the
+Tests need an installed Go 1.25 or newer toolchain. Install `ddto` from the
 [latest release](https://github.com/tonyredondo/dd-ci-testing-poc/releases/latest):
 
 ```sh
-curl -fsSL -o ddto https://github.com/tonyredondo/dd-ci-testing-poc/releases/latest/download/ddto-linux-amd64
-chmod +x ddto
+curl -fsSL https://github.com/tonyredondo/dd-ci-testing-poc/releases/latest/download/install.sh | bash
 ```
 
-Releases have `ddto-<os>-<arch>` for Linux, macOS (`darwin`) and Windows on
-`amd64` and `arm64`, with `.exe` on Windows, and their checksums in
-`SHA256SUMS`. Each executable carries the Mini runtime's sources and its tool
-wrapper, so a CI job builds neither `ddto` nor its wrapper and downloads no
-runtime module; it compiles only what goes into the test binaries.
+The script downloads the executable for your platform into `~/.local/bin`
+and checks it against the release's `SHA256SUMS`. `--version v1.2.3` picks a
+release and `--dir` another directory. Without an executable for the
+platform, it builds `ddto` with `go install`, and in GitHub Actions it adds the
+directory to `PATH`. Releases have `ddto-<os>-<arch>` for Linux, macOS
+(`darwin`) and Windows on `amd64` and `arm64`, with `.exe` on Windows. Each
+executable carries the Mini runtime's sources and its tool wrapper, so a CI job
+builds neither `ddto` nor its wrapper and downloads no runtime module; it
+compiles only what goes into the test binaries.
 
 To build `ddto` from source instead:
 

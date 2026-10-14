@@ -3,7 +3,11 @@
 // platform (see internal/bundle), so that users need neither the module's
 // sources nor a build of ddto or its wrapper. Run it from the module root:
 //
-//	go run ./scripts/release [-o dist] [-target linux/amd64,darwin/arm64]
+//	go run ./scripts/release [-version v1.2.3] [-o dist] [-target linux/amd64,darwin/arm64]
+//
+// -version sets internal/version's Number for the build, through -overlay:
+// the executables, their wrapper and the runtime they carry all report it,
+// and the checkout is not modified.
 package main
 
 import (
@@ -16,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -37,28 +42,96 @@ var runtimeDirs = []string{"internal", "propagation", "testopt"}
 // runtimeFiles are the module files that Go needs to compile those packages.
 var runtimeFiles = []string{"go.mod", "LICENSE", "NOTICE"}
 
+// versionFile declares Number, from which the version's other constants derive.
+const versionFile = "internal/version/version.go"
+
 func main() {
 	out := flag.String("o", "dist", "output directory")
 	list := flag.String("target", strings.Join(targets, ","), "comma-separated GOOS/GOARCH platforms")
+	tag := flag.String("version", "", "version that the executables report, such as v1.2.3; empty keeps internal/version")
 	flag.Parse()
+	if err := release(*out, strings.Split(*list, ","), *tag); err != nil {
+		fmt.Fprintln(os.Stderr, "release:", err)
+		os.Exit(1)
+	}
+}
+
+func release(out string, platforms []string, tag string) error {
 	root, err := moduleRoot()
-	must(err)
-	archive, err := runtimeArchive(root)
-	must(err)
+	if err != nil {
+		return err
+	}
 	temp, err := os.MkdirTemp("", "ddto-release-")
-	must(err)
+	if err != nil {
+		return err
+	}
 	defer os.RemoveAll(temp)
-	must(os.WriteFile(filepath.Join(temp, bundle.RuntimeArchive), archive, 0600))
-	must(os.MkdirAll(*out, 0755))
-	for _, target := range strings.Split(*list, ",") {
+	overlay := map[string]string{}
+	overrides := map[string][]byte{}
+	prefix := version.BuildLogPrefix
+	if tag != "" {
+		source, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(versionFile)))
+		if err != nil {
+			return err
+		}
+		stamped, stampedPrefix, err := stampVersion(source, tag)
+		if err != nil {
+			return err
+		}
+		path := filepath.Join(temp, "version.go")
+		if err := os.WriteFile(path, stamped, 0600); err != nil {
+			return err
+		}
+		overlay[filepath.Join(root, filepath.FromSlash(versionFile))] = path
+		overrides[versionFile] = stamped
+		prefix = stampedPrefix
+	}
+	archive, err := runtimeArchive(root, overrides)
+	if err != nil {
+		return err
+	}
+	overlay[filepath.Join(root, "internal", "bundle", bundle.RuntimeArchive)] = filepath.Join(temp, bundle.RuntimeArchive)
+	if err := os.WriteFile(filepath.Join(temp, bundle.RuntimeArchive), archive, 0600); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(out, 0755); err != nil {
+		return err
+	}
+	for _, target := range platforms {
 		goos, goarch, ok := strings.Cut(target, "/")
 		if !ok {
-			must(fmt.Errorf("target %q is not GOOS/GOARCH", target))
+			return fmt.Errorf("target %q is not GOOS/GOARCH", target)
 		}
-		path, err := build(root, temp, *out, goos, goarch)
-		must(err)
+		path, err := build(root, temp, out, goos, goarch, prefix, overlay)
+		if err != nil {
+			return err
+		}
 		fmt.Println(path)
 	}
+	return nil
+}
+
+// semver accepts vMAJOR.MINOR.PATCH with an optional prerelease, as Go module
+// versions do; build metadata is not a valid module version.
+var semver = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$`)
+
+var numberDeclaration = regexp.MustCompile(`(?m)^const Number = "[^"]*"`)
+
+// stampVersion returns versionFile's source with Number set to tag's version,
+// and the build log prefix that the stamped package declares, which is part of
+// the tool wrapper's key.
+func stampVersion(source []byte, tag string) ([]byte, string, error) {
+	if !semver.MatchString(tag) {
+		return nil, "", fmt.Errorf("version %q is not vMAJOR.MINOR.PATCH[-PRERELEASE]", tag)
+	}
+	if len(numberDeclaration.FindAll(source, -1)) != 1 {
+		return nil, "", fmt.Errorf("%s does not declare Number once", versionFile)
+	}
+	if !strings.HasSuffix(version.BuildLogPrefix, version.Tag) {
+		return nil, "", fmt.Errorf("version.BuildLogPrefix does not end with version.Tag")
+	}
+	stamped := numberDeclaration.ReplaceAll(source, []byte(`const Number = "`+strings.TrimPrefix(tag, "v")+`"`))
+	return stamped, strings.TrimSuffix(version.BuildLogPrefix, version.Tag) + tag, nil
 }
 
 func moduleRoot() (string, error) {
@@ -77,10 +150,10 @@ func moduleRoot() (string, error) {
 }
 
 // runtimeArchive zips the runtime's sources: the module files, and the non-test
-// sources and license texts of runtimeDirs, without testdata. Entries are
-// sorted and carry no times, so the same sources give the same archive and the
-// same cache key.
-func runtimeArchive(root string) ([]byte, error) {
+// sources and license texts of runtimeDirs, without testdata. overrides
+// replaces files by their slash-separated path. Entries are sorted and carry no
+// times, so the same sources give the same archive and the same cache key.
+func runtimeArchive(root string, overrides map[string][]byte) ([]byte, error) {
 	names := slices.Clone(runtimeFiles)
 	for _, dir := range runtimeDirs {
 		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, entry fs.DirEntry, err error) error {
@@ -118,9 +191,12 @@ func runtimeArchive(root string) ([]byte, error) {
 	var buf bytes.Buffer
 	archive := zip.NewWriter(&buf)
 	for _, name := range names {
-		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
-		if err != nil {
-			return nil, err
+		data, ok := overrides[name]
+		if !ok {
+			var err error
+			if data, err = os.ReadFile(filepath.Join(root, filepath.FromSlash(name))); err != nil {
+				return nil, err
+			}
 		}
 		header := &zip.FileHeader{Name: name, Method: zip.Deflate, Modified: time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC)}
 		w, err := archive.CreateHeader(header)
@@ -138,9 +214,9 @@ func runtimeArchive(root string) ([]byte, error) {
 }
 
 // build writes ddto-GOOS-GOARCH to out. The wrapper comes from the sources
-// that ddto would build, so its key matches; -overlay supplies it and the
-// runtime archive to internal/bundle without writing to the checkout.
-func build(root, temp, out, goos, goarch string) (string, error) {
+// that ddto would build with prefix, so its key matches; -overlay supplies it,
+// the runtime archive and any stamped version without writing to the checkout.
+func build(root, temp, out, goos, goarch, prefix string, overlay map[string]string) (string, error) {
 	suffix := ""
 	if goos == "windows" {
 		suffix = ".exe"
@@ -149,7 +225,7 @@ func build(root, temp, out, goos, goarch string) (string, error) {
 	if err := os.RemoveAll(src); err != nil {
 		return "", err
 	}
-	files, _ := toolwrap.Sources(version.BuildLogPrefix)
+	files, _ := toolwrap.Sources(prefix)
 	for name, data := range files {
 		path := filepath.Join(src, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
@@ -164,15 +240,16 @@ func build(root, temp, out, goos, goarch string) (string, error) {
 	if err := run(src, env, "go", "build", "-trimpath", "-buildvcs=false", "-ldflags=-s -w", "-o", wrapper, "."); err != nil {
 		return "", err
 	}
-	overlay, err := json.Marshal(map[string]map[string]string{"Replace": {
-		filepath.Join(root, "internal", "bundle", bundle.RuntimeArchive):  filepath.Join(temp, bundle.RuntimeArchive),
-		filepath.Join(root, "internal", "bundle", bundle.ToolWrapperFile): wrapper,
-	}})
+	replace := map[string]string{filepath.Join(root, "internal", "bundle", bundle.ToolWrapperFile): wrapper}
+	for from, to := range overlay {
+		replace[from] = to
+	}
+	data, err := json.Marshal(map[string]map[string]string{"Replace": replace})
 	if err != nil {
 		return "", err
 	}
 	overlayFile := filepath.Join(temp, "overlay.json")
-	if err := os.WriteFile(overlayFile, overlay, 0600); err != nil {
+	if err := os.WriteFile(overlayFile, data, 0600); err != nil {
 		return "", err
 	}
 	path, err := filepath.Abs(filepath.Join(out, "ddto-"+goos+"-"+goarch+suffix))
@@ -190,11 +267,4 @@ func run(dir string, env []string, name string, args ...string) error {
 		return fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
 	}
 	return nil
-}
-
-func must(err error) {
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "release:", err)
-		os.Exit(1)
-	}
 }

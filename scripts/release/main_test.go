@@ -4,12 +4,15 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
 // The runtime archive holds the module files and the non-test sources of the
@@ -19,11 +22,11 @@ func TestRuntimeArchiveContents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := runtimeArchive(root)
+	first, err := runtimeArchive(root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := runtimeArchive(root)
+	second, err := runtimeArchive(root, nil)
 	if err != nil || !bytes.Equal(first, second) {
 		t.Fatalf("archive not reproducible: %v", err)
 	}
@@ -65,7 +68,7 @@ func TestRuntimeArchiveCoversEveryPlatform(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	archive, err := runtimeArchive(root)
+	archive, err := runtimeArchive(root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,6 +114,55 @@ func TestRuntimeArchiveCoversEveryPlatform(t *testing.T) {
 					}
 				}
 			}
+		}
+	}
+}
+
+// -version sets Number in the version package that the executables and the
+// runtime archive carry, and the tool wrapper's build log prefix follows it.
+func TestStampVersion(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(versionFile)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Stamping the current version changes nothing.
+	same, prefix, err := stampVersion(source, version.Tag)
+	if err != nil || !bytes.Equal(same, source) || prefix != version.BuildLogPrefix {
+		t.Fatalf("stamping %s: prefix %q, %v", version.Tag, prefix, err)
+	}
+	for _, tag := range []string{"v1.2.3", "v0.1.0-rc.1"} {
+		stamped, prefix, err := stampVersion(source, tag)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := `const Number = "` + tag[1:] + `"`; !bytes.Contains(stamped, []byte(want)) || prefix != "TestOptimization.build "+tag {
+			t.Fatalf("%s: prefix %q, source lacks %s", tag, prefix, want)
+		}
+		archive, err := runtimeArchive(root, map[string][]byte{versionFile: stamped})
+		if err != nil {
+			t.Fatal(err)
+		}
+		reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		file, err := reader.Open(versionFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(file)
+		file.Close()
+		if err != nil || !bytes.Equal(data, stamped) {
+			t.Fatalf("%s: the archive does not carry the stamped %s: %v", tag, versionFile, err)
+		}
+	}
+	for _, tag := range []string{"1.2.3", "v1.2", "v1.2.3+build", "v01.2.3", "v1.2.3-"} {
+		if _, _, err := stampVersion(source, tag); err == nil {
+			t.Errorf("accepted %q", tag)
 		}
 	}
 }

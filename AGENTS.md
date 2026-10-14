@@ -22,20 +22,20 @@ keeps its own language version; Go 1.21 and newer are tested.
 
 Prefer the release executable for the host. It carries the runtime's sources
 and its tool wrapper, so nothing of `ddto` is compiled or downloaded later.
-Put it outside the project, in a directory on `PATH`:
+The install script puts it in `~/.local/bin`, outside the project, after
+checking it against the release's checksums:
 
 ```sh
 go version                    # go1.25 or newer
-base=https://github.com/tonyredondo/dd-ci-testing-poc/releases/latest/download
-asset=ddto-$(go env GOHOSTOS)-$(go env GOHOSTARCH)
-[ "$(go env GOHOSTOS)" = windows ] && asset=$asset.exe
-cd "$(mktemp -d)" && curl -fsSL -O "$base/$asset" -O "$base/SHA256SUMS"
-grep " $asset\$" SHA256SUMS | sha256sum -c -    # macOS: shasum -a 256 -c -
-mkdir -p "$HOME/.local/bin" && install -m 0755 "$asset" "$HOME/.local/bin/ddto"
+curl -fsSL https://github.com/tonyredondo/dd-ci-testing-poc/releases/latest/download/install.sh | bash
 ddto --help                   # prints the usage line
 ```
 
-Without a release for the platform, or to use another revision, build it with
+Pass options after `bash -s --`: `--version v1.2.3` for a release, `--dir` for
+another directory on `PATH`. In GitHub Actions the script adds the directory to
+`PATH` for later steps. Without an executable for the platform, it builds
+`ddto` with `go install`; a checksum mismatch stops it. To use another
+revision, build it with
 `go install github.com/tonyredondo/dd-ci-testing-poc/cmd/ddto@main`. Go puts
 the binary in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin` when `GOBIN` is
 empty; add that directory to `PATH` if `ddto --help` is not found. Do not add
