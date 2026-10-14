@@ -29,6 +29,9 @@ func TestReleaseExecutableIsSelfContained(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		driver += ".exe"
 	}
+	if out, stderr, code := command(t, root, testEnv(), driver, "--version"); code != 0 || out != "ddto "+tag+"\n" {
+		t.Fatalf("--version: %d %q %s", code, out, stderr)
+	}
 	var requests atomic.Int64
 	proxy := newServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)

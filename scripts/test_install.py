@@ -16,10 +16,20 @@ SCRIPT = Path(__file__).resolve().parent / "install.sh"
 MODULE = "github.com/tonyredondo/dd-ci-testing-poc"
 OS = {"Linux": "linux", "Darwin": "darwin"}.get(platform.system())
 ARCH = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine().lower())
-FAKE_DDTO = "#!/bin/sh\necho usage: ddto\n"
 
 
-class Quiet(http.server.SimpleHTTPRequestHandler):
+def fake_ddto(version="v1.2.3"):
+    return f'#!/bin/sh\nif [ "$1" = --version ]; then echo "ddto {version}"; else echo usage: ddto; fi\n'
+
+
+FAKE_DDTO = fake_ddto()
+
+
+class Recording(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        self.server.paths.append(self.path)
+        super().do_GET()
+
     def log_message(self, *args):
         pass
 
@@ -33,7 +43,8 @@ class InstallTests(unittest.TestCase):
         self.assets = self.root / "assets"
         self.assets.mkdir()
         self.dir = self.root / "bin"
-        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=self.assets))
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Recording, directory=self.assets))
+        server.paths = self.paths = []
         threading.Thread(target=server.serve_forever, daemon=True).start()
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
@@ -57,7 +68,8 @@ class InstallTests(unittest.TestCase):
         tools = self.root / "tools"
         tools.mkdir()
         go = tools / "go"
-        go.write_text(f'#!/bin/sh\necho "$@" > "{self.root}/go-args"\nprintf "%s" "{FAKE_DDTO}" > "$GOBIN/ddto"\n'
+        (tools / "ddto").write_text(FAKE_DDTO)
+        go.write_text(f'#!/bin/sh\necho "$@" > "{self.root}/go-args"\ncp "{tools}/ddto" "$GOBIN/ddto"\n'
                       'chmod +x "$GOBIN/ddto"\n')
         go.chmod(0o755)
         return f"{tools}{os.pathsep}{os.environ['PATH']}"
@@ -85,6 +97,37 @@ class InstallTests(unittest.TestCase):
         self.assertIn(f"no release executable {self.asset}", result.stderr)
         self.assertEqual((self.root / "go-args").read_text().split(), ["install", f"{MODULE}/cmd/ddto@v1.2.3"])
         self.assertIn("(go install @v1.2.3)", result.stderr)
+
+    def preinstall(self, data=FAKE_DDTO):
+        self.dir.mkdir()
+        installed = self.dir / "ddto"
+        installed.write_text(data)
+        installed.chmod(0o755)
+
+    def test_keeps_an_installed_requested_version_without_downloading(self):
+        self.preinstall()
+        result = self.install("--version", "v1.2.3", path=self.fake_go())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ddto v1.2.3 in", result.stderr)
+        self.assertIn("(already installed)", result.stderr)
+        self.assertEqual(self.paths, [])
+        self.assertFalse((self.root / "go-args").exists())
+
+    def test_keeps_the_latest_release_when_its_checksum_matches(self):
+        self.release()
+        self.preinstall()
+        result = self.install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("(already installed)", result.stderr)
+        self.assertEqual(self.paths, ["/SHA256SUMS"])
+
+    def test_replaces_another_version(self):
+        self.release()
+        self.preinstall(fake_ddto("v1.0.0"))
+        result = self.install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.dir / "ddto").read_text(), FAKE_DDTO)
+        self.assertEqual(self.paths, ["/SHA256SUMS", "/" + self.asset])
 
     def test_adds_the_directory_to_github_path(self):
         self.release()

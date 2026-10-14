@@ -4,10 +4,12 @@
 // sources nor a build of ddto or its wrapper. Run it from the module root:
 //
 //	go run ./scripts/release [-version v1.2.3] [-o dist] [-target linux/amd64,darwin/arm64]
+//	go run ./scripts/release -version v1.2.3 -stamp
 //
 // -version sets internal/version's Number for the build, through -overlay:
 // the executables, their wrapper and the runtime they carry all report it,
-// and the checkout is not modified.
+// and the checkout is not modified. With -stamp it writes that Number into the
+// checkout instead, for the release commit, and builds nothing.
 package main
 
 import (
@@ -49,11 +51,36 @@ func main() {
 	out := flag.String("o", "dist", "output directory")
 	list := flag.String("target", strings.Join(targets, ","), "comma-separated GOOS/GOARCH platforms")
 	tag := flag.String("version", "", "version that the executables report, such as v1.2.3; empty keeps internal/version")
+	stamp := flag.Bool("stamp", false, "write -version into internal/version in the checkout and build nothing")
 	flag.Parse()
-	if err := release(*out, strings.Split(*list, ","), *tag); err != nil {
+	var err error
+	if *stamp {
+		err = stampCheckout(*tag)
+	} else {
+		err = release(*out, strings.Split(*list, ","), *tag)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "release:", err)
 		os.Exit(1)
 	}
+}
+
+// stampCheckout writes tag's version into versionFile in the checkout.
+func stampCheckout(tag string) error {
+	root, err := moduleRoot()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(root, filepath.FromSlash(versionFile))
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	stamped, _, err := stampVersion(source, tag)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, stamped, 0644)
 }
 
 func release(out string, platforms []string, tag string) error {

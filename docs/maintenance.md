@@ -278,22 +278,27 @@ accepted.
 
 ## Releases
 
-Publish a GitHub release whose tag is a version, such as `v0.1.0` or
-`v0.1.0-rc.1`; GitHub creates the tag if it does not exist. The
-[release workflow](../.github/workflows/release.yml) then:
+Run the [release workflow](../.github/workflows/release.yml) from the
+Actions tab, on the branch to release, with a version such as `v0.1.0` or
+`v0.1.0-rc.1`. It:
 
-1. Builds the executables at the tag with
-   `go run ./scripts/release -version <tag> -o dist`. `-version` sets `Number`
-   in [`internal/version`](../internal/version/version.go) through `-overlay`,
-   so the executables, their tool wrapper and the runtime sources they carry
-   report the release's version, and nothing is committed.
-2. Checks that the Linux executable starts and reports that version, and runs
+1. Writes that version as `Number` in
+   [`internal/version`](../internal/version/version.go) with
+   `go run ./scripts/release -version <version> -stamp`, commits it and tags
+   the commit. Only the tag points to that commit; the branch keeps `0.0.0`.
+   `go install ...@<version>` therefore builds the release's source and reports
+   its version too: `ddto --version`, logs, telemetry and test events.
+2. Builds the executables with `go run ./scripts/release -o dist`, checks that
+   `ddto --version` reports the version, and runs
    [`install.sh`](../scripts/install.sh) against the built files.
-3. Attaches the executables, `install.sh` and `SHA256SUMS` to the release.
+3. Pushes the tag and publishes the release with the executables, `install.sh`
+   and `SHA256SUMS`. A version with a suffix publishes a prerelease.
 
-Builds from source, with `go install` or a checkout, report the committed
-`Number`, `0.0.0`. `scripts/release` rejects a tag that is not
-`vMAJOR.MINOR.PATCH` with an optional prerelease.
+`scripts/release` rejects a version that is not `vMAJOR.MINOR.PATCH` with an
+optional prerelease, and the workflow stops before building when the tag
+exists. Other builds from source report `0.0.0`. Without `-stamp`,
+`-version` sets the version through `-overlay` for a local build, without
+changing the checkout.
 
 [`scripts/release`](../scripts/release/main.go) builds `ddto-<os>-<arch>` for
 Linux, macOS and Windows on `amd64` and `arm64`. Each executable carries the
@@ -312,7 +317,8 @@ names; a runtime package outside those directories needs a new entry in
 executable with a version and runs it with an empty user cache and module
 cache and a module proxy that refuses every request.
 `scripts/test_install.py` runs `install.sh` against a local server: a checked
-download, a checksum mismatch, the `go install` fallback and `GITHUB_PATH`.
+download, a checksum mismatch, the `go install` fallback, an installed
+executable of the same version and `GITHUB_PATH`.
 
 ## Verification before publication
 

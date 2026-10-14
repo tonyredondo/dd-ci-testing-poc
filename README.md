@@ -24,9 +24,11 @@ curl -fsSL https://github.com/tonyredondo/dd-ci-testing-poc/releases/latest/down
 
 The script downloads the executable for your platform into `~/.local/bin`
 and checks it against the release's `SHA256SUMS`. `--version v1.2.3` picks a
-release and `--dir` another directory. Without an executable for the
+release and `--dir` another directory. It keeps an installed executable of the
+same version, so a persistent runner downloads nothing for a requested
+version and only `SHA256SUMS` for the latest. Without an executable for the
 platform, it builds `ddto` with `go install`, and in GitHub Actions it adds the
-directory to `PATH`. Releases have `ddto-<os>-<arch>` for Linux, macOS
+directory to `PATH`. `ddto --version` prints the installed version. Releases have `ddto-<os>-<arch>` for Linux, macOS
 (`darwin`) and Windows on `amd64` and `arm64`, with `.exe` on Windows. Each
 executable carries the Mini runtime's sources and its tool wrapper, so a CI job
 builds neither `ddto` nor its wrapper and downloads no runtime module; it

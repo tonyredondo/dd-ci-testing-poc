@@ -7,7 +7,9 @@
 # It downloads the release executable for this host and checks it against the
 # release's SHA256SUMS. Without an executable for the host, or when the
 # download fails, it builds ddto with go install instead. A checksum mismatch
-# stops it. In GitHub Actions it adds the directory to PATH for later steps.
+# stops it. An installed executable of the same version stays: a requested
+# version needs no download, and latest only needs SHA256SUMS. In GitHub
+# Actions it adds the directory to PATH for later steps.
 #
 # Settings, as options or environment variables:
 #   --version, DDTO_VERSION       release tag, or latest (the default)
@@ -75,25 +77,41 @@ mkdir -p "$dir"
 dir=$(cd "$dir" && pwd)
 temp=$(mktemp -d)
 trap 'rm -rf "$temp"' EXIT
+target=$dir/ddto$exe
+current=
+if [ -x "$target" ]; then
+  current=$("$target" --version 2> /dev/null | awk '{ print $2 }' || true)
+fi
 installed=
-if [ -n "$os" ] && [ -n "$arch" ]; then
+# On a persistent runner, keep an installed executable of the same version: a
+# requested version needs no download, and latest only needs SHA256SUMS.
+if [ "$version" != latest ] && [ "$current" = "$version" ]; then
+  installed="already installed"
+elif [ -n "$os" ] && [ -n "$arch" ]; then
   asset=ddto-$os-$arch$exe
-  if ! fetch "$base/$asset" "$temp/$asset"; then
-    say "no release executable $asset at $base"
-  elif ! fetch "$base/SHA256SUMS" "$temp/SHA256SUMS"; then
+  want=
+  if ! fetch "$base/SHA256SUMS" "$temp/SHA256SUMS"; then
     say "no SHA256SUMS at $base"
   else
     want=$(awk -v name="$asset" '$2 == name || $2 == "*" name { print $1 }' "$temp/SHA256SUMS")
+  fi
+  if [ -z "$want" ]; then
+    say "no release executable $asset at $base"
+  elif [ -n "$current" ] && [ "$(sha256 "$target" || true)" = "$want" ]; then
+    installed="already installed"
+  elif ! fetch "$base/$asset" "$temp/$asset"; then
+    say "no release executable $asset at $base"
+  else
     if ! got=$(sha256 "$temp/$asset"); then
       say "sha256sum, shasum or openssl is required to check $asset"
       exit 1
     fi
-    if [ -z "$want" ] || [ "$want" != "$got" ]; then
+    if [ "$want" != "$got" ]; then
       say "$asset does not match SHA256SUMS"
       exit 1
     fi
-    cp "$temp/$asset" "$dir/ddto$exe"
-    chmod 0755 "$dir/ddto$exe"
+    cp "$temp/$asset" "$target"
+    chmod 0755 "$target"
     installed="release $version"
   fi
 else
@@ -108,8 +126,8 @@ if [ -z "$installed" ]; then
   GOBIN=$dir go install "github.com/$repo/cmd/ddto@$version"
   installed="go install @$version"
 fi
-"$dir/ddto$exe" --help > /dev/null 2>&1
-say "installed $dir/ddto$exe ($installed)"
+"$target" --help > /dev/null 2>&1
+say "$("$target" --version) in $target ($installed)"
 case ":$PATH:" in
   *":$dir:"*) ;;
   *)

@@ -28,17 +28,18 @@ checking it against the release's checksums:
 ```sh
 go version                    # go1.25 or newer
 curl -fsSL https://github.com/tonyredondo/dd-ci-testing-poc/releases/latest/download/install.sh | bash
-ddto --help                   # prints the usage line
+ddto --version                # prints the installed version
 ```
 
 Pass options after `bash -s --`: `--version v1.2.3` for a release, `--dir` for
 another directory on `PATH`. In GitHub Actions the script adds the directory to
-`PATH` for later steps. Without an executable for the platform, it builds
-`ddto` with `go install`; a checksum mismatch stops it. To use another
+`PATH` for later steps. An installed executable of the same version stays.
+Without an executable for the platform, it builds `ddto` with `go install`; a
+checksum mismatch stops it. To use another
 revision, build it with
 `go install github.com/tonyredondo/dd-ci-testing-poc/cmd/ddto@main`. Go puts
 the binary in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin` when `GOBIN` is
-empty; add that directory to `PATH` if `ddto --help` is not found. Do not add
+empty; add that directory to `PATH` if `ddto --version` is not found. Do not add
 this module to the project's `go.mod`: each run supplies the runtime through
 temporary module files.
 
