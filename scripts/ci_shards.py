@@ -3,6 +3,7 @@
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor
+import http.client
 import json
 import os
 from pathlib import Path
@@ -119,14 +120,26 @@ def matrix(groups, suite, tip=False):
 
 
 GO_RELEASES = "https://go.dev/dl/?mode=json&include=all"
+# The runners' platforms; setup-go installs a release from its archive.
+RUNNER_ARCHIVES = {("linux", "amd64"), ("darwin", "arm64"), ("windows", "amd64")}
 
 
 def newest_go_releases(releases, specs):
-    """Map each "1.N.x" spec to the newest stable 1.N release in go.dev's list."""
+    """Map each "1.N.x" spec to the newest stable 1.N release in go.dev's list.
+
+    go.dev lists a release while its files are still being published, so a
+    release counts only once it has an archive for every runner platform.
+    """
+    if not isinstance(releases, list) or not all(isinstance(release, dict) for release in releases):
+        raise ValueError("unexpected go.dev release list")
     patches = {}
     for release in releases:
-        match = re.fullmatch(r"go(\d+\.\d+)\.(\d+)", release.get("version", ""))
-        if release.get("stable") and match and match.group(1) + ".x" in specs:
+        match = re.fullmatch(r"go(\d+\.\d+)\.(\d+)", str(release.get("version", "")))
+        files = release.get("files")
+        archives = {(item.get("os"), item.get("arch")) for item in files if isinstance(item, dict)
+                    and item.get("kind") == "archive"} if isinstance(files, list) else set()
+        if release.get("stable") is True and match and match.group(1) + ".x" in specs \
+                and RUNNER_ARCHIVES <= archives:
             spec = match.group(1) + ".x"
             patches[spec] = max(patches.get(spec, 0), int(match.group(2)))
     return {spec: spec.removesuffix("x") + str(patch) for spec, patch in patches.items()}
@@ -147,8 +160,8 @@ def go_versions(fetch=None, sleep=time.sleep):
         try:
             chosen = newest_go_releases(json.loads(fetch()), specs)
             break
-        except (OSError, ValueError) as error:
-            print(f"::warning::attempt {attempt} to list Go releases failed: {error}", file=sys.stderr, flush=True)
+        except (OSError, ValueError, http.client.HTTPException) as error:
+            print(f"::warning::attempt {attempt} to list Go releases failed: {error!r}", file=sys.stderr, flush=True)
             if attempt < 3:
                 sleep(15 * attempt)
     for spec in specs:
