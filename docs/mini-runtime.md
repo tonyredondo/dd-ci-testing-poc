@@ -413,6 +413,14 @@ Text profiles stay in some cases:
 The [adaptation record](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md#per-test-coverage-counters-in-memory)
 lists every case.
 
+When `-coverpkg` covers `testing` itself, coverage reports lines of ddto's
+rewritten `testing.go`: `go tool cover` ignores `//line` directives, so lines
+after ddto's hooks appear shifted, in per-test coverage and in the
+`-coverprofile` that `go test` writes. Stack traces keep the original lines,
+because the compiler applies the directives. The coverage of `testing`'s own
+code is also attributed by timing: `T.Run` continues in the parent goroutine
+while the attempt it started takes its first snapshot.
+
 With `-race`, `ddto` overlays Mini's sources with copies that mark each
 function declaration `//go:norace`, so the race detector does not instrument
 Mini's own memory accesses: with 2,000 empty tests, about 22 µs less per test.
