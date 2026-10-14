@@ -359,6 +359,22 @@ that pooled its connection earlier did so under the pool's mutex, which the
 close then takes, ordering that read before the tests. The next request
 reconnects, which costs a TLS handshake for Agentless delivery.
 
+That close covers plain HTTP, as to a local Agent: closing a TCP connection
+reads no clock. A TLS dial that finishes late still reads it, in
+`tls.Conn.Close` and when it sets up an HTTP/2 connection, and net/http offers
+no way to wait for that dial. `createNewHTTPClient` in
+[`civisibility/utils/net/http.go`](civisibility/utils/net/http.go) therefore
+sends HTTPS requests through a transport with `MaxConnsPerHost: 1`. Concurrent
+requests share one HTTP/2 connection instead of each dialing its own, so no
+extra dial exists: five concurrent requests made one dial instead of five, in
+the same time. Plain HTTP keeps concurrent connections, because HTTP/1.1 would
+serialize the requests. Two cases remain. An HTTPS endpoint that answers only
+HTTP/1.1 serializes its requests. With plain HTTP, a request that starts after
+the close, such as one from the repository upload that ordinary mode runs in
+the background, lets a late dial pool its connection again; in ordinary mode
+those background requests read the clock during tests anyway, which deferred
+mode avoids.
+
 Checks: `TestStartupTelemetrySendsBeforeTests` blocks a real loopback startup
 response and checks that `StartApp` waits for it, initial configuration, retry,
 concurrent close and failed initialization in both modes.
@@ -377,8 +393,11 @@ handshake for successful and failed responses.
 `internal/cidelivery/TestCloseConnectionsKeepsLateDialsOutOfTheIdlePool` holds a
 dial whose request took another request's connection, and checks that closing
 the CI connections cancels it, or closes its connection when it had already
-connected. `TestMiniStartupOverlapsSettingsAndTelemetry` checks that the
-connections close before the first test.
+connected; it follows that connection by its address.
+`TestCITransportDialsOnceForConcurrentHTTPSRequests` sends concurrent requests
+to an HTTP/2 server and expects one dial.
+`TestMiniStartupOverlapsSettingsAndTelemetry` checks that the connections close
+before the first test.
 Run these with `-race`, plus the clock integration and HTTP telemetry parity.
 When synchronizing upstream, check response ownership and startup scheduling
 alongside the telemetry metrics; checking wire fields alone misses these races.
