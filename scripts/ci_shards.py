@@ -9,8 +9,10 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
+import urllib.request
 
 import parity_report
 
@@ -114,6 +116,46 @@ def matrix(groups, suite, tip=False):
             include.append(dict(suite=s, os=os_name, go=go_version, mode=mode,
                                 shards=",".join(shards), job="-".join(shards), owner=index == 0))
     return {"include": include}
+
+
+GO_RELEASES = "https://go.dev/dl/?mode=json&include=all"
+
+
+def newest_go_releases(releases, specs):
+    """Map each "1.N.x" spec to the newest stable 1.N release in go.dev's list."""
+    patches = {}
+    for release in releases:
+        match = re.fullmatch(r"go(\d+\.\d+)\.(\d+)", release.get("version", ""))
+        if release.get("stable") and match and match.group(1) + ".x" in specs:
+            spec = match.group(1) + ".x"
+            patches[spec] = max(patches.get(spec, 0), int(match.group(2)))
+    return {spec: spec.removesuffix("x") + str(patch) for spec, patch in patches.items()}
+
+
+def go_versions(fetch=None, sleep=time.sleep):
+    """Choose one release per Go version for every job of a run.
+
+    setup-go prefers a release already installed on the runner, and runner images
+    carry different patch releases while GitHub rolls out an update. Without
+    go.dev, the jobs fall back to the version spec, and the final job rejects
+    groups that used different toolchains.
+    """
+    specs = sorted({config[2] for config in CONFIGURATIONS if config[2] != "tip"})
+    fetch = fetch or (lambda: urllib.request.urlopen(GO_RELEASES, timeout=30).read())
+    chosen = {}
+    for attempt in range(1, 4):
+        try:
+            chosen = newest_go_releases(json.loads(fetch()), specs)
+            break
+        except (OSError, ValueError) as error:
+            print(f"::warning::attempt {attempt} to list Go releases failed: {error}", file=sys.stderr, flush=True)
+            if attempt < 3:
+                sleep(15 * attempt)
+    for spec in specs:
+        if spec not in chosen:
+            print(f"::warning::no Go release chosen for {spec}; its jobs may install different patch releases",
+                  file=sys.stderr, flush=True)
+    return {spec: chosen.get(spec, spec) for spec in specs}
 
 
 def capture(*command):
@@ -371,6 +413,7 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     matrix_parser = commands.add_parser("matrix")
     matrix_parser.add_argument("--with-tip", action="store_true")
+    commands.add_parser("go-versions", help="print the Go release that every job of the run installs")
     run_parser = commands.add_parser("run")
     for name in ("suite", "os", "go", "mode"):
         run_parser.add_argument("--" + name, required=True)
@@ -393,6 +436,8 @@ def main():
             for name, suite, tip in (("differential", "differential", False), ("mini", "mini", False), ("tip", "mini", True)):
                 value = matrix(groups, suite, tip) if not tip or args.with_tip else {"include": []}
                 print(name + "=" + json.dumps(value, separators=(",", ":")))
+        elif args.command == "go-versions":
+            print("go-versions=" + json.dumps(go_versions(), separators=(",", ":")))
         elif args.command == "run":
             run(args)
         elif args.command == "retry":

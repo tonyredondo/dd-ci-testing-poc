@@ -97,6 +97,25 @@ class ShardTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "failed after 3 attempts"):
                 ci_shards.retry(args, sleep=sleeps.append)
 
+    def test_go_versions_choose_the_newest_stable_release_once(self):
+        releases = [dict(version=version, stable=stable) for version, stable in (
+            ("go1.28rc1", False), ("go1.27.0", True), ("go1.26.10", True), ("go1.26.9", True),
+            ("go1.25.14", True), ("go1.25.15", False), ("go1.24.13", True))]
+        self.assertEqual({"1.26.x": "1.26.10", "1.27.x": "1.27.0"},
+                         ci_shards.newest_go_releases(releases, {"1.26.x", "1.27.x"}))
+        fetch = mock.Mock(side_effect=[OSError("unreachable"), json.dumps(releases).encode()])
+        sleeps = []
+        with mock.patch("sys.stderr"):
+            chosen = ci_shards.go_versions(fetch=fetch, sleep=sleeps.append)
+        self.assertEqual({"1.25.x": "1.25.14", "1.26.x": "1.26.10", "1.27.x": "1.27.0"}, chosen)
+        self.assertEqual([15], sleeps)
+        # Without go.dev, every job installs from the spec, as before.
+        with mock.patch("sys.stderr") as stderr:
+            chosen = ci_shards.go_versions(fetch=mock.Mock(side_effect=OSError("unreachable")), sleep=sleeps.append)
+        self.assertEqual({"1.25.x": "1.25.x", "1.26.x": "1.26.x", "1.27.x": "1.27.x"}, chosen)
+        self.assertEqual([15, 15, 30], sleeps)
+        self.assertIn("no Go release chosen for 1.25.x", "".join(call.args[0] for call in stderr.write.call_args_list))
+
     def test_tip_revision_accepts_git_abbreviations_and_checks_the_actual_commit(self):
         sha = "2557edd671b4ec84af8a5841a621a6abab39774b"
         for version in ("go1.28-devel_2557edd6 Thu Oct 8 11:55:37 2026 -0700",

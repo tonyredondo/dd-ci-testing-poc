@@ -201,6 +201,12 @@ families and tip:
 | macOS | 1.27 | Normal suite |
 | Windows | 1.27 | Normal suite |
 
+The first job picks the newest patch release of each family from go.dev, and
+every job of the run installs that release. While GitHub updates its runner
+images, some carry an older patch release, and `setup-go` would use it. If
+go.dev is unreachable, the jobs install from the family, and the final job
+rejects a configuration whose groups used different toolchains.
+
 One job audits incorporated sources and licenses, checks the dependency boundary
 and runs the script tests. The unit group of each configuration runs `go vet` and
 the local packages. Go 1.25 and tip execute all local runtime packages, plus
