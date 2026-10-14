@@ -281,6 +281,17 @@ class TestModulesTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "--orchestrion-bin"):
             ci_shards.test_modules(args)
 
+    def test_update_reports_a_cache_it_could_not_remove_and_keeps_the_original_error(self):
+        args = type("Args", (), dict(update=True, orchestrion_bin="orchestrion", list=Path("unused")))()
+        failure = subprocess.CalledProcessError(1, "go")
+        with tempfile.TemporaryDirectory() as temp, mock.patch("tempfile.mkdtemp", return_value=temp), \
+                mock.patch("subprocess.run", side_effect=failure), mock.patch("shutil.rmtree"), \
+                mock.patch("sys.stderr") as stderr:
+            with self.assertRaises(subprocess.CalledProcessError) as raised:
+                ci_shards.test_modules(args)
+        self.assertIs(failure, raised.exception)
+        self.assertIn("could not remove", "".join(call.args[0] for call in stderr.write.call_args_list))
+
     def test_checked_in_list_parses(self):
         entries = ci_shards.read_test_modules()
         self.assertTrue(entries)
