@@ -75,6 +75,12 @@ base=${DDTO_DOWNLOAD_URL:-$base}
 
 mkdir -p "$dir"
 dir=$(cd "$dir" && pwd)
+# Windows programs, such as go and later steps of a workflow, need C:\ paths,
+# not the /c/ or /cygdrive/c/ forms of Git Bash and Cygwin.
+native_dir=$dir
+if [ "$os" = windows ] && command -v cygpath > /dev/null; then
+  native_dir=$(cygpath -w "$dir")
+fi
 temp=$(mktemp -d)
 trap 'rm -rf "$temp"' EXIT
 target=$dir/ddto$exe
@@ -124,7 +130,7 @@ if [ -z "$installed" ]; then
   fi
   say "building ddto with go install"
   # For the host, whatever GOOS and GOARCH the project selects.
-  GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) GOBIN=$dir go install "github.com/$repo/cmd/ddto@$version"
+  GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) GOBIN=$native_dir go install "github.com/$repo/cmd/ddto@$version"
   installed="go install @$version"
 fi
 "$target" --help > /dev/null 2>&1
@@ -133,12 +139,7 @@ case ":$PATH:" in
   *":$dir:"*) ;;
   *)
     if [ -n "${GITHUB_PATH:-}" ]; then
-      # Later steps on Windows need C:\ paths, not Git Bash's /c/ form.
-      if [ "$os" = windows ] && command -v cygpath > /dev/null; then
-        cygpath -w "$dir" >> "$GITHUB_PATH"
-      else
-        echo "$dir" >> "$GITHUB_PATH"
-      fi
+      echo "$native_dir" >> "$GITHUB_PATH"
       say "added $dir to PATH for the next steps"
     else
       say "add $dir to PATH"
