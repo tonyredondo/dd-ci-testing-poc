@@ -16,7 +16,7 @@ service is `service-payments`. To use a repository prefix:
 unset DD_SERVICE
 DD_CIVISIBILITY_SERVICE_FROM_CODEOWNERS=true \
 DD_CIVISIBILITY_SERVICE_FROM_CODEOWNERS_FORMAT='dd-go-$(owner)' \
-ddto test -count=1 ./...
+ddto test ./...
 ```
 
 Quote the format with single quotes. Your shell must pass `$(owner)` literally;

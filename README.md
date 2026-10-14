@@ -43,7 +43,7 @@ mirror, vendor mode, workspaces and local replacements.
 With a Datadog Agent that accepts CI Visibility requests, run from your project:
 
 ```sh
-DD_SERVICE=my-tests DD_ENV=ci ddto test -count=1 ./...
+DD_SERVICE=my-tests DD_ENV=ci ddto test ./...
 ```
 
 `ddto go test` is the same as `ddto test`, also with go's `-C dir` before
@@ -69,7 +69,7 @@ configuration and select your Datadog site:
 
 ```sh
 DD_CIVISIBILITY_AGENTLESS_ENABLED=true DD_SITE=datadoghq.com \
-  ddto test -count=1 ./...
+  ddto test ./...
 ```
 
 Git metadata normally comes from the checkout and CI environment. Repository
@@ -79,9 +79,11 @@ Git checkout, supply `DD_GIT_REPOSITORY_URL` and `DD_GIT_COMMIT_SHA`.
 settings and their defaults.
 
 For `go test`, the CLI sets `DD_CIVISIBILITY_ENABLED=parent` when it is absent
-and preserves explicit values. Use `-count=1` for fresh events, because Go can
-otherwise reuse cached test results. Delivery errors are logged, and the
-command keeps Go's exit code.
+and preserves explicit values. Go's test cache works as with `go test`: the
+first run builds instrumented binaries and runs every package, and later runs
+report the packages that Go runs again. Add `-count=1` when every test must
+report on every run. Delivery errors are logged, and the command keeps Go's
+exit code.
 The runtime is provided through temporary module files when needed, leaving
 your sources unchanged. Explicit `-mod=mod` still permits Go's own module edits.
 

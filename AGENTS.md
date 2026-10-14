@@ -34,14 +34,18 @@ through temporary module files.
    `ddto test <args>`, and `go -C dir test <args>` becomes
    `ddto go -C dir test <args>`. ddto runs any other command unchanged, so a
    script can prefix all of its `go` commands; only `go test` reports.
-3. Add `-count=1` where every test should report. Otherwise Go can take results
-   from its test cache, and cached results send no events.
+3. Leave the project's test caching as it is. The first ddto run builds
+   different test binaries, so Go runs every package again. After that, a
+   package whose result Go takes from its test cache runs no tests and sends
+   nothing in that run, as with plain `go test`, and a run whose results all
+   come from the cache makes no requests. Add `-count=1` only if the project
+   wants every test to report on every run.
 4. Configure delivery, as described in the next section.
 5. Check one package before rolling out, as described in
    [Verify that tests report](#verify-that-tests-report).
 
 ```sh
-DD_SERVICE=my-service DD_ENV=ci ddto test -count=1 -race ./...
+DD_SERVICE=my-service DD_ENV=ci ddto test -race ./...
 ```
 
 ## Configure delivery
@@ -52,7 +56,7 @@ then `http://localhost:8126`. Without an Agent, send directly to Datadog:
 
 ```sh
 DD_CIVISIBILITY_AGENTLESS_ENABLED=true DD_SITE=datadoghq.com \
-  ddto test -count=1 ./...
+  ddto test ./...
 ```
 
 Agentless delivery also needs `DD_API_KEY`. Take it from the CI secret store
@@ -72,7 +76,8 @@ on, although EFD still needs known tests enabled in Datadog.
 ## Verify that tests report
 
 Delivery problems never change the exit code, and a test process's logs only
-appear with `-v` or when a test fails. Run one package with debug logs:
+appear with `-v` or when a test fails. Run one package with debug logs, and
+with `-count=1` so that it runs even when Go has its result cached:
 
 ```sh
 DD_TRACE_DEBUG=true ddto test -count=1 -v ./path/to/pkg 2>&1 |
@@ -110,7 +115,7 @@ ports or files left open cause the same problem.
 For those projects, run retries in separate processes:
 
 ```sh
-DD_CIVISIBILITY_RETRY_EXECUTION_MODE=process ddto test -count=1 ./...
+DD_CIVISIBILITY_RETRY_EXECUTION_MODE=process ddto test ./...
 ```
 
 The first attempt still runs in the test binary's process. Each retry then
@@ -211,7 +216,7 @@ To make agents in another repository use ddto, add this to that repository's
 
 Run Go tests through ddto so they report to Datadog Test Optimization.
 Install it with `go install github.com/tonyredondo/dd-ci-testing-poc/cmd/ddto@main`
-and run `ddto test -count=1` with the usual `go test` flags and packages.
+and run `ddto test` with the usual `go test` flags and packages.
 Settings for this project: <for example DD_CIVISIBILITY_RETRY_EXECUTION_MODE=process>.
 Guide: https://github.com/tonyredondo/dd-ci-testing-poc/blob/main/AGENTS.md
 ```
