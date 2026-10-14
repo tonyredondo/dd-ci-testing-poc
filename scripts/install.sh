@@ -123,7 +123,8 @@ if [ -z "$installed" ]; then
     exit 1
   fi
   say "building ddto with go install"
-  GOBIN=$dir go install "github.com/$repo/cmd/ddto@$version"
+  # For the host, whatever GOOS and GOARCH the project selects.
+  GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) GOBIN=$dir go install "github.com/$repo/cmd/ddto@$version"
   installed="go install @$version"
 fi
 "$target" --help > /dev/null 2>&1
@@ -132,7 +133,12 @@ case ":$PATH:" in
   *":$dir:"*) ;;
   *)
     if [ -n "${GITHUB_PATH:-}" ]; then
-      echo "$dir" >> "$GITHUB_PATH"
+      # Later steps on Windows need C:\ paths, not Git Bash's /c/ form.
+      if [ "$os" = windows ] && command -v cygpath > /dev/null; then
+        cygpath -w "$dir" >> "$GITHUB_PATH"
+      else
+        echo "$dir" >> "$GITHUB_PATH"
+      fi
       say "added $dir to PATH for the next steps"
     else
       say "add $dir to PATH"

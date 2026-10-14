@@ -56,9 +56,9 @@ class InstallTests(unittest.TestCase):
         digest = checksum or hashlib.sha256(data.encode()).hexdigest()
         (self.assets / "SHA256SUMS").write_text(f"{digest}  {self.asset}\n{'0' * 64}  ddto-other-arch\n")
 
-    def install(self, *args, path=None, github_path=None):
+    def install(self, *args, path=None, github_path=None, **extra):
         env = {key: value for key, value in os.environ.items() if not key.startswith(("DDTO_", "GITHUB_"))}
-        env.update(DDTO_DOWNLOAD_URL=self.url, DDTO_INSTALL_DIR=str(self.dir), PATH=path or os.environ["PATH"])
+        env.update(DDTO_DOWNLOAD_URL=self.url, DDTO_INSTALL_DIR=str(self.dir), PATH=path or os.environ["PATH"], **extra)
         if github_path:
             env["GITHUB_PATH"] = str(github_path)
         return subprocess.run(["bash", str(SCRIPT), *args], env=env, capture_output=True, text=True, timeout=60)
@@ -69,8 +69,11 @@ class InstallTests(unittest.TestCase):
         tools.mkdir()
         go = tools / "go"
         (tools / "ddto").write_text(FAKE_DDTO)
-        go.write_text(f'#!/bin/sh\necho "$@" > "{self.root}/go-args"\ncp "{tools}/ddto" "$GOBIN/ddto"\n'
-                      'chmod +x "$GOBIN/ddto"\n')
+        # go env GOHOSTOS and GOHOSTARCH answer for the host; install records
+        # its arguments and the platform it builds for.
+        go.write_text(f'#!/bin/sh\nif [ "$1" = env ]; then case $2 in GOHOSTOS) echo {OS};; GOHOSTARCH) echo {ARCH};; esac; exit 0; fi\n'
+                      f'echo "$@" > "{self.root}/go-args"\necho "$GOOS/$GOARCH" > "{self.root}/go-platform"\n'
+                      f'cp "{tools}/ddto" "$GOBIN/ddto"\nchmod +x "$GOBIN/ddto"\n')
         go.chmod(0o755)
         return f"{tools}{os.pathsep}{os.environ['PATH']}"
 
@@ -92,10 +95,12 @@ class InstallTests(unittest.TestCase):
         self.assertFalse((self.root / "go-args").exists())
 
     def test_builds_with_go_install_without_a_release_executable(self):
-        result = self.install("--version", "v1.2.3", path=self.fake_go())
+        # The project's target platform does not change the host's build.
+        result = self.install("--version", "v1.2.3", path=self.fake_go(), GOOS="windows", GOARCH="386")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(f"no release executable {self.asset}", result.stderr)
         self.assertEqual((self.root / "go-args").read_text().split(), ["install", f"{MODULE}/cmd/ddto@v1.2.3"])
+        self.assertEqual((self.root / "go-platform").read_text().strip(), f"{OS}/{ARCH}")
         self.assertIn("(go install @v1.2.3)", result.stderr)
 
     def preinstall(self, data=FAKE_DDTO):

@@ -295,8 +295,9 @@ Actions tab, on the branch to release, with a version such as `v0.1.0` or
    and `SHA256SUMS`. A version with a suffix publishes a prerelease.
 
 `scripts/release` rejects a version that is not `vMAJOR.MINOR.PATCH` with an
-optional prerelease, and the workflow stops before building when the tag
-exists. Other builds from source report `0.0.0`. Without `-stamp`,
+optional prerelease, and a release above `v1`: the module path has no `/vN`
+suffix, so `go install` could not resolve it. The workflow stops before
+building when the tag exists. Other builds from source report `0.0.0`. Without `-stamp`,
 `-version` sets the version through `-overlay` for a local build, without
 changing the checkout.
 

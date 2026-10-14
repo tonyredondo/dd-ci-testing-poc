@@ -65,8 +65,12 @@ func main() {
 	}
 }
 
-// stampCheckout writes tag's version into versionFile in the checkout.
+// stampCheckout writes tag's version into versionFile in the checkout, for a
+// release that go install can also build.
 func stampCheckout(tag string) error {
+	if err := publishable(tag); err != nil {
+		return err
+	}
 	root, err := moduleRoot()
 	if err != nil {
 		return err
@@ -143,6 +147,18 @@ func release(out string, platforms []string, tag string) error {
 var semver = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$`)
 
 var numberDeclaration = regexp.MustCompile(`(?m)^const Number = "[^"]*"`)
+
+// publishable rejects a tag that go install could not resolve: the module path
+// has no /vN suffix, so only v0 and v1 tags belong to it.
+func publishable(tag string) error {
+	if !semver.MatchString(tag) {
+		return fmt.Errorf("version %q is not vMAJOR.MINOR.PATCH[-PRERELEASE]", tag)
+	}
+	if !strings.HasPrefix(tag, "v0.") && !strings.HasPrefix(tag, "v1.") {
+		return fmt.Errorf("version %q needs the module path to end in /%s", tag, strings.SplitN(tag, ".", 2)[0])
+	}
+	return nil
+}
 
 // stampVersion returns versionFile's source with Number set to tag's version,
 // and the build log prefix that the stamped package declares, which is part of
