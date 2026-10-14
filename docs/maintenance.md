@@ -285,7 +285,8 @@ Actions tab, on the branch to release, with a version such as `v0.1.0` or
 1. Writes that version as `Number` in
    [`internal/version`](../internal/version/version.go) with
    `go run ./scripts/release -version <version> -stamp`, commits it and tags
-   the commit. Only the tag points to that commit; the branch keeps `0.0.0`.
+   the commit. Only the tag points to that commit; the branch keeps its
+   development version.
    `go install ...@<version>` therefore builds the release's source and reports
    its version too: `ddto --version`, logs, telemetry and test events.
 2. Builds the executables with `go run ./scripts/release -o dist`, checks that
@@ -293,11 +294,16 @@ Actions tab, on the branch to release, with a version such as `v0.1.0` or
    [`install.sh`](../scripts/install.sh) against the built files.
 3. Pushes the tag and publishes the release with the executables, `install.sh`
    and `SHA256SUMS`. A version with a suffix publishes a prerelease.
+4. After a release without a suffix, opens a pull request that sets the
+   branch's version to the release's with `-dev`, such as `0.1.0-dev`, and
+   starts the compatibility workflow on it; a pull request that a workflow
+   opens starts no workflow by itself. Merge it like any other.
 
 `scripts/release` rejects a version that is not `vMAJOR.MINOR.PATCH` with an
 optional prerelease, and a release above `v1`: the module path has no `/vN`
 suffix, so `go install` could not resolve it. The workflow stops before
-building when the tag exists. Other builds from source report `0.0.0`. Without `-stamp`,
+building when the tag exists. Builds from the branch report the last release
+with `-dev`, or `0.0.0-dev` before the first one. Without `-stamp`,
 `-version` sets the version through `-overlay` for a local build, without
 changing the checkout.
 

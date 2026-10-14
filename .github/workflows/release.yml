@@ -3,8 +3,9 @@ name: Release
 # v0.1.0-rc.1. It commits that version to internal/version in a commit that
 # only the new tag points to, so that go install at the tag reports it too;
 # builds and checks the executables; then pushes the tag and publishes the
-# release with the executables, install.sh and SHA256SUMS. The branch keeps
-# its development version.
+# release with the executables, install.sh and SHA256SUMS. After a release
+# without a prerelease suffix, it opens a pull request that sets the branch's
+# version to the release's with a -dev suffix, such as 0.1.0-dev.
 on:
   workflow_dispatch:
     inputs:
@@ -23,7 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
+      # Tag, release and the -dev branch; its pull request; starting CI on it.
       contents: write
+      pull-requests: write
+      actions: write
     env:
       VERSION: ${{ inputs.version }}
     steps:
@@ -44,6 +48,7 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          echo "BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
           git commit -q -am "Release $VERSION"
           git tag "$VERSION"
       - name: Build
@@ -67,3 +72,19 @@ jobs:
           flags=()
           if [[ "$VERSION" == *-* ]]; then flags+=(--prerelease); fi
           gh release create "$VERSION" dist/* --verify-tag --title "$VERSION" --generate-notes "${flags[@]}"
+      - name: Propose the development version
+        if: ${{ !contains(inputs.version, '-') }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="dev-version/$VERSION"
+          git switch -q -c "$branch" "$BASE"
+          go run ./scripts/release -version "$VERSION-dev" -stamp
+          git commit -q -am "Start ${VERSION#v}-dev after $VERSION"
+          git push -q origin "$branch"
+          gh pr create --base "$GITHUB_REF_NAME" --head "$branch" \
+            --title "Start ${VERSION#v}-dev after $VERSION" \
+            --body "Builds from $GITHUB_REF_NAME report the last release, $VERSION, with a -dev suffix."
+          # A pull request that this workflow opens starts no workflow by itself.
+          gh workflow run compatibility.yml --ref "$branch"
