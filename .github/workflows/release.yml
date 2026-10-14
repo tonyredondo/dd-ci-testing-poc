@@ -1,11 +1,12 @@
 name: Release
-# Run it from the branch to release with a version, such as v0.1.0 or
-# v0.1.0-rc.1. It commits that version to internal/version in a commit that
-# only the new tag points to, so that go install at the tag reports it too;
-# builds and checks the executables; then pushes the tag and publishes the
-# release with the executables, install.sh and SHA256SUMS. After a release
-# without a prerelease suffix, it opens a pull request that sets the branch's
-# version to the release's with a -dev suffix, such as 0.1.0-dev.
+# Run it from main with a version, such as v0.1.0 or v0.1.0-rc.1. It commits
+# that version to internal/version in a commit that only the new tag points to,
+# so that go install at the tag reports it too; builds and checks the
+# executables; then pushes the tag and publishes the release with the
+# executables, install.sh and SHA256SUMS. After a release without a prerelease
+# suffix, a second job opens a pull request that sets main's version to the
+# release's with a -dev suffix, such as 0.1.0-dev; rerunning that job alone
+# retries it.
 on:
   workflow_dispatch:
     inputs:
@@ -18,19 +19,22 @@ concurrency:
   group: release
 env:
   PYTHONDONTWRITEBYTECODE: '1'
+  VERSION: ${{ inputs.version }}
 jobs:
   release:
     name: Release ${{ inputs.version }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
-      # Tag, release and the -dev branch; its pull request; starting CI on it.
       contents: write
-      pull-requests: write
-      actions: write
-    env:
-      VERSION: ${{ inputs.version }}
+    outputs:
+      base: ${{ steps.commit.outputs.base }}
     steps:
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::run the release workflow from main"
+          exit 1
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
@@ -39,6 +43,7 @@ jobs:
       # scripts/release rejects a version that is not vMAJOR.MINOR.PATCH with
       # an optional prerelease.
       - name: Commit and tag the version
+        id: commit
         shell: bash
         run: |
           go run ./scripts/release -version "$VERSION" -stamp
@@ -46,9 +51,9 @@ jobs:
             echo "::error::tag $VERSION already exists"
             exit 1
           fi
+          echo "base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          echo "BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
           git commit -q -am "Release $VERSION"
           git tag "$VERSION"
       - name: Build
@@ -72,19 +77,39 @@ jobs:
           flags=()
           if [[ "$VERSION" == *-* ]]; then flags+=(--prerelease); fi
           gh release create "$VERSION" dist/* --verify-tag --title "$VERSION" --generate-notes "${flags[@]}"
-      - name: Propose the development version
-        if: ${{ !contains(inputs.version, '-') }}
+
+  dev-version:
+    name: Propose ${{ inputs.version }}-dev
+    needs: release
+    if: ${{ !contains(inputs.version, '-') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.release.outputs.base }}
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.x'
+          cache: false
+      # GitHub asks a user with write access to approve the workflows of a
+      # pull request that a workflow opens; the pull request says so.
+      - name: Open the pull request
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           branch="dev-version/$VERSION"
-          git switch -q -c "$branch" "$BASE"
           go run ./scripts/release -version "$VERSION-dev" -stamp
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -q -am "Start ${VERSION#v}-dev after $VERSION"
-          git push -q origin "$branch"
-          gh pr create --base "$GITHUB_REF_NAME" --head "$branch" \
-            --title "Start ${VERSION#v}-dev after $VERSION" \
-            --body "Builds from $GITHUB_REF_NAME report the last release, $VERSION, with a -dev suffix."
-          # A pull request that this workflow opens starts no workflow by itself.
-          gh workflow run compatibility.yml --ref "$branch"
+          git push -q --force origin "HEAD:refs/heads/$branch"
+          if ! gh pr view "$branch" --json number > /dev/null 2>&1; then
+            gh pr create --base main --head "$branch" \
+              --title "Start ${VERSION#v}-dev after $VERSION" \
+              --body "Builds from main report the last release, $VERSION, with a -dev suffix. Approve this pull request's workflows to run CI on it."
+          fi

@@ -2,9 +2,9 @@
 package version
 
 // Number identifies this experimental CI runtime, independently of its source SDK.
-// On a branch it is the last published release with a -dev suffix. The release
+// On main it is the last published release with a -dev suffix. The release
 // workflow sets the release's version in the commit that the release tag
-// points to, then opens a pull request that sets the next -dev value here.
+// points to, then opens a pull request that sets the new -dev value here.
 const Number = "0.0.0-dev"
 
 // Tag is the version reported by the extracted diagnostics and telemetry.
