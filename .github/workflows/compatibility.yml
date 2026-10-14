@@ -362,6 +362,12 @@ jobs:
         run: |
           python scripts/ci_shards.py retry -- go -C testdata/toolchain mod download
           go -C testdata/toolchain mod verify
+      # On Go 1.26 and later, the native groups fetch the fixture's modules and
+      # SDK releases such as v2.11.0-rc.2. Go 1.25 groups fetch only a few
+      # small Testify versions, and testdata/fixture needs Go 1.26.
+      - name: Download the integration tests' modules
+        shell: bash
+        run: python scripts/ci_shards.py test-modules
       - name: Vet
         if: contains(format(',{0},', matrix.shards), ',units,')
         shell: bash

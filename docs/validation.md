@@ -275,8 +275,9 @@ because a proxy fetch can stall for several minutes. Before the tests, the
 differential jobs download the fixture's modules this way, and every job, tip
 included, downloads those of `testdata/toolchain`, the consumer module of
 `TestMiniToolchainFeatures`, which then needs no network. The differential
-jobs also run `python scripts/ci_shards.py test-modules`. It downloads, with
-the same retries, `testdata/orchestrion` and the module versions in
+and tip jobs also run `python scripts/ci_shards.py test-modules`. With the same
+retries, it downloads the modules of `testdata/orchestrion`, `testdata/fixture`
+and `testdata/toolchain`, and the versions in
 [`testdata/test-modules.txt`](../testdata/test-modules.txt): what the
 integration tests fetch beyond those modules, such as Orchestrion v1.6.1,
 dd-trace-go v2.10.1 and v2.11.0-rc.2, and the Testify and goleak versions and
@@ -286,8 +287,11 @@ with
 `python scripts/ci_shards.py test-modules --update --orchestrion-bin <path>`,
 which runs the integration package with an empty temporary module cache. A
 test whose module is missing from the list still fetches it, without the
-retries. Tip is built once from a recorded source SHA, and all tip groups
-download that toolchain, check its revision and disable automatic upgrades.
+retries. The Go 1.25 jobs skip this step: their groups fetch only a few small
+Testify versions and their dependencies, and `testdata/fixture` and
+`testdata/orchestrion` need Go 1.26. Tip is built once from a recorded source
+SHA, and all tip groups download that toolchain, check its revision and disable
+automatic upgrades.
 
 The runner sets `GORACE=atexit_sleep_ms=0` unless the caller already chose that
 option, and the harness passes `GORACE` to fixtures. A race-enabled program
