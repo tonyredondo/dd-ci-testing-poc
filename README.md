@@ -30,10 +30,11 @@ cd dd-ci-testing-poc
 go build -o bin/ddto ./cmd/ddto
 ```
 
-Run the resulting binary from the module you want to test. The toolchain must
-live outside `GOMODCACHE`, because Go rejects overlays inside that directory.
-See [runtime provisioning](docs/mini-runtime.md#runtime-provisioning) for vendor
-mode, workspaces and local replacements.
+Run the resulting binary from the module you want to test. A toolchain that
+`GOTOOLCHAIN` downloads into `GOMODCACHE` works too: Go rejects overlays there,
+so `ddto` runs that toolchain from a mirror in its user cache.
+[Runtime provisioning](docs/mini-runtime.md#runtime-provisioning) covers the
+mirror, vendor mode, workspaces and local replacements.
 
 ## Report your tests
 
@@ -46,7 +47,7 @@ DD_SERVICE=my-tests DD_ENV=ci ddto test -count=1 ./...
 `ddto go test` is the same as `ddto test`, also with go's `-C dir` before
 `test`. Any other command runs unchanged, with its arguments, standard
 streams, environment and exit status: `ddto go build ./...` runs `go build
-./...`. As from `env`, a command that is not found exits with 127, and one
+./...`. As with `env`, a command that is not found exits with 127, and one
 that cannot run with 126. A CI script can put `ddto` in front of its go
 commands; only `go test` reports to CI Visibility. With `DD_TRACE_DEBUG=true`,
 ddto logs on `stderr` which program it started and how; see
@@ -76,8 +77,9 @@ Git checkout, supply `DD_GIT_REPOSITORY_URL` and `DD_GIT_COMMIT_SHA`.
 settings and their defaults.
 
 For `go test`, the CLI sets `DD_CIVISIBILITY_ENABLED=parent` when it is absent
-and preserves explicit values. Use `-count=1` for fresh events: Go can otherwise reuse cached
-test results. Delivery errors are logged; the command retains Go's exit code.
+and preserves explicit values. Use `-count=1` for fresh events, because Go can
+otherwise reuse cached test results. Delivery errors are logged, and the
+command keeps Go's exit code.
 The runtime is provided through temporary module files when needed, leaving
 your sources unchanged. Explicit `-mod=mod` still permits Go's own module edits.
 
@@ -110,6 +112,7 @@ Mini is selected when `--runtime` is omitted. Both `--runtime=mini` and
 custom test flags, `-args` or `--`, which begin the test binary's arguments.
 
 Two more options follow the same rule:
+
 - `--git-upload-timeout=2m` (default one minute) bounds every wait for the
   repository upload of `ddto`'s Git worker. Test processes wait at most that
   long for its result, and `ddto` waits at most that long after `go test`
@@ -117,7 +120,8 @@ Two more options follow the same rule:
 - `--keep-ci-state` keeps the invocation's CI state and prints where;
   `--keep-ci-state=state.zip` archives it. See
   [Keeping the CI state](docs/cli-debug.md#keeping-the-ci-state).
-The SDK backend requires the exact version pinned in
+
+`--runtime=sdk` requires the exact SDK version pinned in
 [`internal/version`](internal/version/version.go).
 
 ## What is supported
@@ -139,9 +143,11 @@ installed toolchain must meet Mini's Go 1.25 minimum. Older toolchains are
 rejected before module provisioning. Instrumentation preserves the client's
 language version, including its loop-variable behavior. A direct `testopt`
 dependency requires the consuming module to declare Go 1.25 or newer. Future Go
-and private SDK layouts need their own compatibility runs. Standard-library test targets are unsupported. Explicit
-`.go` file mode runs native Go without instrumentation and prints a warning.
-The [validation contract](docs/validation.md) distinguishes loopback protocol
+releases and private SDK layouts need their own compatibility runs.
+
+Standard-library test targets are unsupported, and explicit `.go` file mode
+runs native Go without instrumentation and prints a warning. The
+[validation contract](docs/validation.md) distinguishes loopback protocol
 checks from live intake, UI and downstream-project validation.
 
 ## Environment variables
@@ -209,7 +215,7 @@ See the [feature matrix](docs/ci-parity.md) for combinations and limitations.
 | `DD_TELEMETRY_DEBUG` | `false` | Mark telemetry payloads for debug handling. |
 
 Goleak integration is automatic when a supported library is reachable, in both
-delivery modes. It needs no environment switch.
+delivery modes, and needs no environment switch.
 
 ### Git identity and offline inputs
 

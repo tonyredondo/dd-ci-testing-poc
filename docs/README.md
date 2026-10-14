@@ -28,6 +28,7 @@ Measurement reports describe the exact revisions in their manifests.
 | Maintain ownership-rule parsing | [CODEOWNERS implementation](codeownership.md) |
 | Profile CPU, allocations or build time | [Performance and profiling](performance.md) |
 | Choose a focused performance change | [Optimization backlog](optimization-backlog.md) |
+| See what the October 2026 optimization phases measured and changed | [Optimization plan](optimization-plan.md) |
 | Read the retained measurements | [Build, runtime and memory comparison](benchmarks.md) |
 | Collect builds or regenerate tables | [Benchmark runner](build-benchmarks.md) |
 
