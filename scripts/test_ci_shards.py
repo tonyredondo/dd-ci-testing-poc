@@ -227,5 +227,66 @@ class ShardTests(unittest.TestCase):
                 ci_shards.aggregate(args)
 
 
+class TestModulesTests(unittest.TestCase):
+    def test_cached_modules_decode_paths_and_keep_zips_over_go_mod_files(self):
+        with tempfile.TemporaryDirectory() as cache:
+            download = Path(cache) / "cache" / "download"
+            for name in ("github.com/!data!dog/orchestrion/@v/v1.6.1.zip",
+                         "github.com/!data!dog/orchestrion/@v/v1.6.1.mod",
+                         "github.com/google/go-cmp/@v/v0.7.0.mod",
+                         "github.com/google/go-cmp/@v/v0.7.0.info",
+                         "sumdb/sum.golang.org/lookup/github.com/google/go-cmp@v0.7.0"):
+                path = download / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("")
+            self.assertEqual({"github.com/DataDog/orchestrion@v1.6.1": "zip", "github.com/google/go-cmp@v0.7.0": "mod"},
+                             ci_shards.cached_modules(cache))
+
+    def test_added_modules_keep_new_versions_and_new_zips(self):
+        before = {"a@v1": "zip", "b@v1": "mod", "c@v1": "mod"}
+        after = {"a@v1": "zip", "b@v1": "zip", "c@v1": "mod", "d@v2": "mod"}
+        self.assertEqual({"b@v1": "zip", "d@v2": "mod"}, ci_shards.added_modules(before, after))
+
+    def test_list_round_trips_and_rejects_malformed_lines(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "modules.txt"
+            ci_shards.write_test_modules({"b.example/m@v1.0.0": "mod", "a.example/m@v1.2.0": "zip"}, path)
+            self.assertTrue(path.read_text().startswith("# Module versions"))
+            self.assertEqual([("a.example/m@v1.2.0", "zip"), ("b.example/m@v1.0.0", "mod")], ci_shards.read_test_modules(path))
+            for line in ("a.example/m@v1 tar", "a.example/m zip", "a.example/m@v1"):
+                path.write_text(line + "\n")
+                with self.assertRaisesRegex(ValueError, "want 'module@version zip\\|mod'"):
+                    ci_shards.read_test_modules(path)
+
+    def test_download_prefetches_testdata_then_zips_and_go_mod_files_in_batches(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "modules.txt"
+            modules = {f"example.com/z{i}@v1.0.0": "zip" for i in range(51)}
+            modules["example.com/m@v1.0.0"] = "mod"
+            ci_shards.write_test_modules(modules, path)
+            args = type("Args", (), dict(list=path, attempts=2, timeout=7, update=False))()
+            commands = []
+            with mock.patch.object(ci_shards, "retry", side_effect=lambda a, sleep: commands.append((a.argv, a.attempts, a.timeout))):
+                ci_shards.test_modules(args)
+        self.assertEqual([["go", "-C", module, "mod", "download"] for module in ci_shards.PREFETCHED_MODULES],
+                         [command for command, _, _ in commands[:3]])
+        self.assertEqual(["go", "mod", "download"], commands[3][0][:3])
+        self.assertEqual(50, len(commands[3][0]) - 3)
+        self.assertEqual(["go", "mod", "download", "example.com/z9@v1.0.0"], commands[4][0])
+        self.assertEqual(["go", "list", "-m", "-f", "{{.Path}}@{{.Version}}", "example.com/m@v1.0.0"], commands[5][0])
+        self.assertEqual(6, len(commands))
+        self.assertTrue(all(attempts == 2 and timeout == 7 for _, attempts, timeout in commands))
+
+    def test_update_needs_the_orchestrion_reference(self):
+        args = type("Args", (), dict(update=True, orchestrion_bin=None, list=Path("unused")))()
+        with self.assertRaisesRegex(ValueError, "--orchestrion-bin"):
+            ci_shards.test_modules(args)
+
+    def test_checked_in_list_parses(self):
+        entries = ci_shards.read_test_modules()
+        self.assertTrue(entries)
+        self.assertEqual(len(entries), len({key for key, _ in entries}))
+
+
 if __name__ == "__main__":
     unittest.main()

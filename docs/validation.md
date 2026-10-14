@@ -274,10 +274,20 @@ Module downloads outside tests retry with a five-minute deadline per attempt,
 because a proxy fetch can stall for several minutes. Before the tests, the
 differential jobs download the fixture's modules this way, and every job, tip
 included, downloads those of `testdata/toolchain`, the consumer module of
-`TestMiniToolchainFeatures`, which then needs no network. Tests that run
-`go mod tidy` in their own consumer modules still fetch what the cache lacks.
-Tip is built once from a recorded source SHA, and all tip groups download that
-toolchain, check its revision and disable automatic upgrades.
+`TestMiniToolchainFeatures`, which then needs no network. The differential
+jobs also run `python scripts/ci_shards.py test-modules`. It downloads, with
+the same retries, `testdata/orchestrion` and the module versions in
+[`testdata/test-modules.txt`](../testdata/test-modules.txt): what the
+integration tests fetch beyond those modules, such as Orchestrion v1.6.1,
+dd-trace-go v2.10.1 and v2.11.0-rc.2, and the Testify and goleak versions and
+forks. Versions that only take part in version selection download only their
+`go.mod`. After changing a version that a test fetches, regenerate the list
+with
+`python scripts/ci_shards.py test-modules --update --orchestrion-bin <path>`,
+which runs the integration package with an empty temporary module cache. A
+test whose module is missing from the list still fetches it, without the
+retries. Tip is built once from a recorded source SHA, and all tip groups
+download that toolchain, check its revision and disable automatic upgrades.
 
 The runner sets `GORACE=atexit_sleep_ms=0` unless the caller already chose that
 option, and the harness passes `GORACE` to fixtures. A race-enabled program

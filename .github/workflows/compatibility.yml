@@ -156,6 +156,12 @@ jobs:
           go -C testdata/fixture mod verify
           python scripts/ci_shards.py retry -- go -C testdata/toolchain mod download
           go -C testdata/toolchain mod verify
+      # The integration tests fetch module versions beyond the fixture's, such
+      # as pinned Orchestrion, SDK and Testify releases: download them here,
+      # with retries, so a stalled proxy fetch cannot fail a test.
+      - name: Download the integration tests' modules
+        shell: bash
+        run: python scripts/ci_shards.py test-modules
       # TestMiniGOROOTMirrorToolchainSwitch needs a real GOTOOLCHAIN switch to a
       # toolchain in a module cache. It gets its own module cache, outside the
       # cached one.

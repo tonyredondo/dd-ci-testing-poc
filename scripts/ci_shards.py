@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 
@@ -297,6 +298,104 @@ def retry(args, sleep=time.sleep):
     raise ValueError(f"{' '.join(command)} failed after {args.attempts} attempts")
 
 
+TEST_MODULES = ROOT / "testdata/test-modules.txt"
+# Modules whose downloads the workflow already prepares. test-modules lists the
+# module versions that the integration tests fetch beyond them.
+PREFETCHED_MODULES = ("testdata/orchestrion", "testdata/fixture", "testdata/toolchain")
+TEST_MODULES_HEADER = """\
+# Module versions that the integration tests fetch beyond testdata/orchestrion,
+# testdata/fixture and testdata/toolchain. "zip" needs the module's files; "mod"
+# only its go.mod, for version selection. CI downloads them before the tests,
+# with retries. Regenerate after changing a version that a test fetches:
+#   python scripts/ci_shards.py test-modules --update --orchestrion-bin <path>
+"""
+
+
+def unescape_module_path(path):
+    """Undo the module cache's case encoding, where "!x" stands for "X"."""
+    return re.sub(r"!([a-z])", lambda match: match.group(1).upper(), path)
+
+
+def cached_modules(cache):
+    """Map each module@version in a module cache to "zip" or "mod"."""
+    download = Path(cache) / "cache" / "download"
+    found = {}
+    for path in download.rglob("*"):
+        if path.suffix not in (".mod", ".zip") or path.parent.name != "@v":
+            continue
+        module = unescape_module_path(path.parent.parent.relative_to(download).as_posix())
+        key = module + "@" + unescape_module_path(path.stem)
+        if path.suffix == ".zip" or key not in found:
+            found[key] = path.suffix[1:]
+    return found
+
+
+def added_modules(before, after):
+    """Return what after needs beyond before: new versions, or a zip that was only a go.mod."""
+    return {key: kind for key, kind in after.items()
+            if key not in before or (kind == "zip" and before[key] == "mod")}
+
+
+def read_test_modules(path=TEST_MODULES):
+    entries = []
+    for number, line in enumerate(Path(path).read_text().splitlines(), 1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split()
+        if len(fields) != 2 or fields[1] not in ("zip", "mod") or "@" not in fields[0]:
+            raise ValueError(f"{path}:{number}: want 'module@version zip|mod', got {line!r}")
+        entries.append((fields[0], fields[1]))
+    return entries
+
+
+def write_test_modules(modules, path=TEST_MODULES):
+    lines = [f"{key} {kind}" for key, kind in sorted(modules.items())]
+    Path(path).write_text(TEST_MODULES_HEADER + "\n".join(lines) + "\n")
+
+
+def download_test_modules(args, sleep=time.sleep):
+    """Download what the integration tests fetch, retrying each batch like retry."""
+    def attempt(command):
+        retry(argparse.Namespace(argv=command, attempts=args.attempts, timeout=args.timeout), sleep=sleep)
+
+    for module in PREFETCHED_MODULES:
+        attempt(["go", "-C", module, "mod", "download"])
+    entries = read_test_modules(args.list)
+    for kind, command in (("zip", ["go", "mod", "download"]), ("mod", ["go", "list", "-m", "-f", "{{.Path}}@{{.Version}}"])):
+        selected = [key for key, entry in entries if entry == kind]
+        for start in range(0, len(selected), 50):
+            attempt(command + selected[start:start + 50])
+
+
+def update_test_modules(args):
+    """Record what the integration tests fetch, from an empty module cache."""
+    if not args.orchestrion_bin:
+        raise ValueError("--update needs --orchestrion-bin, as the Orchestrion tests fetch modules too")
+    temp = Path(tempfile.mkdtemp(prefix="dd-ci-test-modules-"))
+    try:
+        env = dict(os.environ, GOMODCACHE=str(temp / "modcache"), GOFLAGS="", ORCHESTRION_BIN=str(Path(args.orchestrion_bin).resolve()))
+        for module in PREFETCHED_MODULES:
+            subprocess.run(["go", "-C", module, "mod", "download"], cwd=ROOT, env=env, check=True)
+        before = cached_modules(env["GOMODCACHE"])
+        if subprocess.run(["go", "test", "-count=1", "-timeout=90m", "./integration"], cwd=ROOT, env=env).returncode != 0:
+            raise ValueError("the integration tests failed, so the list could miss modules")
+        write_test_modules(added_modules(before, cached_modules(env["GOMODCACHE"])), args.list)
+    finally:
+        # The module cache is read-only; this removes only the temporary one.
+        for root, dirs, _ in os.walk(temp):
+            for name in dirs:
+                os.chmod(os.path.join(root, name), 0o755)
+        shutil.rmtree(temp, ignore_errors=True)
+
+
+def test_modules(args, sleep=time.sleep):
+    if args.update:
+        update_test_modules(args)
+    else:
+        download_test_modules(args, sleep=sleep)
+
+
 def collect_manifests(source, groups, revision, tree, expected_configurations=CONFIGURATIONS):
     expected = {(*config, shard) for config in expected_configurations for shard in SHARDS[config[0]]}
     manifests = {}
@@ -386,6 +485,12 @@ def main():
     retry_parser.add_argument("--attempts", type=int, default=3)
     retry_parser.add_argument("--timeout", type=float, default=300, help="seconds per attempt")
     retry_parser.add_argument("argv", nargs=argparse.REMAINDER, metavar="command")
+    modules_parser = commands.add_parser("test-modules", help="download, or with --update record, the modules that the integration tests fetch")
+    modules_parser.add_argument("--update", action="store_true")
+    modules_parser.add_argument("--orchestrion-bin")
+    modules_parser.add_argument("--list", type=Path, default=TEST_MODULES)
+    modules_parser.add_argument("--attempts", type=int, default=3)
+    modules_parser.add_argument("--timeout", type=float, default=300, help="seconds per attempt")
     args = parser.parse_args()
     try:
         if args.command == "matrix":
@@ -397,6 +502,8 @@ def main():
             run(args)
         elif args.command == "retry":
             retry(args)
+        elif args.command == "test-modules":
+            test_modules(args)
         else:
             aggregate(args)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
