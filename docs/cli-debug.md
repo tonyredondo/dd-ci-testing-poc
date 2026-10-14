@@ -61,8 +61,10 @@ The log records:
   directive.
 - For a release executable, the state of the runtime sources it carries:
   `bundled runtime state=created` with the extraction's duration, `reused`, or
-  `unavailable` with the error, in which case ddto looks for its version in
-  the module cache. `state=stale` comes first when ddto extracts them again.
+  `unavailable` with the error. Without a usable user cache, `state=temporary`
+  follows: the run's temporary directory holds them. Otherwise ddto looks for
+  its version in the module cache. `state=stale` comes first when ddto
+  extracts them again.
 - The `testing` transformation, its source and rewritten-file counts, and the
   Fuzz and parallel-stop hooks selected for that runtime.
 - Optional library discovery, including how many imports still need a query

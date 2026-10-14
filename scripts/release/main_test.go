@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,6 +31,23 @@ func TestRuntimeArchiveContents(t *testing.T) {
 	for _, want := range []string{"go.mod", "LICENSE", "testopt/testopt.go", "internal/toolwrap/toolwrap.go", "internal/bundle/bundle.go"} {
 		if !files[want] {
 			t.Errorf("archive lacks %s", want)
+		}
+	}
+	// Every license text of the incorporated sources travels with them.
+	for _, dir := range runtimeDirs {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, entry fs.DirEntry, err error) error {
+			if err != nil || entry.IsDir() {
+				return err
+			}
+			upper := strings.ToUpper(entry.Name())
+			if rel, _ := filepath.Rel(root, path); (strings.HasPrefix(upper, "LICENSE") || strings.HasPrefix(upper, "NOTICE")) &&
+				!strings.Contains(filepath.ToSlash(rel), "/testdata/") && !files[filepath.ToSlash(rel)] {
+				t.Errorf("archive lacks %s", filepath.ToSlash(rel))
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 	for name := range files {

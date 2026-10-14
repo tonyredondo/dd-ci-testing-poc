@@ -260,7 +260,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		ctx = withGoToolchain(ctx, plan.gorootMirror)
 	}
 	if archive := bundle.Runtime(); runtime == Mini && archive != nil {
-		plan.bundledMini = &bundledMini{env: opts.environment, dir: dir, archive: archive}
+		plan.bundledMini = &bundledMini{env: opts.environment, dir: dir, archive: archive, temp: temp}
 		ctx = withBundledMini(ctx, plan.bundledMini)
 	}
 	plan.testLauncher = opts.exec != "" || opts.environment.GOOS != opts.environment.GOHOSTOS || opts.environment.GOARCH != opts.environment.GOHOSTARCH

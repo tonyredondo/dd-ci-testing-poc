@@ -298,8 +298,9 @@ as `v0.1.0-rc.1`, publishes a prerelease.
 Linux, macOS and Windows on `amd64` and `arm64`. Each executable carries the
 two files of [`internal/bundle`](../internal/bundle/bundle.go): a zip of the
 runtime's sources, which are `go.mod`, `LICENSE`, `NOTICE` and the non-test
-sources of `internal`, `propagation` and `testopt`, and the tool wrapper built
-for its platform from the sources that ddto would build, so its key matches.
+sources and license texts of `internal`, `propagation` and `testopt`, and the
+tool wrapper built for its platform from the sources that ddto would build, so
+its key matches.
 `-overlay` supplies both with the `ddto_release` build tag, and the checkout is
 not modified. Other builds carry neither and behave as before.
 

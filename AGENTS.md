@@ -27,7 +27,8 @@ Put it outside the project, in a directory on `PATH`:
 ```sh
 go version                    # go1.25 or newer
 base=https://github.com/tonyredondo/dd-ci-testing-poc/releases/latest/download
-asset=ddto-$(go env GOHOSTOS)-$(go env GOHOSTARCH)$(go env GOEXE)
+asset=ddto-$(go env GOHOSTOS)-$(go env GOHOSTARCH)
+[ "$(go env GOHOSTOS)" = windows ] && asset=$asset.exe
 cd "$(mktemp -d)" && curl -fsSL -O "$base/$asset" -O "$base/SHA256SUMS"
 grep " $asset\$" SHA256SUMS | sha256sum -c -    # macOS: shasum -a 256 -c -
 mkdir -p "$HOME/.local/bin" && install -m 0755 "$asset" "$HOME/.local/bin/ddto"

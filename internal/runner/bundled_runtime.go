@@ -22,9 +22,12 @@ type bundledMini struct {
 	env     *goEnvironment
 	dir     string
 	archive []byte
-	once    sync.Once
-	root    string
-	lock    *os.File
+	// temp is the run's temporary directory, which holds the sources when the
+	// user cache is unusable.
+	temp string
+	once sync.Once
+	root string
+	lock *os.File
 }
 
 type bundledMiniKey struct{}
@@ -47,11 +50,27 @@ func (b *bundledMini) sources(ctx context.Context) string {
 	b.once.Do(func() {
 		debug := debugFromContext(ctx)
 		root, lock, err := ensureBundledRuntime(ctx, b.env, b.dir, b.archive, debug)
+		if err == nil {
+			b.root, b.lock = root, lock
+			return
+		}
+		debug.printf("bundled runtime state=unavailable error=%q", err.Error())
+		if b.temp == "" {
+			return
+		}
+		// Without a usable user cache, such as one inside the project, the
+		// run's temporary directory holds the sources until go test ends.
+		root = filepath.Join(b.temp, "runtime")
+		archive, err := zip.NewReader(bytes.NewReader(b.archive), int64(len(b.archive)))
+		if err == nil {
+			err = extractBundledFiles(archive, root)
+		}
 		if err != nil {
 			debug.printf("bundled runtime state=unavailable error=%q", err.Error())
 			return
 		}
-		b.root, b.lock = root, lock
+		debug.printf("bundled runtime state=temporary path=%q", root)
+		b.root = root
 	})
 	return b.root
 }
@@ -140,19 +159,26 @@ func extractBundledRuntime(archive *zip.Reader, parent, key, root string, debug 
 		return err
 	}
 	defer removeGOROOTMirror(staging)
-	for _, file := range archive.File {
-		name := filepath.FromSlash(file.Name)
-		if !filepath.IsLocal(name) || file.FileInfo().IsDir() {
-			return fmt.Errorf("bundled runtime has an invalid entry %q", file.Name)
-		}
-		if err := extractBundledFile(file, filepath.Join(staging, name)); err != nil {
-			return err
-		}
+	if err := extractBundledFiles(archive, staging); err != nil {
+		return err
 	}
 	if err := os.Rename(staging, root); err != nil {
 		return err
 	}
 	debug.printf("bundled runtime state=created path=%q duration_ms=%d", root, time.Since(started).Milliseconds())
+	return nil
+}
+
+func extractBundledFiles(archive *zip.Reader, dir string) error {
+	for _, file := range archive.File {
+		name := filepath.FromSlash(file.Name)
+		if !filepath.IsLocal(name) || file.FileInfo().IsDir() {
+			return fmt.Errorf("bundled runtime has an invalid entry %q", file.Name)
+		}
+		if err := extractBundledFile(file, filepath.Join(dir, name)); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

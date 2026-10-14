@@ -63,7 +63,8 @@ instead. It extracts them once per version into `ddto/runtimes` in its user
 cache and uses that directory as it would use a checkout. The rules of the
 [toolchain mirrors](#toolchains-in-the-module-cache) apply: a run holds the
 directory, one unused for 14 days is removed, and a copy that misses a file is
-extracted again.
+extracted again. Without a usable user cache, such as one inside the project,
+the run's temporary directory holds them until `go test` ends.
 
 With `-trimpath`, or when no such source directory is usable, the CLI checks the
 module cache for its exact published version. It fetches that version only when

@@ -68,15 +68,18 @@ func moduleRoot() (string, error) {
 	}
 	root := filepath.Dir(strings.TrimSpace(string(gomod)))
 	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
-	if err != nil || !bytes.HasPrefix(data, []byte("module "+module+"\n")) {
+	// A Windows checkout can end the line with a carriage return.
+	line, _, _ := bytes.Cut(data, []byte("\n"))
+	if err != nil || strings.TrimSpace(string(line)) != "module "+module {
 		return "", fmt.Errorf("run from the %s module", module)
 	}
 	return root, nil
 }
 
-// runtimeArchive zips the runtime's sources: the module files and the non-test
-// sources of runtimeDirs, without testdata. Entries are sorted and carry no
-// times, so the same sources give the same archive and the same cache key.
+// runtimeArchive zips the runtime's sources: the module files, and the non-test
+// sources and license texts of runtimeDirs, without testdata. Entries are
+// sorted and carry no times, so the same sources give the same archive and the
+// same cache key.
 func runtimeArchive(root string) ([]byte, error) {
 	names := slices.Clone(runtimeFiles)
 	for _, dir := range runtimeDirs {
@@ -91,13 +94,17 @@ func runtimeArchive(root string) ([]byte, error) {
 				}
 				return nil
 			}
+			if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || strings.HasSuffix(name, "_test.go") {
+				return nil
+			}
+			// Third-party sources keep their license texts.
+			upper := strings.ToUpper(name)
 			switch filepath.Ext(name) {
 			case ".go", ".s", ".h", ".c":
 			default:
-				return nil
-			}
-			if strings.HasSuffix(name, "_test.go") || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
-				return nil
+				if !strings.HasPrefix(upper, "LICENSE") && !strings.HasPrefix(upper, "NOTICE") {
+					return nil
+				}
 			}
 			rel, err := filepath.Rel(root, path)
 			names = append(names, filepath.ToSlash(rel))

@@ -3,6 +3,7 @@ package runner
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -85,6 +86,26 @@ func TestBundledRuntimeExtractsOnceAndRepairs(t *testing.T) {
 	}
 	if _, err := os.Stat(source); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Without a usable user cache, the run's temporary directory holds the
+// bundled sources.
+func TestBundledRuntimeWithoutUserCache(t *testing.T) {
+	previous := userCacheDir
+	userCacheDir = func() (string, error) { return "", errors.New("no user cache") }
+	t.Cleanup(func() { userCacheDir = previous })
+	temp := t.TempDir()
+	var log bytes.Buffer
+	t.Setenv("DD_TRACE_DEBUG", "true")
+	ctx := withCLIDebug(t.Context(), &log)
+	bundled := &bundledMini{env: testGoEnvironment(t), dir: ".", archive: testRuntimeArchive(t, testRuntimeFiles), temp: temp}
+	defer bundled.release()
+	if root := bundled.sources(ctx); root != filepath.Join(temp, "runtime") || !validMiniSource(root) {
+		t.Fatalf("root %s:\n%s", root, log.String())
+	}
+	if !strings.Contains(log.String(), "bundled runtime state=temporary") {
+		t.Fatalf("missing temporary state:\n%s", log.String())
 	}
 }
 
