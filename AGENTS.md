@@ -7,7 +7,13 @@ repository.
 
 `ddto` is an experimental proof of concept. It wraps `go test`: it prepares
 temporary build overlays, lets Go compile and run the tests, and exits with
-Go's status. It writes nothing into the project it tests.
+Go's status. ddto leaves no files of its own in the project, but, as with the
+SDK, the run can still change it. With `-mod=mod`, Go updates `go.mod` and
+`go.sum` as it would without ddto. The Git work can fetch into `.git`: the
+repository upload deepens a shallow clone, impacted-test detection fetches the
+base branch, and a pull-request run in a shallow clone fetches its head
+commit. `DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=false` and
+`DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED=false` stop the first two.
 
 ## Install
 
@@ -37,8 +43,10 @@ through temporary module files.
 3. Leave the project's test caching as it is. The first ddto run builds
    different test binaries, so Go runs every package again. After that, a
    package whose result Go takes from its test cache runs no tests and sends
-   nothing in that run, as with plain `go test`, and a run whose results all
-   come from the cache makes no requests. Add `-count=1` only if the project
+   nothing in that run, as with plain `go test`. A run whose results all come
+   from the cache, without relinking a test binary, makes no requests; a change
+   such as an edited comment relinks the binary, so the Git worker still sends
+   its requests although no test runs. Add `-count=1` only if the project
    wants every test to report on every run.
 4. Configure delivery, as described in the next section.
 5. Check one package before rolling out, as described in
@@ -185,9 +193,13 @@ run:
 
 `DD_CIVISIBILITY_ENABLED=false` switches off all reporting: the build is still
 instrumented, but the tests run as with `go test` and send nothing. When the
-variable is absent, ddto sets it to `parent`, which reports the test binaries
-but not the processes they start. The
-[README](README.md#environment-variables) lists every variable and default.
+variable is absent, ddto sets it to `parent`. A test binary then reports, and
+once Mini has started it sets the variable to `false` for the processes it
+starts. A helper started before that, from `init` or from `TestMain` before
+`m.Run`, inherits `parent`; if it is itself an instrumented test binary, start
+it with `DD_CIVISIBILITY_ENABLED=false`, or it reports a session of its own.
+The [README](README.md#environment-variables) lists every variable and
+default.
 
 ## When something breaks
 
@@ -215,15 +227,20 @@ from `TestOptimization.build` or `TestOptimization.run`, a run that hangs,
 missing or wrong events, and a `WARN` fallback to plain `go test` that the
 project does not explain. Collect:
 
-1. ddto's version from `go version -m "$(command -v ddto)" | head -3`, which
-   prints its module version and commit, plus `go version` and
+1. ddto's version from
+   `go version -m "$(command -v ddto)" | grep -E '^\s+(mod|build\s+vcs\.)'`,
+   which prints its module version and, for a binary built from a checkout,
+   the commit and whether it had local changes, plus `go version` and
    `go env GOOS GOARCH GOTOOLCHAIN GOFLAGS`.
 2. The ddto command that fails, the plain `go test` command that works, and
    both exit codes.
 3. The `DD_*` variables set for the run, with secrets written as `<set>`.
-4. What the project uses: the `go` line of its `go.mod`, the modules from
-   `go list -m all | grep -E 'testify|goleak|dd-trace-go|orchestrion'`, and
-   whether it vendors, uses `go.work` or runs tests through `-exec`.
+4. What the project uses: the `go` line of its `go.mod`, the modules its
+   tests build from
+   `go list -deps -test -f '{{with .Module}}{{.Path}} {{.Version}}{{end}}' ./... | sort -u | grep -E 'testify|goleak|dd-trace-go'`,
+   which also works with vendoring, the Orchestrion version if it uses
+   Orchestrion, and whether it vendors, uses `go.work` or runs tests through
+   `-exec`.
 5. The error from a run with `DD_TRACE_DEBUG=true` and the 20 to 40 lines
    before it, instead of the whole log.
 6. A minimal reproduction, such as a small module or a single test, when one
