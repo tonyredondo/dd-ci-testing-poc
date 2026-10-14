@@ -55,6 +55,17 @@ func TestCoveredRetry(t *testing.T) {
 }
 `
 
+// fixtureCoverage keeps the rows of the fixture's own files.
+func fixtureCoverage(rows []string) []string {
+	var kept []string
+	for _, row := range rows {
+		if fields := strings.Fields(row); len(fields) == 3 && (fields[1] == "memory_cov.go" || fields[1] == "memory_cov_test.go") {
+			kept = append(kept, row)
+		}
+	}
+	return kept
+}
+
 // Per-test coverage reads the counters in memory when ddto adds its testing
 // hook. Each test's coverage is the same as with text profiles, in count and
 // atomic modes and under -race, also by the debug comparison with the
@@ -120,8 +131,20 @@ func TestMiniPerTestCoverageInMemory(t *testing.T) {
 				t.Fatalf("debug comparison: %d matches, %d mismatches:\n%s", matches, mismatches, exec.stderr)
 			}
 			text, textLines, _ := run(policy, "DD_CIVISIBILITY_INTERNAL_COVERAGE_IN_MEMORY=false")
-			if len(memory) == 0 || !slices.Equal(memory, text) {
+			// testing's own code runs in the parent goroutine while an attempt
+			// takes its snapshots: after T.Run starts the attempt, the parent's
+			// next block can count before or after the attempt's first snapshot.
+			// Only the fixture's coverage is the same in every process.
+			fixtureMemory, fixtureText := fixtureCoverage(memory), fixtureCoverage(text)
+			if len(fixtureMemory) == 0 || !slices.Equal(fixtureMemory, fixtureText) {
 				t.Fatalf("per-test coverage differs\nin memory: %v\ntext profiles: %v", memory, text)
+			}
+			if !build.memory {
+				for _, rows := range [][]string{memory, text} {
+					if len(rows) == len(fixtureCoverage(rows)) {
+						t.Fatalf("testing is not covered: %v", rows)
+					}
+				}
 			}
 			_, plainLines, _ := run(policySettings{Retry: true})
 			if build.memory && memoryLines != plainLines || textLines <= plainLines {
