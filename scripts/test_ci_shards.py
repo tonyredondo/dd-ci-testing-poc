@@ -252,16 +252,16 @@ class TestModulesTests(unittest.TestCase):
             path = Path(directory) / "modules.txt"
             ci_shards.write_test_modules({"b.example/m@v1.0.0": "mod", "a.example/m@v1.2.0": "zip"}, path)
             self.assertTrue(path.read_text().startswith("# Module versions"))
-            self.assertEqual([("a.example/m@v1.2.0", "zip"), ("b.example/m@v1.0.0", "mod")], ci_shards.read_test_modules(path))
-            for line in ("a.example/m@v1 tar", "a.example/m zip", "a.example/m@v1"):
+            self.assertEqual(["a.example/m@v1.2.0", "b.example/m@v1.0.0"], ci_shards.read_test_modules(path))
+            for line in ("a.example/m@v1 zip", "a.example/m"):
                 path.write_text(line + "\n")
-                with self.assertRaisesRegex(ValueError, "want 'module@version zip\\|mod'"):
+                with self.assertRaisesRegex(ValueError, "want 'module@version'"):
                     ci_shards.read_test_modules(path)
 
-    def test_download_prefetches_testdata_then_zips_and_go_mod_files_in_batches(self):
+    def test_download_prefetches_testdata_then_the_list_in_batches(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "modules.txt"
-            modules = {f"example.com/z{i}@v1.0.0": "zip" for i in range(51)}
+            modules = {f"example.com/z{i}@v1.0.0": "zip" for i in range(50)}
             modules["example.com/m@v1.0.0"] = "mod"
             ci_shards.write_test_modules(modules, path)
             args = type("Args", (), dict(list=path, attempts=2, timeout=7, update=False))()
@@ -270,11 +270,10 @@ class TestModulesTests(unittest.TestCase):
                 ci_shards.test_modules(args)
         self.assertEqual([["go", "-C", module, "mod", "download"] for module in ci_shards.PREFETCHED_MODULES],
                          [command for command, _, _ in commands[:3]])
-        self.assertEqual(["go", "mod", "download"], commands[3][0][:3])
+        self.assertEqual(["go", "mod", "download", "example.com/m@v1.0.0"], commands[3][0][:4])
         self.assertEqual(50, len(commands[3][0]) - 3)
         self.assertEqual(["go", "mod", "download", "example.com/z9@v1.0.0"], commands[4][0])
-        self.assertEqual(["go", "list", "-m", "-f", "{{.Path}}@{{.Version}}", "example.com/m@v1.0.0"], commands[5][0])
-        self.assertEqual(6, len(commands))
+        self.assertEqual(5, len(commands))
         self.assertTrue(all(attempts == 2 and timeout == 7 for _, attempts, timeout in commands))
 
     def test_update_needs_the_orchestrion_reference(self):
@@ -285,7 +284,7 @@ class TestModulesTests(unittest.TestCase):
     def test_checked_in_list_parses(self):
         entries = ci_shards.read_test_modules()
         self.assertTrue(entries)
-        self.assertEqual(len(entries), len({key for key, _ in entries}))
+        self.assertEqual(len(entries), len(set(entries)))
 
 
 if __name__ == "__main__":

@@ -281,9 +281,8 @@ and `testdata/toolchain`, and the versions in
 [`testdata/test-modules.txt`](../testdata/test-modules.txt): what the
 integration tests fetch beyond those modules, such as Orchestrion v1.6.1,
 dd-trace-go v2.10.1 and v2.11.0-rc.2, and the Testify and goleak versions and
-forks. Versions that only take part in version selection download only their
-`go.mod`. After changing a version that a test fetches, regenerate the list
-with
+forks, and versions whose `go.mod` only takes part in version selection. After
+changing a version that a test fetches, regenerate the list with
 `python scripts/ci_shards.py test-modules --update --orchestrion-bin <path>`,
 which runs the integration package with an empty temporary module cache. A
 test whose module is missing from the list still fetches it, without the

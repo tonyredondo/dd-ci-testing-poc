@@ -304,9 +304,9 @@ TEST_MODULES = ROOT / "testdata/test-modules.txt"
 PREFETCHED_MODULES = ("testdata/orchestrion", "testdata/fixture", "testdata/toolchain")
 TEST_MODULES_HEADER = """\
 # Module versions that the integration tests fetch beyond testdata/orchestrion,
-# testdata/fixture and testdata/toolchain. "zip" needs the module's files; "mod"
-# only its go.mod, for version selection. CI downloads them before the tests,
-# with retries. Regenerate after changing a version that a test fetches:
+# testdata/fixture and testdata/toolchain, including versions whose go.mod only
+# takes part in version selection. CI downloads them before the tests, with
+# retries. Regenerate after changing a version that a test fetches:
 #   python scripts/ci_shards.py test-modules --update --orchestrion-bin <path>
 """
 
@@ -342,16 +342,14 @@ def read_test_modules(path=TEST_MODULES):
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        fields = line.split()
-        if len(fields) != 2 or fields[1] not in ("zip", "mod") or "@" not in fields[0]:
-            raise ValueError(f"{path}:{number}: want 'module@version zip|mod', got {line!r}")
-        entries.append((fields[0], fields[1]))
+        if len(line.split()) != 1 or "@" not in line:
+            raise ValueError(f"{path}:{number}: want 'module@version', got {line!r}")
+        entries.append(line)
     return entries
 
 
 def write_test_modules(modules, path=TEST_MODULES):
-    lines = [f"{key} {kind}" for key, kind in sorted(modules.items())]
-    Path(path).write_text(TEST_MODULES_HEADER + "\n".join(lines) + "\n")
+    Path(path).write_text(TEST_MODULES_HEADER + "\n".join(sorted(modules)) + "\n")
 
 
 def download_test_modules(args, sleep=time.sleep):
@@ -361,11 +359,11 @@ def download_test_modules(args, sleep=time.sleep):
 
     for module in PREFETCHED_MODULES:
         attempt(["go", "-C", module, "mod", "download"])
+    # go mod download also fetches the files of versions that tests need only
+    # for version selection; unlike go list -m, it fails when a go.mod fetch fails.
     entries = read_test_modules(args.list)
-    for kind, command in (("zip", ["go", "mod", "download"]), ("mod", ["go", "list", "-m", "-f", "{{.Path}}@{{.Version}}"])):
-        selected = [key for key, entry in entries if entry == kind]
-        for start in range(0, len(selected), 50):
-            attempt(command + selected[start:start + 50])
+    for start in range(0, len(entries), 50):
+        attempt(["go", "mod", "download"] + entries[start:start + 50])
 
 
 def update_test_modules(args):
@@ -383,10 +381,12 @@ def update_test_modules(args):
         write_test_modules(added_modules(before, cached_modules(env["GOMODCACHE"])), args.list)
     finally:
         # The module cache is read-only; this removes only the temporary one.
-        for root, dirs, _ in os.walk(temp):
-            for name in dirs:
+        for root, dirs, files in os.walk(temp):
+            for name in dirs + files:
                 os.chmod(os.path.join(root, name), 0o755)
         shutil.rmtree(temp, ignore_errors=True)
+        if temp.exists():
+            print(f"ci_shards: could not remove {temp}", file=sys.stderr)
 
 
 def test_modules(args, sleep=time.sleep):
