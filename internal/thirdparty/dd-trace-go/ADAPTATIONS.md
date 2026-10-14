@@ -380,6 +380,19 @@ the background, lets a late dial pool its connection again; in ordinary mode
 those background requests read the clock during tests anyway, which deferred
 mode avoids.
 
+One case remains open by decision. net/http detaches a dial from its request
+(`context.WithoutCancel`), so a startup request that gives up while its
+connection is still being established leaves that dial running; telemetry gives
+up after 5 seconds, while a TLS handshake may take 10. `CloseConnections`
+cancels the dial, but cannot wait for it: a dial that has just finished its
+handshake still sets up HTTP/2 or closes the connection afterwards, reading
+the clock while the first test may change `time.Local`. That needs a slow or
+failing network at startup, and the race detector reports it only in a test
+that changes `time.Local` under `-race`. Aborting such dials ourselves would
+mean doing the TLS handshake in `DialTLSContext` and would not cover the
+handshake that follows a proxy's `CONNECT`; the user chose to document the case
+instead (2026-10-14).
+
 Checks: `TestStartupTelemetrySendsBeforeTests` blocks a real loopback startup
 response and checks that `StartApp` waits for it, initial configuration, retry,
 concurrent close and failed initialization in both modes.
