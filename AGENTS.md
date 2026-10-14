@@ -20,16 +20,26 @@ commit. `DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=false` and
 `ddto` needs a Go 1.25 or newer toolchain on `PATH`. The project under test
 keeps its own language version; Go 1.21 and newer are tested.
 
+Prefer the release executable for the host. It carries the runtime's sources
+and its tool wrapper, so nothing of `ddto` is compiled or downloaded later.
+Put it outside the project, in a directory on `PATH`:
+
 ```sh
 go version                    # go1.25 or newer
-go install github.com/tonyredondo/dd-ci-testing-poc/cmd/ddto@main
+base=https://github.com/tonyredondo/dd-ci-testing-poc/releases/latest/download
+asset=ddto-$(go env GOHOSTOS)-$(go env GOHOSTARCH)$(go env GOEXE)
+cd "$(mktemp -d)" && curl -fsSL -O "$base/$asset" -O "$base/SHA256SUMS"
+grep " $asset\$" SHA256SUMS | sha256sum -c -    # macOS: shasum -a 256 -c -
+mkdir -p "$HOME/.local/bin" && install -m 0755 "$asset" "$HOME/.local/bin/ddto"
 ddto --help                   # prints the usage line
 ```
 
-Go puts the binary in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin` when
-`GOBIN` is empty; add that directory to `PATH` if `ddto --help` is not found.
-Do not add this module to the project's `go.mod`: each run supplies the runtime
-through temporary module files.
+Without a release for the platform, or to use another revision, build it with
+`go install github.com/tonyredondo/dd-ci-testing-poc/cmd/ddto@main`. Go puts
+the binary in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin` when `GOBIN` is
+empty; add that directory to `PATH` if `ddto --help` is not found. Do not add
+this module to the project's `go.mod`: each run supplies the runtime through
+temporary module files.
 
 ## Instrument a project
 

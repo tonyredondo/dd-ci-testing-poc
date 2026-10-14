@@ -276,6 +276,40 @@ Add the new toolchain to the compatibility matrix only after exercising it.
 Keep the oldest tested toolchain until a compatibility change is explicitly
 accepted.
 
+## Releases
+
+A tag `vX.Y.Z` that matches `Number` in `internal/version` publishes the
+release executables. Change `Number` in
+[`internal/version/version.go`](../internal/version/version.go), merge it,
+then tag that commit and push the tag:
+
+```sh
+git tag v0.1.0 <commit>
+git push origin v0.1.0
+```
+
+The [release workflow](../.github/workflows/release.yml) rejects a tag that
+differs from `Number`, builds the executables with
+`go run ./scripts/release -o dist`, checks that the Linux one starts, and
+attaches them and `SHA256SUMS` to a GitHub release. A tag with a suffix, such
+as `v0.1.0-rc.1`, publishes a prerelease.
+
+[`scripts/release`](../scripts/release/main.go) builds `ddto-<os>-<arch>` for
+Linux, macOS and Windows on `amd64` and `arm64`. Each executable carries the
+two files of [`internal/bundle`](../internal/bundle/bundle.go): a zip of the
+runtime's sources, which are `go.mod`, `LICENSE`, `NOTICE` and the non-test
+sources of `internal`, `propagation` and `testopt`, and the tool wrapper built
+for its platform from the sources that ddto would build, so its key matches.
+`-overlay` supplies both with the `ddto_release` build tag, and the checkout is
+not modified. Other builds carry neither and behave as before.
+
+`TestRuntimeArchiveCoversEveryPlatform` checks that the zip holds every file Go
+compiles for a runtime package on each platform that `go tool dist list`
+names; a runtime package outside those directories needs a new entry in
+`runtimeDirs`. `TestReleaseExecutableIsSelfContained` builds the host's
+executable and runs it with an empty user cache and module cache and a module
+proxy that refuses every request.
+
 ## Verification before publication
 
 Use focused checks while developing. For an SDK, codec, platform or ownership

@@ -1,0 +1,46 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+jobs:
+  release:
+    name: Build and publish ddto
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.x'
+          cache: false
+      # ddto reports internal/version.Number in its logs and telemetry.
+      - name: Check the version
+        shell: bash
+        run: |
+          number="$(sed -n 's/^const Number = "\(.*\)"$/\1/p' internal/version/version.go)"
+          if [[ "$GITHUB_REF_NAME" != "v$number" ]]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match internal/version.Number $number"
+            exit 1
+          fi
+      - name: Build
+        shell: bash
+        run: |
+          go run ./scripts/release -o dist
+          cd dist && sha256sum ddto-* > SHA256SUMS
+      - name: Check the Linux executable
+        shell: bash
+        run: dist/ddto-linux-amd64 --help
+      - name: Publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "$GITHUB_REF_NAME" --generate-notes "${flags[@]}"
