@@ -194,9 +194,9 @@ but not the processes they start. The
 1. Run the same command with plain `go test`. If it also fails, the problem
    belongs to the project.
 2. If only the ddto build fails, keep the output of a run with
-   `DD_TRACE_DEBUG=true` and report it. To unblock CI, run `go test` without
-   the `ddto` prefix; `DD_CIVISIBILITY_ENABLED=false` does not skip the
-   instrumented build.
+   `DD_TRACE_DEBUG=true` and [report it](#report-a-ddto-bug). To unblock CI,
+   run `go test` without the `ddto` prefix; `DD_CIVISIBILITY_ENABLED=false`
+   does not skip the instrumented build.
 3. If tests fail only under ddto, check the retry and delivery settings above,
    then compare with `--runtime=sdk`, which uses the unmodified dd-trace-go
    SDK and needs the version pinned in
@@ -205,6 +205,87 @@ but not the processes they start. The
 Never edit the project's sources, `go.mod` or `go.sum` to work around ddto,
 and never set `DD_CIVISIBILITY_INTERNAL_*` or `DDTO_*` variables: ddto manages
 them.
+
+## Report a ddto bug
+
+When a problem belongs to ddto, tell the user and offer to prepare an issue in
+[this repository](https://github.com/tonyredondo/dd-ci-testing-poc/issues).
+That covers a build that fails only under ddto, a panic or an `ERROR` line
+from `TestOptimization.build` or `TestOptimization.run`, a run that hangs,
+missing or wrong events, and a `WARN` fallback to plain `go test` that the
+project does not explain. Collect:
+
+1. ddto's version from `go version -m "$(command -v ddto)" | head -3`, which
+   prints its module version and commit, plus `go version` and
+   `go env GOOS GOARCH GOTOOLCHAIN GOFLAGS`.
+2. The ddto command that fails, the plain `go test` command that works, and
+   both exit codes.
+3. The `DD_*` variables set for the run, with secrets written as `<set>`.
+4. What the project uses: the `go` line of its `go.mod`, the modules from
+   `go list -m all | grep -E 'testify|goleak|dd-trace-go|orchestrion'`, and
+   whether it vendors, uses `go.work` or runs tests through `-exec`.
+5. The error from a run with `DD_TRACE_DEBUG=true` and the 20 to 40 lines
+   before it, instead of the whole log.
+6. A minimal reproduction, such as a small module or a single test, when one
+   is easy to write.
+
+This repository is public. Before showing the issue to anyone, replace API
+keys, tokens and other credentials, internal hostnames and URLs, private
+repository and service names, and personal paths and emails with
+placeholders. Debug logs and the state that `--keep-ci-state` keeps include
+the repository URL, commit messages and author emails.
+
+Write the issue to a file outside the project, such as in a temporary
+directory, with this layout:
+
+````markdown
+### What happened
+
+<what failed, in a few sentences>
+
+### Commands
+
+- ddto: `<command>`, exit <code>
+- go test: `<command>`, exit <code>
+
+### Environment
+
+- ddto: <module version and commit>
+- Go: <go version>, <GOOS>/<GOARCH>
+- Settings: <DD_* variables, secrets as <set>>
+- Project: go <version>; <Testify, goleak, dd-trace-go, Orchestrion versions>; <vendor, go.work, -exec>
+
+### Output
+
+```text
+<the trimmed DD_TRACE_DEBUG output>
+```
+
+### Reproduction
+
+<steps or a minimal module>
+````
+
+Show it to the user, then print a link that opens GitHub's new-issue form
+with the title and body filled in:
+
+```sh
+python3 - /tmp/ddto-issue.md "ddto test: <one-line summary>" <<'EOF'
+import sys, urllib.parse
+query = urllib.parse.urlencode(
+    {"title": sys.argv[2], "body": open(sys.argv[1]).read()},
+    quote_via=urllib.parse.quote,
+)
+print("https://github.com/tonyredondo/dd-ci-testing-poc/issues/new?" + query)
+EOF
+```
+
+GitHub rejects very long links, so keep the link under about 8,000
+characters: trim the output in the body, and ask the user to attach the full
+log to the issue instead. The user reviews and submits the issue. Create it
+yourself, for example with
+`gh issue create --repo tonyredondo/dd-ci-testing-poc --title "<summary>" --body-file /tmp/ddto-issue.md`,
+only when the user asks you to.
 
 ## Use ddto from another project
 
