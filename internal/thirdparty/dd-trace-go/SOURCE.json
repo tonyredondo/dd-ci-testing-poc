@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "9df0bdaf33113e39ce5b81bc643ddb0b043c69f5eafd90fdff9c5883b5ed0cd1",
+      "sha256": "9b4635f7e8eabe2d1c53611f0ce170c7315258c5dd4b504e85dd2637e2d77100",
       "role": "local"
     },
     {
@@ -1192,7 +1192,7 @@
     },
     {
       "path": "civisibility/utils/net/http.go",
-      "sha256": "86433df022e32aefe2ed009941a31e225151d25c78e8ac2b8bb9d93c81b3fb9a",
+      "sha256": "212a2c32f1d2b6f04ffa1597e0e94ef3d18ccefa9e51f114c78b8f10c1bd2b32",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/net/http.go",
       "source_sha256": "6a0ad6c1e3935019ce88e4d6931a091c562c3e9f96cc2e21474b716ac8cf8d09"
@@ -2282,7 +2282,22 @@
     },
     {
       "path": "civisibility/utils/net/ci_transport_test.go",
-      "sha256": "4231d21ef9597705c02ed3215e7640cd9f02440c96cde499ade1de4ca5778803",
+      "sha256": "2dad842abc7aa1a73272ca5dab86b3445f7703d4510378e135962f2d09b8f105",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/utils/net/ci_transport_go126_test.go",
+      "sha256": "ef8a95394f85944d713f9b7bd11e8dc3556a777c6f9af716ca262d6e49748309",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/utils/net/http_strict_go125.go",
+      "sha256": "2e8012460d2ce0fcd293373195f10d9d8f88ac31b0c5628ed67c2cf9ca8eb351",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/utils/net/http_strict_go126.go",
+      "sha256": "fe8d9db0ab669eb508ccd8ee02bc19b2ebd399a273e7379243142b9f1b42cee7",
       "role": "local"
     }
   ],

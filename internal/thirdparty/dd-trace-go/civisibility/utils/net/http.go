@@ -181,6 +181,7 @@ func createNewHTTPClient() *http.Client {
 	}
 	secure := newTransport()
 	secure.MaxConnsPerHost = 1
+	strictHTTP2Streams(secure)
 	return &http.Client{
 		Timeout:   45 * time.Second,
 		Transport: &ciTransport{plain: newTransport(), secure: secure},
@@ -200,10 +201,24 @@ type ciTransport struct {
 }
 
 func (t *ciTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if req.URL != nil && req.URL.Scheme == "https" {
+	if t.usesTLS(req) {
 		return t.secure.RoundTrip(req)
 	}
 	return t.plain.RoundTrip(req)
+}
+
+// usesTLS reports a request whose connection uses TLS: an https destination,
+// or any destination through an https proxy. A proxy error is left to the
+// plain transport, which reports it.
+func (t *ciTransport) usesTLS(req *http.Request) bool {
+	if req.URL != nil && req.URL.Scheme == "https" {
+		return true
+	}
+	if t.plain.Proxy == nil {
+		return false
+	}
+	proxy, err := t.plain.Proxy(req)
+	return err == nil && proxy != nil && proxy.Scheme == "https"
 }
 
 // CloseIdleConnections closes both transports' idle connections and cancels

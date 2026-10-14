@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -78,5 +79,38 @@ func TestCITransportDialsOnceForConcurrentHTTPSRequests(t *testing.T) {
 	}
 	if transport.plain.MaxConnsPerHost != 0 {
 		t.Fatalf("plain HTTP is limited to %d connections per host", transport.plain.MaxConnsPerHost)
+	}
+}
+
+// A connection uses TLS for an https destination, and for any destination
+// through an https proxy; only those go through the transport that limits
+// connections per host.
+func TestCITransportRoutesTLSConnections(t *testing.T) {
+	proxy := func(raw string) func(*http.Request) (*url.URL, error) {
+		return func(*http.Request) (*url.URL, error) {
+			if raw == "" {
+				return nil, nil
+			}
+			return url.Parse(raw)
+		}
+	}
+	for _, tc := range []struct {
+		target, proxy string
+		tls           bool
+	}{
+		{"http://agent:8126/evp_proxy/v2/x", "", false},
+		{"https://api.datadoghq.com/x", "", true},
+		{"http://agent:8126/evp_proxy/v2/x", "http://proxy:3128", false},
+		{"http://agent:8126/evp_proxy/v2/x", "https://proxy:8443", true},
+		{"https://api.datadoghq.com/x", "http://proxy:3128", true},
+	} {
+		transport := &ciTransport{plain: &http.Transport{Proxy: proxy(tc.proxy)}, secure: &http.Transport{}}
+		req, err := http.NewRequest(http.MethodGet, tc.target, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := transport.usesTLS(req); got != tc.tls {
+			t.Errorf("%s through %q: usesTLS=%t, want %t", tc.target, tc.proxy, got, tc.tls)
+		}
 	}
 }

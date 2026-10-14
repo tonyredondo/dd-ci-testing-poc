@@ -364,12 +364,17 @@ reads no clock. A TLS dial that finishes late still reads it, in
 `tls.Conn.Close` and when it sets up an HTTP/2 connection, and net/http offers
 no way to wait for that dial. `createNewHTTPClient` in
 [`civisibility/utils/net/http.go`](civisibility/utils/net/http.go) therefore
-sends HTTPS requests through a transport with `MaxConnsPerHost: 1`. Concurrent
-requests share one HTTP/2 connection instead of each dialing its own, so no
-extra dial exists: five concurrent requests made one dial instead of five, in
-the same time. Plain HTTP keeps concurrent connections, because HTTP/1.1 would
-serialize the requests. Two cases remain. An HTTPS endpoint that answers only
-HTTP/1.1 serializes its requests. With plain HTTP, a request that starts after
+sends requests whose connection uses TLS, to an https destination or through an
+https proxy, through a transport with `MaxConnsPerHost: 1`. Concurrent requests
+share one HTTP/2 connection instead of each dialing its own, so no extra dial
+exists: five concurrent requests made one dial instead of five, in the same
+time. From Go 1.26, `HTTP2Config.StrictMaxConcurrentRequests` also makes a
+request that finds the connection's streams in use wait for one instead of
+dialing; Go 1.25 has no such setting, so a server that limits concurrent
+streams below the startup requests can still cause an extra dial there. Plain
+HTTP keeps concurrent connections, because HTTP/1.1 would serialize the
+requests. Two more cases remain. An HTTPS endpoint that answers only HTTP/1.1
+serializes its requests. With plain HTTP, a request that starts after
 the close, such as one from the repository upload that ordinary mode runs in
 the background, lets a late dial pool its connection again; in ordinary mode
 those background requests read the clock during tests anyway, which deferred
@@ -395,7 +400,10 @@ dial whose request took another request's connection, and checks that closing
 the CI connections cancels it, or closes its connection when it had already
 connected; it follows that connection by its address.
 `TestCITransportDialsOnceForConcurrentHTTPSRequests` sends concurrent requests
-to an HTTP/2 server and expects one dial.
+to an HTTP/2 server and expects one dial;
+`TestCITransportWaitsForHTTP2Streams`, from Go 1.26, does it with a one-stream
+server; `TestCITransportRoutesTLSConnections` checks which requests use the
+limited transport.
 `TestMiniStartupOverlapsSettingsAndTelemetry` checks that the connections close
 before the first test.
 Run these with `-race`, plus the clock integration and HTTP telemetry parity.
