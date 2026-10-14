@@ -51,8 +51,9 @@ jobs:
           fi
           # Runner images carry different patch releases of a Go version while
           # GitHub rolls out an update, and setup-go prefers the installed one.
-          # Every job of the run installs the release chosen here.
-          python scripts/ci_shards.py go-versions >> "$GITHUB_OUTPUT"
+          # Every job of the run installs the newest release, chosen here.
+          curl -fsSL --retry 3 'https://go.dev/dl/?mode=json&include=all' |
+            python scripts/ci_shards.py go-versions >> "$GITHUB_OUTPUT"
       # Squash-merging an up-to-date pull request produces the tree that its
       # last run verified. Only runs of branches in this repository count.
       - id: verified

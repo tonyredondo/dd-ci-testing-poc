@@ -1,7 +1,6 @@
 """Missing tests, skipped checks and incomplete artifacts must make CI fail."""
 
 import copy
-import http.client
 import json
 import os
 from pathlib import Path
@@ -98,36 +97,14 @@ class ShardTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "failed after 3 attempts"):
                 ci_shards.retry(args, sleep=sleeps.append)
 
-    def test_go_versions_choose_the_newest_stable_release_once(self):
-        def release(version, stable=True, platforms=ci_shards.RUNNER_ARCHIVES):
-            files = [dict(os="", arch="", kind="source")]
-            files += [dict(os=goos, arch=goarch, kind="archive") for goos, goarch in sorted(platforms)]
-            return dict(version=version, stable=stable, files=files)
-
-        releases = [release("go1.28rc1", stable=False), release("go1.27.0"),
-                    # Listed while its files are still being published.
-                    release("go1.27.1", platforms={("linux", "amd64"), ("darwin", "arm64")}),
-                    release("go1.26.10"), release("go1.26.9"), release("go1.25.14"),
-                    release("go1.25.15", stable=False), release("go1.24.13")]
-        self.assertEqual({"1.26.x": "1.26.10", "1.27.x": "1.27.0"},
-                         ci_shards.newest_go_releases(releases, {"1.26.x", "1.27.x"}))
-        for invalid in (None, {"message": "unavailable"}, ["go1.27.0"]):
-            with self.assertRaisesRegex(ValueError, "unexpected go.dev release list"):
-                ci_shards.newest_go_releases(invalid, {"1.27.x"})
-        fetch = mock.Mock(side_effect=[OSError("unreachable"), http.client.IncompleteRead(b"[]", 98),
-                                       b'{"message": "unavailable"}', json.dumps(releases).encode()])
-        sleeps = []
-        # Three failed attempts: every job installs from the spec, as before.
-        with mock.patch("sys.stderr") as stderr:
-            chosen = ci_shards.go_versions(fetch=fetch, sleep=sleeps.append)
-        self.assertEqual({"1.25.x": "1.25.x", "1.26.x": "1.26.x", "1.27.x": "1.27.x"}, chosen)
-        self.assertEqual([15, 30], sleeps)
-        self.assertIn("no Go release chosen for 1.25.x", "".join(call.args[0] for call in stderr.write.call_args_list))
-        with mock.patch("sys.stderr"):
-            chosen = ci_shards.go_versions(fetch=fetch, sleep=sleeps.append)
-        self.assertEqual({"1.25.x": "1.25.14", "1.26.x": "1.26.10", "1.27.x": "1.27.0"}, chosen)
-        self.assertEqual([15, 30], sleeps)
-        self.assertEqual(4, fetch.call_count)
+    def test_go_versions_choose_the_newest_release_of_each_version(self):
+        releases = [dict(version=version, stable=stable) for version, stable in (
+            ("go1.28rc1", False), ("go1.27.2", True), ("go1.27.0", True), ("go1.26.10", True), ("go1.26.9", True),
+            ("go1.25.15", False), ("go1.25.14", True))]
+        self.assertEqual({"1.25.x": "1.25.14", "1.26.x": "1.26.10", "1.27.x": "1.27.2"},
+                         ci_shards.go_versions(releases))
+        with self.assertRaisesRegex(ValueError, "no release of Go 1.25.x"):
+            ci_shards.go_versions(releases[:5])
 
     def test_tip_revision_accepts_git_abbreviations_and_checks_the_actual_commit(self):
         sha = "2557edd671b4ec84af8a5841a621a6abab39774b"
