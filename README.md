@@ -30,7 +30,9 @@ cd dd-ci-testing-poc
 go build -o bin/ddto ./cmd/ddto
 ```
 
-Run the resulting binary from the module you want to test. A toolchain that
+Coding agents can follow [AGENTS.md](AGENTS.md), which covers installation,
+verification and the settings to choose for a project. Run the resulting
+binary from the module you want to test. A toolchain that
 `GOTOOLCHAIN` downloads into `GOMODCACHE` works too: Go rejects overlays there,
 so `ddto` runs that toolchain from a mirror in its user cache.
 [Runtime provisioning](docs/mini-runtime.md#runtime-provisioning) covers the

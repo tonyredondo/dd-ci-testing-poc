@@ -1,7 +1,8 @@
 # Documentation
 
 Start with the [README](../README.md) to install `ddto`, configure delivery
-and run your first tests. These guides cover the current implementation.
+and run your first tests. Coding agents have their own guide in
+[AGENTS.md](../AGENTS.md). These guides cover the current implementation.
 Measurement reports describe the exact revisions in their manifests.
 
 ## Using ddto
