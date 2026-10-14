@@ -237,8 +237,9 @@ project does not explain. Collect:
 3. The `DD_*` variables set for the run, with secrets written as `<set>`.
 4. What the project uses: the `go` line of its `go.mod`, the modules its
    tests build from
-   `go list -deps -test -f '{{with .Module}}{{.Path}} {{.Version}}{{end}}' ./... | sort -u | grep -E 'testify|goleak|dd-trace-go'`,
-   which also works with vendoring, the Orchestrion version if it uses
+   `go list -deps -test -f '{{with .Module}}{{.Path}} {{.Version}}{{with .Replace}} => {{.Path}} {{.Version}}{{end}}{{end}}' ./... | sort -u | grep -E 'testify|goleak|dd-trace-go'`,
+   which shows replacements after `=>` and also works with vendoring (write
+   local replacement paths as placeholders), the Orchestrion version if it uses
    Orchestrion, and whether it vendors, uses `go.work` or runs tests through
    `-exec`.
 5. The error from a run with `DD_TRACE_DEBUG=true` and the 20 to 40 lines
