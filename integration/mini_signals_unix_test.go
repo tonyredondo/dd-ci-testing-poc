@@ -5,6 +5,8 @@ package integration
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -17,11 +19,41 @@ import (
 // SIGTERM that nothing handles still ends the process with that signal, as
 // under go test, after Mini has sent its events, also after a test has reset
 // SIGTERM to its default action. A signal that the test ignores stays
-// ignored, as without ddto, also after a later Notify, Stop or Reset. With Mini's own package under coverage, the hook
+// ignored, as without ddto, also after a later Notify, Stop or Reset, and
+// when the test ignored it before Mini started. With Mini's own package under coverage, the hook
 // leaves no counters without a package.
 func TestMiniSignalsKeepGoTestBehavior(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
-	writeBuildFixture(t, dir, map[string]string{"sample_test.go": `package fixture_test
+	if err := os.MkdirAll(filepath.Join(dir, "ignoredbefore"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeBuildFixture(t, dir, map[string]string{"ignoredbefore/ignored_test.go": `package ignoredbefore
+
+import (
+	"os"
+	"os/signal"
+	"syscall"
+	"testing"
+	"time"
+)
+
+// SIGINT stays ignored by the operating system after Notify and Stop,
+// although signal.Ignored reports false.
+func TestMain(m *testing.M) {
+	signal.Ignore(os.Interrupt)
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	signal.Stop(c)
+	os.Exit(m.Run())
+}
+
+func TestSIGINT(t *testing.T) {
+	if err := syscall.Kill(os.Getpid(), syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+}
+`, "sample_test.go": `package fixture_test
 
 import (
 	"os"
@@ -97,21 +129,27 @@ func TestTERM(t *testing.T) {
 		code      int
 		output    string
 		tests     []string
+		pkg       string
 	}{
-		{"handled", "^(TestHandlesTERM|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestHandlesTERM"}},
-		{"unhandled", "^(TestAfter|TestTERM)$", nil, 1, "signal: terminated", []string{"TestAfter"}},
-		{"reset", "^(TestResets|TestAfter|TestTERM)$", nil, 1, "signal: terminated", []string{"TestAfter", "TestResets"}},
-		{"coverage", "^(TestHandlesTERM|TestAfter)$", []string{coverMini}, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestHandlesTERM"}},
-		{"ignore-reset", "^(TestIgnoreThenReset|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestIgnoreThenReset"}},
-		{"ignore-notify-stop-reset", "^(TestIgnoreNotifyStopReset|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestIgnoreNotifyStopReset"}},
+		{"handled", "^(TestHandlesTERM|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestHandlesTERM"}, ""},
+		{"unhandled", "^(TestAfter|TestTERM)$", nil, 1, "signal: terminated", []string{"TestAfter"}, ""},
+		{"reset", "^(TestResets|TestAfter|TestTERM)$", nil, 1, "signal: terminated", []string{"TestAfter", "TestResets"}, ""},
+		{"coverage", "^(TestHandlesTERM|TestAfter)$", []string{coverMini}, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestHandlesTERM"}, ""},
+		{"ignore-reset", "^(TestIgnoreThenReset|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestIgnoreThenReset"}, ""},
+		{"ignore-notify-stop-reset", "^(TestIgnoreNotifyStopReset|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestIgnoreNotifyStopReset"}, ""},
+		{"ignored-before-mini", "^TestSIGINT$", nil, 0, "--- PASS: TestSIGINT", []string{"TestSIGINT"}, "./ignoredbefore"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			receiver := &capture{}
 			server := newServer(http.HandlerFunc(receiver.handler))
 			defer server.Close()
 			env := testEnv("DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_TRACE_AGENT_URL="+server.URL, "DD_API_KEY=poc-not-a-real-key")
+			pkg := tc.pkg
+			if pkg == "" {
+				pkg = "."
+			}
 			args := append([]string{"test", "--runtime=mini", "-count=1", "-v", "-run=" + tc.run}, tc.args...)
-			out, stderr, code := command(t, dir, env, driver, append(args, ".")...)
+			out, stderr, code := command(t, dir, env, driver, append(args, pkg)...)
 			if code != tc.code || !strings.Contains(out, tc.output) || strings.Contains(out+stderr, "bad pkgID") {
 				t.Fatalf("exit %d, want %d and %q\n%s\n%s", code, tc.code, tc.output, out, stderr)
 			}

@@ -1271,8 +1271,10 @@ ends the process without reaching Mini first; other signals are disabled as
 before. `Ignore` passes `__dd_civisibility_ignoreSignal` instead of
 `ignoreSignal`, which also makes Mini stop holding the signal for good: Go
 keeps an ignored signal ignored after `Reset`, and for SIGINT and SIGHUP even
-after `Notify` and `Stop`, where only the operating system remembers it. The
-edits stay on their lines, so os/signal keeps its positions.
+after `Notify` and `Stop`, where only the operating system remembers it. Mini
+also leaves out, when it registers, the signals that the test ignored before
+Mini started. The hook keeps these sets in arrays indexed by signal number.
+The edits stay on their lines, so os/signal keeps its positions.
 
 `SignalHook` sets `signalNotify` and `signalStop` in
 [`civisibility.go`](civisibility/integrations/civisibility.go) through
@@ -1314,7 +1316,13 @@ it down it waits for that shutdown. The shutdown runs on its own goroutine,
 and `forcedExit` waits for it at most a minute (`forcedExitTimeout`): the
 goroutine that called `os.Exit` can hold a lock that the shutdown needs, as
 when user code that Mini calls during its own shutdown, such as a replaced
-`http.DefaultTransport`, exits. It does not join the signal handler's
+`http.DefaultTransport`, exits; Mini's own delivery no longer uses that one.
+The bound also ends a delivery that still progresses after a minute, such as a
+large deferred queue to a slow intake: an exit is never delayed longer. An
+error says so, printed at once rather than with the errors that Mini prints
+every minute. testing's `-timeout` alarm keeps running while the hook waits;
+in the rare case that it expires then, testing's timeout panic ends the
+process instead of `os.Exit`'s status. It does not join the signal handler's
 goroutine: on Windows that goroutine calls `os.Exit` after a signal, and would
 wait for itself. Another package's init can call `os.Exit` after testing
 registered the hook and before Mini initializes; CI Visibility has not started

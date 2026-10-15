@@ -375,6 +375,8 @@ func forcedExit() {
 	case <-done:
 	case <-time.After(forcedExitTimeout):
 		log.Error("civisibility: closing CI Visibility in os.Exit did not finish within %s; exiting without it", forcedExitTimeout)
+		// Errors are otherwise printed once a minute; the process ends now.
+		log.Flush()
 	}
 }
 

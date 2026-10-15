@@ -116,6 +116,8 @@ func TestForcedExitBoundsItsWait(t *testing.T) {
 	forcedExitTimeout = 100 * time.Millisecond
 	t.Cleanup(func() { forcedExitTimeout = original })
 
+	recorder := &log.RecordLogger{}
+	t.Cleanup(log.UseLogger(recorder))
 	initializeCIVisibilityLifecycleForTesting()
 	var held sync.Mutex
 	held.Lock() // the exiting goroutine's lock
@@ -133,6 +135,10 @@ func TestForcedExitBoundsItsWait(t *testing.T) {
 	case <-returned:
 	case <-time.After(5 * time.Second):
 		t.Fatal("the exit hook waits for a shutdown that the exiting goroutine blocks")
+	}
+	// The process ends right after the hook, so the error is already printed.
+	if lines := strings.Join(recorder.Logs(), "\n"); !strings.Contains(lines, "did not finish within 100ms") {
+		t.Errorf("the timeout was not logged before the exit: %q", lines)
 	}
 	held.Unlock()
 	// Waits for the shutdown that the hook started, then for the owner to
