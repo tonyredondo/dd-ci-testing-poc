@@ -2,7 +2,6 @@ package instrument
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -23,6 +22,16 @@ import (
 // already holds, so a channel that the test stops right after its delivery
 // still counts. Channels that Stop is removing still receive the signal, as
 // in process, and count too.
+//
+// Reset returns signals to their default action for every channel, Mini's
+// included. TransformSignal edits it to register Mini's channel again for the
+// signals that Mini wanted, so a signal that later ends the process still
+// reaches Mini first. Mini's own stop goes through the hook, so that Reset
+// does not register a channel that Mini has stopped.
+//
+// The hook sets Mini's variables instead of calling Mini: os/signal
+// initializes before Mini, and a Mini function that coverage instruments
+// would record its counters under package ID zero if it ran first.
 const SignalHook = `package signal
 
 import (
@@ -31,30 +40,46 @@ import (
 	_ "unsafe"
 )
 
+//go:linkname __dd_civisibility_signalNotify github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations.signalNotify
+var __dd_civisibility_signalNotify func(chan<- os.Signal, ...os.Signal)
+
+//go:linkname __dd_civisibility_signalStop github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations.signalStop
+var __dd_civisibility_signalStop func(chan<- os.Signal)
+
 var (
-	__dd_civisibility_signalsMu sync.Mutex
-	__dd_civisibility_signals   chan<- os.Signal
+	// __dd_civisibility_registration orders Mini's registration, its stop and
+	// Reset's registration. Take it before handlers' lock.
+	__dd_civisibility_registration sync.Mutex
+	// Mini's channel and the signals it wants, written holding both locks.
+	__dd_civisibility_signals chan<- os.Signal
+	__dd_civisibility_wanted  []os.Signal
 )
 
-//go:linkname __dd_civisibility_registerSignalNotify github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations.registerSignalNotify
-func __dd_civisibility_registerSignalNotify(func(chan<- os.Signal, ...os.Signal))
-
 func init() {
-	__dd_civisibility_registerSignalNotify(func(c chan<- os.Signal, sig ...os.Signal) {
-		__dd_civisibility_signalsMu.Lock()
-		__dd_civisibility_signals = c
-		__dd_civisibility_signalsMu.Unlock()
+	__dd_civisibility_signalNotify = func(c chan<- os.Signal, sig ...os.Signal) {
+		__dd_civisibility_registration.Lock()
+		defer __dd_civisibility_registration.Unlock()
+		handlers.Lock()
+		__dd_civisibility_signals, __dd_civisibility_wanted = c, sig
+		handlers.Unlock()
 		Notify(c, sig...)
-	})
+	}
+	__dd_civisibility_signalStop = func(c chan<- os.Signal) {
+		__dd_civisibility_registration.Lock()
+		defer __dd_civisibility_registration.Unlock()
+		handlers.Lock()
+		if __dd_civisibility_signals == c {
+			__dd_civisibility_signals, __dd_civisibility_wanted = nil, nil
+		}
+		handlers.Unlock()
+		Stop(c)
+	}
 }
 
 // __dd_civisibility_signalWantedElsewhere reports whether c is Mini's channel
 // and another channel wants signal n. process calls it holding handlers' lock.
 func __dd_civisibility_signalWantedElsewhere(c chan<- os.Signal, n int) bool {
-	__dd_civisibility_signalsMu.Lock()
-	own := c == __dd_civisibility_signals
-	__dd_civisibility_signalsMu.Unlock()
-	if !own {
+	if c != __dd_civisibility_signals {
 		return false
 	}
 	for other, h := range handlers.m {
@@ -69,44 +94,67 @@ func __dd_civisibility_signalWantedElsewhere(c chan<- os.Signal, n int) bool {
 	}
 	return false
 }
+
+// __dd_civisibility_reset runs Reset's reset of sig, all signals when empty,
+// then registers Mini's channel again for the signals of sig that it wanted.
+func __dd_civisibility_reset(sig []os.Signal, reset func()) {
+	__dd_civisibility_registration.Lock()
+	defer __dd_civisibility_registration.Unlock()
+	reset()
+	var again []os.Signal
+	for _, s := range __dd_civisibility_wanted {
+		for _, r := range sig {
+			if r == s {
+				again = append(again, s)
+				break
+			}
+		}
+		if len(sig) == 0 {
+			again = append(again, s)
+		}
+	}
+	if len(again) != 0 {
+		Notify(__dd_civisibility_signals, again...)
+	}
+}
 `
 
 // signalHookAPI is every declaration of package os/signal that SignalHook
 // uses, rendered as sourceDeclarations renders them. A toolchain that lacks
 // one, or declares it otherwise, builds without the hook.
 var signalHookAPI = []string{
+	"embed handlers sync.Mutex",
 	"field handlers.m map[chan<- os.Signal]*handler",
 	"field handlers.stopping []stopping",
 	"field stopping.c chan<- os.Signal",
 	"field stopping.h *handler",
 	"func (*handler) want(int) bool",
 	"func Notify(chan<- os.Signal, ...os.Signal)",
+	"func Stop(chan<- os.Signal)",
 }
 
-// signalRegistration is the function that SignalHook's linkname names in
-// Mini's integrations package, rendered as sourceDeclarations renders it.
-const signalRegistration = "func registerSignalNotify(func(chan<- os.Signal, ...os.Signal))"
+// signalRuntimeAPI is what SignalHook's linknames name in Mini's integrations
+// package, rendered as sourceDeclarations renders it.
+var signalRuntimeAPI = []string{
+	"var signalNotify func(chan<- os.Signal, ...os.Signal)",
+	"var signalStop func(chan<- os.Signal)",
+}
 
 // TransformSignal checks that package os/signal, given as the sources that the
 // build compiles, declares what SignalHook uses, and returns its file whose
-// process asks the hook about Mini's channel. The edit stays on its line, so
-// os/signal keeps its positions.
+// process asks the hook about Mini's channel and whose Reset registers Mini's
+// channel again. The edits stay on their lines, so os/signal keeps its
+// positions.
 func TransformSignal(files map[string][]byte) (map[string][]byte, error) {
-	have, err := sourceDeclarations(files)
-	if err != nil {
+	if err := declarationsError(files, signalHookAPI, "os/signal lacks %s"); err != nil {
 		return nil, err
-	}
-	for _, decl := range signalHookAPI {
-		if !have[decl] {
-			return nil, fmt.Errorf("os/signal lacks %s", decl)
-		}
 	}
 	names := make([]string, 0, len(files))
 	for name := range files {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	var found []string
+	deliveries, resets := 0, 0
 	output := map[string][]byte{}
 	for _, name := range names {
 		src := files[name]
@@ -118,31 +166,52 @@ func TransformSignal(files map[string][]byte) (map[string][]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		text := func(n ast.Node) string {
+			return string(src[fs.Position(n.Pos()).Offset:fs.Position(n.End()).Offset])
+		}
+		var edits []edit
 		for _, decl := range file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Recv != nil || fn.Name.Name != "process" || fn.Body == nil {
+			if !ok || fn.Recv != nil || fn.Body == nil {
 				continue
 			}
-			for _, cond := range processDeliveries(fn.Body) {
-				start, end := fs.Position(cond.call.Pos()).Offset, fs.Position(cond.call.End()).Offset
-				var buf bytes.Buffer
-				buf.WriteString("//line " + name + ":1\n")
-				buf.Write(src[:start])
-				fmt.Fprintf(&buf, "%s && !__dd_civisibility_signalWantedElsewhere(%s, %s)", src[start:end], cond.channel, src[fs.Position(cond.signal.Pos()).Offset:fs.Position(cond.signal.End()).Offset])
-				buf.Write(src[end:])
-				output[name] = buf.Bytes()
-				found = append(found, name)
+			switch fn.Name.Name {
+			case "process":
+				for _, d := range processDeliveries(fn.Body) {
+					edits = append(edits, edit{fs.Position(d.call.Pos()).Offset, fs.Position(d.call.End()).Offset,
+						fmt.Sprintf("%s && !__dd_civisibility_signalWantedElsewhere(%s, %s)", text(d.call), d.channel, text(d.signal))})
+					deliveries++
+				}
+			case "Reset":
+				if call, param := resetCancel(fn); call != nil {
+					edits = append(edits, edit{fs.Position(call.Pos()).Offset, fs.Position(call.End()).Offset,
+						fmt.Sprintf("__dd_civisibility_reset(%s, func() { %s })", param, text(call))})
+					resets++
+				}
 			}
 		}
+		if len(edits) == 0 {
+			continue
+		}
+		sort.Slice(edits, func(i, j int) bool { return edits[i].start < edits[j].start })
+		var buf bytes.Buffer
+		buf.WriteString("//line " + name + ":1\n")
+		cursor := 0
+		for _, e := range edits {
+			buf.Write(src[cursor:e.start])
+			buf.WriteString(e.text)
+			cursor = e.end
+		}
+		buf.Write(src[cursor:])
+		output[name] = buf.Bytes()
 	}
-	switch len(found) {
-	case 0:
-		return nil, errors.New("os/signal's process delivers to no handlers.m channel that TransformSignal recognizes")
-	case 1:
-		return output, nil
-	default:
-		return nil, fmt.Errorf("os/signal's process delivers to handlers.m in %d places", len(found))
+	switch {
+	case deliveries != 1:
+		return nil, fmt.Errorf("os/signal's process delivers to handlers.m in %d places that TransformSignal recognizes, want 1", deliveries)
+	case resets != 1:
+		return nil, fmt.Errorf("os/signal declares %d Reset functions that TransformSignal recognizes, want 1", resets)
 	}
+	return output, nil
 }
 
 // signalDelivery is process's check that a channel of handlers.m wants the
@@ -198,16 +267,33 @@ func processDeliveries(body *ast.BlockStmt) []signalDelivery {
 	return found
 }
 
+// resetCancel returns Reset's only statement, "cancel(sig, disableSignal)",
+// and the name of its variadic os.Signal parameter, or nil.
+func resetCancel(fn *ast.FuncDecl) (*ast.CallExpr, string) {
+	params := fn.Type.Params.List
+	if len(params) != 1 || len(params[0].Names) != 1 || render(params[0].Type) != "...os.Signal" || len(fn.Body.List) != 1 {
+		return nil, ""
+	}
+	stmt, ok := fn.Body.List[0].(*ast.ExprStmt)
+	if !ok {
+		return nil, ""
+	}
+	call, ok := stmt.X.(*ast.CallExpr)
+	if !ok || len(call.Args) != 2 || call.Ellipsis.IsValid() {
+		return nil, ""
+	}
+	cancel, ok := call.Fun.(*ast.Ident)
+	param, paramOK := call.Args[0].(*ast.Ident)
+	action, actionOK := call.Args[1].(*ast.Ident)
+	if !ok || !paramOK || !actionOK || cancel.Name != "cancel" || param.Name != params[0].Names[0].Name || action.Name != "disableSignal" {
+		return nil, ""
+	}
+	return call, param.Name
+}
+
 // SignalHookRuntimeError reports why the selected runtime's integrations
 // package, given as the sources that the build compiles, cannot receive
 // SignalHook's registration, or nil.
 func SignalHookRuntimeError(sources map[string][]byte) error {
-	have, err := sourceDeclarations(sources)
-	if err != nil {
-		return err
-	}
-	if !have[signalRegistration] || !have["linkname registerSignalNotify"] {
-		return fmt.Errorf("the runtime's integrations package lacks %s", signalRegistration)
-	}
-	return nil
+	return declarationsError(sources, signalRuntimeAPI, "the runtime's integrations package lacks %s")
 }

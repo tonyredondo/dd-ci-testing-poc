@@ -66,10 +66,12 @@ var (
 
 	// signalNotify registers a channel that receives a signal only when no
 	// other channel wants it, that is, when the signal would otherwise end the
-	// process. ddto's os/signal overlay sets it while os/signal initializes,
-	// before this package's variables; without the overlay it stays nil and CI
-	// Visibility handles no signal.
+	// process; signal.Reset registers it again. signalStop stops it. ddto's
+	// os/signal overlay sets both while os/signal initializes, before this
+	// package's variables, which therefore have no initializer. Without the
+	// overlay they stay nil and CI Visibility handles no signal.
 	signalNotify func(chan<- os.Signal, ...os.Signal)
+	signalStop   func(chan<- os.Signal)
 
 	// closeActions holds CI visibility close actions.
 	closeActions []ciVisibilityCloseAction
@@ -202,17 +204,12 @@ func (handler *ciVisibilitySignalHandler) run() {
 		}
 		// Without CI Visibility's channel, a signal that no other channel
 		// wants takes its default action again.
-		signal.Stop(handler.signals)
+		signalStop(handler.signals)
 		ciVisibilitySignalExitFunc(sig)
 	case <-handler.stop:
 		return
 	}
 }
-
-// registerSignalNotify is called by ddto's os/signal overlay.
-//
-//go:linkname registerSignalNotify
-func registerSignalNotify(notify func(chan<- os.Signal, ...os.Signal)) { signalNotify = notify }
 
 // startCIVisibilitySignalHandler registers the process signal handler once for
 // the current CI Visibility initialization. It receives SIGINT and SIGTERM
@@ -227,7 +224,7 @@ func startCIVisibilitySignalHandler() {
 	if activeCIVisibilitySignalHandler != nil {
 		return
 	}
-	if signalNotify == nil {
+	if signalNotify == nil || signalStop == nil {
 		log.Debug("civisibility: no signal handler: os/signal was built without ddto's overlay")
 		return
 	}
@@ -277,7 +274,7 @@ func stopCIVisibilitySignalHandler() {
 
 	handler.stopOnce.Do(func() {
 		handler.stopping.Store(true)
-		signal.Stop(handler.signals)
+		signalStop(handler.signals)
 		close(handler.stop)
 	})
 
@@ -332,6 +329,28 @@ func TryPushCiVisibilityPreCloseAction(action ciVisibilityCloseAction) bool {
 	}
 	preCloseActions = append(preCloseActions, action)
 	return true
+}
+
+// forcedExit closes CI Visibility when the process ends through os.Exit, as
+// when a test calls os.Exit or log.Fatal before the tests finish, so that the
+// events of the tests that ran and the session are sent. ddto's testing
+// overlay registers it as a runtime exit hook, which runs inside os.Exit with
+// any status. After the tests, CI Visibility is already closed and it returns
+// at once.
+//
+//go:linkname forcedExit
+func forcedExit() {
+	// The runtime ends the process with a fatal error, instead of the status
+	// that os.Exit received, when an exit hook panics.
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("civisibility: closing CI Visibility in os.Exit panicked: %v", r)
+		}
+	}()
+	if civisibility.GetState() == civisibility.StateInitialized {
+		log.Debug("civisibility: os.Exit before CI Visibility closed; closing it")
+	}
+	ExitCiVisibility()
 }
 
 // ExitCiVisibility executes all registered close actions and stops the tracer.

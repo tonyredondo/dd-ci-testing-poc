@@ -67,12 +67,15 @@ The log records:
   extracts them again.
 - The `testing` transformation, its source and rewritten-file counts, and the
   Fuzz and parallel-stop hooks selected for that runtime.
-- With Mini, whether os/signal gets the hook that lets Mini receive only the
-  signals that would end the process: `signal hook installed=true`, or `false`
-  with the reason. A test process without it logs
+- With Mini, the hooks for [forced exits](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md#forced-exits):
+  `signal hook installed=true` when os/signal lets Mini receive only the
+  signals that would end the process, and `exit hook installed=true` when
+  testing closes Mini's CI Visibility in `os.Exit`; `false` comes with the
+  reason. A test process without the signal hook logs
   `civisibility: no signal handler: os/signal was built without ddto's overlay`
-  and handles no signal, as under go test. See
-  [signals](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md#signals-that-would-end-the-process).
+  and handles no signal, as under go test. A test process that `os.Exit`
+  ends during its tests logs
+  `civisibility: os.Exit before CI Visibility closed; closing it`.
 - Optional library discovery, including how many imports still need a query
   and how many standard-library imports it left out.
   Testify and goleak each report detection, instrumentation and warnings.

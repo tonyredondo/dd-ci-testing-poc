@@ -1228,7 +1228,14 @@ allocation checks therefore use its `allocsPerRun` helper instead of
 `testing.AllocsPerRun`, which would panic with `-count` above one or with
 `-shuffle`. `TestPackageTestsMeasureAllocationsWithHelper` keeps it that way.
 
-## Signals that would end the process
+## Forced exits
+
+A test process can end before its tests finish: a signal, or a call to
+`os.Exit` or `log.Fatal` from a test, a cleanup or another goroutine. Mini
+sends the events of the tests that ran and closes the session as failed in
+both cases, and the process ends as under go test.
+
+### Signals that would end the process
 
 Upstream registers SIGINT and SIGTERM with `signal.Notify` when CI Visibility
 starts and, on either signal, closes CI Visibility and calls `os.Exit(1)`. Go
@@ -1242,34 +1249,69 @@ instead of the signal, so go test does not print `signal: terminated`.
 Go has no API that tells whether another channel wants a signal, and its
 runtime ends a process for an unwanted signal from its signal handler, without
 running Go code. Mini therefore relies on an os/signal overlay that ddto adds
-for Mini only: `TransformSignal` in `internal/instrument/signal.go` edits
+for Mini only. `TransformSignal` in `internal/instrument/signal.go` edits
 `process`, the function that delivers signals to channels, so that Mini's
 channel receives a signal only when no other channel wants it. Channels that
 `Stop` is removing count too, as `process` still delivers to them, and so does
 a channel that the test stops right after its delivery: the check runs under
-the lock that `process` holds. The edit stays on its line, so os/signal keeps
-its positions. `SignalHook` registers that Notify through `registerSignalNotify`
-in [`civisibility.go`](civisibility/integrations/civisibility.go) while
-os/signal initializes.
+the lock that `process` holds. It also edits `Reset`, which removes a signal
+from every channel, Mini's included, to register Mini's channel again for the
+signals it wanted, so that a later signal that ends the process still reaches
+Mini first. Both edits stay on their lines, so os/signal keeps its positions.
+
+`SignalHook` sets `signalNotify` and `signalStop` in
+[`civisibility.go`](civisibility/integrations/civisibility.go) through
+linknamed variables while os/signal initializes. It does not call Mini, because
+os/signal initializes before Mini: a Mini function that runs first and that
+`-coverpkg` instruments records its coverage counters without a package, and
+Go reports `internal error in coverage meta-data tracking` when it writes the
+profile. Mini stops its channel through `signalStop`, so that `Reset` does
+not register it again afterwards.
 
 On such a signal Mini closes CI Visibility as before, stops its channel, and
-sends the signal to its own process again; with no channel left, the runtime
+sends the signal to its own process again. With no channel left, the runtime
 ends the process as under go test
 ([`civisibility_signal_exit_unix.go`](civisibility/integrations/civisibility_signal_exit_unix.go)).
 Windows cannot send a console event to one process, so it keeps exit status 1.
 Mini registers no signal that the process ignores, such as SIGINT in a
-background job, because registering it would install a handler. When the
-toolchain's os/signal or the selected runtime lacks what the hook uses,
-`prepareSignalHook` leaves os/signal unchanged; Mini then handles no signal,
-and a signal ends the process without CI events, as it ends go test. The SDK
-runtime keeps upstream behavior.
+background job, because registering it would install a handler. A test that
+ignores a signal removes Mini's channel for it, as for any channel. When the
+toolchain's os/signal lacks what the hook uses, `prepareSignalHook` leaves
+os/signal unchanged, and Mini handles no signal: a signal ends the process
+without CI events, as it ends go test. A client that requires an older version
+of this module runs that version's runtime, signal handling included.
 
-Checks: `TestMiniSignalsKeepGoTestBehavior`, `TestToolchainProvidesSignalHook`,
-`TestSignalHookTypeChecks`, `TestSignalHookMatchesMiniRegistration`,
-`TestTransformSignalRejectsOtherShapes`, `TestPrepareSignalHook`,
-`TestCIVisibilitySignalHandlerNeedsTheOverlay` and
-`TestCIVisibilitySignalHandlerKeepsIgnoredSignalsIgnored`. This package's own
-tests run without the overlay and register with `signal.Notify` in its place.
+### os.Exit and log.Fatal
+
+Upstream loses every event of a process that a test ends with `os.Exit` or
+`log.Fatal`, because the process ends without running deferred functions or
+CI Visibility's shutdown. `ExitHook` in `internal/instrument/exit.go` is a
+testing overlay file that registers `forcedExit` in
+[`civisibility.go`](civisibility/integrations/civisibility.go) as a runtime
+exit hook (`internal/runtime/exithook`, which coverage uses to write its
+counters). `os.Exit` runs it before the process ends, with any status.
+`forcedExit` calls `ExitCiVisibility`; after a normal end CI Visibility is
+already closed, and it returns at once. It recovers a panic, because the
+runtime ends the process with a fatal error when an exit hook panics. The test
+that was running is not reported, as after a signal. Mini closes a test when
+its body returns, before testing runs the test's cleanups, so a test whose
+cleanup exits reports the result of its body. `os.Exit(0)` during a test
+already panics in testing, and signals and crashes run no exit hooks.
+`prepareExitHook` adds the file only when the toolchain's exithook and the
+selected runtime declare what it uses.
+
+The SDK runtime keeps upstream behavior for signals and exits.
+
+Checks: `TestMiniSignalsKeepGoTestBehavior`, `TestMiniForcedExitKeepsEvents`,
+`TestToolchainProvidesSignalHook`, `TestSignalHookTypeChecks`,
+`TestSignalHookMatchesMiniRegistration`, `TestTransformSignalRejectsOtherShapes`,
+`TestToolchainProvidesExitHook`, `TestExitHookTypeChecks`,
+`TestExitHookMatchesMiniRegistration`, `TestPrepareSignalHook`,
+`TestPrepareExitHook`, `TestForcedExitClosesCIVisibility`,
+`TestForcedExitRecoversPanics`, `TestCIVisibilitySignalHandlerNeedsTheOverlay`
+and `TestCIVisibilitySignalHandlerKeepsIgnoredSignalsIgnored`. This package's
+own tests run without the overlays and use `signal.Notify` and `signal.Stop`
+in place of the hook's functions.
 
 ## Per-test allocations
 

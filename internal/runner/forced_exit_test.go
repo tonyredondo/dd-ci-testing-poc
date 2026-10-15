@@ -117,3 +117,60 @@ func TestSignalHookCoverGoesThroughThePlan(t *testing.T) {
 		t.Error("cover of other packages or without the cover mode reads the plan")
 	}
 }
+
+// prepareExitHook adds the hook to testing when the toolchain's exithook and
+// the selected runtime provide what it uses, and otherwise leaves testing as
+// it is.
+func TestPrepareExitHook(t *testing.T) {
+	exithook, err := build.Default.Import("internal/runtime/exithook", "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, file, _, _ := runtime.Caller(0)
+	repo := filepath.Dir(filepath.Dir(filepath.Dir(file)))
+	integrationsDir := filepath.Join(repo, "internal", "thirdparty", "dd-trace-go", "civisibility", "integrations")
+	pkg, err := build.ImportDir(integrationsDir, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := func() []goPackage {
+		return []goPackage{
+			{ImportPath: "internal/runtime/exithook", Standard: true, DepOnly: true, Dir: exithook.Dir, GoFiles: exithook.GoFiles},
+			{ImportPath: miniIntegrationsPackage, DepOnly: true, Dir: integrationsDir, GoFiles: pkg.GoFiles},
+		}
+	}
+	prepare := func(listed []goPackage) (string, map[string]string) {
+		t.Helper()
+		added := map[string]string{}
+		refusal, err := prepareExitHook(listed, map[string]string{}, "/goroot/src/testing", func(logical, content string) error {
+			added[logical] = content
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return refusal, added
+	}
+	if refusal, added := prepare(listed()); refusal != "" || len(added) != 1 || added[filepath.Join("/goroot/src/testing", exitHookFile)] != instrument.ExitHook {
+		t.Fatalf("hook: %q %v", refusal, added)
+	}
+
+	old := filepath.Join(t.TempDir(), "civisibility.go")
+	if err := os.WriteFile(old, []byte("package integrations\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	withoutForcedExit := listed()
+	withoutForcedExit[1].Dir, withoutForcedExit[1].GoFiles = filepath.Dir(old), []string{"civisibility.go"}
+	otherToolchain := listed()
+	otherToolchain[0].Dir, otherToolchain[0].GoFiles = filepath.Dir(old), []string{"civisibility.go"}
+	for name, listed := range map[string][]goPackage{"old runtime": withoutForcedExit, "other toolchain": otherToolchain, "no exithook": listed()[1:]} {
+		if refusal, added := prepare(listed); refusal == "" || len(added) != 0 {
+			t.Errorf("%s: %q %v", name, refusal, added)
+		}
+	}
+
+	conflict := errors.New("conflict")
+	if _, err := prepareExitHook(listed(), map[string]string{}, "/goroot/src/testing", func(string, string) error { return conflict }); !errors.Is(err, conflict) {
+		t.Fatalf("conflict: %v", err)
+	}
+}

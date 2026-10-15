@@ -51,8 +51,10 @@ func TestToolchainProvidesSignalHook(t *testing.T) {
 		if got, want := bytes.Count(body, []byte("\n")), bytes.Count(files[path], []byte("\n")); got != want {
 			t.Errorf("the edit moved os/signal's lines: %d lines, want %d", got, want)
 		}
-		if n := bytes.Count(body, []byte("__dd_civisibility_signalWantedElsewhere(")); n != 1 {
-			t.Errorf("%d calls of the hook", n)
+		for _, call := range []string{"__dd_civisibility_signalWantedElsewhere(", "__dd_civisibility_reset("} {
+			if n := bytes.Count(body, []byte(call)); n != 1 {
+				t.Errorf("%d calls of %s", n, call)
+			}
 		}
 	}
 }
@@ -88,8 +90,8 @@ func TestSignalHookTypeChecks(t *testing.T) {
 	}
 }
 
-// SignalHook's registration matches the function of Mini's integrations
-// package that its linkname names.
+// SignalHook's linknames name variables that Mini's integrations package
+// declares with the same types.
 func TestSignalHookMatchesMiniRegistration(t *testing.T) {
 	dir := filepath.Join("..", "thirdparty", "dd-trace-go", "civisibility", "integrations")
 	entries, err := os.ReadDir(dir)
@@ -107,40 +109,35 @@ func TestSignalHookMatchesMiniRegistration(t *testing.T) {
 	if err := SignalHookRuntimeError(sources); err != nil {
 		t.Fatal(err)
 	}
-	file, err := parser.ParseFile(token.NewFileSet(), "", SignalHook, parser.ParseComments|parser.SkipObjectResolution)
+	hook, err := sourceDeclarations(map[string][]byte{"zz_dd_ci_visibility_signal.go": []byte(SignalHook)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	declared := ""
-	for _, decl := range file.Decls {
-		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == "__dd_civisibility_registerSignalNotify" {
-			declared = "func registerSignalNotify" + signature(fn.Type)
+	const integrations = "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations."
+	for _, decl := range signalRuntimeAPI {
+		name, typ, _ := strings.Cut(strings.TrimPrefix(decl, "var "), " ")
+		if !hook["var __dd_civisibility_"+name+" "+typ] || !hook["linkname __dd_civisibility_"+name+" "+integrations+name] {
+			t.Errorf("SignalHook does not link %s", decl)
 		}
-	}
-	if declared != signalRegistration {
-		t.Errorf("SignalHook declares %q, want %q", declared, signalRegistration)
-	}
-	target := "//go:linkname __dd_civisibility_registerSignalNotify github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations.registerSignalNotify\n"
-	if !strings.Contains(SignalHook, target) {
-		t.Error("SignalHook's linkname does not name Mini's integrations.registerSignalNotify")
 	}
 }
 
-// A runtime without the registration, or with another signature, builds
-// without the hook instead of failing to link.
+// A runtime without the variables, or with other types, builds without the
+// hook.
 func TestSignalHookRuntimeErrorRejectsOtherRuntimes(t *testing.T) {
+	const both = "package integrations\nimport \"os\"\nvar (\n\tsignalNotify func(chan<- os.Signal, ...os.Signal)\n\tsignalStop func(chan<- os.Signal)\n)\n"
 	for name, source := range map[string]string{
-		"missing":   "package integrations\nfunc other() {}\n",
-		"signature": "package integrations\nimport _ \"unsafe\"\n//go:linkname registerSignalNotify\nfunc registerSignalNotify(func(chan<- os.Signal)) {}\n",
-		"linkname":  "package integrations\nfunc registerSignalNotify(notify func(chan<- os.Signal, ...os.Signal)) {}\n",
+		"missing":      "package integrations\nfunc other() {}\n",
+		"old function": "package integrations\nimport _ \"unsafe\"\n//go:linkname registerSignalNotify\nfunc registerSignalNotify(notify func(chan<- os.Signal, ...os.Signal)) {}\n",
+		"notify type":  strings.Replace(both, "...os.Signal", "[]os.Signal", 1),
+		"no stop":      strings.Replace(both, "\tsignalStop func(chan<- os.Signal)\n", "", 1),
 	} {
 		if err := SignalHookRuntimeError(map[string][]byte{"civisibility.go": []byte(source)}); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
-	source := "package integrations\nimport _ \"unsafe\"\n//go:linkname registerSignalNotify\nfunc registerSignalNotify(notify func(chan<- os.Signal, ...os.Signal)) {}\n"
-	if err := SignalHookRuntimeError(map[string][]byte{"civisibility.go": []byte(source)}); err != nil {
-		t.Errorf("named parameter: %v", err)
+	if err := SignalHookRuntimeError(map[string][]byte{"civisibility.go": []byte(both)}); err != nil {
+		t.Errorf("both variables: %v", err)
 	}
 }
 
@@ -168,6 +165,16 @@ func (h *handler) want(sig int) bool { return h.mask[sig/32]>>uint(sig&31)&1 != 
 
 func Notify(c chan<- os.Signal, sig ...os.Signal) {}
 
+func Stop(c chan<- os.Signal) {}
+
+func Reset(sig ...os.Signal) {
+	cancel(sig, disableSignal)
+}
+
+func cancel(sigs []os.Signal, action func(int)) {}
+
+func disableSignal(n int) {}
+
 func process(sig os.Signal) {
 	n := signum(sig)
 	for c, h := range handlers.m {
@@ -189,17 +196,26 @@ func process(sig os.Signal) {
 }
 `
 
-// The edit names process's own channel and signal, and only its delivery
-// to handlers.m.
+// The edits name process's own channel and signal and Reset's own parameter,
+// and touch only process's delivery to handlers.m and Reset's cancel.
 func TestTransformSignalEditsTheDelivery(t *testing.T) {
-	source := strings.NewReplacer("for c, h := range", "for ch, hd := range", "if h.want(n) {\n\t\t\tselect {\n\t\t\tcase c <- sig", "if hd.want(n) {\n\t\t\tselect {\n\t\t\tcase ch <- sig").Replace(signalSource)
+	source := strings.NewReplacer("for c, h := range", "for ch, hd := range", "if h.want(n) {\n\t\t\tselect {\n\t\t\tcase c <- sig", "if hd.want(n) {\n\t\t\tselect {\n\t\t\tcase ch <- sig",
+		"func Reset(sig ...os.Signal) {\n\tcancel(sig, disableSignal)", "func Reset(s ...os.Signal) {\n\tcancel(s, disableSignal)").Replace(signalSource)
 	edited, err := TransformSignal(map[string][]byte{"signal.go": []byte(source)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "if hd.want(n) && !__dd_civisibility_signalWantedElsewhere(ch, n) {"
-	if got := string(edited["signal.go"]); !strings.Contains(got, want) || strings.Count(got, "__dd_civisibility_") != 1 {
-		t.Fatalf("edited source lacks %q or edits more:\n%s", want, got)
+	got := string(edited["signal.go"])
+	for _, want := range []string{
+		"if hd.want(n) && !__dd_civisibility_signalWantedElsewhere(ch, n) {",
+		"\t__dd_civisibility_reset(s, func() { cancel(s, disableSignal) })\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("edited source lacks %q", want)
+		}
+	}
+	if strings.Count(got, "__dd_civisibility_") != 2 || strings.Count(got, "\n") != strings.Count(source, "\n")+1 {
+		t.Errorf("edited source edits more or moves lines:\n%s", got)
 	}
 }
 
@@ -212,6 +228,12 @@ func TestTransformSignalRejectsOtherShapes(t *testing.T) {
 		"want":                 strings.Replace(signalSource, "want(sig int) bool", "want(sig uint32) bool", 1),
 		"handlers map":         strings.Replace(signalSource, "m        map[chan<- os.Signal]*handler", "m        map[chan<- os.Signal]handler", 1),
 		"Notify":               strings.Replace(signalSource, "func Notify(c chan<- os.Signal, sig ...os.Signal) {}", "func Notify(c chan<- os.Signal, sig []os.Signal) {}", 1),
+		"Stop":                 strings.Replace(signalSource, "func Stop(c chan<- os.Signal) {}", "func Stop(c chan os.Signal) {}", 1),
+		"no mutex":             strings.Replace(signalSource, "\tsync.Mutex\n", "\tmu sync.Mutex\n", 1),
+		"Reset body":           strings.Replace(signalSource, "\tcancel(sig, disableSignal)\n", "\tcancel(sig, disableSignal)\n\t_ = 0\n", 1),
+		"Reset action":         strings.Replace(signalSource, "\tcancel(sig, disableSignal)\n", "\tcancel(sig, ignoreSignal)\n", 1),
+		"Reset argument":       strings.Replace(signalSource, "\tcancel(sig, disableSignal)\n", "\tcancel(nil, disableSignal)\n", 1),
+		"no Reset":             strings.Replace(signalSource, "func Reset(", "func reset(", 1),
 		"no process":           strings.Replace(signalSource, "func process(", "func deliver(", 1),
 		"other loop":           strings.Replace(signalSource, "range handlers.m {\n\t\tif h.want(n)", "range handlers.m {\n\t\t_ = 0\n\t\tif h.want(n)", 1),
 		"other condition":      strings.Replace(signalSource, "if h.want(n) {\n\t\t\tselect {\n\t\t\tcase c <-", "if n > 0 {\n\t\t\tselect {\n\t\t\tcase c <-", 1),

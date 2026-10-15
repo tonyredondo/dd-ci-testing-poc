@@ -15,7 +15,9 @@ import (
 // its process, so the tests after it run and report; Mini's channel does not
 // receive that SIGTERM, even though the test stops its own channel at once. A
 // SIGTERM that nothing handles still ends the process with that signal, as
-// under go test, after Mini has sent its events.
+// under go test, after Mini has sent its events, also after a test has reset
+// SIGTERM to its default action. With Mini's own package under coverage, the
+// hook leaves no counters without a package.
 func TestMiniSignalsKeepGoTestBehavior(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
 	writeBuildFixture(t, dir, map[string]string{"sample_test.go": `package fixture_test
@@ -42,6 +44,16 @@ func TestHandlesTERM(t *testing.T) {
 	signal.Stop(c)
 }
 
+func TestResets(t *testing.T) {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGTERM)
+	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	<-c
+	signal.Reset(syscall.SIGTERM)
+}
+
 func TestAfter(t *testing.T) {}
 
 func TestTERM(t *testing.T) {
@@ -52,22 +64,27 @@ func TestTERM(t *testing.T) {
 	t.Fatal("SIGTERM did not end the process")
 }
 `})
+	coverMini := "-coverpkg=github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations"
 	for _, tc := range []struct {
 		name, run string
+		args      []string
 		code      int
 		output    string
 		tests     []string
 	}{
-		{"handled", "^(TestHandlesTERM|TestAfter)$", 0, "--- PASS: TestAfter", []string{"TestAfter", "TestHandlesTERM"}},
-		{"unhandled", "^(TestAfter|TestTERM)$", 1, "signal: terminated", []string{"TestAfter"}},
+		{"handled", "^(TestHandlesTERM|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestHandlesTERM"}},
+		{"unhandled", "^(TestAfter|TestTERM)$", nil, 1, "signal: terminated", []string{"TestAfter"}},
+		{"reset", "^(TestResets|TestAfter|TestTERM)$", nil, 1, "signal: terminated", []string{"TestAfter", "TestResets"}},
+		{"coverage", "^(TestHandlesTERM|TestAfter)$", []string{coverMini}, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestHandlesTERM"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			receiver := &capture{}
 			server := newServer(http.HandlerFunc(receiver.handler))
 			defer server.Close()
 			env := testEnv("DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_TRACE_AGENT_URL="+server.URL, "DD_API_KEY=poc-not-a-real-key")
-			out, stderr, code := command(t, dir, env, driver, "test", "--runtime=mini", "-count=1", "-v", "-run="+tc.run, ".")
-			if code != tc.code || !strings.Contains(out, tc.output) {
+			args := append([]string{"test", "--runtime=mini", "-count=1", "-v", "-run=" + tc.run}, tc.args...)
+			out, stderr, code := command(t, dir, env, driver, append(args, ".")...)
+			if code != tc.code || !strings.Contains(out, tc.output) || strings.Contains(out+stderr, "bad pkgID") {
 				t.Fatalf("exit %d, want %d and %q\n%s\n%s", code, tc.code, tc.output, out, stderr)
 			}
 			receiver.mu.Lock()

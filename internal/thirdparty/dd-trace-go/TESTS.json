@@ -49,9 +49,9 @@
       "source": "internal/civisibility/integrations/civisibility_signal_handler_test.go",
       "destination": "internal/thirdparty/dd-trace-go/civisibility/integrations/civisibility_signal_handler_test.go",
       "source_sha256": "02c7164b23ce0e0941f53170dd07b651eebedcbc1e751a11f62cabc97dc04d48",
-      "adapted_sha256": "01e4dd1db5f5bfe46e93a28d1c637a98a18de45c4b9d4d44873671df23ce7a31",
+      "adapted_sha256": "0f27607c95acb365c22da7aeb1b15d110b5bb06c52c9c246967731028eb6dde7",
       "kind": "full",
-      "adaptation": "Native writer-free CI bootstrap replaces APM mock initialization; signal/shutdown assertions preserved; the exit seam receives the signal; signal.Notify stands in for the os/signal overlay's registration, and Mini-only cases cover a build without the overlay and ignored signals; standard-library assertion helpers"
+      "adaptation": "Native writer-free CI bootstrap replaces APM mock initialization; signal/shutdown assertions preserved; the exit seam receives the signal; signal.Notify and signal.Stop stand in for the functions that the os/signal overlay sets, and Mini-only cases cover a build without the overlay and ignored signals; standard-library assertion helpers"
     },
     {
       "source": "internal/civisibility/integrations/testing_helpers_test.go",

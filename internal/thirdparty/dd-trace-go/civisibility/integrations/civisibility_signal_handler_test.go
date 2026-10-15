@@ -225,13 +225,16 @@ func TestCIVisibilitySignalHandlerKeepsIgnoredSignalsIgnored(t *testing.T) {
 	require.Equal(t, []os.Signal{syscall.SIGTERM}, registered)
 }
 
-// replaceSignalNotifyForTesting stands in for the registration that ddto's
-// os/signal overlay makes.
+// replaceSignalNotifyForTesting stands in for the functions that ddto's
+// os/signal overlay sets; nil stands for a build without the overlay.
 func replaceSignalNotifyForTesting(t *testing.T, notify func(chan<- os.Signal, ...os.Signal)) {
 	t.Helper()
-	original := signalNotify
-	signalNotify = notify
-	t.Cleanup(func() { signalNotify = original })
+	originalNotify, originalStop := signalNotify, signalStop
+	signalNotify, signalStop = notify, nil
+	if notify != nil {
+		signalStop = signal.Stop
+	}
+	t.Cleanup(func() { signalNotify, signalStop = originalNotify, originalStop })
 }
 
 // replaceSignalExitForTesting records the signal that would end the process.

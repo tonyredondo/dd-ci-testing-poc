@@ -622,6 +622,10 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		if signal != nil {
 			rewrittenPackages = append(rewrittenPackages, *signal)
 		}
+		if refusal, e = prepareExitHook(listed, replacements, native.Dir, add); e != nil {
+			return plan, e
+		}
+		debug.printf("exit hook installed=%t reason=%q", refusal == "", refusal)
 	}
 	plan.coverOverlay = needsCoverOverlay(dir, opts, packages, rewrittenPackages)
 	plan.File = filepath.Join(temp, "overlay.json")
