@@ -19,13 +19,16 @@ import (
 // SIGTERM that nothing handles still ends the process with that signal, as
 // under go test, after Mini has sent its events, also after a test has reset
 // SIGTERM to its default action. A signal that the test ignores stays
-// ignored, as without ddto, also after a later Notify, Stop or Reset, and
-// when the test ignored it before Mini started. With Mini's own package under coverage, the hook
+// ignored, as without ddto, also after a later Notify, Stop or Reset, when the
+// test ignored it before Mini started, and when the process started with
+// SIGINT ignored. With Mini's own package under coverage, the hook
 // leaves no counters without a package.
 func TestMiniSignalsKeepGoTestBehavior(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
-	if err := os.MkdirAll(filepath.Join(dir, "ignoredbefore"), 0o700); err != nil {
-		t.Fatal(err)
+	for _, pkg := range []string{"ignoredbefore", "inherited"} {
+		if err := os.MkdirAll(filepath.Join(dir, pkg), 0o700); err != nil {
+			t.Fatal(err)
+		}
 	}
 	writeBuildFixture(t, dir, map[string]string{"ignoredbefore/ignored_test.go": `package ignoredbefore
 
@@ -53,6 +56,33 @@ func TestSIGINT(t *testing.T) {
 	}
 	time.Sleep(200 * time.Millisecond)
 }
+`, "inherited/inherited_test.go": `package inherited
+
+import (
+	"os"
+	"os/signal"
+	"syscall"
+	"testing"
+	"time"
+)
+
+// Started with SIGINT ignored, the process keeps it ignored after Notify and
+// Stop, although signal.Ignored then reports false.
+func TestMain(m *testing.M) {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	signal.Stop(c)
+	os.Exit(m.Run())
+}
+
+func TestSIGINT(t *testing.T) {
+	if err := syscall.Kill(os.Getpid(), syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+}
+
+func TestAfter(t *testing.T) {}
 `, "sample_test.go": `package fixture_test
 
 import (
@@ -173,4 +203,38 @@ func TestTERM(t *testing.T) {
 			}
 		})
 	}
+
+	// A test binary built with -c and started with SIGINT ignored, as a
+	// background job of a non-interactive shell is.
+	t.Run("inherited-ignore", func(t *testing.T) {
+		bin := filepath.Join(t.TempDir(), "inherited.test")
+		if out, stderr, code := command(t, dir, testEnv(), driver, "test", "--runtime=mini", "-c", "-o", bin, "./inherited"); code != 0 {
+			t.Fatalf("build: %d\n%s\n%s", code, out, stderr)
+		}
+		receiver := &capture{}
+		server := newServer(http.HandlerFunc(receiver.handler))
+		defer server.Close()
+		env := testEnv("DD_CIVISIBILITY_ENABLED=parent", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_TRACE_AGENT_URL="+server.URL, "DD_API_KEY=poc-not-a-real-key")
+		out, stderr, code := command(t, filepath.Join(dir, "inherited"), env, "sh", "-c", "trap '' INT; exec \"$0\" -test.v", bin)
+		if code != 0 || !strings.Contains(out, "--- PASS: TestAfter") {
+			t.Fatalf("exit %d\n%s\n%s", code, out, stderr)
+		}
+		receiver.mu.Lock()
+		defer receiver.mu.Unlock()
+		var tests, sessions []string
+		for _, event := range receiver.events {
+			content, _ := event["content"].(map[string]any)
+			meta, _ := content["meta"].(map[string]any)
+			switch event["type"] {
+			case "test":
+				tests = append(tests, fmt.Sprint(meta["test.name"]))
+			case "test_session_end":
+				sessions = append(sessions, fmt.Sprint(meta["test.status"]))
+			}
+		}
+		sort.Strings(tests)
+		if len(receiver.failures) != 0 || !reflect.DeepEqual(tests, []string{"TestAfter", "TestSIGINT"}) || !reflect.DeepEqual(sessions, []string{"pass"}) {
+			t.Fatalf("tests %v, sessions %v, failures %v\n%s\n%s", tests, sessions, receiver.failures, out, stderr)
+		}
+	})
 }

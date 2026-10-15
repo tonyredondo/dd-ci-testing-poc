@@ -1273,7 +1273,10 @@ before. `Ignore` passes `__dd_civisibility_ignoreSignal` instead of
 keeps an ignored signal ignored after `Reset`, and for SIGINT and SIGHUP even
 after `Notify` and `Stop`, where only the operating system remembers it. Mini
 also leaves out, when it registers, the signals that the test ignored before
-Mini started. The hook keeps these sets in arrays indexed by signal number.
+Mini started, and SIGINT when the process started with it ignored, as a
+background job of a non-interactive shell does: the hook records that while
+os/signal initializes, before any `Notify` can hide it from `Ignored`. The
+hook keeps these sets in arrays indexed by signal number.
 The edits stay on their lines, so os/signal keeps its positions.
 
 `SignalHook` sets `signalNotify` and `signalStop` in

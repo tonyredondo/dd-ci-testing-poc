@@ -174,6 +174,8 @@ func enableSignal(sig int) {}
 
 func ignoreSignal(sig int) {}
 
+func signalIgnored(sig int) bool { return false }
+
 func Notify(c chan<- os.Signal, sig ...os.Signal) {}
 
 func Stop(c chan<- os.Signal) {}
@@ -254,6 +256,7 @@ func TestTransformSignalRejectsOtherShapes(t *testing.T) {
 		"no Ignore":            strings.Replace(signalSource, "func Ignore(", "func ignore(", 1),
 		"Ignore action":        strings.Replace(signalSource, "\tcancel(sig, ignoreSignal)\n", "\tcancel(sig, disableSignal)\n", 1),
 		"no ignoreSignal":      strings.Replace(signalSource, "func ignoreSignal(sig int) {}", "", 1),
+		"no signalIgnored":     strings.Replace(signalSource, "func signalIgnored(sig int) bool { return false }", "", 1),
 		"ref":                  strings.Replace(signalSource, "\tref      [numSig]int64\n", "\tref      []int64\n", 1),
 		"no process":           strings.Replace(signalSource, "func process(", "func deliver(", 1),
 		"other loop":           strings.Replace(signalSource, "range handlers.m {\n\t\tif h.want(n)", "range handlers.m {\n\t\t_ = 0\n\t\tif h.want(n)", 1),

@@ -49,8 +49,8 @@ var __dd_civisibility_signalNotify func(chan<- os.Signal, ...os.Signal)
 //go:linkname __dd_civisibility_signalStop github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations.signalStop
 var __dd_civisibility_signalStop func(chan<- os.Signal)
 
-// Mini's channel, the signals it holds and those that the test ignored, all
-// guarded by handlers' lock.
+// Mini's channel, the signals it holds and those that the process ignores
+// for good, all guarded by handlers' lock.
 var (
 	__dd_civisibility_signals chan<- os.Signal
 	__dd_civisibility_wanted  [numSig]bool
@@ -58,6 +58,12 @@ var (
 )
 
 func init() {
+	// A process that started with SIGINT ignored keeps it ignored by the
+	// operating system after a Notify and Stop, although Ignored then reports
+	// false. os/signal initializes before any code that could call Notify.
+	if n := signum(os.Interrupt); n >= 0 && n < numSig && signalIgnored(n) {
+		__dd_civisibility_ignored[n] = true
+	}
 	__dd_civisibility_signalNotify = func(c chan<- os.Signal, sig ...os.Signal) {
 		// A signal that the test ignored before Mini started can stay ignored
 		// by the operating system although Ignored reports false.
@@ -177,6 +183,7 @@ var signalHookAPI = []string{
 	"func disableSignal(int)",
 	"func signum(os.Signal) int",
 	"func ignoreSignal(int)",
+	"func signalIgnored(int) bool",
 	"const numSig",
 }
 
