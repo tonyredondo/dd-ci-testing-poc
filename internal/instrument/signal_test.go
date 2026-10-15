@@ -125,11 +125,12 @@ func TestSignalHookMatchesMiniRegistration(t *testing.T) {
 // A runtime without the variables, or with other types, builds without the
 // hook.
 func TestSignalHookRuntimeErrorRejectsOtherRuntimes(t *testing.T) {
-	const both = "package integrations\nimport \"os\"\nvar (\n\tsignalNotify func(chan<- os.Signal, ...os.Signal)\n\tsignalStop func(chan<- os.Signal)\n)\n"
+	const both = "package integrations\nimport \"os\"\nvar (\n\tsignalNotify func(chan<- os.Signal, chan<- int, ...os.Signal)\n\tsignalStop func(chan<- os.Signal)\n)\n"
 	for name, source := range map[string]string{
 		"missing":      "package integrations\nfunc other() {}\n",
 		"old function": "package integrations\nimport _ \"unsafe\"\n//go:linkname registerSignalNotify\nfunc registerSignalNotify(notify func(chan<- os.Signal, ...os.Signal)) {}\n",
 		"notify type":  strings.Replace(both, "...os.Signal", "[]os.Signal", 1),
+		"no observer":  strings.Replace(both, "chan<- int, ", "", 1),
 		"no stop":      strings.Replace(both, "\tsignalStop func(chan<- os.Signal)\n", "", 1),
 	} {
 		if err := SignalHookRuntimeError(map[string][]byte{"civisibility.go": []byte(source)}); err == nil {

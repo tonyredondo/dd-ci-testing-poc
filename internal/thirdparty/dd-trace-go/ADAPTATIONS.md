@@ -1340,6 +1340,22 @@ selected runtime declare what it uses.
 
 The SDK runtime keeps upstream behavior for signals and exits.
 
+### Debug lines for process endings
+
+We never see a project's code, so with `DD_TRACE_DEBUG=true` a test process's
+log has to say how it ended. Mini logs:
+- each test's start (`createTest`) and finish (`finalizeInstrumentedTestExecution`, with a panic's value);
+- a panic that leaves `testing.M.Run` (`isAbnormalTestingMExit`);
+- the signals it watches, and each signal that reaches it or that the test handles itself;
+- the stack that called `os.Exit`;
+- the HTTP transport of its event delivery.
+
+The os/signal hook reports a signal that reached the test's channels on a
+channel that `signalNotify` receives, without blocking. `testing.go` changes
+on its line only, so its lines stay where the stack comparison expects them.
+[CLI build diagnostics](../../../docs/cli-debug.md#why-a-test-process-ended)
+explains each line.
+
 Checks: `TestMiniSignalsKeepGoTestBehavior`, `TestMiniForcedExitKeepsEvents`,
 `TestToolchainProvidesSignalHook`, `TestSignalHookTypeChecks`,
 `TestSignalHookMatchesMiniRegistration`, `TestTransformSignalRejectsOtherShapes`,

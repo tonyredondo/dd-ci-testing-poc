@@ -208,6 +208,33 @@ entry, individual compiler/linker durations, CPU time or memory. A normal
 `go test` duration includes both building and executing tests; use `-c` for a
 build-only observation.
 
+## Why a test process ended
+
+With `DD_TRACE_DEBUG=true`, a test process's log says how it ended, so that a
+failure can be explained without the project's code. go test shows the log
+with `-v` or when the package fails.
+
+| Line | Meaning |
+| --- | --- |
+| `civisibility: test started name=<name> suite=<suite>` | A test or subtest started. |
+| `gotesting: test finished name=<name> status=<pass/fail/skip> duration=<d>` | A test ended; `panic="<value>"` follows when it panicked. The last start without a finish names the test that ran when the process ended. |
+| `instrumentTestingM: finished with exit code: <n>` | testing.M.Run returned; the process exits normally with that status. |
+| `instrumentTestingM: a panic leaves testing.M.Run and will end the process; closing CI Visibility first` | A panic escaped the tests; it ends the process after CI Visibility closes. |
+| `civisibility: signal handler registered for [<signals>], ...; ignored by the process: [<signals>]` | Which signals Mini watches. `civisibility: no signal handler: ...` says why it watches none. |
+| `civisibility: signal "<name>" reached a channel of the test; the test handles it and CI Visibility keeps running` | The test received the signal itself, for example a graceful-shutdown test; the process goes on. |
+| `civisibility: received signal "<name>", which no channel of the test handles and which ends the process: closing CI Visibility` | A signal that ends the process, such as a CI job's cancellation. |
+| `civisibility: CI Visibility closed; ending the process with signal "<name>", as without CI Visibility` | Next, go test reports `signal: <name>`. On Windows the process exits with status 1 instead. |
+| `civisibility: os.Exit before CI Visibility closed; closing it. os.Exit was called from:` | Something called `os.Exit`, or `log.Fatal`, during the tests. The stack that follows shows the status, as in `os.Exit(0x3)`, and the frame below it names the caller. |
+| `civisibility: closed CI Visibility for os.Exit duration=<d>` | The events were sent before the process exited. |
+| `ERROR: civisibility: closing CI Visibility in os.Exit did not finish within 1m0s; exiting without it` | The shutdown blocked, and the process exited without it. |
+| `test-cycle: delivery uses <transport> endpoint=<url> agentless=<bool>` | Which HTTP transport sends the events: Mini's own, a clone of the client's, or a client's custom RoundTripper. |
+
+A process that ends without any of these lines was ended by something that
+runs no Go code first: a crash such as a panic in another goroutine or a fatal
+runtime error, testing's `-timeout` panic, which prints its own stack, or a
+signal that cannot be caught, such as SIGKILL. The test lines still show which
+test was running.
+
 ## Requests ahead
 
 ddto's Git worker requests the settings, known tests, skippable tests and test

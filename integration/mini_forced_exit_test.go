@@ -83,10 +83,18 @@ func TestExit(t *testing.T) {
 			receiver := &capture{}
 			server := newServer(http.HandlerFunc(receiver.handler))
 			defer server.Close()
-			env := testEnv("DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_TRACE_AGENT_URL="+server.URL, "DD_API_KEY=poc-not-a-real-key",
+			env := testEnv("DD_TRACE_DEBUG=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_TRACE_AGENT_URL="+server.URL, "DD_API_KEY=poc-not-a-real-key",
 				"FIXTURE_EXIT="+tc.exit, fmt.Sprintf("DD_CIVISIBILITY_DEFERRED_DELIVERY=%t", tc.deferred))
 			out, stderr, code := command(t, dir, env, driver, "test", "--runtime=mini", "-count=1", "-v", ".")
 			ran := tc.tests != nil
+			// The debug log names the call that ended the process.
+			if ran && tc.exit != "goroutine" {
+				for _, line := range []string{"os.Exit before CI Visibility closed; closing it. os.Exit was called from:", "sample_test.go:", "closed CI Visibility for os.Exit duration=", "gotesting: test finished name=TestFirst status=pass", "civisibility: test started name=TestExit"} {
+					if !strings.Contains(out+stderr, line) {
+						t.Errorf("the debug log lacks %q", line)
+					}
+				}
+			}
 			if code != 1 || strings.Contains(out, "--- PASS: TestFirst") != ran || strings.Contains(out+stderr, "exit hook invoked") || strings.Contains(out+stderr, "fatal error") {
 				t.Fatalf("exit %d\n%s\n%s", code, out, stderr)
 			}

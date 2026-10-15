@@ -39,9 +39,9 @@ func TestFirst(t *testing.T) {}
 	receiver := &capture{}
 	server := newServer(http.HandlerFunc(receiver.handler))
 	defer server.Close()
-	env := testEnv("DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_TRACE_AGENT_URL="+server.URL, "DD_API_KEY=poc-not-a-real-key")
+	env := testEnv("DD_TRACE_DEBUG=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_TRACE_AGENT_URL="+server.URL, "DD_API_KEY=poc-not-a-real-key")
 	out, stderr, code := command(t, dir, env, driver, "test", "--runtime=mini", "-count=1", "-v", ".")
-	if code != 0 || strings.Contains(out+stderr, "unexpected request") {
+	if code != 0 || strings.Contains(out+stderr, "unexpected request") || !strings.Contains(out+stderr, "test-cycle: delivery uses Mini's own default transport") {
 		t.Fatalf("exit %d\n%s\n%s", code, out, stderr)
 	}
 	receiver.mu.Lock()

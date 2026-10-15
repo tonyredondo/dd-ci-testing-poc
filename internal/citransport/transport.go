@@ -83,8 +83,19 @@ func New(c Config) (*Transport, error) {
 	// This client owns standard transports even in ordinary delivery mode.
 	// A goleak checkpoint must not close a caller's unrelated HTTP connections.
 	transport := copyClient.Transport
+	origin := "the client's custom RoundTripper"
 	if transport == nil {
-		transport = defaultTransport()
+		transport, origin = defaultTransport(), "Mini's own default transport"
+	} else if _, ok := transport.(*http.Transport); ok {
+		origin = "a clone of the client's transport"
+	}
+	if log.DebugEnabled() {
+		// The query can carry credentials; the scheme, host and path cannot.
+		endpoint := ""
+		if u != nil {
+			endpoint = u.Scheme + "://" + u.Host + u.Path
+		}
+		log.Debug("test-cycle: delivery uses %s endpoint=%s agentless=%t", origin, endpoint, c.Agentless)
 	}
 	if standard, ok := transport.(*http.Transport); ok {
 		clone := standard.Clone()

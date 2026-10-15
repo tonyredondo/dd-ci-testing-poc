@@ -160,20 +160,28 @@ func TestTERM(t *testing.T) {
 		output    string
 		tests     []string
 		pkg       string
+		logs      []string // debug lines that explain what happened
 	}{
-		{"handled", "^(TestHandlesTERM|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestHandlesTERM"}, ""},
-		{"unhandled", "^(TestAfter|TestTERM)$", nil, 1, "signal: terminated", []string{"TestAfter"}, ""},
-		{"reset", "^(TestResets|TestAfter|TestTERM)$", nil, 1, "signal: terminated", []string{"TestAfter", "TestResets"}, ""},
-		{"coverage", "^(TestHandlesTERM|TestAfter)$", []string{coverMini}, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestHandlesTERM"}, ""},
-		{"ignore-reset", "^(TestIgnoreThenReset|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestIgnoreThenReset"}, ""},
-		{"ignore-notify-stop-reset", "^(TestIgnoreNotifyStopReset|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestIgnoreNotifyStopReset"}, ""},
-		{"ignored-before-mini", "^TestSIGINT$", nil, 0, "--- PASS: TestSIGINT", []string{"TestSIGINT"}, "./ignoredbefore"},
+		{"handled", "^(TestHandlesTERM|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestHandlesTERM"}, "", []string{
+			`signal handler registered for [interrupt terminated]`,
+			`signal "terminated" reached a channel of the test; the test handles it and CI Visibility keeps running`,
+			`gotesting: test finished name=TestHandlesTERM status=pass`,
+		}},
+		{"unhandled", "^(TestAfter|TestTERM)$", nil, 1, "signal: terminated", []string{"TestAfter"}, "", []string{
+			`received signal "terminated", which no channel of the test handles and which ends the process: closing CI Visibility`,
+			`CI Visibility closed; ending the process with signal "terminated"`,
+		}},
+		{"reset", "^(TestResets|TestAfter|TestTERM)$", nil, 1, "signal: terminated", []string{"TestAfter", "TestResets"}, "", nil},
+		{"coverage", "^(TestHandlesTERM|TestAfter)$", []string{coverMini}, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestHandlesTERM"}, "", nil},
+		{"ignore-reset", "^(TestIgnoreThenReset|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestIgnoreThenReset"}, "", nil},
+		{"ignore-notify-stop-reset", "^(TestIgnoreNotifyStopReset|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestIgnoreNotifyStopReset"}, "", nil},
+		{"ignored-before-mini", "^TestSIGINT$", nil, 0, "--- PASS: TestSIGINT", []string{"TestSIGINT"}, "./ignoredbefore", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			receiver := &capture{}
 			server := newServer(http.HandlerFunc(receiver.handler))
 			defer server.Close()
-			env := testEnv("DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_TRACE_AGENT_URL="+server.URL, "DD_API_KEY=poc-not-a-real-key")
+			env := testEnv("DD_TRACE_DEBUG=true", "DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_TRACE_AGENT_URL="+server.URL, "DD_API_KEY=poc-not-a-real-key")
 			pkg := tc.pkg
 			if pkg == "" {
 				pkg = "."
@@ -182,6 +190,11 @@ func TestTERM(t *testing.T) {
 			out, stderr, code := command(t, dir, env, driver, append(args, pkg)...)
 			if code != tc.code || !strings.Contains(out, tc.output) || strings.Contains(out+stderr, "bad pkgID") {
 				t.Fatalf("exit %d, want %d and %q\n%s\n%s", code, tc.code, tc.output, out, stderr)
+			}
+			for _, line := range tc.logs {
+				if !strings.Contains(out+stderr, line) {
+					t.Errorf("the debug log lacks %q", line)
+				}
 			}
 			receiver.mu.Lock()
 			defer receiver.mu.Unlock()

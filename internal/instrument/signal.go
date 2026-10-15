@@ -44,7 +44,7 @@ import (
 )
 
 //go:linkname __dd_civisibility_signalNotify github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations.signalNotify
-var __dd_civisibility_signalNotify func(chan<- os.Signal, ...os.Signal)
+var __dd_civisibility_signalNotify func(chan<- os.Signal, chan<- int, ...os.Signal)
 
 //go:linkname __dd_civisibility_signalStop github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations.signalStop
 var __dd_civisibility_signalStop func(chan<- os.Signal)
@@ -52,9 +52,10 @@ var __dd_civisibility_signalStop func(chan<- os.Signal)
 // Mini's channel, the signals it holds and those that the process ignores
 // for good, all guarded by handlers' lock.
 var (
-	__dd_civisibility_signals chan<- os.Signal
-	__dd_civisibility_wanted  [numSig]bool
-	__dd_civisibility_ignored [numSig]bool
+	__dd_civisibility_signals  chan<- os.Signal
+	__dd_civisibility_observed chan<- int // signals that reached other channels, for Mini's debug log
+	__dd_civisibility_wanted   [numSig]bool
+	__dd_civisibility_ignored  [numSig]bool
 )
 
 func init() {
@@ -64,7 +65,7 @@ func init() {
 	if n := signum(os.Interrupt); n >= 0 && n < numSig && signalIgnored(n) {
 		__dd_civisibility_ignored[n] = true
 	}
-	__dd_civisibility_signalNotify = func(c chan<- os.Signal, sig ...os.Signal) {
+	__dd_civisibility_signalNotify = func(c chan<- os.Signal, observed chan<- int, sig ...os.Signal) {
 		// A signal that the test ignored before Mini started can stay ignored
 		// by the operating system although Ignored reports false.
 		var keep []os.Signal
@@ -84,7 +85,7 @@ func init() {
 		// __dd_civisibility_hold relies on once c is Mini's.
 		Notify(c, keep...)
 		handlers.Lock()
-		__dd_civisibility_signals, __dd_civisibility_wanted = c, wanted
+		__dd_civisibility_signals, __dd_civisibility_observed, __dd_civisibility_wanted = c, observed, wanted
 		// A Reset after Notify removed c without knowing it was Mini's.
 		for n := range wanted {
 			if wanted[n] {
@@ -96,7 +97,7 @@ func init() {
 	__dd_civisibility_signalStop = func(c chan<- os.Signal) {
 		handlers.Lock()
 		if __dd_civisibility_signals == c {
-			__dd_civisibility_signals, __dd_civisibility_wanted = nil, [numSig]bool{}
+			__dd_civisibility_signals, __dd_civisibility_observed, __dd_civisibility_wanted = nil, nil, [numSig]bool{}
 		}
 		handlers.Unlock()
 		Stop(c)
@@ -105,21 +106,25 @@ func init() {
 
 // __dd_civisibility_signalWantedElsewhere reports whether c is Mini's channel
 // and another channel wants signal n. process calls it holding handlers' lock.
+// Mini learns, without blocking, of a signal that reached other channels.
 func __dd_civisibility_signalWantedElsewhere(c chan<- os.Signal, n int) bool {
 	if c != __dd_civisibility_signals {
 		return false
 	}
+	elsewhere := false
 	for other, h := range handlers.m {
-		if other != c && h.want(n) {
-			return true
-		}
+		elsewhere = elsewhere || other != c && h.want(n)
 	}
 	for _, d := range handlers.stopping {
-		if d.c != c && d.h.want(n) {
-			return true
+		elsewhere = elsewhere || d.c != c && d.h.want(n)
+	}
+	if elsewhere {
+		select {
+		case __dd_civisibility_observed <- n:
+		default:
 		}
 	}
-	return false
+	return elsewhere
 }
 
 // __dd_civisibility_hold makes Mini's channel want signal n, as Notify does,
@@ -190,7 +195,7 @@ var signalHookAPI = []string{
 // signalRuntimeAPI is what SignalHook's linknames name in Mini's integrations
 // package, rendered as sourceDeclarations renders it.
 var signalRuntimeAPI = []string{
-	"var signalNotify func(chan<- os.Signal, ...os.Signal)",
+	"var signalNotify func(chan<- os.Signal, chan<- int, ...os.Signal)",
 	"var signalStop func(chan<- os.Signal)",
 }
 

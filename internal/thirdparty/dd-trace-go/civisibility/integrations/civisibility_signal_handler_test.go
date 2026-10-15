@@ -230,8 +230,9 @@ func TestCIVisibilitySignalHandlerKeepsIgnoredSignalsIgnored(t *testing.T) {
 func replaceSignalNotifyForTesting(t *testing.T, notify func(chan<- os.Signal, ...os.Signal)) {
 	t.Helper()
 	originalNotify, originalStop := signalNotify, signalStop
-	signalNotify, signalStop = notify, nil
+	signalNotify, signalStop = nil, nil
 	if notify != nil {
+		signalNotify = func(c chan<- os.Signal, _ chan<- int, sig ...os.Signal) { notify(c, sig...) }
 		signalStop = signal.Stop
 	}
 	t.Cleanup(func() { signalNotify, signalStop = originalNotify, originalStop })
