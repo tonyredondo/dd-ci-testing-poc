@@ -254,7 +254,7 @@ with `-v` or when the package fails.
 | `civisibility: failed <n> running tests before the crash` and `civisibility: closed CI Visibility before the crash duration=<d>` | The tests that the crash interrupted were reported as failed, and the events were sent; the crash then ends the process as without Mini. |
 | `civisibility: os.Exit while the process crashes; the crash ends the process` | The tests finished while Mini sent before a crash; the crash keeps its exit status. |
 | `civisibility: joined ddto's test session id=<id> record=<file> crash_output=<file>` and `civisibility: reporting in ddto's test session id=<id>` | The process reports in the session of ddto's command, and where its record and crash output are; `WARN: civisibility: ... reports its own session` says why it could not. |
-| `civisibility: test session record <module/module_end/suite/suite_end> id=<id> name=<name>` | A module or suite started or ended, as ddto would recreate it if the process crashed. |
+| `civisibility: test session record lines=<n> failed=<n> first_error=<error>` | Once CI Visibility closes: how many module and suite starts and ends, and session closes, the process recorded for ddto, which recreates the containers left open if the process crashes, and whether a write failed. |
 | `civisibility: failed the test name=<name> suite=<suite> for the crash (<timeout/panic>) final_status=<status>` | A test that the crash interrupted, reported as failed. |
 | `civisibility: recorded the close of this process in ddto's test session exit_code=<n> tags=<n>` | The process closed CI Visibility and left its session tags for ddto. |
 

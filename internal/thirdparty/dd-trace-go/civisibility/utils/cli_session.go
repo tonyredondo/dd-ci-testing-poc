@@ -68,10 +68,16 @@ func WriteCLISession(dir string, session CLISession) error {
 	return WriteCLIGitStateFile(dir, CLISessionFile, session)
 }
 
-// CLISessionRecord appends to this process's record.
+// CLISessionRecord appends to this process's record. Its callers hold the
+// locks of the modules, suites and session that they record, so it logs
+// nothing, since a client can replace the logger: Stats reports to a caller
+// that holds none.
 type CLISessionRecord struct {
-	mu   sync.Mutex
-	file *os.File
+	mu       sync.Mutex
+	file     *os.File
+	lines    int
+	failures int
+	firstErr error
 }
 
 var (
@@ -142,19 +148,35 @@ func (r *CLISessionRecord) Append(line CLISessionRecordLine) {
 		return
 	}
 	data, err := json.Marshal(line)
-	if err != nil {
-		log.Debug("civisibility: test session record line not written: %s", err.Error())
-		return
-	}
-	// The logger, which a client can replace, runs after the lock.
 	r.mu.Lock()
-	_, err = r.file.Write(append(data, '\n'))
-	r.mu.Unlock()
+	defer r.mu.Unlock()
+	if err == nil {
+		_, err = r.file.Write(append(data, '\n'))
+	}
 	if err != nil {
-		log.Debug("civisibility: test session record line not written: %s", err.Error())
+		r.failures++
+		if r.firstErr == nil {
+			r.firstErr = err
+		}
 		return
 	}
-	log.Debug("civisibility: test session record %s id=%d name=%q", line.Kind, line.ID, line.Name)
+	r.lines++
+}
+
+// NewCLISessionRecordForTesting returns a record that appends to file.
+func NewCLISessionRecordForTesting(file *os.File) *CLISessionRecord {
+	return &CLISessionRecord{file: file}
+}
+
+// Stats returns how many lines the record holds, how many it could not write,
+// and the first error.
+func (r *CLISessionRecord) Stats() (lines, failures int, first error) {
+	if r == nil {
+		return 0, 0, nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.lines, r.failures, r.firstErr
 }
 
 // ReadCLISessionRecord reads a process's record. A last line that the

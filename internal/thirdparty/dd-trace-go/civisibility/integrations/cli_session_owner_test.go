@@ -12,11 +12,13 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
 )
 
@@ -306,5 +308,57 @@ func TestFinishCLISessionBoundsGit(t *testing.T) {
 	}
 	if elapsed := time.Since(started); elapsed > 15*time.Second {
 		t.Fatalf("the session waited %s for git", elapsed)
+	}
+}
+
+// reentrantLogger runs onLog for each message, as a client's logger can.
+type reentrantLogger struct{ onLog func() }
+
+func (l reentrantLogger) Log(string) { l.onLog() }
+
+// A process in ddto's test session logs nothing while it holds a module's,
+// suite's or session's lock: a client's logger that calls back into them,
+// here closing the suite on every message, does not deadlock.
+func TestCLISessionLogsOutsideLifecycleLocks(t *testing.T) {
+	resetCIVisibilityBootstrapStateForTesting()
+	disableAdditionalFeaturesForBootstrapTest()
+	t.Cleanup(restoreCIVisibilityBootstrapForTesting)
+	initializeCIVisibilityLifecycleForTesting()
+	level := log.GetLevel()
+	log.SetLevel(log.LevelDebug)
+	t.Cleanup(func() { log.SetLevel(level) })
+
+	file, err := os.Create(filepath.Join(t.TempDir(), "process-a.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = file.Close() })
+	record := utils.NewCLISessionRecordForTesting(file)
+	session := CreateTestSession().(*tslvTestSession)
+	session.cliRecord, session.cliTags = record, map[string]any{}
+	var suite atomic.Pointer[TestSuite]
+	t.Cleanup(log.UseLogger(reentrantLogger{onLog: func() {
+		if s := suite.Load(); s != nil {
+			(*s).Close()
+		}
+	}}))
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		module := session.GetOrCreateModule("m")
+		s := module.GetOrCreateSuite("s")
+		suite.Store(&s)
+		s.CreateTest("T").Close(ResultStatusPass)
+		s.Close()
+		module.Close()
+		session.Close(0)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("a log line under a lifecycle lock deadlocked with the client's logger")
+	}
+	if lines, failures, _ := record.Stats(); lines != 5 || failures != 0 {
+		t.Fatalf("record lines %d, failures %d; want module, suite, their ends and the close", lines, failures)
 	}
 }

@@ -557,6 +557,10 @@ func exitCiVisibility(stopSignalHandler bool) {
 	}
 	if debug {
 		log.Debug("civisibility: close actions finished duration=%s actions=%d", time.Since(stageStarted), len(actions))
+		if _, record := utils.HandedCLISession(); record != nil {
+			lines, failures, first := record.Stats()
+			log.Debug("civisibility: test session record lines=%d failed=%d first_error=%v", lines, failures, first)
+		}
 	}
 }
 

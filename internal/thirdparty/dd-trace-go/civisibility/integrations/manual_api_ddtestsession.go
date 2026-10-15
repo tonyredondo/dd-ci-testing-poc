@@ -187,6 +187,13 @@ func (t *tslvTestSession) WorkingDirectory() string { return t.workingDirectory 
 // Close closes the test session with the given exit code.
 func (t *tslvTestSession) Close(exitCode int, options ...TestSessionCloseOption) {
 	alreadyClosed := false
+	recordedTags := -1
+	// After unlocking: a client can replace the logger.
+	defer func() {
+		if recordedTags >= 0 {
+			log.Debug("civisibility: recorded the close of this process in ddto's test session exit_code=%d tags=%d", exitCode, recordedTags)
+		}
+	}()
 	if log.DebugEnabled() {
 		started := time.Now()
 		log.Debug("civisibility: session close started exit_code=%d", exitCode)
@@ -218,7 +225,7 @@ func (t *tslvTestSession) Close(exitCode int, options ...TestSessionCloseOption)
 	t.modules = map[string]TestModule{}
 
 	if t.cliRecord != nil {
-		t.closeInCLISession(exitCode)
+		recordedTags = t.closeInCLISession(exitCode)
 		t.reportFinished()
 		tracer.Flush()
 		return
@@ -299,9 +306,9 @@ func (t *tslvTestSession) GetOrCreateModule(name string, options ...TestModuleSt
 
 // closeInCLISession closes a session that ddto owns: it records, for ddto's
 // session event, the exit code and the session tags that this process set,
-// including those that the CI tags carry, as Close does. The session event
-// itself is ddto's.
-func (t *tslvTestSession) closeInCLISession(exitCode int) {
+// including those that the CI tags carry, as Close does, and returns how many
+// tags it recorded. The session event itself is ddto's.
+func (t *tslvTestSession) closeInCLISession(exitCode int) int {
 	t.cliTagsMu.Lock()
 	tags := make(map[string]any, len(t.cliTags))
 	for key, value := range t.cliTags {
@@ -317,5 +324,5 @@ func (t *tslvTestSession) closeInCLISession(exitCode int) {
 	}
 	t.cliRecord.Append(utils.CLISessionRecordLine{Kind: "closed", ExitCode: exitCode, Tags: tags})
 	t.closed = true
-	log.Debug("civisibility: recorded the close of this process in ddto's test session exit_code=%d tags=%d", exitCode, len(tags))
+	return len(tags)
 }
