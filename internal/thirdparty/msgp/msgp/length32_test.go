@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"strconv"
 	"testing"
 )
+
+// stream reads b without io.Seeker, so the reader cannot skip past its end.
+func stream(b []byte) *Reader { return NewReader(struct{ io.Reader }{bytes.NewReader(b)}) }
 
 // Objects whose 32-bit length an int cannot hold on 32-bit platforms read
 // as short bytes, as on 64-bit platforms, since no slice holds them, and
@@ -40,14 +44,33 @@ func TestLengthsBeyondInt(t *testing.T) {
 			}
 		}
 		for _, b := range [][]byte{bin, ext, object} {
-			// Without io.Seeker, the reader cannot skip past the end.
-			reader := func() *Reader { return NewReader(struct{ io.Reader }{bytes.NewReader(b)}) }
-			if err := reader().Skip(); err == nil {
+			if err := stream(b).Skip(); err == nil {
 				t.Errorf("Reader.Skip of %x: no error", b)
 			}
-			if _, err := reader().CopyNext(io.Discard); err == nil {
+			if _, err := stream(b).CopyNext(io.Discard); err == nil {
 				t.Errorf("Reader.CopyNext of %x: no error", b)
 			}
+		}
+		// On 64-bit platforms, Raw would allocate the object's size.
+		if strconv.IntSize == 32 {
+			var raw Raw
+			if err := raw.DecodeMsg(stream(bin)); !errors.Is(err, ErrLimitExceeded) {
+				t.Errorf("Raw.DecodeMsg of length %d: %v, want ErrLimitExceeded", length, err)
+			}
+		}
+	}
+}
+
+// CopyNext streams an object, or a map's elements, beyond math.MaxInt32 on
+// any platform: it copies what the stream holds until its end.
+func TestCopyNextStreamsLargeObjects(t *testing.T) {
+	for name, b := range map[string][]byte{
+		"bin": append([]byte{mbin32, 0x80, 0, 0, 0}, make([]byte, 10)...),
+		"map": {mmap32, 0x40, 0, 0, 0, 0x01, 0x02},
+	} {
+		n, err := stream(b).CopyNext(io.Discard)
+		if n != int64(len(b)) || err == nil {
+			t.Errorf("%s: copied %d of %d bytes, error %v", name, n, len(b), err)
 		}
 	}
 }

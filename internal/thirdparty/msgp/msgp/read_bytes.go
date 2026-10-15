@@ -130,6 +130,10 @@ func appendNext(f *Reader, d *[]byte) error {
 	if err != nil {
 		return err
 	}
+	// On 32-bit platforms, an object can be too large for a slice.
+	if amt > math.MaxInt {
+		return ErrLimitExceeded
+	}
 	var i int
 	*d, i = ensure(*d, int(amt))
 	_, err = f.R.ReadFull((*d)[i:])
@@ -1368,10 +1372,9 @@ func getSize(b []byte) (uintptr, uintptr, error) {
 	case extra16:
 		return uintptr(size) + uintptr(big.Uint16(b[1:])), 0, nil
 	case extra32:
-		// On 32-bit platforms, uintptr and int cannot hold every 32-bit
-		// length, and b cannot be longer than math.MaxInt.
+		// On 32-bit platforms, the size can exceed uintptr, and then b.
 		sz := uint64(size) + uint64(big.Uint32(b[1:]))
-		if sz > math.MaxInt {
+		if sz > uint64(^uintptr(0)) {
 			return 0, 0, ErrShortBytes
 		}
 		return uintptr(sz), 0, nil
@@ -1380,7 +1383,7 @@ func getSize(b []byte) (uintptr, uintptr, error) {
 	case map32v:
 		// Each element takes at least one byte of b.
 		o := 2 * uint64(big.Uint32(b[1:]))
-		if o > math.MaxInt {
+		if o > uint64(^uintptr(0)) {
 			return 0, 0, ErrShortBytes
 		}
 		return uintptr(size), uintptr(o), nil
