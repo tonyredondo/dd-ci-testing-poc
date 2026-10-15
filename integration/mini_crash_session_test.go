@@ -238,12 +238,17 @@ func TestMiniTestSessionSpansTheCommand(t *testing.T) {
 	}
 	t.Run("one session", func(t *testing.T) {
 		started := time.Now()
-		got, output, code := run(t, []string{"FIXTURE_FAIL=beta"}, "-count=1", "./alpha", "./beta")
+		got, output, code := run(t, []string{"FIXTURE_FAIL=beta"}, "-count=1", "-ldflags=-X=main.private=private-flag-value", "./alpha", "./beta")
 		elapsed := time.Since(started)
+		// ddto's build diagnostics never show argument values, also with
+		// its session.
+		if logs := cliDebugLines(output); !strings.Contains(logs, "test session owned=true") || strings.Contains(logs, "private-flag-value") || strings.Contains(logs, "ldflags") {
+			t.Errorf("session debug lines expose arguments:\n%s", logs)
+		}
 		if code != 1 || !reflect.DeepEqual(got.tests, []string{"TestAlpha pass", "TestBeta fail"}) || !reflect.DeepEqual(got.sessions, []string{"fail"}) || got.modules != 2 || len(got.sessionIDs) != 1 {
 			t.Fatalf("exit %d, tests %v, sessions %v, modules %d, session IDs %v\n%s", code, got.tests, got.sessions, got.modules, got.sessionIDs, output)
 		}
-		want := filepath.Base(driver) + " test --runtime=mini -count=1 ./alpha ./beta"
+		want := filepath.Base(driver) + " test --runtime=mini -count=1 -ldflags=-X=main.private=private-flag-value ./alpha ./beta"
 		if len(got.commands) != 1 || !got.commands[want] {
 			t.Fatalf("commands %v, want %q", got.commands, want)
 		}

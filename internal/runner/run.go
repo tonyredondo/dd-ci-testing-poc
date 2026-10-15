@@ -875,7 +875,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 	session, refusal := startTestSession(cli, opts, plan, dir, begin, stderr)
 	debug.printf("test session owned=%t reason=%q", session != nil, refusal)
 	if session != nil {
-		debug.printf("test session id=%d dir=%s command=%q", session.session.ID, session.dir, session.session.Command)
+		debug.printf("test session id=%d dir=%s", session.session.ID, session.dir)
 		env = append(env, session.handoff())
 		if gitWorker == nil {
 			// The session reports the test processes' runtime version.

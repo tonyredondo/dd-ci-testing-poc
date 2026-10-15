@@ -153,27 +153,33 @@ func (t *tslvTest) Close(status TestResultStatus, options ...TestCloseOption) {
 // first, in one critical section with Close: the test then has either its
 // own outcome or the crash's, never a mix. It reports whether it failed it.
 func (t *tslvTest) failForCrash(errType, message, stack string) bool {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	if _, open := openTests.Load(t); !open || t.ended || t.closed {
-		return false
+	failed, final := func() (bool, string) {
+		t.mutex.Lock()
+		defer t.mutex.Unlock()
+		if _, open := openTests.Load(t); !open || t.ended || t.closed {
+			return false, ""
+		}
+		final := constants.TestStatusFail
+		if t.getContextValue(constants.TestIsQuarantined) == "true" || t.getContextValue(constants.TestIsDisabled) == "true" {
+			final = constants.TestStatusSkip
+		}
+		// The test's own SetTag and SetError do not take t.mutex: the span sets
+		// these tags as it finishes, so theirs land before and are replaced, or
+		// after and are ignored.
+		tags := map[string]any{ext.Error: true, ext.ErrorType: errType, ext.ErrorMsg: truncateCIVisibilityTagValue(message), constants.TestFinalStatus: final}
+		if stack != "" {
+			tags[ext.ErrorStack] = truncateCIVisibilityTagValue(stack)
+		}
+		t.Suite().SetTag(ext.Error, true)
+		t.Suite().Module().SetTag(ext.Error, true)
+		t.closeLocked(ResultStatusFail, func(o *tslvTestCloseOptions) { o.finishTags = tags })
+		return true, final
+	}()
+	if failed {
+		// The logger, which a client can replace, runs after the lock.
+		log.Debug("civisibility: failed the test name=%s suite=%s for the crash (%s) final_status=%s", t.name, t.suite.name, errType, final)
 	}
-	final := constants.TestStatusFail
-	if t.getContextValue(constants.TestIsQuarantined) == "true" || t.getContextValue(constants.TestIsDisabled) == "true" {
-		final = constants.TestStatusSkip
-	}
-	// The test's own SetTag and SetError do not take t.mutex: the span sets
-	// these tags as it finishes, so theirs land before and are replaced, or
-	// after and are ignored.
-	tags := map[string]any{ext.Error: true, ext.ErrorType: errType, ext.ErrorMsg: truncateCIVisibilityTagValue(message), constants.TestFinalStatus: final}
-	if stack != "" {
-		tags[ext.ErrorStack] = truncateCIVisibilityTagValue(stack)
-	}
-	t.Suite().SetTag(ext.Error, true)
-	t.Suite().Module().SetTag(ext.Error, true)
-	t.closeLocked(ResultStatusFail, func(o *tslvTestCloseOptions) { o.finishTags = tags })
-	log.Debug("civisibility: failed the test name=%s suite=%s for the crash (%s) final_status=%s", t.name, t.suite.name, errType, final)
-	return true
+	return failed
 }
 
 // closeLocked is Close, with t.mutex held.

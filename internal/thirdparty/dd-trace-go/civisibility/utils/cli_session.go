@@ -116,7 +116,7 @@ func HandedCLISession() (*CLISession, *CLISessionRecord) {
 		if stem != "" {
 			crash = stem + ".crash"
 		}
-		log.Debug("civisibility: joined ddto's test session id=%d command=%q record=%s crash_output=%s", session.ID, session.Command, file.Name(), crash)
+		log.Debug("civisibility: joined ddto's test session id=%d record=%s crash_output=%s", session.ID, file.Name(), crash)
 	})
 	return cliSession, cliSessionRecord
 }
@@ -146,9 +146,11 @@ func (r *CLISessionRecord) Append(line CLISessionRecordLine) {
 		log.Debug("civisibility: test session record line not written: %s", err.Error())
 		return
 	}
+	// The logger, which a client can replace, runs after the lock.
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, err := r.file.Write(append(data, '\n')); err != nil {
+	_, err = r.file.Write(append(data, '\n'))
+	r.mu.Unlock()
+	if err != nil {
 		log.Debug("civisibility: test session record line not written: %s", err.Error())
 		return
 	}
