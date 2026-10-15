@@ -23,7 +23,5 @@ func exitBySignal(sig os.Signal) {
 	log.Flush()
 	if err := syscall.Kill(syscall.Getpid(), s); err != nil {
 		log.Error("civisibility: could not end the process with signal %q: %s", sig, err)
-		return
 	}
-	log.Debug("civisibility: signal %q did not end the process: a channel of the test registered for it in the meantime", sig)
 }

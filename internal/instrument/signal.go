@@ -44,7 +44,7 @@ import (
 )
 
 //go:linkname __dd_civisibility_signalNotify github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations.signalNotify
-var __dd_civisibility_signalNotify func(chan<- os.Signal, chan<- int, ...os.Signal)
+var __dd_civisibility_signalNotify func(chan<- os.Signal, chan<- int, ...os.Signal) []os.Signal
 
 //go:linkname __dd_civisibility_signalStop github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations.signalStop
 var __dd_civisibility_signalStop func(chan<- os.Signal)
@@ -65,7 +65,7 @@ func init() {
 	if n := signum(os.Interrupt); n >= 0 && n < numSig && signalIgnored(n) {
 		__dd_civisibility_ignored[n] = true
 	}
-	__dd_civisibility_signalNotify = func(c chan<- os.Signal, observed chan<- int, sig ...os.Signal) {
+	__dd_civisibility_signalNotify = func(c chan<- os.Signal, observed chan<- int, sig ...os.Signal) []os.Signal {
 		// A signal that the test ignored before Mini started can stay ignored
 		// by the operating system although Ignored reports false.
 		var keep []os.Signal
@@ -79,7 +79,7 @@ func init() {
 		}
 		handlers.Unlock()
 		if len(keep) == 0 {
-			return
+			return nil
 		}
 		// Notify creates handlers.m and starts the signal loop, which
 		// __dd_civisibility_hold relies on once c is Mini's.
@@ -93,6 +93,7 @@ func init() {
 			}
 		}
 		handlers.Unlock()
+		return keep
 	}
 	__dd_civisibility_signalStop = func(c chan<- os.Signal) {
 		handlers.Lock()
@@ -106,7 +107,8 @@ func init() {
 
 // __dd_civisibility_signalWantedElsewhere reports whether c is Mini's channel
 // and another channel wants signal n. process calls it holding handlers' lock.
-// Mini learns, without blocking, of a signal that reached other channels.
+// Mini learns, without blocking, of a signal that arrived while other
+// channels were registered for it, whether or not their buffers took it.
 func __dd_civisibility_signalWantedElsewhere(c chan<- os.Signal, n int) bool {
 	if c != __dd_civisibility_signals {
 		return false
@@ -195,7 +197,7 @@ var signalHookAPI = []string{
 // signalRuntimeAPI is what SignalHook's linknames name in Mini's integrations
 // package, rendered as sourceDeclarations renders it.
 var signalRuntimeAPI = []string{
-	"var signalNotify func(chan<- os.Signal, chan<- int, ...os.Signal)",
+	"var signalNotify func(chan<- os.Signal, chan<- int, ...os.Signal) []os.Signal",
 	"var signalStop func(chan<- os.Signal)",
 }
 

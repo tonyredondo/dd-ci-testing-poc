@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"regexp"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -69,12 +70,13 @@ var (
 	// signalNotify registers a channel that receives a signal only when no
 	// other channel wants it, that is, when the signal would otherwise end the
 	// process; signal.Reset registers it again. The second channel learns,
-	// without blocking os/signal, of the signals that other channels received.
-	// signalStop stops it. ddto's os/signal overlay sets both while os/signal
+	// without blocking os/signal, of the signals that arrived while another
+	// channel was registered for them. It returns the signals it registered,
+	// leaving out those that the process ignores for good. signalStop stops it. ddto's os/signal overlay sets both while os/signal
 	// initializes, before this package's variables, which therefore have no
 	// initializer. Without the overlay they stay nil and CI Visibility handles
 	// no signal.
-	signalNotify func(chan<- os.Signal, chan<- int, ...os.Signal)
+	signalNotify func(chan<- os.Signal, chan<- int, ...os.Signal) []os.Signal
 	signalStop   func(chan<- os.Signal)
 
 	// closeActions holds CI visibility close actions.
@@ -203,7 +205,7 @@ func (handler *ciVisibilitySignalHandler) run() {
 		select {
 		case n := <-handler.observed:
 			if log.DebugEnabled() {
-				log.Debug("civisibility: signal %q reached a channel of the test; the test handles it and CI Visibility keeps running", syscall.Signal(n).String())
+				log.Debug("civisibility: signal %q arrived while a channel of the test is registered for it; the signal does not end the process, and CI Visibility keeps running", syscall.Signal(n).String())
 			}
 		case sig := <-handler.signals:
 			if handler.stopping.Load() {
@@ -265,8 +267,15 @@ func startCIVisibilitySignalHandler() {
 	}
 
 	activeCIVisibilitySignalHandler = handler
-	signalNotify(handler.signals, handler.observed, signals...)
-	log.Debug("civisibility: signal handler registered for %v, which reach CI Visibility only when no channel of the test handles them; ignored by the process: %v", signals, ignored)
+	registered := signalNotify(handler.signals, handler.observed, signals...)
+	if log.DebugEnabled() {
+		for _, sig := range signals {
+			if !slices.Contains(registered, sig) {
+				ignored = append(ignored, sig) // ignored before CI Visibility started
+			}
+		}
+		log.Debug("civisibility: signal handler registered for %v, which reach CI Visibility only when no channel of the test is registered for them; ignored by the process: %v", registered, ignored)
+	}
 	go handler.run()
 }
 

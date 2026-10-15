@@ -164,7 +164,7 @@ func TestTERM(t *testing.T) {
 	}{
 		{"handled", "^(TestHandlesTERM|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestHandlesTERM"}, "", []string{
 			`signal handler registered for [interrupt terminated]`,
-			`signal "terminated" reached a channel of the test; the test handles it and CI Visibility keeps running`,
+			`signal "terminated" arrived while a channel of the test is registered for it; the signal does not end the process, and CI Visibility keeps running`,
 			`gotesting: test finished name=TestHandlesTERM status=pass`,
 		}},
 		{"unhandled", "^(TestAfter|TestTERM)$", nil, 1, "signal: terminated", []string{"TestAfter"}, "", []string{
@@ -175,7 +175,9 @@ func TestTERM(t *testing.T) {
 		{"coverage", "^(TestHandlesTERM|TestAfter)$", []string{coverMini}, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestHandlesTERM"}, "", nil},
 		{"ignore-reset", "^(TestIgnoreThenReset|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestIgnoreThenReset"}, "", nil},
 		{"ignore-notify-stop-reset", "^(TestIgnoreNotifyStopReset|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestIgnoreNotifyStopReset"}, "", nil},
-		{"ignored-before-mini", "^TestSIGINT$", nil, 0, "--- PASS: TestSIGINT", []string{"TestSIGINT"}, "./ignoredbefore", nil},
+		{"ignored-before-mini", "^TestSIGINT$", nil, 0, "--- PASS: TestSIGINT", []string{"TestSIGINT"}, "./ignoredbefore", []string{
+			`signal handler registered for [terminated], which reach CI Visibility only when no channel of the test is registered for them; ignored by the process: [interrupt]`,
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			receiver := &capture{}

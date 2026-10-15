@@ -232,7 +232,10 @@ func replaceSignalNotifyForTesting(t *testing.T, notify func(chan<- os.Signal, .
 	originalNotify, originalStop := signalNotify, signalStop
 	signalNotify, signalStop = nil, nil
 	if notify != nil {
-		signalNotify = func(c chan<- os.Signal, _ chan<- int, sig ...os.Signal) { notify(c, sig...) }
+		signalNotify = func(c chan<- os.Signal, _ chan<- int, sig ...os.Signal) []os.Signal {
+			notify(c, sig...)
+			return sig
+		}
 		signalStop = signal.Stop
 	}
 	t.Cleanup(func() { signalNotify, signalStop = originalNotify, originalStop })
