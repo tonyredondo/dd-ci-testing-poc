@@ -112,7 +112,11 @@ func HandedCLISession() (*CLISession, *CLISessionRecord) {
 			return
 		}
 		cliSession, cliSessionRecord = &session, &CLISessionRecord{file: file}
-		log.Debug("civisibility: joined ddto's test session id=%d record=%s", session.ID, file.Name())
+		crash := "none"
+		if stem != "" {
+			crash = stem + ".crash"
+		}
+		log.Debug("civisibility: joined ddto's test session id=%d command=%q record=%s crash_output=%s", session.ID, session.Command, file.Name(), crash)
 	})
 	return cliSession, cliSessionRecord
 }
@@ -146,7 +150,9 @@ func (r *CLISessionRecord) Append(line CLISessionRecordLine) {
 	defer r.mu.Unlock()
 	if _, err := r.file.Write(append(data, '\n')); err != nil {
 		log.Debug("civisibility: test session record line not written: %s", err.Error())
+		return
 	}
+	log.Debug("civisibility: test session record %s id=%d name=%q", line.Kind, line.ID, line.Name)
 }
 
 // ReadCLISessionRecord reads a process's record. A last line that the

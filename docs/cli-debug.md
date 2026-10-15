@@ -85,9 +85,17 @@ The log records:
   `false` comes with the reason, such as `--panic-hook not set`. Both need the
   exit hook.
 - `test session owned=true` when ddto owns the command's
-  [test session](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md#ddtos-test-session);
-  `false` comes with the reason, such as `--session-per-binary`, and the test
-  processes then report their own. After go test,
+  [test session](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md#ddtos-test-session),
+  followed by `test session id=<id> dir=<dir> command=<command>`; `false`
+  comes with the reason, such as `--session-per-binary`, and the test
+  processes then report their own. After go test, with `DD_TRACE_DEBUG=true`,
+  ddto logs each process it found
+  (`civisibility: test session process <file> closed=<bool> exit_code=<n|none> crash_output_bytes=<n> modules=<n> suites=<n>`),
+  where the session's CI tags come from
+  (`civisibility: test session CI tags directory=<dir> git_worker_record=<bool> git_timeout=<d>`)
+  and what it sends
+  (`civisibility: sending ddto's test session id=<id> exit_code=<n> duration=<d> tags=<n> coverage=<pct> crashed_processes=<n>`).
+  Then
   `test session sent=<bool> processes=<n> closed=<n> crashed=<n> recreated=<n> exit_code=<n>`
   counts the test processes that joined it, those that closed CI Visibility,
   those that left crash output, and the modules, suites and tests recreated
@@ -245,7 +253,9 @@ with `-v` or when the package fails.
 | `civisibility: the process crashes (<timeout/panic>); failing the running tests and closing CI Visibility first: <message>` | testing's `-timeout` alarm, or an unrecovered panic with `--panic-hook`, is about to end the process. The stack follows for a panic. |
 | `civisibility: failed <n> running tests before the crash` and `civisibility: closed CI Visibility before the crash duration=<d>` | The tests that the crash interrupted were reported as failed, and the events were sent; the crash then ends the process as without Mini. |
 | `civisibility: os.Exit while the process crashes; the crash ends the process` | The tests finished while Mini sent before a crash; the crash keeps its exit status. |
-| `civisibility: joined ddto's test session id=<id> record=<file>` and `civisibility: reporting in ddto's test session id=<id>` | The process reports in the session of ddto's command; `WARN: civisibility: ... reports its own session` says why it could not. |
+| `civisibility: joined ddto's test session id=<id> command=<command> record=<file> crash_output=<file>` and `civisibility: reporting in ddto's test session id=<id>` | The process reports in the session of ddto's command, and where its record and crash output are; `WARN: civisibility: ... reports its own session` says why it could not. |
+| `civisibility: test session record <module/module_end/suite/suite_end> id=<id> name=<name>` | A module or suite started or ended, as ddto would recreate it if the process crashed. |
+| `civisibility: failed the test name=<name> suite=<suite> for the crash (<timeout/panic>) final_status=<status>` | A test that the crash interrupted, reported as failed. |
 | `civisibility: recorded the close of this process in ddto's test session exit_code=<n> tags=<n>` | The process closed CI Visibility and left its session tags for ddto. |
 
 A process that ends without any of these lines was ended by something that

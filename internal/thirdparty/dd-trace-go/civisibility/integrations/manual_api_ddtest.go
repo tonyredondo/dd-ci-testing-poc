@@ -172,6 +172,7 @@ func (t *tslvTest) failForCrash(errType, message, stack string) bool {
 	t.Suite().SetTag(ext.Error, true)
 	t.Suite().Module().SetTag(ext.Error, true)
 	t.closeLocked(ResultStatusFail, func(o *tslvTestCloseOptions) { o.finishTags = tags })
+	log.Debug("civisibility: failed the test name=%s suite=%s for the crash (%s) final_status=%s", t.name, t.suite.name, errType, final)
 	return true
 }
 

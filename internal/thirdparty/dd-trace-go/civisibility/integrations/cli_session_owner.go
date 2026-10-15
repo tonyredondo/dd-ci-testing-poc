@@ -78,6 +78,10 @@ type cliProcess struct {
 // signal handler or logs.
 func FinishCLISession(end CLISessionEnd) (CLISessionSummary, error) {
 	var summary CLISessionSummary
+	// ddto's process has not initialized CI Visibility, which sets the level.
+	if infra.BoolEnv("DD_TRACE_DEBUG", false) {
+		log.SetLevel(log.LevelDebug)
+	}
 	processes, err := readCLIProcesses(end.Dir)
 	if err != nil {
 		return summary, err
@@ -85,6 +89,22 @@ func FinishCLISession(end CLISessionEnd) (CLISessionSummary, error) {
 	summary.Processes = len(processes)
 	var crashes []*cliProcess
 	for _, p := range processes {
+		if log.DebugEnabled() {
+			modules, suites := 0, 0
+			for _, line := range p.lines {
+				switch line.Kind {
+				case "module":
+					modules++
+				case "suite":
+					suites++
+				}
+			}
+			exitCode := "none"
+			if p.closed != nil {
+				exitCode = strconv.Itoa(p.closed.ExitCode)
+			}
+			log.Debug("civisibility: test session process %s closed=%t exit_code=%s crash_output_bytes=%d modules=%d suites=%d", filepath.Base(p.stem), p.closed != nil, exitCode, len(p.crash), modules, suites)
+		}
 		if p.closed != nil {
 			summary.Closed++
 		}
@@ -114,14 +134,17 @@ func FinishCLISession(end CLISessionEnd) (CLISessionSummary, error) {
 	defer cancel()
 	utils.SetGitCommandContext(gitCtx)
 	defer utils.SetGitCommandContext(context.Background())
+	reused := false
 	if end.GitState != "" {
 		var record utils.CLIGitRecord
 		if err := utils.ReadCLIGitStateFile(end.GitState, utils.CLIGitRecordFile, &record); err == nil {
 			utils.UseCLIGitState(end.GitState, record)
+			reused = true
 		} else {
 			log.Debug("civisibility: test session without the Git worker's record: %s", err.Error())
 		}
 	}
+	log.Debug("civisibility: test session CI tags directory=%s git_worker_record=%t git_timeout=%s", end.Session.WorkingDirectory, reused, cliSessionGitTimeout)
 	initializeCLISessionOwner(end.GoVersion)
 	session := CreateTestSession(
 		withTestSessionID(end.Session.ID),
@@ -129,9 +152,11 @@ func FinishCLISession(end CLISessionEnd) (CLISessionSummary, error) {
 		WithTestSessionFramework(cliSessionFramework, end.GoVersion),
 		WithTestSessionStartTime(end.Start),
 	).(*tslvTestSession)
-	for key, value := range mergeCLISessionTags(processes, end.Coverage) {
+	merged := mergeCLISessionTags(processes, end.Coverage)
+	for key, value := range merged {
 		session.SetTag(key, value)
 	}
+	log.Debug("civisibility: sending ddto's test session id=%d exit_code=%d duration=%s tags=%d coverage=%v crashed_processes=%d", end.Session.ID, end.ExitCode, end.Finish.Sub(end.Start), len(merged), merged[constants.CodeCoveragePercentageOfTotalLines], len(crashes))
 	for _, p := range crashes {
 		if p.closed == nil {
 			summary.Recreated += recreateCLIProcess(session, p, end.Finish)
