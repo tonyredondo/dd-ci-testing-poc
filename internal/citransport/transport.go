@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -83,7 +84,7 @@ func New(c Config) (*Transport, error) {
 	// A goleak checkpoint must not close a caller's unrelated HTTP connections.
 	transport := copyClient.Transport
 	if transport == nil {
-		transport = http.DefaultTransport
+		transport = defaultTransport()
 	}
 	if standard, ok := transport.(*http.Transport); ok {
 		clone := standard.Clone()
@@ -119,6 +120,25 @@ func New(c Config) (*Transport, error) {
 		}
 	}
 	return t, nil
+}
+
+// defaultTransport returns a transport configured as Go's
+// http.DefaultTransport, which Mini never uses: a test can replace it before
+// Mini starts, with a mock that fails on unexpected requests or with settings
+// of its own, and Mini's events would then go through it.
+func defaultTransport() *http.Transport {
+	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 }
 
 // Send retries transient failures using the same immutable payload. Context
