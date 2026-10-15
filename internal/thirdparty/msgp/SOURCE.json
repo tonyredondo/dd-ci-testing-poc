@@ -250,7 +250,7 @@
     },
     {
       "path": "msgp/length32_test.go",
-      "sha256": "7a0d098ebeca32435940adf62367c28708d57334c28badfafe6929d83dfa746f",
+      "sha256": "32f1e18d6bbb10b438b9314ef31f7aeab03860736b518fe17d017b1afaf2d081",
       "role": "local"
     },
     {
@@ -290,7 +290,7 @@
     },
     {
       "path": "msgp/read_bytes.go",
-      "sha256": "0e4933e6296741a32abd9a887f50306f26e46f6d6d58ebd0ef5133c4fca9c1fa",
+      "sha256": "a0a3c0eada05154c791098ff2806ade42629bdec5685f7cccfff45f594cb835a",
       "role": "adapted",
       "source_path": "msgp/read_bytes.go",
       "source_sha256": "8a865ab944433074e47163acce511beb46a8709d08df0154ddbdd29167616ba9"

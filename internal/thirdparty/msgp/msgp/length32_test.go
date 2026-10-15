@@ -74,6 +74,11 @@ func TestLengthsBeyondInt(t *testing.T) {
 				t.Errorf("Raw.DecodeMsg of %s: %v, want ErrLimitExceeded", name, err)
 			}
 		}
+		// An object that the buffer holds needs no growth.
+		raw := make(Raw, 0, 1<<30)
+		if err := raw.DecodeMsg(stream([]byte{0x01})); err != nil || !bytes.Equal(raw, []byte{0x01}) {
+			t.Errorf("Raw.DecodeMsg in a 1 GiB buffer: %x, %v", []byte(raw), err)
+		}
 	}
 }
 
