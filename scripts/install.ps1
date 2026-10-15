@@ -89,7 +89,8 @@ param(
         # On a persistent runner, keep an installed executable of the same
         # version: a requested version needs no download, and latest only
         # needs SHA256SUMS.
-        if ($Version -ne 'latest' -and $current -eq $Version) {
+        # Versions compare case-sensitively, as SemVer prereleases do.
+        if ($Version -ne 'latest' -and $current -ceq $Version) {
             $installed = 'already installed'
         } elseif ($os -and $arch) {
             $asset = "ddto-$os-$arch$exe"
@@ -150,10 +151,15 @@ param(
         Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
     }
     $separator = [IO.Path]::PathSeparator
-    if (($env:PATH -split [regex]::Escape($separator)) -notcontains $Dir) {
+    $entries = $env:PATH -split [regex]::Escape($separator)
+    # Windows paths ignore case; Unix paths do not.
+    $listed = if ($os -eq 'windows') { $entries -contains $Dir } else { $entries -ccontains $Dir }
+    if (-not $listed) {
         $env:PATH = "$Dir$separator$env:PATH"
         if ($env:GITHUB_PATH) {
-            Add-Content -LiteralPath $env:GITHUB_PATH -Value $Dir
+            # GitHub reads environment files as UTF-8; Windows PowerShell 5.1
+            # would otherwise write the system's code page.
+            Add-Content -LiteralPath $env:GITHUB_PATH -Value $Dir -Encoding UTF8
             Say "added $Dir to PATH for this session and the next steps"
         } else {
             Say "added $Dir to PATH for this session; add it to your profile to keep it"
