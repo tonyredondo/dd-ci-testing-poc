@@ -130,8 +130,9 @@ func appendNext(f *Reader, d *[]byte) error {
 	if err != nil {
 		return err
 	}
-	// On 32-bit platforms, an object can be too large for a slice.
-	if amt > math.MaxInt {
+	// On 32-bit platforms, an object can be too large for a slice, or
+	// for ensure's growth of d, which len(d) is part of.
+	if uint64(amt)+2*uint64(cap(*d)) > math.MaxInt {
 		return ErrLimitExceeded
 	}
 	var i int

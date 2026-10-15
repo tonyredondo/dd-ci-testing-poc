@@ -59,6 +59,22 @@ func TestLengthsBeyondInt(t *testing.T) {
 			}
 		}
 	}
+	// Nor does Raw overflow growing its buffer for an object that fits an
+	// int: after an array's header, or in a buffer that it reuses.
+	if strconv.IntSize == 32 {
+		for name, read := range map[string]func() error{
+			"array of 2^31-1": func() error { var raw Raw; return raw.DecodeMsg(stream([]byte{0x91, mbin32, 0x7f, 0xff, 0xff, 0xfa})) },
+			"array of 2^31-2": func() error { var raw Raw; return raw.DecodeMsg(stream([]byte{0x91, mbin32, 0x7f, 0xff, 0xff, 0xf9})) },
+			"reused buffer": func() error {
+				raw := make(Raw, 0, 16)
+				return raw.DecodeMsg(stream([]byte{mbin32, 0x7f, 0xff, 0xff, 0xe0}))
+			},
+		} {
+			if err := read(); !errors.Is(err, ErrLimitExceeded) {
+				t.Errorf("Raw.DecodeMsg of %s: %v, want ErrLimitExceeded", name, err)
+			}
+		}
+	}
 }
 
 // CopyNext streams an object, or a map's elements, beyond math.MaxInt32 on
