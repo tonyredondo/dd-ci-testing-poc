@@ -33,7 +33,7 @@ system time of the whole process tree.
 | `./...` with `-count=1`, 100 ms per Agent request (5 runs) | 0.71 s | 1.23 s | +0.52 s | 10 |
 | `./...` with `-count=1`, no Agent listening (5 runs) | 0.71 s | 2.34 s | +1.63 s | 59, 28 |
 | Five packages, every result from Go's test cache (9 runs) | 0.086 s, 0.48 CPU-s | 0.200 s, 0.98 CPU-s | +0.11 s | 56 |
-| `./...` with an empty build cache (3 runs) | 11.0 s, 112 CPU-s | 11.7 s, 125 CPU-s | +0.7 s, +12.8 CPU-s | 57 |
+| `./...` with an empty build cache (3 runs) | 11.0 s, 112 CPU-s | 11.7 s, 125 CPU-s | +0.7 s, +12.8 CPU-s | 57, in projects without HTTP |
 
 Binaries with 1 and 2,000 empty tests, run directly 15 times each, give the
 cost per test and per binary. Mini adds 15.4 µs per test: 2,000 tests took
@@ -45,7 +45,8 @@ With an Agent that answers at once, preparation, about 0.11 s, is most of what
 `ddto` adds to a warm run. Request latency then adds about 0.3 s per run,
 through round trips at each test process's exit and the worker's last request.
 Without an Agent, retries cost more than everything else together. Cold builds
-pay for compiling and linking Mini's HTTPS stack into every test binary.
+pay for compiling Mini's packages and, in projects that do not use HTTP
+themselves, its HTTPS stack.
 
 ## Summary
 
@@ -53,10 +54,10 @@ Ordered by the expected effect on a run's wall time, then by cost.
 
 | Item | Change | Expected saving | Complexity | Status |
 | --- | --- | --- | --- | --- |
-| 59 | Tell test processes that the backend is unreachable | Most of the 1.6 s that Gin's run adds without an Agent | Medium | Open |
+| 59 | Tell test processes at startup that the backend is unreachable | About 1 s of the 1.6 s that each test process pays without an Agent | Medium | Open |
 | 28 | Skip the final retries after a failed session-close flush | 0.3 s at each test process's exit when delivery fails | Low | Needs the user's go-ahead |
 | 10 | Send each test process's exit telemetry through the worker | About one request latency per run: 0.1 s of the 0.3 s that 100 ms of latency adds | Medium | Parked (2026-10-12) |
-| 57 | Deliver events through the CLI | Most of the 12.8 CPU-s and 0.7 s of a cold Gin build; link time and binary size | High | Parked (2026-10-11) |
+| 57 | Deliver events through the CLI | In a project without HTTP, about 10 of the 16 CPU-s that Mini adds to a cold build, and 0.2 s and 12 MB per test binary link; little in projects that use HTTP, such as Gin | High | Parked (2026-10-11) |
 | 56 | Reuse the preparation plan between unchanged invocations | 60–80 ms of the 0.11 s in repeated local runs; nothing in a fresh CI job | Medium to high | Parked (2026-10-14) |
 | 39 | Parse the sources of selected tests concurrently at startup | 1–4.5 ms per test file with Early Flake Detection and impacted tests | Medium | Open |
 | 51 | Store known tests per module in the read cache | 10–25 ms of CPU and several MB of heap per binary with 100,000 known tests | Medium to high | Open |
@@ -72,28 +73,31 @@ pointing at a closed port took 2.34 s, against 0.93 s with the fake Agent and
 0.71 s natively, medians of 5 runs. A `DD_TRACE_DEBUG` run of `./render/...`
 shows where each test process waits:
 
-- 0.28 s for the worker's settings request through the read cache, which
-  failed: the waiter then falls back to its own request
-  (`civisibility/utils/net/read_cache.go:499`).
-- 0.98 s for that request: four attempts refused at once, with 0.1, 0.2 and
-  0.4 s of backoff between them.
+- 0.98 s for settings: 0.28 s waiting for the worker's request through the
+  read cache, which failed, so the waiter falls back to its own request
+  (`civisibility/utils/net/read_cache.go:499`); then 0.70 s for that request,
+  four attempts refused at once with 0.1, 0.2 and 0.4 s of backoff between
+  them.
 - 0.30 s for the session-close flush, three attempts, and 0.30 s more for the
-  final delivery of the same payload at exit (item 28).
+  final delivery of the same payload at exit, which item 28 covers.
 
 ddto's Git worker has already found the backend unreachable by the time test
 processes ask for settings. Record that result for the run, for example as a
 short-lived entry that read-cache waiters accept. Test processes then give up
 their startup requests at once and run with the defaults they reach today after
-their retries, and they deliver events once, logging the same errors. A process
-run alone keeps today's retries. Expect most of the 1.6 s per test process,
-which is what a developer running `ddto test` without an Agent pays, and what a
-misconfigured CI job pays in every package.
+their retries. A process run alone keeps today's retries. Expect about 1 s per
+test process, which is what a developer running `ddto test` without an Agent
+pays, and what a misconfigured CI job pays in every package. The same signal
+could also let delivery skip its retries, the other 0.6 s, but that changes
+delivery like item 28, which waits for the user's go-ahead.
 
-Limit the shortcut to connection errors that the worker saw in this run, so
-that an Agent that is still starting, a timeout or a 5xx response keep their
-retries. The run must still finish with the same test results and exit code,
-and the same telemetry about the failure. An Agent that comes up during the run
-is then missed until the next run; check that this trade-off is acceptable.
+An Agent that is still starting refuses connections just as an absent one
+does, so the shortcut also gives up on it: it reaches the backend only in a
+later run. Keep the entry short-lived, on the order of the worker's own retry
+cycle, and limit it to connection errors that the worker saw in this run, so
+that timeouts and 5xx responses keep their retries. The run must still finish
+with the same test results and exit code, and the same telemetry about the
+failure. Check that this trade-off is acceptable before implementing it.
 
 ## 28. Final retries after a failed session close
 
@@ -139,16 +143,19 @@ Git, and combining compatible messages at exit would address them.
 
 ## 57. Events through the CLI
 
-Every test binary links Mini's HTTP and TLS delivery. On 2026-10-15, a cold
-Gin build took 11.7 s and 125 CPU-s against 11.0 s and 112 CPU-s natively, at
-32 threads: +0.7 s and +12.8 CPU-s. Phase 4 of the optimization plan
-([#44](https://github.com/tonyredondo/dd-ci-testing-poc/pull/44)) found that
-the HTTPS transport accounts for 10.2 of the 16.3 CPU-s that Mini adds to a
-cold build. On 2026-10-11, a one-test binary grew from 4.8 to 16.7 MB and its
-link from 106 to 289 ms; the HTTP and TLS stack accounted for about 104 ms of
-the 183 ms that Mini adds to each link. Every edit rebuild links each affected
-test binary again. A binary whose own code already uses HTTP or TLS keeps that
-stack, so measure the marginal saving on representative projects.
+Every test binary links Mini's HTTP and TLS delivery. Phase 4 of the
+optimization plan ([#44](https://github.com/tonyredondo/dd-ci-testing-poc/pull/44))
+built a module with one empty test from an empty build cache: Mini added
+16.3 CPU-s, and its HTTPS transport, the `crypto`, `net` and `net/http`
+packages with cgo, accounted for 10.2 of them. On 2026-10-11, a one-test binary
+grew from 4.8 to 16.7 MB and its link from 106 to 289 ms; the HTTP and TLS stack
+accounted for about 104 ms of the 183 ms that Mini adds to each link. Every
+edit rebuild links each affected test binary again.
+
+Projects whose own tests use HTTP or TLS keep that stack. Gin's tests import
+`net/http` and `crypto/tls`, so the +12.8 CPU-s of its cold build on
+2026-10-15 come mostly from elsewhere, such as Mini's own packages, which took
+3.8 CPU-s in phase 4; measure the marginal saving on representative projects.
 
 For `ddto test` runs, test binaries could hand encoded batches to the CLI
 through an inherited pipe or a local socket. The CLI would deliver them over
