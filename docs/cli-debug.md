@@ -78,6 +78,20 @@ The log records:
   `civisibility: os.Exit before CI Visibility closed; closing it`, and
   `ERROR: civisibility: closing CI Visibility in os.Exit did not finish within 1m0s; exiting without it`
   when that shutdown cannot finish.
+- The hooks for [crashes](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md#crashes):
+  `timeout hook installed=true` when testing's `-timeout` alarm closes Mini's
+  CI Visibility before it panics, and `panic hook installed=true` when
+  `--panic-hook` edits the runtime to do so before an unrecovered panic;
+  `false` comes with the reason, such as `--panic-hook not set`. Both need the
+  exit hook.
+- `test session owned=true` when ddto owns the command's
+  [test session](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md#ddtos-test-session);
+  `false` comes with the reason, such as `--session-per-binary`, and the test
+  processes then report their own. After go test,
+  `test session sent=<bool> processes=<n> closed=<n> crashed=<n> recreated=<n> exit_code=<n>`
+  counts the test processes that joined it, those that closed CI Visibility,
+  those that left crash output, and the modules, suites and tests recreated
+  for the processes that did not close.
 - Optional library discovery, including how many imports still need a query
   and how many standard-library imports it left out.
   Testify and goleak each report detection, instrumentation and warnings.
@@ -228,12 +242,21 @@ with `-v` or when the package fails.
 | `civisibility: closed CI Visibility for os.Exit duration=<d>` | CI Visibility's shutdown finished before the process exited. The delivery lines and errors before it say whether the events reached the intake. |
 | `ERROR: civisibility: closing CI Visibility in os.Exit did not finish within 1m0s; exiting without it` | The shutdown blocked, and the process exited without it. |
 | `test-cycle: delivery uses <transport> endpoint=<url> agentless=<bool>` | Which HTTP transport sends the events: Mini's own, a clone of the client's, or a client's custom RoundTripper. |
+| `civisibility: the process crashes (<timeout/panic>); failing the running tests and closing CI Visibility first: <message>` | testing's `-timeout` alarm, or an unrecovered panic with `--panic-hook`, is about to end the process. The stack follows for a panic. |
+| `civisibility: failed <n> running tests before the crash` and `civisibility: closed CI Visibility before the crash duration=<d>` | The tests that the crash interrupted were reported as failed, and the events were sent; the crash then ends the process as without Mini. |
+| `civisibility: os.Exit while the process crashes; the crash ends the process` | The tests finished while Mini sent before a crash; the crash keeps its exit status. |
+| `civisibility: joined ddto's test session id=<id> record=<file>` and `civisibility: reporting in ddto's test session id=<id>` | The process reports in the session of ddto's command; `WARN: civisibility: ... reports its own session` says why it could not. |
+| `civisibility: recorded the close of this process in ddto's test session exit_code=<n> tags=<n>` | The process closed CI Visibility and left its session tags for ddto. |
 
 A process that ends without any of these lines was ended by something that
-runs no Go code first: a crash such as a panic in another goroutine or a fatal
-runtime error, testing's `-timeout` panic, which prints its own stack, or a
-signal that cannot be caught, such as SIGKILL. The test lines still show which
-test was running.
+runs no Go code first: a fatal runtime error, an unrecovered panic in another
+goroutine without `--panic-hook`, the race detector with
+`GORACE=halt_on_error=1`, or a signal that cannot be caught, such as SIGKILL.
+The test lines still show which test was running. In ddto's test session, ddto
+then logs, with `DD_TRACE_DEBUG=true`,
+`civisibility: test process process-<id> ended without closing CI Visibility (<reason>); recreated <n> events`
+and, when the crash output names the test,
+`civisibility: recreated the crashed test name=<name> suite=<suite> module=<module>`.
 
 ## Requests ahead
 
