@@ -3,12 +3,14 @@ package integrations
 import (
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 )
 
 // os.Exit during the tests closes CI Visibility through ddto's exit hook,
@@ -79,4 +81,25 @@ func TestForcedExitFromTheSignalHandlerReturns(t *testing.T) {
 		t.Fatal("the exit hook waits for the signal handler that runs it")
 	}
 	assertSignalHandlerDone(t, handler)
+}
+
+// testing registers the hook, so another package's init can call os.Exit
+// before this package initializes, with CI Visibility not started and this
+// package's variables still zero. The hook then does nothing.
+func TestForcedExitBeforeTheRuntimeInitializes(t *testing.T) {
+	resetCIVisibilityBootstrapStateForTesting()
+	t.Cleanup(restoreCIVisibilityBootstrapForTesting)
+	transport := processRetryChildTransport
+	processRetryChildTransport = nil
+	t.Cleanup(func() { processRetryChildTransport = transport })
+	recorder := &log.RecordLogger{}
+	t.Cleanup(log.UseLogger(recorder))
+	require.Equal(t, civisibility.StateUninitialized, civisibility.GetState())
+
+	forcedExit()
+
+	if lines := strings.Join(recorder.Logs(), "\n"); strings.Contains(lines, "panicked") {
+		t.Fatalf("the exit hook panicked: %s", lines)
+	}
+	require.Equal(t, civisibility.StateUninitialized, civisibility.GetState())
 }

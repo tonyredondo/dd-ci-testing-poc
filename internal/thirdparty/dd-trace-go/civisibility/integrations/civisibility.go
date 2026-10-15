@@ -343,9 +343,6 @@ func TryPushCiVisibilityPreCloseAction(action ciVisibilityCloseAction) bool {
 //
 //go:linkname forcedExit
 func forcedExit() {
-	if IsProcessRetryChild() {
-		return
-	}
 	// The runtime ends the process with a fatal error, instead of the status
 	// that os.Exit received, when an exit hook panics.
 	defer func() {
@@ -353,8 +350,15 @@ func forcedExit() {
 			log.Error("civisibility: closing CI Visibility in os.Exit panicked: %v", r)
 		}
 	}()
-	if civisibility.GetState() == civisibility.StateInitialized {
+	// The hook is registered with testing, so another package's init can call
+	// os.Exit before this package initializes; CI Visibility has not started
+	// then, and process retry children never start it.
+	switch civisibility.GetState() {
+	case civisibility.StateInitialized:
 		log.Debug("civisibility: os.Exit before CI Visibility closed; closing it")
+	case civisibility.StateExiting:
+	default:
+		return
 	}
 	markCIVisibilitySignalHandlerStopping()
 	exitCiVisibility(false)

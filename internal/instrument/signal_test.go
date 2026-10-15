@@ -172,6 +172,8 @@ func signum(sig os.Signal) int { return 0 }
 
 func enableSignal(sig int) {}
 
+func signalIgnored(sig int) bool { return false }
+
 func Notify(c chan<- os.Signal, sig ...os.Signal) {}
 
 func Stop(c chan<- os.Signal) {}

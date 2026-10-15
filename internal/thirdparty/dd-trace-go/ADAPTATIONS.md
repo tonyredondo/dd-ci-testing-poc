@@ -1267,8 +1267,9 @@ from every channel, Mini's included, and disables it: `Reset` passes `cancel`
 the hook's `__dd_civisibility_resetSignal` instead of `disableSignal`. Under
 the same lock, that action registers Mini's channel again for a signal that
 Mini wanted and keeps the signal enabled, so it never ends the process without
-reaching Mini first; other signals are disabled as before. Both edits stay on
-their lines, so os/signal keeps its positions.
+reaching Mini first; other signals are disabled as before. Reset does not undo
+`Ignore`, so a signal that the test ignores stays ignored and without Mini.
+Both edits stay on their lines, so os/signal keeps its positions.
 
 `SignalHook` sets `signalNotify` and `signalStop` in
 [`civisibility.go`](civisibility/integrations/civisibility.go) through
@@ -1276,9 +1277,10 @@ linknamed variables while os/signal initializes. It does not call Mini, because
 os/signal initializes before Mini: a Mini function that runs first and that
 `-coverpkg` instruments records its coverage counters without a package, and
 Go reports `internal error in coverage meta-data tracking` when it writes the
-profile. Mini's channel and its signals change under handlers' lock. Mini
-stops its channel through `signalStop`, so that `Reset` does not register it
-again afterwards.
+profile. Mini's channel and its signals change under handlers' lock, after
+`Notify` has created the channel map and started the signal loop. Mini stops
+its channel through `signalStop`, so that `Reset` does not register it again
+afterwards.
 
 On such a signal Mini closes CI Visibility as before, stops its channel, and
 sends the signal to its own process again. With no channel left, the runtime
@@ -1306,8 +1308,10 @@ counters). `os.Exit` runs it before the process ends, with any status.
 is already closed, and it returns at once, and while another goroutine shuts
 it down it waits for that shutdown. It does not wait for the signal handler's
 goroutine: on Windows that goroutine calls `os.Exit` after a signal, and would
-wait for itself. It recovers a panic, because the runtime ends the process
-with a fatal error when an exit hook panics. The test
+wait for itself. Another package's init can call `os.Exit` after testing
+registered the hook and before Mini initializes; CI Visibility has not started
+then, and the hook only reads its state. It recovers a panic, because the
+runtime ends the process with a fatal error when an exit hook panics. The test
 that was running is not reported, as after a signal. Mini closes a test when
 its body returns, before testing runs the test's cleanups, so a test whose
 cleanup exits reports the result of its body. `os.Exit(0)` during a test
@@ -1324,6 +1328,7 @@ Checks: `TestMiniSignalsKeepGoTestBehavior`, `TestMiniForcedExitKeepsEvents`,
 `TestExitHookMatchesMiniRegistration`, `TestPrepareSignalHook`,
 `TestPrepareExitHook`, `TestForcedExitClosesCIVisibility`,
 `TestForcedExitRecoversPanics`, `TestForcedExitFromTheSignalHandlerReturns`,
+`TestForcedExitBeforeTheRuntimeInitializes`,
 `TestCIVisibilitySignalHandlerNeedsTheOverlay`
 and `TestCIVisibilitySignalHandlerKeepsIgnoredSignalsIgnored`. This package's
 own tests run without the overlays and use `signal.Notify` and `signal.Stop`

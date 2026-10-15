@@ -57,10 +57,12 @@ func init() {
 		for _, s := range sig {
 			wanted = append(wanted, signum(s))
 		}
+		// Notify first: it creates handlers.m and starts the signal loop,
+		// which __dd_civisibility_resetSignal relies on once c is Mini's.
+		Notify(c, sig...)
 		handlers.Lock()
 		__dd_civisibility_signals, __dd_civisibility_wanted = c, wanted
 		handlers.Unlock()
-		Notify(c, sig...)
 	}
 	__dd_civisibility_signalStop = func(c chan<- os.Signal) {
 		handlers.Lock()
@@ -94,14 +96,15 @@ func __dd_civisibility_signalWantedElsewhere(c chan<- os.Signal, n int) bool {
 // __dd_civisibility_resetSignal is Reset's action for signal n, which cancel
 // calls holding handlers' lock after removing n from every channel. It
 // disables n, as Reset does, unless Mini wanted n: then Mini's channel wants
-// it again, as after Notify, and n stays enabled throughout.
+// it again, as after Notify, and n stays enabled throughout. Reset does not
+// undo Ignore, so an ignored signal stays ignored and without Mini.
 func __dd_civisibility_resetSignal(n int) {
 	c := __dd_civisibility_signals
 	wanted := false
 	for _, w := range __dd_civisibility_wanted {
 		wanted = wanted || w == n
 	}
-	if c == nil || !wanted {
+	if c == nil || !wanted || signalIgnored(n) {
 		disableSignal(n)
 		return
 	}
@@ -136,6 +139,7 @@ var signalHookAPI = []string{
 	"func enableSignal(int)",
 	"func disableSignal(int)",
 	"func signum(os.Signal) int",
+	"func signalIgnored(int) bool",
 }
 
 // signalRuntimeAPI is what SignalHook's linknames name in Mini's integrations

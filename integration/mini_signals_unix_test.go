@@ -16,8 +16,9 @@ import (
 // receive that SIGTERM, even though the test stops its own channel at once. A
 // SIGTERM that nothing handles still ends the process with that signal, as
 // under go test, after Mini has sent its events, also after a test has reset
-// SIGTERM to its default action. With Mini's own package under coverage, the
-// hook leaves no counters without a package.
+// SIGTERM to its default action. Reset keeps a signal that the test ignores
+// ignored, as without ddto. With Mini's own package under coverage, the hook
+// leaves no counters without a package.
 func TestMiniSignalsKeepGoTestBehavior(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
 	writeBuildFixture(t, dir, map[string]string{"sample_test.go": `package fixture_test
@@ -54,6 +55,19 @@ func TestResets(t *testing.T) {
 	signal.Reset(syscall.SIGTERM)
 }
 
+func TestIgnoreThenReset(t *testing.T) {
+	signal.Ignore(syscall.SIGTERM)
+	signal.Reset(syscall.SIGTERM)
+	signal.Reset()
+	if !signal.Ignored(syscall.SIGTERM) {
+		t.Fatal("Reset undid Ignore")
+	}
+	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+}
+
 func TestAfter(t *testing.T) {}
 
 func TestTERM(t *testing.T) {
@@ -76,6 +90,7 @@ func TestTERM(t *testing.T) {
 		{"unhandled", "^(TestAfter|TestTERM)$", nil, 1, "signal: terminated", []string{"TestAfter"}},
 		{"reset", "^(TestResets|TestAfter|TestTERM)$", nil, 1, "signal: terminated", []string{"TestAfter", "TestResets"}},
 		{"coverage", "^(TestHandlesTERM|TestAfter)$", []string{coverMini}, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestHandlesTERM"}},
+		{"ignore-reset", "^(TestIgnoreThenReset|TestAfter)$", nil, 0, "--- PASS: TestAfter", []string{"TestAfter", "TestIgnoreThenReset"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			receiver := &capture{}

@@ -3,6 +3,8 @@ package integration
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -13,16 +15,38 @@ import (
 // failed session: from the test body, from a cleanup, from another
 // goroutine, and with deferred delivery. Mini closes a test when its body
 // returns, before testing runs its cleanups, so a test whose cleanup exits
-// reports its body's result.
+// reports its body's result. An os.Exit in a package's init, before Mini
+// starts, exits with its own status and reports nothing.
 func TestMiniForcedExitKeepsEvents(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
-	writeBuildFixture(t, dir, map[string]string{"sample_test.go": `package fixture_test
+	if err := os.MkdirAll(filepath.Join(dir, "exiter"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeBuildFixture(t, dir, map[string]string{"exiter/exiter.go": `package exiter
+
+import (
+	"os"
+	"testing"
+)
+
+// Importing testing initializes this package after testing, which registers
+// the exit hook, and its import path before Mini's.
+var _ = testing.Short
+
+func init() {
+	if os.Getenv("FIXTURE_EXIT") == "init" {
+		os.Exit(3)
+	}
+}
+`, "sample_test.go": `package fixture_test
 
 import (
 	"log"
 	"os"
 	"testing"
 	"time"
+
+	_ "example.com/dd-ci-testing-fixture/exiter"
 )
 
 func TestFirst(t *testing.T) {}
@@ -53,6 +77,7 @@ func TestExit(t *testing.T) {
 		{"cleanup", "cleanup", false, []string{"TestFirst pass", "TestExit pass"}},
 		{"goroutine", "goroutine", false, first},
 		{"deferred", "body", true, first},
+		{"init", "init", false, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			receiver := &capture{}
@@ -61,7 +86,8 @@ func TestExit(t *testing.T) {
 			env := testEnv("DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_TRACE_AGENT_URL="+server.URL, "DD_API_KEY=poc-not-a-real-key",
 				"FIXTURE_EXIT="+tc.exit, fmt.Sprintf("DD_CIVISIBILITY_DEFERRED_DELIVERY=%t", tc.deferred))
 			out, stderr, code := command(t, dir, env, driver, "test", "--runtime=mini", "-count=1", "-v", ".")
-			if code != 1 || !strings.Contains(out, "--- PASS: TestFirst") || strings.Contains(out+stderr, "exit hook invoked") || strings.Contains(out+stderr, "fatal error") {
+			ran := tc.tests != nil
+			if code != 1 || strings.Contains(out, "--- PASS: TestFirst") != ran || strings.Contains(out+stderr, "exit hook invoked") || strings.Contains(out+stderr, "fatal error") {
 				t.Fatalf("exit %d\n%s\n%s", code, out, stderr)
 			}
 			receiver.mu.Lock()
@@ -77,7 +103,11 @@ func TestExit(t *testing.T) {
 					sessions = append(sessions, fmt.Sprint(meta["test.status"]))
 				}
 			}
-			if len(receiver.failures) != 0 || !reflect.DeepEqual(tests, tc.tests) || !reflect.DeepEqual(sessions, []string{"fail"}) {
+			wantSessions := []string{"fail"}
+			if !ran {
+				wantSessions = nil
+			}
+			if len(receiver.failures) != 0 || !reflect.DeepEqual(tests, tc.tests) || !reflect.DeepEqual(sessions, wantSessions) {
 				t.Fatalf("tests %v, sessions %v, failures %v\n%s\n%s", tests, sessions, receiver.failures, out, stderr)
 			}
 		})
