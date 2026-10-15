@@ -19,6 +19,12 @@ when changing sources or generation pins.
 
 Follow the [shared audit and update procedure](../README.md#audit-and-update).
 
+On 32-bit platforms, upstream converts a 32-bit length beyond `math.MaxInt` to a
+negative `int` or wraps the skipped size. `readBytesBytes`, `ReadStringZC`,
+`readExt` and `getSize` return `ErrShortBytes` for such a length instead, and
+`getNextSize` returns `ErrLimitExceeded`. Keep these checks when recopying;
+`msgp/length32_test.go` tests them.
+
 This copy uses native Go 1.25 APIs. Follow the
 [source-language rules](../../../docs/maintenance.md#verification-before-publication)
 when updating this copy, then record its local hashes.

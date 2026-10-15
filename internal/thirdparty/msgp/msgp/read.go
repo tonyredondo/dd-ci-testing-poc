@@ -357,11 +357,21 @@ func getNextSize(r *fwd.Reader) (uintptr, uintptr, error) {
 	case extra16:
 		return uintptr(size) + uintptr(big.Uint16(b[1:])), 0, nil
 	case extra32:
-		return uintptr(size) + uintptr(big.Uint32(b[1:])), 0, nil
+		// On 32-bit platforms, uintptr and int cannot hold every 32-bit
+		// length.
+		sz := uint64(size) + uint64(big.Uint32(b[1:]))
+		if sz > math.MaxInt {
+			return 0, 0, ErrLimitExceeded
+		}
+		return uintptr(sz), 0, nil
 	case map16v:
 		return uintptr(size), 2 * uintptr(big.Uint16(b[1:])), nil
 	case map32v:
-		return uintptr(size), 2 * uintptr(big.Uint32(b[1:])), nil
+		o := 2 * uint64(big.Uint32(b[1:]))
+		if o > math.MaxInt {
+			return 0, 0, ErrLimitExceeded
+		}
+		return uintptr(size), uintptr(o), nil
 	case array16v:
 		return uintptr(size), uintptr(big.Uint16(b[1:])), nil
 	case array32v:
