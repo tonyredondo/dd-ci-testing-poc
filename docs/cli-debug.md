@@ -75,7 +75,9 @@ The log records:
   `civisibility: no signal handler: os/signal was built without ddto's overlay`
   and handles no signal, as under go test. A test process that `os.Exit`
   ends during its tests logs
-  `civisibility: os.Exit before CI Visibility closed; closing it`.
+  `civisibility: os.Exit before CI Visibility closed; closing it`, and
+  `ERROR: civisibility: closing CI Visibility in os.Exit did not finish within 1m0s; exiting without it`
+  when that shutdown cannot finish.
 - Optional library discovery, including how many imports still need a query
   and how many standard-library imports it left out.
   Testify and goleak each report detection, instrumentation and warnings.

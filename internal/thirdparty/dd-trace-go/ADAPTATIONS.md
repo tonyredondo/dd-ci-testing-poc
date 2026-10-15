@@ -1262,14 +1262,17 @@ for Mini only. `TransformSignal` in `internal/instrument/signal.go` edits
 channel receives a signal only when no other channel wants it. Channels that
 `Stop` is removing count too, as `process` still delivers to them, and so does
 a channel that the test stops right after its delivery: the check runs under
-the lock that `process` holds. It also edits `Reset`, which removes a signal
-from every channel, Mini's included, and disables it: `Reset` passes `cancel`
-the hook's `__dd_civisibility_resetSignal` instead of `disableSignal`. Under
-the same lock, that action registers Mini's channel again for a signal that
-Mini wanted and keeps the signal enabled, so it never ends the process without
-reaching Mini first; other signals are disabled as before. Reset does not undo
-`Ignore`, so a signal that the test ignores stays ignored and without Mini.
-Both edits stay on their lines, so os/signal keeps its positions.
+the lock that `process` holds. It also edits `Reset` and `Ignore`, which
+remove a signal from every channel, Mini's included, through `cancel`. `Reset`
+passes `cancel` the hook's `__dd_civisibility_resetSignal` instead of
+`disableSignal`: under the same lock, that action registers Mini's channel
+again for a signal that Mini holds and keeps the signal enabled, so it never
+ends the process without reaching Mini first; other signals are disabled as
+before. `Ignore` passes `__dd_civisibility_ignoreSignal` instead of
+`ignoreSignal`, which also makes Mini stop holding the signal for good: Go
+keeps an ignored signal ignored after `Reset`, and for SIGINT and SIGHUP even
+after `Notify` and `Stop`, where only the operating system remembers it. The
+edits stay on their lines, so os/signal keeps its positions.
 
 `SignalHook` sets `signalNotify` and `signalStop` in
 [`civisibility.go`](civisibility/integrations/civisibility.go) through
@@ -1278,9 +1281,10 @@ os/signal initializes before Mini: a Mini function that runs first and that
 `-coverpkg` instruments records its coverage counters without a package, and
 Go reports `internal error in coverage meta-data tracking` when it writes the
 profile. Mini's channel and its signals change under handlers' lock, after
-`Notify` has created the channel map and started the signal loop. Mini stops
-its channel through `signalStop`, so that `Reset` does not register it again
-afterwards.
+`Notify` has created the channel map and started the signal loop. Under that
+lock Mini holds its signals again, in case a `Reset` ran since `Notify`. Mini
+stops its channel through `signalStop`, so that `Reset` does not register it
+again afterwards.
 
 On such a signal Mini closes CI Visibility as before, stops its channel, and
 sends the signal to its own process again. With no channel left, the runtime
@@ -1306,7 +1310,11 @@ exit hook (`internal/runtime/exithook`, which coverage uses to write its
 counters). `os.Exit` runs it before the process ends, with any status.
 `forcedExit` runs CI Visibility's shutdown; after a normal end CI Visibility
 is already closed, and it returns at once, and while another goroutine shuts
-it down it waits for that shutdown. It does not wait for the signal handler's
+it down it waits for that shutdown. The shutdown runs on its own goroutine,
+and `forcedExit` waits for it at most a minute (`forcedExitTimeout`): the
+goroutine that called `os.Exit` can hold a lock that the shutdown needs, as
+when user code that Mini calls during its own shutdown, such as a replaced
+`http.DefaultTransport`, exits. It does not join the signal handler's
 goroutine: on Windows that goroutine calls `os.Exit` after a signal, and would
 wait for itself. Another package's init can call `os.Exit` after testing
 registered the hook and before Mini initializes; CI Visibility has not started
@@ -1328,11 +1336,13 @@ Checks: `TestMiniSignalsKeepGoTestBehavior`, `TestMiniForcedExitKeepsEvents`,
 `TestExitHookMatchesMiniRegistration`, `TestPrepareSignalHook`,
 `TestPrepareExitHook`, `TestForcedExitClosesCIVisibility`,
 `TestForcedExitRecoversPanics`, `TestForcedExitFromTheSignalHandlerReturns`,
-`TestForcedExitBeforeTheRuntimeInitializes`,
+`TestForcedExitBeforeTheRuntimeInitializes`, `TestForcedExitBoundsItsWait`,
 `TestCIVisibilitySignalHandlerNeedsTheOverlay`
 and `TestCIVisibilitySignalHandlerKeepsIgnoredSignalsIgnored`. This package's
 own tests run without the overlays and use `signal.Notify` and `signal.Stop`
-in place of the hook's functions.
+in place of the hook's functions. Their shared cleanup waits for the
+bootstrap's tracked background work first, which a shutdown that ends early,
+as on a panic, can leave running.
 
 ## Per-test allocations
 

@@ -51,7 +51,7 @@ func TestToolchainProvidesSignalHook(t *testing.T) {
 		if got, want := bytes.Count(body, []byte("\n")), bytes.Count(files[path], []byte("\n")); got != want {
 			t.Errorf("the edit moved os/signal's lines: %d lines, want %d", got, want)
 		}
-		for _, call := range []string{"__dd_civisibility_signalWantedElsewhere(", "cancel(sig, __dd_civisibility_resetSignal)"} {
+		for _, call := range []string{"__dd_civisibility_signalWantedElsewhere(", "cancel(sig, __dd_civisibility_resetSignal)", "cancel(sig, __dd_civisibility_ignoreSignal)"} {
 			if n := bytes.Count(body, []byte(call)); n != 1 {
 				t.Errorf("%d calls of %s", n, call)
 			}
@@ -172,7 +172,7 @@ func signum(sig os.Signal) int { return 0 }
 
 func enableSignal(sig int) {}
 
-func signalIgnored(sig int) bool { return false }
+func ignoreSignal(sig int) {}
 
 func Notify(c chan<- os.Signal, sig ...os.Signal) {}
 
@@ -180,6 +180,10 @@ func Stop(c chan<- os.Signal) {}
 
 func Reset(sig ...os.Signal) {
 	cancel(sig, disableSignal)
+}
+
+func Ignore(sig ...os.Signal) {
+	cancel(sig, ignoreSignal)
 }
 
 func cancel(sigs []os.Signal, action func(int)) {}
@@ -207,8 +211,8 @@ func process(sig os.Signal) {
 }
 `
 
-// The edits name process's own channel and signal and Reset's own parameter,
-// and touch only process's delivery to handlers.m and Reset's cancel.
+// The edits name process's own channel and signal, and touch only process's
+// delivery to handlers.m and the actions of Reset's and Ignore's cancel.
 func TestTransformSignalEditsTheDelivery(t *testing.T) {
 	source := strings.NewReplacer("for c, h := range", "for ch, hd := range", "if h.want(n) {\n\t\t\tselect {\n\t\t\tcase c <- sig", "if hd.want(n) {\n\t\t\tselect {\n\t\t\tcase ch <- sig",
 		"func Reset(sig ...os.Signal) {\n\tcancel(sig, disableSignal)", "func Reset(s ...os.Signal) {\n\tcancel(s, disableSignal)").Replace(signalSource)
@@ -220,12 +224,13 @@ func TestTransformSignalEditsTheDelivery(t *testing.T) {
 	for _, want := range []string{
 		"if hd.want(n) && !__dd_civisibility_signalWantedElsewhere(ch, n) {",
 		"\tcancel(s, __dd_civisibility_resetSignal)\n",
+		"\tcancel(sig, __dd_civisibility_ignoreSignal)\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("edited source lacks %q", want)
 		}
 	}
-	if strings.Count(got, "__dd_civisibility_") != 2 || strings.Count(got, "\n") != strings.Count(source, "\n")+1 {
+	if strings.Count(got, "__dd_civisibility_") != 3 || strings.Count(got, "\n") != strings.Count(source, "\n")+1 {
 		t.Errorf("edited source edits more or moves lines:\n%s", got)
 	}
 }
@@ -246,6 +251,9 @@ func TestTransformSignalRejectsOtherShapes(t *testing.T) {
 		"Reset argument":       strings.Replace(signalSource, "\tcancel(sig, disableSignal)\n", "\tcancel(nil, disableSignal)\n", 1),
 		"no Reset":             strings.Replace(signalSource, "func Reset(", "func reset(", 1),
 		"no enableSignal":      strings.Replace(signalSource, "func enableSignal(sig int) {}", "", 1),
+		"no Ignore":            strings.Replace(signalSource, "func Ignore(", "func ignore(", 1),
+		"Ignore action":        strings.Replace(signalSource, "\tcancel(sig, ignoreSignal)\n", "\tcancel(sig, disableSignal)\n", 1),
+		"no ignoreSignal":      strings.Replace(signalSource, "func ignoreSignal(sig int) {}", "", 1),
 		"ref":                  strings.Replace(signalSource, "\tref      [numSig]int64\n", "\tref      []int64\n", 1),
 		"no process":           strings.Replace(signalSource, "func process(", "func deliver(", 1),
 		"other loop":           strings.Replace(signalSource, "range handlers.m {\n\t\tif h.want(n)", "range handlers.m {\n\t\t_ = 0\n\t\tif h.want(n)", 1),

@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -102,4 +103,43 @@ func TestForcedExitBeforeTheRuntimeInitializes(t *testing.T) {
 		t.Fatalf("the exit hook panicked: %s", lines)
 	}
 	require.Equal(t, civisibility.StateUninitialized, civisibility.GetState())
+}
+
+// The goroutine that calls os.Exit can hold a lock that the shutdown needs,
+// as when user code that Mini calls during its own shutdown exits. The hook
+// then gives up after its timeout instead of hanging os.Exit.
+func TestForcedExitBoundsItsWait(t *testing.T) {
+	resetCIVisibilityBootstrapStateForTesting()
+	disableAdditionalFeaturesForBootstrapTest()
+	t.Cleanup(restoreCIVisibilityBootstrapForTesting)
+	original := forcedExitTimeout
+	forcedExitTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { forcedExitTimeout = original })
+
+	initializeCIVisibilityLifecycleForTesting()
+	var held sync.Mutex
+	held.Lock() // the exiting goroutine's lock
+	PushCiVisibilityCloseAction(func() {
+		held.Lock()
+		held.Unlock()
+	})
+
+	returned := make(chan struct{})
+	go func() {
+		forcedExit()
+		close(returned)
+	}()
+	select {
+	case <-returned:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the exit hook waits for a shutdown that the exiting goroutine blocks")
+	}
+	held.Unlock()
+	// Waits for the shutdown that the hook started, then for the owner to
+	// release the lock under which it publishes the end, before the test's
+	// cleanup resets that state.
+	ExitCiVisibility()
+	closeActionsMutex.Lock()
+	closeActionsMutex.Unlock()
+	require.Equal(t, civisibility.StateExited, civisibility.GetState())
 }

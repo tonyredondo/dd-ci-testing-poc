@@ -26,8 +26,11 @@ import (
 // Reset removes a signal from every channel, Mini's included, and returns it
 // to its default action. TransformSignal gives Reset's cancel the action
 // __dd_civisibility_resetSignal instead of disableSignal: for a signal that
-// Mini wanted, it registers Mini's channel again under the same lock, so the
-// signal never ends the process without reaching Mini first.
+// Mini holds, it registers Mini's channel again under the same lock, so the
+// signal never ends the process without reaching Mini first. Ignore's cancel
+// gets __dd_civisibility_ignoreSignal instead of ignoreSignal: Mini stops
+// holding a signal that the test ignores, which then stays ignored as without
+// ddto, also after a later Notify, Stop or Reset.
 //
 // The hook sets Mini's variables instead of calling Mini: os/signal
 // initializes before Mini, and a Mini function that coverage instruments
@@ -46,9 +49,12 @@ var __dd_civisibility_signalNotify func(chan<- os.Signal, ...os.Signal)
 //go:linkname __dd_civisibility_signalStop github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations.signalStop
 var __dd_civisibility_signalStop func(chan<- os.Signal)
 
+// Mini's channel, the signal numbers it registered and those that the test
+// ignored since, all guarded by handlers' lock.
 var (
-	__dd_civisibility_signals chan<- os.Signal // Mini's channel
-	__dd_civisibility_wanted  []int            // the signal numbers that Mini registered
+	__dd_civisibility_signals chan<- os.Signal
+	__dd_civisibility_wanted  []int
+	__dd_civisibility_ignored []int
 )
 
 func init() {
@@ -57,11 +63,15 @@ func init() {
 		for _, s := range sig {
 			wanted = append(wanted, signum(s))
 		}
-		// Notify first: it creates handlers.m and starts the signal loop,
-		// which __dd_civisibility_resetSignal relies on once c is Mini's.
+		// Notify creates handlers.m and starts the signal loop, which
+		// __dd_civisibility_hold relies on once c is Mini's.
 		Notify(c, sig...)
 		handlers.Lock()
 		__dd_civisibility_signals, __dd_civisibility_wanted = c, wanted
+		// A Reset after Notify removed c without knowing it was Mini's.
+		for _, n := range wanted {
+			__dd_civisibility_hold(n)
+		}
 		handlers.Unlock()
 	}
 	__dd_civisibility_signalStop = func(c chan<- os.Signal) {
@@ -93,20 +103,20 @@ func __dd_civisibility_signalWantedElsewhere(c chan<- os.Signal, n int) bool {
 	return false
 }
 
-// __dd_civisibility_resetSignal is Reset's action for signal n, which cancel
-// calls holding handlers' lock after removing n from every channel. It
-// disables n, as Reset does, unless Mini wanted n: then Mini's channel wants
-// it again, as after Notify, and n stays enabled throughout. Reset does not
-// undo Ignore, so an ignored signal stays ignored and without Mini.
-func __dd_civisibility_resetSignal(n int) {
+// __dd_civisibility_hold makes Mini's channel want signal n, as Notify does,
+// if Mini registered n and the test has not ignored it since, and reports
+// whether it did. The caller holds handlers' lock.
+func __dd_civisibility_hold(n int) bool {
 	c := __dd_civisibility_signals
 	wanted := false
 	for _, w := range __dd_civisibility_wanted {
 		wanted = wanted || w == n
 	}
-	if c == nil || !wanted || signalIgnored(n) {
-		disableSignal(n)
-		return
+	for _, i := range __dd_civisibility_ignored {
+		wanted = wanted && i != n
+	}
+	if c == nil || !wanted {
+		return false
 	}
 	h := handlers.m[c]
 	if h == nil {
@@ -118,6 +128,25 @@ func __dd_civisibility_resetSignal(n int) {
 		handlers.ref[n]++
 	}
 	enableSignal(n)
+	return true
+}
+
+// __dd_civisibility_resetSignal is Reset's action for signal n, which cancel
+// calls holding handlers' lock after removing n from every channel. It
+// disables n, as Reset does, unless Mini holds n: then Mini's channel wants
+// it again, and n stays enabled throughout.
+func __dd_civisibility_resetSignal(n int) {
+	if !__dd_civisibility_hold(n) {
+		disableSignal(n)
+	}
+}
+
+// __dd_civisibility_ignoreSignal is Ignore's action for signal n, which
+// cancel calls holding handlers' lock after removing n from every channel.
+// Mini stops holding n for good.
+func __dd_civisibility_ignoreSignal(n int) {
+	__dd_civisibility_ignored = append(__dd_civisibility_ignored, n)
+	ignoreSignal(n)
 }
 `
 
@@ -139,7 +168,7 @@ var signalHookAPI = []string{
 	"func enableSignal(int)",
 	"func disableSignal(int)",
 	"func signum(os.Signal) int",
-	"func signalIgnored(int) bool",
+	"func ignoreSignal(int)",
 }
 
 // signalRuntimeAPI is what SignalHook's linknames name in Mini's integrations
@@ -151,8 +180,9 @@ var signalRuntimeAPI = []string{
 
 // TransformSignal checks that package os/signal, given as the sources that the
 // build compiles, declares what SignalHook uses, and returns its file whose
-// process asks the hook about Mini's channel and whose Reset keeps Mini's
-// channel. The edits stay on their lines, so os/signal keeps its positions.
+// process asks the hook about Mini's channel, and whose Reset and Ignore give
+// cancel the hook's actions. The edits stay on their lines, so os/signal keeps
+// its positions.
 func TransformSignal(files map[string][]byte) (map[string][]byte, error) {
 	if err := declarationsError(files, signalHookAPI, "os/signal lacks %s"); err != nil {
 		return nil, err
@@ -162,7 +192,7 @@ func TransformSignal(files map[string][]byte) (map[string][]byte, error) {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	deliveries, resets := 0, 0
+	deliveries, cancels := 0, map[string]int{}
 	output := map[string][]byte{}
 	for _, name := range names {
 		src := files[name]
@@ -190,10 +220,14 @@ func TransformSignal(files map[string][]byte) (map[string][]byte, error) {
 						fmt.Sprintf("%s && !__dd_civisibility_signalWantedElsewhere(%s, %s)", text(d.call), d.channel, text(d.signal))})
 					deliveries++
 				}
-			case "Reset":
-				if action := resetAction(fn); action != nil {
-					edits = append(edits, edit{fs.Position(action.Pos()).Offset, fs.Position(action.End()).Offset, "__dd_civisibility_resetSignal"})
-					resets++
+			case "Reset", "Ignore":
+				native, hook := "disableSignal", "__dd_civisibility_resetSignal"
+				if fn.Name.Name == "Ignore" {
+					native, hook = "ignoreSignal", "__dd_civisibility_ignoreSignal"
+				}
+				if action := cancelAction(fn, native); action != nil {
+					edits = append(edits, edit{fs.Position(action.Pos()).Offset, fs.Position(action.End()).Offset, hook})
+					cancels[fn.Name.Name]++
 				}
 			}
 		}
@@ -215,8 +249,8 @@ func TransformSignal(files map[string][]byte) (map[string][]byte, error) {
 	switch {
 	case deliveries != 1:
 		return nil, fmt.Errorf("os/signal's process delivers to handlers.m in %d places that TransformSignal recognizes, want 1", deliveries)
-	case resets != 1:
-		return nil, fmt.Errorf("os/signal declares %d Reset functions that TransformSignal recognizes, want 1", resets)
+	case cancels["Reset"] != 1 || cancels["Ignore"] != 1:
+		return nil, fmt.Errorf("os/signal declares %d Reset and %d Ignore functions that TransformSignal recognizes, want 1 each", cancels["Reset"], cancels["Ignore"])
 	}
 	return output, nil
 }
@@ -274,10 +308,10 @@ func processDeliveries(body *ast.BlockStmt) []signalDelivery {
 	return found
 }
 
-// resetAction returns the action of Reset's only statement,
-// "cancel(sig, disableSignal)" with Reset's variadic os.Signal parameter, or
-// nil.
-func resetAction(fn *ast.FuncDecl) *ast.Ident {
+// cancelAction returns the action of fn's only statement,
+// "cancel(sig, native)" with fn's variadic os.Signal parameter, as in Reset and
+// Ignore, or nil.
+func cancelAction(fn *ast.FuncDecl, native string) *ast.Ident {
 	params := fn.Type.Params.List
 	if len(params) != 1 || len(params[0].Names) != 1 || render(params[0].Type) != "...os.Signal" || len(fn.Body.List) != 1 {
 		return nil
@@ -293,7 +327,7 @@ func resetAction(fn *ast.FuncDecl) *ast.Ident {
 	cancel, ok := call.Fun.(*ast.Ident)
 	param, paramOK := call.Args[0].(*ast.Ident)
 	action, actionOK := call.Args[1].(*ast.Ident)
-	if !ok || !paramOK || !actionOK || cancel.Name != "cancel" || param.Name != params[0].Names[0].Name || action.Name != "disableSignal" {
+	if !ok || !paramOK || !actionOK || cancel.Name != "cancel" || param.Name != params[0].Names[0].Name || action.Name != native {
 		return nil
 	}
 	return action

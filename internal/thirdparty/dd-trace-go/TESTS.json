@@ -529,9 +529,9 @@
       "source": "internal/civisibility/integrations/civisibility_parent_test.go",
       "destination": "internal/thirdparty/dd-trace-go/civisibility/integrations/civisibility_parent_test.go",
       "source_sha256": "87c77b91fe4ff0304f4089f0f4815d9935418b6b5537bdfca300d8736956a508",
-      "adapted_sha256": "7041d5e39b88dc282d8f578184d97334e7fef4909429eaf0d19185c930fbeb29",
+      "adapted_sha256": "fd1922a59387d7fe0747cf83c04d80f35c5cdab0bd5b9680ce1b958fb3f6bb1d",
       "kind": "full",
-      "adaptation": "APM mock startup is replaced by a writer-free native CI bootstrap callback; assertions preserved; standard-library assertion helpers"
+      "adaptation": "APM mock startup is replaced by a writer-free native CI bootstrap callback; assertions preserved; standard-library assertion helpers; the shared restore waits for the bootstrap's tracked background work"
     },
     {
       "source": "internal/civisibility/integrations/manual_api_test.go",

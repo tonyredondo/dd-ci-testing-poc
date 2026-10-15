@@ -331,6 +331,10 @@ func TryPushCiVisibilityPreCloseAction(action ciVisibilityCloseAction) bool {
 	return true
 }
 
+// forcedExitTimeout bounds forcedExit's wait for CI Visibility's shutdown;
+// tests shorten it.
+var forcedExitTimeout = time.Minute
+
 // forcedExit closes CI Visibility when the process ends through os.Exit, as
 // when a test calls os.Exit or log.Fatal before the tests finish, so that the
 // events of the tests that ran and the session are sent. ddto's testing
@@ -338,18 +342,14 @@ func TryPushCiVisibilityPreCloseAction(action ciVisibilityCloseAction) bool {
 // any status. After the tests, CI Visibility is already closed and it returns
 // at once; while another goroutine closes it, it waits for that shutdown.
 //
-// It does not wait for the signal handler's goroutine, which can be the one
-// calling os.Exit after a signal; the process ends anyway.
+// The shutdown runs on its own goroutine, and forcedExit waits for it at most
+// forcedExitTimeout: the goroutine that called os.Exit can hold a lock that
+// the shutdown needs, as when user code that Mini calls during its own
+// shutdown exits. It does not join the signal handler's goroutine, which can
+// be the one calling os.Exit after a signal.
 //
 //go:linkname forcedExit
 func forcedExit() {
-	// The runtime ends the process with a fatal error, instead of the status
-	// that os.Exit received, when an exit hook panics.
-	defer func() {
-		if r := recover(); r != nil {
-			log.Error("civisibility: closing CI Visibility in os.Exit panicked: %v", r)
-		}
-	}()
 	// The hook is registered with testing, so another package's init can call
 	// os.Exit before this package initializes; CI Visibility has not started
 	// then, and process retry children never start it.
@@ -360,8 +360,22 @@ func forcedExit() {
 	default:
 		return
 	}
-	markCIVisibilitySignalHandlerStopping()
-	exitCiVisibility(false)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error("civisibility: closing CI Visibility in os.Exit panicked: %v", r)
+			}
+		}()
+		markCIVisibilitySignalHandlerStopping()
+		exitCiVisibility(false)
+	}()
+	select {
+	case <-done:
+	case <-time.After(forcedExitTimeout):
+		log.Error("civisibility: closing CI Visibility in os.Exit did not finish within %s; exiting without it", forcedExitTimeout)
+	}
 }
 
 // ExitCiVisibility executes all registered close actions and stops the tracer.
