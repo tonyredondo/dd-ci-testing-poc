@@ -129,6 +129,9 @@ func FuzzSeeds(f *testing.F) {
 		// containers and the test that the crash output names.
 		{"panic", "goroutine", nil, nil, []string{"TestCrash fail"}, "crash: panic: background goroutine failed", "panic: background goroutine failed", 1},
 		{"fatal error", "map", nil, nil, []string{"TestCrash fail"}, "crash: fatal error in example.com/dd-ci-testing-fixture_test.TestCrash.func", "fatal error in ", 1},
+		// The panic hook's runtime also copies the fatal error's message to
+		// the crash output.
+		{"fatal error with panic hook", "map", []string{"--panic-hook"}, nil, []string{"TestCrash fail"}, "crash: fatal error: concurrent map writes", "fatal error: concurrent map writes", 1},
 		{"killed", "kill", nil, nil, nil, "", "the test process ended before it closed CI Visibility", 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

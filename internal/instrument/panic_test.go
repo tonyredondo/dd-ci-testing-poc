@@ -37,8 +37,29 @@ func TestToolchainGopanicTakesTheHook(t *testing.T) {
 	for name, src := range edited {
 		original := string(sources[name])
 		got := string(src)
-		if strings.Count(got, "__dd_civisibility_unhandledPanic") != 2 || strings.Count(got, "\n") != strings.Count(original, "\n")+1 {
-			t.Fatalf("%s: the edit adds more than the call or moves lines", name)
+		if strings.Count(got, "__dd_civisibility_") != 5 || strings.Count(got, "\n") != strings.Count(original, "\n")+1 {
+			t.Fatalf("%s: the edits add more than the calls or move lines", name)
+		}
+		// fatal and throw pass their message to fatalthrow, which copies it
+		// where it starts the panic, each on its line.
+		gotLines, originalLines := strings.Split(got, "\n"), strings.Split(original, "\n")
+		edited := map[string]string{
+			"fatalthrow(throwTypeRuntime)":   "fatalthrow(throwTypeRuntime, s)",
+			"fatalthrow(throwTypeUser)":      "fatalthrow(throwTypeUser, s)",
+			"func fatalthrow(t throwType) {": "func fatalthrow(t throwType, __dd_civisibility_message string) {",
+			"startpanic_m()":                 "if startpanic_m() { __dd_civisibility_copyFatal(__dd_civisibility_message) }",
+		}
+		seen := 0
+		for i, line := range originalLines {
+			if want, ok := edited[strings.TrimSpace(line)]; ok {
+				seen++
+				if strings.TrimSpace(gotLines[i+1]) != want {
+					t.Errorf("%s:%d: %q, want %q", name, i+1, gotLines[i+1], want)
+				}
+			}
+		}
+		if seen != len(edited) {
+			t.Errorf("%s: found %d of the %d edited lines", name, seen, len(edited))
 		}
 		var hookLine, nativeLine int
 		for i, line := range strings.Split(got, "\n") {
@@ -58,20 +79,48 @@ func TestToolchainGopanicTakesTheHook(t *testing.T) {
 }
 
 // PanicHook compiles as a file of package runtime, which may import only
-// unsafe.
+// unsafe, against what panicToolchainAPI lists of the runtime.
 func TestPanicHookTypeChecks(t *testing.T) {
+	const runtime = `package runtime
+
+import "unsafe"
+
+type uintptrValue struct{ v uintptr }
+
+func (u *uintptrValue) Load() uintptr { return u.v }
+
+var crashFD uintptrValue
+
+func write(fd uintptr, p unsafe.Pointer, n int32) int32 { return n }
+`
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, panicHookName, PanicHook, parser.ParseComments)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, spec := range file.Imports {
-		if spec.Path.Value != `"unsafe"` {
-			t.Errorf("PanicHook imports %s", spec.Path.Value)
+	var files []*ast.File
+	for name, src := range map[string]string{panicHookName: PanicHook, "runtime.go": runtime} {
+		file, err := parser.ParseFile(fset, name, src, parser.ParseComments)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, file)
+		if name != panicHookName {
+			continue
+		}
+		for _, spec := range file.Imports {
+			if spec.Path.Value != `"unsafe"` {
+				t.Errorf("PanicHook imports %s", spec.Path.Value)
+			}
 		}
 	}
-	if _, err := (&types.Config{Importer: importer.Default()}).Check("runtime", fset, []*ast.File{file}, nil); err != nil {
+	if _, err := (&types.Config{Importer: importer.Default()}).Check("runtime", fset, files, nil); err != nil {
 		t.Fatal(err)
+	}
+	for _, used := range []string{"var crashFD ", "func write("} {
+		listed := false
+		for _, decl := range panicToolchainAPI {
+			listed = listed || strings.HasPrefix(decl, used)
+		}
+		if !listed {
+			t.Errorf("panicToolchainAPI lacks %s", used)
+		}
 	}
 }
 
@@ -119,7 +168,11 @@ func TestPanicHookRejectsOtherRuntimesAndToolchains(t *testing.T) {
 	if err := PanicHookRuntimeError(map[string][]byte{"crash.go": []byte("package integrations\nvar unhandledPanic func(any)\n")}); err != nil {
 		t.Errorf("runtime: %v", err)
 	}
-	const gopanic = "package runtime\ntype _panic struct {\n\targ any\n}\nfunc preprintpanics(p *_panic) {}\nfunc gopanic(e any) {\n\tvar p _panic\n\tpreprintpanics(&p)\n\tfatalpanic(&p)\n}\n"
+	const gopanic = "package runtime\nimport (\n\t\"internal/runtime/atomic\"\n\t\"unsafe\"\n)\nvar crashFD atomic.Uintptr\nfunc write(fd uintptr, p unsafe.Pointer, n int32) int32 { return n }\n" +
+		"type _panic struct {\n\targ any\n}\nfunc preprintpanics(p *_panic) {}\nfunc gopanic(e any) {\n\tvar p _panic\n\tpreprintpanics(&p)\n\tfatalpanic(&p)\n}\n" +
+		"func throw(s string) {\n\tsystemstack(func() {\n\t\tprint(\"fatal error: \")\n\t\tprintindented(s)\n\t})\n\tfatalthrow(throwTypeRuntime)\n}\n" +
+		"func fatal(s string) {\n\tsystemstack(func() {\n\t\tprint(\"fatal error: \")\n\t\tprintindented(s)\n\t})\n\tfatalthrow(throwTypeUser)\n}\n" +
+		"type throwType uint32\nfunc startpanic_m() bool { return true }\nfunc fatalthrow(t throwType) {\n\tsystemstack(func() {\n\t\tif isSecureMode() {\n\t\t\texit(2)\n\t\t}\n\t\tstartpanic_m()\n\t})\n}\n"
 	for name, source := range map[string]string{
 		"no gopanic":           strings.Replace(gopanic, "gopanic", "gopanic2", 1),
 		"no preprintpanics":    strings.Replace(gopanic, "\tpreprintpanics(&p)\n", "", 1),
@@ -128,6 +181,10 @@ func TestPanicHookRejectsOtherRuntimesAndToolchains(t *testing.T) {
 		"other argument":       strings.Replace(gopanic, "\tpreprintpanics(&p)", "\tpreprintpanics(nil)", 1),
 		"no arg field":         strings.Replace(gopanic, "\targ any\n", "\tvalue any\n", 1),
 		"preprintpanics":       strings.Replace(gopanic, "func preprintpanics(p *_panic) {}", "func preprintpanics(p _panic) {}", 1),
+		"no crashFD":           strings.Replace(gopanic, "var crashFD atomic.Uintptr\n", "", 1),
+		"no fatalthrow call":   strings.Replace(gopanic, "\tfatalthrow(throwTypeUser)\n", "", 1),
+		"throw message":        strings.Replace(gopanic, "func throw(s string) {", "func throw(string) {", 1),
+		"no startpanic_m call": strings.Replace(gopanic, "\t\tstartpanic_m()\n", "", 1),
 		"already instrumented": gopanic + "var __dd_civisibility_unhandledPanic func(any)\n",
 	} {
 		if _, err := TransformPanic(map[string][]byte{"panic.go": []byte(source)}); err == nil {
@@ -138,7 +195,8 @@ func TestPanicHookRejectsOtherRuntimesAndToolchains(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "\tpreprintpanics(&p); if __dd_civisibility_unhandledPanic != nil { __dd_civisibility_unhandledPanic(p.arg) }\n"; !strings.Contains(string(edited["panic.go"]), want) {
-		t.Fatalf("edited gopanic:\n%s", edited["panic.go"])
+	got := string(edited["panic.go"])
+	if !strings.Contains(got, "\tpreprintpanics(&p); if __dd_civisibility_unhandledPanic != nil { __dd_civisibility_unhandledPanic(p.arg) }\n") || !strings.Contains(got, "\tfatalthrow(throwTypeRuntime, s)\n") || !strings.Contains(got, "\tfatalthrow(throwTypeUser, s)\n") || !strings.Contains(got, "func fatalthrow(t throwType, __dd_civisibility_message string) {") || !strings.Contains(got, "\t\tif startpanic_m() { __dd_civisibility_copyFatal(__dd_civisibility_message) }\n") {
+		t.Fatalf("edited runtime:\n%s", got)
 	}
 }

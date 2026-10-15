@@ -157,9 +157,11 @@ More options follow the same rule:
   [Keeping the CI state](docs/cli-debug.md#keeping-the-ci-state). It also
   keeps the test session's directory.
 - `--panic-hook` edits Go's runtime so that Mini sends its events before an
-  unrecovered panic in any goroutine ends a test process. The first build with
-  it, per Go version and build variant, compiles every package again. See
-  [Crashes](internal/thirdparty/dd-trace-go/ADAPTATIONS.md#crashes).
+  unrecovered panic in any goroutine ends a test process, and so that a fatal
+  error's message, such as `concurrent map writes`, reaches the session. The
+  first build with it, per Go version and build variant, compiles every
+  package again; other projects then reuse the standard library that it
+  compiled. See [Crashes](internal/thirdparty/dd-trace-go/ADAPTATIONS.md#crashes).
 - `--session-per-binary` keeps one test session per test binary instead of
   one for the command.
 

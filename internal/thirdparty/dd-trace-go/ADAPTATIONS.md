@@ -1442,7 +1442,14 @@ runtime calls the value's `Error` or `String` method there for the last time
 before it stops the other goroutines; `panicValueText` renders the result
 without calling any method again. That also covers testing's timeout and a
 `nil` dereference in a background goroutine. The runtime still runs no Go code
-for fatal errors, the race detector's halt or a kill. The hook is opt-in: every
+for fatal errors, the race detector's halt or a kill. The runtime prints a
+fatal error's message before it starts copying its output to the crash output
+(`runtime/debug.SetCrashOutput`), so that output starts with the goroutine;
+with the hook, `fatal` and `throw` pass the message to `fatalthrow`, which takes
+it as a new last parameter and writes it there right after `startpanic_m`:
+after the secure-mode exit, and once the runtime keeps the crash output's
+descriptor from being replaced or closed. Each crashing thread copies its own
+message. Like `print`, the copy only writes. The hook is opt-in: every
 package depends on the runtime, so the first build with it, per Go version and
 build variant, compiles every package again, and a CI cache that is not saved
 after the run pays that each time. ddto warns and builds without it when the
@@ -1515,7 +1522,8 @@ the test function that created the goroutine, in a suite left open
 (`crashedTest`). Methods of testify suites, `TestMain`, helpers and dynamic
 subtest names name no test. The session's error names the crash: a panic's
 first line, or, for a fatal error, whose message the runtime prints before it
-copies its output to the crash output, its first frame outside the runtime. A
+copies its output to the crash output, its first frame outside the runtime,
+unless `--panic-hook` copied the message too. A
 process without crash output was killed or stopped by a sanitizer. ddto sends
 no session when no test process joined and go test succeeded, as when every
 result came from Go's cache.
