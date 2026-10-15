@@ -32,7 +32,12 @@ type goPackage struct {
 	DepOnly                            bool // Listed by -deps only as a dependency of the named packages.
 	GoFiles, TestGoFiles, XTestGoFiles []string
 	Imports, TestImports, XTestImports []string
-	Module                             *struct {
+	// ForTest and the other files are listed only for file coverage.
+	ForTest                                               string
+	CgoFiles, EmbedFiles, TestEmbedFiles, XTestEmbedFiles []string
+	SFiles, CFiles, CXXFiles, MFiles, HFiles, FFiles      []string
+	SwigFiles, SwigCXXFiles, SysoFiles                    []string
+	Module                                                *struct {
 		Path, Version, Dir string
 		Main               bool
 		Replace            *struct{ Path, Dir, Version string }
@@ -232,6 +237,11 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		phase.finish(nil)
 		debug.printf("user overlay entries=%d", len(replacements))
 	}
+	userOverlay := make(map[string]bool, len(replacements))
+	for path := range replacements {
+		userOverlay[path] = true
+	}
+	vendorProvided := false
 	temp, e := os.MkdirTemp("", "dd-ci-testing-poc-")
 	if e != nil {
 		return plan, e
@@ -290,6 +300,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 				if plan.Workfile, plan.workspaceLock, e = vendorWorkspace(ctx, plan.Workfile, selected, replacements); e != nil {
 					return plan, e
 				}
+				vendorProvided = true
 			}
 			opts.workfile = plan.Workfile
 		} else if root := moduleRoot(dir); root != "" {
@@ -317,6 +328,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 				if e != nil {
 					return plan, e
 				}
+				vendorProvided = true
 				opts.workfile = plan.Workfile
 			}
 		}
@@ -335,13 +347,13 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	// dependencies once. Reachability follows Imports through that graph
 	// instead of each package's Deps, a complete closure per package that grows
 	// with the product of package count and dependency depth.
-	list := func(patterns ...string) (packages []goPackage, err error) {
+	listWith := func(fields string, patterns ...string) (packages []goPackage, err error) {
 		phase := debug.start("resolve packages")
 		defer func() {
 			phase.finish(err)
 			debug.printf("package query patterns=%d resolved=%d", len(patterns), len(packages))
 		}()
-		listArgs := append([]string{"list", "-e", "-json=Dir,Name,ImportPath,Standard,DepOnly,GoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,Module,Error"}, opts.buildFlags...)
+		listArgs := append([]string{"list", "-e", "-json=" + fields}, opts.buildFlags...)
 		listArgs = append(listArgs, patterns...)
 		// Keep Env from os/exec, which sets PWD to dir, so go list reports
 		// package directories with the spelling of dir, even through symbolic
@@ -354,6 +366,9 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			}
 		}
 		return readPackages(ctx, cmd, "resolve packages")
+	}
+	list := func(patterns ...string) ([]goPackage, error) {
+		return listWith("Dir,Name,ImportPath,Standard,DepOnly,GoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,Module,Error", patterns...)
 	}
 	if runtime == Mini && opts.mod != "mod" && plan.Workfile == "" {
 		plan.Modfile, e = preprovideMini(ctx, dir, opts, temp, replacements, progress)
@@ -652,6 +667,37 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			plan.Warnings = append(plan.Warnings, "--panic-hook: "+refusal+"; an unrecovered panic still loses the test process's events")
 		}
 	}
+	if opts.fileCoverage {
+		phase := debug.start("file coverage")
+		refusal := fileCoverageRefusal(&plan, opts, vendorProvided, listed, replacements)
+		var summary fileCoverageSummary
+		if refusal == "" {
+			// The build with tests also links what only tests import.
+			patterns := append([]string{"-deps", "-test"}, opts.packages...)
+			if opts.mod == "mod" && !plan.moduleWorkspace {
+				patterns = append([]string{"-mod=readonly"}, patterns...)
+			}
+			tested, e := listWith(fileCoverageListFields, patterns...)
+			if e != nil {
+				refusal = "the package query with tests failed: " + strings.SplitN(e.Error(), "\n", 2)[0]
+			} else {
+				excluded := []string{opts.environment.GOROOT, opts.environment.GOMODCACHE}
+				if plan.gorootMirror != nil {
+					excluded = append(excluded, plan.gorootMirror.root)
+				}
+				summary, refusal, e = prepareFileCoverage(tested, repositoryRoots(dir, listed), excluded, replacements, userOverlay, temp, add)
+				if e != nil {
+					phase.finish(e)
+					return plan, e
+				}
+			}
+		}
+		phase.finish(nil)
+		debug.printf("file coverage installed=%t reason=%q packages=%d marked_files=%d always_files=%d", refusal == "", refusal, summary.packages, summary.marked, summary.always)
+		if refusal != "" {
+			plan.Warnings = append(plan.Warnings, "--experimental-file-coverage: "+refusal+"; per-test coverage keeps Go's coverage counters")
+		}
+	}
 	plan.coverOverlay = needsCoverOverlay(dir, opts, packages, rewrittenPackages)
 	plan.File = filepath.Join(temp, "overlay.json")
 	plan.InstrumentedFiles = len(rewritten.Files)
@@ -747,6 +793,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 	}
 	applyGoLauncher(ctx, &opts)
 	opts.panicHook = cli.PanicHook
+	opts.fileCoverage = cli.FileCoverage
 	dir := workingDirectory(cwd, opts)
 	debug.printf("working_directory=%q package_patterns=%d build_flags=%d", dir, len(opts.packages), len(opts.buildFlags))
 	if opts.help || explicitFiles(dir, opts.packages) {

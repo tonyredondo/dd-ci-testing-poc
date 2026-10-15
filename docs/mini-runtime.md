@@ -429,6 +429,77 @@ because the compiler applies the directives. The coverage of `testing`'s own
 code is also attributed by timing: `T.Run` continues in the parent goroutine
 while the attempt it started takes its first snapshot.
 
+### Experimental file coverage
+
+`ddto test --experimental-file-coverage` takes per-test coverage from file
+marks instead of Go's coverage counters. Test Impact Analysis skips by file,
+so a mark per source file is enough. Per-test coverage then works without
+`-cover`, and it reaches every package of the repository that a test runs,
+not only the packages that `-coverpkg` names.
+
+**What changes in the build.** ddto lists the build with its tests
+(`go list -deps -test`) and rewrites, through its overlay, every Go file of
+the repository's packages:
+- **The repository's packages:** those inside the Git working tree that holds
+  the working directory, or, outside Git, inside the main modules. That
+  includes `vendor/`, local `replace` targets and packages that only tests
+  import.
+- **The mark:** before every statement, a call to the package's hit function
+  raises the file's mark to Mini's current epoch. The call stays on the
+  statement's line, and a `//line` directive keeps the file's name, so stack
+  traces and test output keep their positions.
+- **The bank:** a generated file per package (`zz_ddto_file_coverage.go`), per
+  internal test package (`zz_ddto_file_coverage_test.go`) and per external
+  test package (`zz_ddto_file_coverage_x_test.go`) holds the marks and the
+  file names. It registers the bank while the package initializes. The
+  packages only read and write Mini's variables through linkname; they never
+  call Mini, which initializes after them.
+- **The test result cache:** the rewritten packages compile into their own
+  build cache entries. Runs with the flag share them, and Go's test result
+  cache works as without it.
+
+**What a test reports.** Each test advances the epoch when it starts. After
+its cleanups, it reports the files whose mark reached its epoch. Some files go
+to every test instead, because a test can depend on them without running a
+statement of theirs:
+- non-Go files of the linked packages: embedded files, assembly, C and the
+  rest;
+- Go files that a package embeds, which keep their content because embedding
+  reads the overlay;
+- files whose only code runs while packages initialize: declarations and
+  `init` functions;
+- cgo files;
+- files with a function directive under which the call could change behavior,
+  such as `//go:nosplit` or `//go:norace`;
+- files that ddto's own overlay replaces.
+
+Rows name files without line bitmaps.
+
+**When it applies.** The flag applies only with Mini and without Go's coverage
+flags, which would make cover count the marks, and without `-race`, where the
+marks' atomics would order goroutines for the race detector. It also needs a
+selected Mini that reads banks. Otherwise ddto prints
+`--experimental-file-coverage: <reason>; per-test coverage keeps Go's coverage counters`
+and builds as without the flag. It also refuses with Orchestrion's
+`-toolexec`, and when ddto provides vendored dependencies from its cache,
+outside the repository.
+
+**Limits.**
+- Top-level tests still run one at a time while coverage is collected, as
+  with Go's counters.
+- Tests retried in a child process report no per-test coverage.
+- As with Go's counters, a statement that blocks before the test starts and
+  resumes during it does not mark its file again.
+- The backend has to accept rows without bitmaps.
+
+**Measured on samber/lo** (333 tests, GOMAXPROCS=4):
+- No test misses a production file that Go's counters
+  (`-cover -covermode=atomic -coverpkg=./...`) report.
+- Every test has three more files: lo's type-only constraint files, which go
+  to every test.
+- Wall time: 8.43 s with marks, 8.40 s with Go's counters, 8.30 s without
+  per-test coverage.
+
 With `-race`, `ddto` overlays Mini's sources with copies that mark each
 function declaration `//go:norace`, so the race detector does not instrument
 Mini's own memory accesses: with 2,000 empty tests, about 22 µs less per test.

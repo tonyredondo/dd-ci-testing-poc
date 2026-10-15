@@ -75,6 +75,8 @@ func TestParseCLIArgsUploadTimeoutAndCIState(t *testing.T) {
 		{"panic hook", []string{"--panic-hook", "-race", "."}, []string{"-race", "."}, CLIOptions{Runtime: Mini, GitUploadTimeout: time.Minute, PanicHook: true}},
 		{"session per binary", []string{"-count=1", "--session-per-binary", "--panic-hook"}, []string{"-count=1"}, CLIOptions{Runtime: Mini, GitUploadTimeout: time.Minute, PanicHook: true, SessionPerBinary: true}},
 		{"test flag named like an option", []string{"-run", "--panic-hook", "."}, []string{"-run", "--panic-hook", "."}, CLIOptions{Runtime: Mini, GitUploadTimeout: time.Minute}},
+		{"file coverage", []string{"--experimental-file-coverage", "-count=1", "./..."}, []string{"-count=1", "./..."}, CLIOptions{Runtime: Mini, GitUploadTimeout: time.Minute, FileCoverage: true}},
+		{"test flag named like file coverage", []string{"-run", "--experimental-file-coverage", "."}, []string{"-run", "--experimental-file-coverage", "."}, CLIOptions{Runtime: Mini, GitUploadTimeout: time.Minute}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			options, got, err := ParseCLIArgs(tc.args)

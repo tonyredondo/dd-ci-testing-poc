@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "b7b8b17c3f6428b90d35fad5c203a2ac826505fad5c0df2233763e304570c86f",
+      "sha256": "b2fcc0fb324545b8f179e09f7efffb15f5311d803bf2e6b3c032e6b2f19f5dda",
       "role": "local"
     },
     {
@@ -378,6 +378,16 @@
       "source_sha256": "efbb2944244938dc1878b434a1d7ea90cb807916c65174e67217e0a51ba4761d"
     },
     {
+      "path": "civisibility/integrations/gotesting/coverage/file_coverage.go",
+      "sha256": "e51c0cfe9686604c97fc71a82e5aedb7d52fb6b55d6cdb186fb649fcfd5bab12",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/integrations/gotesting/coverage/file_coverage_test.go",
+      "sha256": "30d24af8b4755682fc82c86a163b122a0a171aba803904b467682790dd4fbe92",
+      "role": "local"
+    },
+    {
       "path": "civisibility/integrations/gotesting/coverage/lcov_report.go",
       "sha256": "3cf35e842d2df388a73050a103e870fb3fb142d163ae7066bdbc6d7575bdfff7",
       "role": "adapted",
@@ -445,7 +455,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/coverage/test_coverage.go",
-      "sha256": "c5830776b04d24589b461cb060c8d51ded4b49c775b4ea55a742de6b2d7c1011",
+      "sha256": "0efe3c92eb718517d2dae7f39c4a0030353fdd66a525597c89fb98ba03e11723",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/coverage/test_coverage.go",
       "source_sha256": "90f437bef02e1c4eca6e220f13d128ce8da64109359b66b98db6b5bb3bb5c352"
@@ -776,7 +786,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/testing.go",
-      "sha256": "d3a89bf160c8c03c8ec16ed4f7fbe0b1872b8c875c80250016bb7edf23eb710a",
+      "sha256": "967a9a9987c56ef2e122403112788dfdf48a470b736df5f9031bd7de50cd658c",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testing.go",
       "source_sha256": "73324a56f1b1c581df8620a4f67a51743b198b2470d43f9b645425fff6a63646"
