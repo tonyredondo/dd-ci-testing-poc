@@ -48,15 +48,16 @@ func TestProfileCoverage(t *testing.T) {
 // go test writes a relative -coverprofile in -outputdir, which is relative to
 // its directory.
 func TestCoverProfilePath(t *testing.T) {
-	dir := filepath.Join(string(filepath.Separator), "work")
+	// Absolute on every system, with a volume on Windows.
+	dir, abs := t.TempDir(), t.TempDir()
 	for _, tc := range []struct {
 		profile, output, want string
 	}{
 		{"", "", ""},
 		{"c.out", "", filepath.Join(dir, "c.out")},
 		{"c.out", "out", filepath.Join(dir, "out", "c.out")},
-		{"c.out", filepath.Join(string(filepath.Separator), "abs"), filepath.Join(string(filepath.Separator), "abs", "c.out")},
-		{filepath.Join(string(filepath.Separator), "p", "c.out"), "out", filepath.Join(string(filepath.Separator), "p", "c.out")},
+		{"c.out", abs, filepath.Join(abs, "c.out")},
+		{filepath.Join(abs, "p", "c.out"), "out", filepath.Join(abs, "p", "c.out")},
 	} {
 		if got := coverProfilePath(options{coverProfile: tc.profile, outputDir: tc.output}, dir); got != tc.want {
 			t.Errorf("profile %q outputdir %q: %q, want %q", tc.profile, tc.output, got, tc.want)
