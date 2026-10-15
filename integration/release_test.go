@@ -179,7 +179,20 @@ func TestInstallScriptsInstallTheReleaseExecutable(t *testing.T) {
 			if out, stderr, code := command(t, root, testEnv(), installed, "--version"); code != 0 || out != "ddto "+releaseTag+"\n" {
 				t.Fatalf("installed --version: %d %q %s", code, out, stderr)
 			}
-			if data, err := os.ReadFile(githubPath); err != nil || !strings.Contains(string(data), dir) {
+			// A script can write another spelling of the directory, such as
+			// Windows' long form of an 8.3 temporary path.
+			want, err := os.Stat(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(githubPath)
+			listed := false
+			for _, line := range strings.Split(string(data), "\n") {
+				if info, err := os.Stat(strings.TrimSpace(line)); err == nil && os.SameFile(info, want) {
+					listed = true
+				}
+			}
+			if err != nil || !listed {
 				t.Fatalf("GITHUB_PATH %q, want %s: %v", data, dir, err)
 			}
 		})
