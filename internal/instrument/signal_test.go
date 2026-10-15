@@ -1,0 +1,228 @@
+package instrument
+
+import (
+	"bytes"
+	"go/ast"
+	"go/build"
+	"go/importer"
+	"go/parser"
+	"go/token"
+	"go/types"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// toolchainSignalSources returns the os/signal files that the toolchain's
+// go/build context compiles for this platform.
+func toolchainSignalSources(t *testing.T) (*build.Package, map[string][]byte) {
+	t.Helper()
+	pkg, err := build.Default.Import("os/signal", "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string][]byte{}
+	for _, name := range pkg.GoFiles {
+		path := filepath.Join(pkg.Dir, name)
+		if files[path], err = os.ReadFile(path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return pkg, files
+}
+
+// Supported toolchains keep what SignalHook uses. If one stops, Mini builds
+// without the hook and handles no signal.
+func TestToolchainProvidesSignalHook(t *testing.T) {
+	_, files := toolchainSignalSources(t)
+	edited, err := TransformSignal(files)
+	if err != nil {
+		t.Fatalf("%v; review SignalHook", err)
+	}
+	if len(edited) != 1 {
+		t.Fatalf("edited %d files", len(edited))
+	}
+	for path, src := range edited {
+		header, body, _ := bytes.Cut(src, []byte("\n"))
+		if string(header) != "//line "+path+":1" {
+			t.Errorf("header %q", header)
+		}
+		if got, want := bytes.Count(body, []byte("\n")), bytes.Count(files[path], []byte("\n")); got != want {
+			t.Errorf("the edit moved os/signal's lines: %d lines, want %d", got, want)
+		}
+		if n := bytes.Count(body, []byte("__dd_civisibility_signalWantedElsewhere(")); n != 1 {
+			t.Errorf("%d calls of the hook", n)
+		}
+	}
+}
+
+// The edited os/signal and SignalHook compile together: every unexported
+// declaration that they use exists with the expected type.
+func TestSignalHookTypeChecks(t *testing.T) {
+	pkg, files := toolchainSignalSources(t)
+	edited, err := TransformSignal(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	var parsed []*ast.File
+	for path, src := range files {
+		if replacement, ok := edited[path]; ok {
+			src = replacement
+		}
+		file, err := parser.ParseFile(fset, path, src, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parsed = append(parsed, file)
+	}
+	hook, err := parser.ParseFile(fset, filepath.Join(pkg.Dir, "zz_dd_ci_visibility_signal.go"), SignalHook, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed = append(parsed, hook)
+	config := types.Config{Importer: importer.ForCompiler(fset, "source", nil)}
+	if _, err := config.Check("os/signal", fset, parsed, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// SignalHook's registration matches the function of Mini's integrations
+// package that its linkname names.
+func TestSignalHookMatchesMiniRegistration(t *testing.T) {
+	dir := filepath.Join("..", "thirdparty", "dd-trace-go", "civisibility", "integrations")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources := map[string][]byte{}
+	for _, entry := range entries {
+		if name := entry.Name(); strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") {
+			if sources[name], err = os.ReadFile(filepath.Join(dir, name)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := SignalHookRuntimeError(sources); err != nil {
+		t.Fatal(err)
+	}
+	file, err := parser.ParseFile(token.NewFileSet(), "", SignalHook, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared := ""
+	for _, decl := range file.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == "__dd_civisibility_registerSignalNotify" {
+			declared = "func registerSignalNotify" + signature(fn.Type)
+		}
+	}
+	if declared != signalRegistration {
+		t.Errorf("SignalHook declares %q, want %q", declared, signalRegistration)
+	}
+	target := "//go:linkname __dd_civisibility_registerSignalNotify github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations.registerSignalNotify\n"
+	if !strings.Contains(SignalHook, target) {
+		t.Error("SignalHook's linkname does not name Mini's integrations.registerSignalNotify")
+	}
+}
+
+// A runtime without the registration, or with another signature, builds
+// without the hook instead of failing to link.
+func TestSignalHookRuntimeErrorRejectsOtherRuntimes(t *testing.T) {
+	for name, source := range map[string]string{
+		"missing":   "package integrations\nfunc other() {}\n",
+		"signature": "package integrations\nimport _ \"unsafe\"\n//go:linkname registerSignalNotify\nfunc registerSignalNotify(func(chan<- os.Signal)) {}\n",
+		"linkname":  "package integrations\nfunc registerSignalNotify(notify func(chan<- os.Signal, ...os.Signal)) {}\n",
+	} {
+		if err := SignalHookRuntimeError(map[string][]byte{"civisibility.go": []byte(source)}); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	source := "package integrations\nimport _ \"unsafe\"\n//go:linkname registerSignalNotify\nfunc registerSignalNotify(notify func(chan<- os.Signal, ...os.Signal)) {}\n"
+	if err := SignalHookRuntimeError(map[string][]byte{"civisibility.go": []byte(source)}); err != nil {
+		t.Errorf("named parameter: %v", err)
+	}
+}
+
+const signalSource = `package signal
+
+import (
+	"os"
+	"sync"
+)
+
+var handlers struct {
+	sync.Mutex
+	m        map[chan<- os.Signal]*handler
+	stopping []stopping
+}
+
+type stopping struct {
+	c chan<- os.Signal
+	h *handler
+}
+
+type handler struct{ mask [3]uint32 }
+
+func (h *handler) want(sig int) bool { return h.mask[sig/32]>>uint(sig&31)&1 != 0 }
+
+func Notify(c chan<- os.Signal, sig ...os.Signal) {}
+
+func process(sig os.Signal) {
+	n := signum(sig)
+	for c, h := range handlers.m {
+		if h.want(n) {
+			select {
+			case c <- sig:
+			default:
+			}
+		}
+	}
+	for _, d := range handlers.stopping {
+		if d.h.want(n) {
+			select {
+			case d.c <- sig:
+			default:
+			}
+		}
+	}
+}
+`
+
+// The edit names process's own channel and signal, and only its delivery
+// to handlers.m.
+func TestTransformSignalEditsTheDelivery(t *testing.T) {
+	source := strings.NewReplacer("for c, h := range", "for ch, hd := range", "if h.want(n) {\n\t\t\tselect {\n\t\t\tcase c <- sig", "if hd.want(n) {\n\t\t\tselect {\n\t\t\tcase ch <- sig").Replace(signalSource)
+	edited, err := TransformSignal(map[string][]byte{"signal.go": []byte(source)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "if hd.want(n) && !__dd_civisibility_signalWantedElsewhere(ch, n) {"
+	if got := string(edited["signal.go"]); !strings.Contains(got, want) || strings.Count(got, "__dd_civisibility_") != 1 {
+		t.Fatalf("edited source lacks %q or edits more:\n%s", want, got)
+	}
+}
+
+// A toolchain whose os/signal differs builds without the hook instead of
+// failing to compile os/signal.
+func TestTransformSignalRejectsOtherShapes(t *testing.T) {
+	for name, source := range map[string]string{
+		"no stopping list":     strings.Replace(signalSource, "\tstopping []stopping\n", "", 1),
+		"stopping channel":     strings.Replace(signalSource, "\tc chan<- os.Signal\n", "\tc chan os.Signal\n", 1),
+		"want":                 strings.Replace(signalSource, "want(sig int) bool", "want(sig uint32) bool", 1),
+		"handlers map":         strings.Replace(signalSource, "m        map[chan<- os.Signal]*handler", "m        map[chan<- os.Signal]handler", 1),
+		"Notify":               strings.Replace(signalSource, "func Notify(c chan<- os.Signal, sig ...os.Signal) {}", "func Notify(c chan<- os.Signal, sig []os.Signal) {}", 1),
+		"no process":           strings.Replace(signalSource, "func process(", "func deliver(", 1),
+		"other loop":           strings.Replace(signalSource, "range handlers.m {\n\t\tif h.want(n)", "range handlers.m {\n\t\t_ = 0\n\t\tif h.want(n)", 1),
+		"other condition":      strings.Replace(signalSource, "if h.want(n) {\n\t\t\tselect {\n\t\t\tcase c <-", "if n > 0 {\n\t\t\tselect {\n\t\t\tcase c <-", 1),
+		"two deliveries":       strings.Replace(signalSource, "\tfor _, d := range handlers.stopping {", "\tfor c, h := range handlers.m {\n\t\tif h.want(n) {\n\t\t\t_ = c\n\t\t}\n\t}\n\tfor _, d := range handlers.stopping {", 1),
+		"already instrumented": signalSource + "\nvar __dd_civisibility_signals int\n",
+	} {
+		if _, err := TransformSignal(map[string][]byte{"signal.go": []byte(source)}); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	if _, err := TransformSignal(map[string][]byte{"signal.go": []byte(signalSource)}); err != nil {
+		t.Fatalf("the reference shape: %v", err)
+	}
+}

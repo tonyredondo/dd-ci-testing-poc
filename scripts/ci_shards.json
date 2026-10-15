@@ -215,6 +215,7 @@
         "TestMiniCLIStateGivesModuleToCoverage",
         "TestMiniGOROOTMirrorToolchainSwitch",
         "TestMiniGitWorkerStopsOnInterrupt",
+        "TestMiniSignalsKeepGoTestBehavior",
         "TestToolWrapperWaitStopsOnSignal"
       ],
       "parity": [
@@ -225,6 +226,7 @@
       "cli": [
         "TestMiniCLIStateGivesModuleToCoverage",
         "TestMiniGitWorkerStopsOnInterrupt",
+        "TestMiniSignalsKeepGoTestBehavior",
         "TestToolWrapperWaitStopsOnSignal"
       ],
       "parity": [

@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	_ "unsafe" // go:linkname
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	tracer "github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer"
@@ -42,7 +43,7 @@ type ciVisibilityIdleConnectionCloser interface {
 // ciVisibilitySignalHandler owns the SIGINT/SIGTERM goroutine registered by CI
 // Visibility and lets normal test shutdown stop it before goleak runs.
 type ciVisibilitySignalHandler struct {
-	signals  chan os.Signal // receives process interrupt and termination signals
+	signals  chan os.Signal // receives the interrupt and termination signals that would end the process
 	stop     chan struct{}  // asks the handler goroutine to exit during normal shutdown
 	done     chan struct{}  // closes when the handler goroutine exits
 	stopOnce sync.Once      // guarantees stop is signaled at most once
@@ -59,8 +60,16 @@ var (
 	// activeCIVisibilitySignalHandler contains the active process signal handler, if CI Visibility started one.
 	activeCIVisibilitySignalHandler *ciVisibilitySignalHandler
 
-	// ciVisibilitySignalExitFunc terminates the process after signal-triggered shutdown; tests replace it.
-	ciVisibilitySignalExitFunc = os.Exit
+	// ciVisibilitySignalExitFunc ends the process with the signal after
+	// signal-triggered shutdown; tests replace it.
+	ciVisibilitySignalExitFunc = exitBySignal
+
+	// signalNotify registers a channel that receives a signal only when no
+	// other channel wants it, that is, when the signal would otherwise end the
+	// process. ddto's os/signal overlay sets it while os/signal initializes,
+	// before this package's variables; without the overlay it stays nil and CI
+	// Visibility handles no signal.
+	signalNotify func(chan<- os.Signal, ...os.Signal)
 
 	// closeActions holds CI visibility close actions.
 	closeActions []ciVisibilityCloseAction
@@ -183,7 +192,7 @@ func (handler *ciVisibilitySignalHandler) run() {
 	defer close(handler.done)
 
 	select {
-	case <-handler.signals:
+	case sig := <-handler.signals:
 		if handler.stopping.Load() {
 			return
 		}
@@ -191,19 +200,44 @@ func (handler *ciVisibilitySignalHandler) run() {
 		if handler.stopping.Load() {
 			return
 		}
-		ciVisibilitySignalExitFunc(1)
+		// Without CI Visibility's channel, a signal that no other channel
+		// wants takes its default action again.
+		signal.Stop(handler.signals)
+		ciVisibilitySignalExitFunc(sig)
 	case <-handler.stop:
 		return
 	}
 }
 
+// registerSignalNotify is called by ddto's os/signal overlay.
+//
+//go:linkname registerSignalNotify
+func registerSignalNotify(notify func(chan<- os.Signal, ...os.Signal)) { signalNotify = notify }
+
 // startCIVisibilitySignalHandler registers the process signal handler once for
-// the current CI Visibility initialization.
+// the current CI Visibility initialization. It receives SIGINT and SIGTERM
+// only when they would end the process: a signal that the test handles
+// itself, as the fuzzing coordinator does with SIGINT, leaves CI Visibility
+// running. A signal that the process ignores, such as SIGINT in a background
+// job, stays ignored.
 func startCIVisibilitySignalHandler() {
 	ciVisibilitySignalHandlerMu.Lock()
 	defer ciVisibilitySignalHandlerMu.Unlock()
 
 	if activeCIVisibilitySignalHandler != nil {
+		return
+	}
+	if signalNotify == nil {
+		log.Debug("civisibility: no signal handler: os/signal was built without ddto's overlay")
+		return
+	}
+	var signals []os.Signal
+	for _, sig := range []os.Signal{syscall.SIGINT, syscall.SIGTERM} {
+		if !signal.Ignored(sig) {
+			signals = append(signals, sig)
+		}
+	}
+	if len(signals) == 0 {
 		return
 	}
 
@@ -214,7 +248,7 @@ func startCIVisibilitySignalHandler() {
 	}
 
 	activeCIVisibilitySignalHandler = handler
-	signal.Notify(handler.signals, syscall.SIGINT, syscall.SIGTERM)
+	signalNotify(handler.signals, signals...)
 	go handler.run()
 }
 

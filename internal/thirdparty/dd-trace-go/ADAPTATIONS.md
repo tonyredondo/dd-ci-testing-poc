@@ -1228,6 +1228,49 @@ allocation checks therefore use its `allocsPerRun` helper instead of
 `testing.AllocsPerRun`, which would panic with `-count` above one or with
 `-shuffle`. `TestPackageTestsMeasureAllocationsWithHelper` keeps it that way.
 
+## Signals that would end the process
+
+Upstream registers SIGINT and SIGTERM with `signal.Notify` when CI Visibility
+starts and, on either signal, closes CI Visibility and calls `os.Exit(1)`. Go
+delivers a signal to every channel that wants it, so that handler also ends a
+process whose test handles the signal itself: a server test that sends itself
+SIGTERM to check its graceful shutdown, or fuzzing's coordinator, which stops
+on SIGINT. The process exits with status 1 between two tests, and go test
+prints no reason. A signal that nothing handles also ends it with status 1
+instead of the signal, so go test does not print `signal: terminated`.
+
+Go has no API that tells whether another channel wants a signal, and its
+runtime ends a process for an unwanted signal from its signal handler, without
+running Go code. Mini therefore relies on an os/signal overlay that ddto adds
+for Mini only: `TransformSignal` in `internal/instrument/signal.go` edits
+`process`, the function that delivers signals to channels, so that Mini's
+channel receives a signal only when no other channel wants it. Channels that
+`Stop` is removing count too, as `process` still delivers to them, and so does
+a channel that the test stops right after its delivery: the check runs under
+the lock that `process` holds. The edit stays on its line, so os/signal keeps
+its positions. `SignalHook` registers that Notify through `registerSignalNotify`
+in [`civisibility.go`](civisibility/integrations/civisibility.go) while
+os/signal initializes.
+
+On such a signal Mini closes CI Visibility as before, stops its channel, and
+sends the signal to its own process again; with no channel left, the runtime
+ends the process as under go test
+([`civisibility_signal_exit_unix.go`](civisibility/integrations/civisibility_signal_exit_unix.go)).
+Windows cannot send a console event to one process, so it keeps exit status 1.
+Mini registers no signal that the process ignores, such as SIGINT in a
+background job, because registering it would install a handler. When the
+toolchain's os/signal or the selected runtime lacks what the hook uses,
+`prepareSignalHook` leaves os/signal unchanged; Mini then handles no signal,
+and a signal ends the process without CI events, as it ends go test. The SDK
+runtime keeps upstream behavior.
+
+Checks: `TestMiniSignalsKeepGoTestBehavior`, `TestToolchainProvidesSignalHook`,
+`TestSignalHookTypeChecks`, `TestSignalHookMatchesMiniRegistration`,
+`TestTransformSignalRejectsOtherShapes`, `TestPrepareSignalHook`,
+`TestCIVisibilitySignalHandlerNeedsTheOverlay` and
+`TestCIVisibilitySignalHandlerKeepsIgnoredSignalsIgnored`. This package's own
+tests run without the overlay and register with `signal.Notify` in its place.
+
 ## Per-test allocations
 
 Each instrumented test runs the SDK's span creation, source lookup and Testify

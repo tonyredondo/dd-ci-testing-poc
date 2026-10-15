@@ -612,7 +612,18 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		racePhase.finish(nil)
 		debug.printf("race annotations files=%d", files)
 	}
-	plan.coverOverlay = needsCoverOverlay(dir, opts, packages, []goPackage{*native})
+	rewrittenPackages := []goPackage{*native}
+	if plan.mini {
+		signal, refusal, e := prepareSignalHook(listed, replacements, temp, add)
+		if e != nil {
+			return plan, e
+		}
+		debug.printf("signal hook installed=%t reason=%q", signal != nil, refusal)
+		if signal != nil {
+			rewrittenPackages = append(rewrittenPackages, *signal)
+		}
+	}
+	plan.coverOverlay = needsCoverOverlay(dir, opts, packages, rewrittenPackages)
 	plan.File = filepath.Join(temp, "overlay.json")
 	plan.InstrumentedFiles = len(rewritten.Files)
 	writePhase := debug.start("write overlay")
