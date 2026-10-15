@@ -57,7 +57,7 @@ Ordered by the expected effect on a run's wall time, then by cost.
 | 59 | Tell test processes at startup that the backend is unreachable | About 1 s of the 1.6 s that each test process pays without an Agent | Medium | Open |
 | 28 | Skip the final retries after a failed session-close flush | 0.3 s at each test process's exit when delivery fails | Low | Needs the user's go-ahead |
 | 10 | Send each test process's exit telemetry through the worker | About one request latency per run: 0.1 s of the 0.3 s that 100 ms of latency adds | Medium | Parked (2026-10-12) |
-| 57 | Deliver events through the CLI | In a project without HTTP, about 10 of the 16 CPU-s that Mini adds to a cold build, and 0.2 s and 12 MB per test binary link; little in projects that use HTTP, such as Gin | High | Parked (2026-10-11) |
+| 57 | Deliver events through the CLI | In a project without HTTP, up to about 10 of the 16 CPU-s that Mini adds to a cold build, and about 0.1 s and 5.6 MB per test binary link, by a probe; little in projects that use HTTP, such as Gin. Unmeasured for the change itself | High | Parked (2026-10-11) |
 | 56 | Reuse the preparation plan between unchanged invocations | 60–80 ms of the 0.11 s in repeated local runs; nothing in a fresh CI job | Medium to high | Parked (2026-10-14) |
 | 39 | Parse the sources of selected tests concurrently at startup | 1–4.5 ms per test file with Early Flake Detection and impacted tests | Medium | Open |
 | 51 | Store known tests per module in the read cache | 10–25 ms of CPU and several MB of heap per binary with 100,000 known tests | Medium to high | Open |
@@ -92,10 +92,13 @@ could also let delivery skip its retries, the other 0.6 s, but that changes
 delivery like item 28, which waits for the user's go-ahead.
 
 An Agent that is still starting refuses connections just as an absent one
-does, so the shortcut also gives up on it: it reaches the backend only in a
-later run. Keep the entry short-lived, on the order of the worker's own retry
-cycle, and limit it to connection errors that the worker saw in this run, so
-that timeouts and 5xx responses keep their retries. The run must still finish
+does, so the shortcut also gives up on it. A test process that accepts the
+entry keeps the default settings for its whole life, even if the Agent comes up
+while its tests run; its delivery keeps its retries and reaches the Agent then,
+and processes that start after the entry expires request settings again. Keep
+the entry short-lived, on the order of the worker's own retry cycle, and limit
+it to connection errors that the worker saw in this run, so that timeouts and
+5xx responses keep their retries. The run must still finish
 with the same test results and exit code, and the same telemetry about the
 failure. Check that this trade-off is acceptable before implementing it.
 
@@ -148,9 +151,12 @@ optimization plan ([#44](https://github.com/tonyredondo/dd-ci-testing-poc/pull/4
 built a module with one empty test from an empty build cache: Mini added
 16.3 CPU-s, and its HTTPS transport, the `crypto`, `net` and `net/http`
 packages with cgo, accounted for 10.2 of them. On 2026-10-11, a one-test binary
-grew from 4.8 to 16.7 MB and its link from 106 to 289 ms; the HTTP and TLS stack
-accounted for about 104 ms of the 183 ms that Mini adds to each link. Every
-edit rebuild links each affected test binary again.
+grew from 4.8 to 16.7 MB and its link from 106 to 289 ms. A probe binary that
+references only `http.DefaultClient.Do` and `tls.Client` linked in 210 ms and
+was 5.6 MB larger, so the HTTP and TLS stack accounted for about 104 ms of the
+183 ms that Mini adds to each link. Every edit rebuild links each affected test
+binary again. These figures bound what the change could save; it has not been
+measured.
 
 Projects whose own tests use HTTP or TLS keep that stack. Gin's tests import
 `net/http` and `crypto/tls`, so the +12.8 CPU-s of its cold build on
