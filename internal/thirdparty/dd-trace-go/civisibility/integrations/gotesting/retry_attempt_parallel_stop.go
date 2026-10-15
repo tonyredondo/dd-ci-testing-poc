@@ -12,6 +12,13 @@ import (
 // toolchain does not keep that accounting, it stays nil.
 var testingParallelStop func()
 
+// registerTestingParallelStop is what the testing overlay of ddto v0.1.0 and
+// v0.1.1 calls instead; it stays so that their test binaries still link when a
+// client selects this runtime.
+//
+//go:linkname registerTestingParallelStop
+func registerTestingParallelStop(stop func()) { testingParallelStop = stop }
+
 // sharedParallelLeaseAttempts holds attempts that went parallel after an
 // earlier attempt had moved the logical test's parallel lease to the original
 // test. Each entry is removed when its attempt publishes its result.

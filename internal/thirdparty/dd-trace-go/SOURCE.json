@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "aae1f1cbe475789b8d6975a177d77750003a333d5a5f849378a7bfe29cb49e17",
+      "sha256": "4a16ffe027b0ac97d51e811e085eb67d305af69fd4b3654d179fc20f96c90e9d",
       "role": "local"
     },
     {
@@ -619,7 +619,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/retry_attempt_parallel_stop.go",
-      "sha256": "9b1e7e7291754daf43e29dd80fa2b8f7413ec5cc7bff5571ccece4ce464cc60e",
+      "sha256": "5466dbea64c9adc56c71d437de6c18b3ae1f76a2b6fffc2011957296c4bfd2f4",
       "role": "local"
     },
     {

@@ -1227,7 +1227,10 @@ For the same reason, Mini's copy of the SDK's `Hooks` sets
 `testingBuiltWithOrchestrion` instead of calling
 `instrumentTestingBuiltWithOrchestrion`; the SDK runtime keeps the call.
 Released versions of this module declare both variables with the same types,
-so a client that requires one of them still links. The in-memory coverage
+so a client that requires one of them still links. In the other direction,
+the testing overlays of ddto v0.1.0 and v0.1.1 call `registerTestingParallelStop`
+and `instrumentTestingBuiltWithOrchestrion`, so Mini keeps both functions:
+a client can select this runtime while running an older ddto. The in-memory coverage
 hook keeps its call, because ddto installs it only when `-coverpkg` leaves
 Mini's coverage package alone. The SDK mirror's hook also keeps its call:
 Mini's tracer initializes before the SDK's in the tested graphs, so that call
@@ -1240,7 +1243,8 @@ runtime keeps upstream behavior.
 
 Checks: `TestSharedParallelLeaseAttemptsRecordTheirEnd`,
 `TestSequentialAttemptsRecordNoParallelEnd`, `TestParallelStopHookOnlyForMini`,
-`TestMiniHooksCallNoMiniFunctionAtInit`, `TestToolchainTestingDeclaresParallelStop`,
+`TestMiniHooksCallNoMiniFunctionAtInit`, `TestRuntimeKeepsFunctionsThatReleasedOverlaysLink`,
+`TestToolchainTestingDeclaresParallelStop`,
 `TestMiniCoverageOfMiniItselfHasNoCounterErrors` and
 `TestMiniInProcessRetryKeepsAllocsPerRun`. This package's own tests run without
 the overlay, so `TestSharedParallelLeaseAttemptsRecordTheirEnd` and
