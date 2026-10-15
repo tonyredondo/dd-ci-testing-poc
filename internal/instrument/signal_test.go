@@ -51,7 +51,7 @@ func TestToolchainProvidesSignalHook(t *testing.T) {
 		if got, want := bytes.Count(body, []byte("\n")), bytes.Count(files[path], []byte("\n")); got != want {
 			t.Errorf("the edit moved os/signal's lines: %d lines, want %d", got, want)
 		}
-		for _, call := range []string{"__dd_civisibility_signalWantedElsewhere(", "__dd_civisibility_reset("} {
+		for _, call := range []string{"__dd_civisibility_signalWantedElsewhere(", "cancel(sig, __dd_civisibility_resetSignal)"} {
 			if n := bytes.Count(body, []byte(call)); n != 1 {
 				t.Errorf("%d calls of %s", n, call)
 			}
@@ -148,9 +148,12 @@ import (
 	"sync"
 )
 
+const numSig = 65
+
 var handlers struct {
 	sync.Mutex
 	m        map[chan<- os.Signal]*handler
+	ref      [numSig]int64
 	stopping []stopping
 }
 
@@ -162,6 +165,12 @@ type stopping struct {
 type handler struct{ mask [3]uint32 }
 
 func (h *handler) want(sig int) bool { return h.mask[sig/32]>>uint(sig&31)&1 != 0 }
+
+func (h *handler) set(sig int) { h.mask[sig/32] |= 1 << uint(sig&31) }
+
+func signum(sig os.Signal) int { return 0 }
+
+func enableSignal(sig int) {}
 
 func Notify(c chan<- os.Signal, sig ...os.Signal) {}
 
@@ -208,7 +217,7 @@ func TestTransformSignalEditsTheDelivery(t *testing.T) {
 	got := string(edited["signal.go"])
 	for _, want := range []string{
 		"if hd.want(n) && !__dd_civisibility_signalWantedElsewhere(ch, n) {",
-		"\t__dd_civisibility_reset(s, func() { cancel(s, disableSignal) })\n",
+		"\tcancel(s, __dd_civisibility_resetSignal)\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("edited source lacks %q", want)
@@ -234,6 +243,8 @@ func TestTransformSignalRejectsOtherShapes(t *testing.T) {
 		"Reset action":         strings.Replace(signalSource, "\tcancel(sig, disableSignal)\n", "\tcancel(sig, ignoreSignal)\n", 1),
 		"Reset argument":       strings.Replace(signalSource, "\tcancel(sig, disableSignal)\n", "\tcancel(nil, disableSignal)\n", 1),
 		"no Reset":             strings.Replace(signalSource, "func Reset(", "func reset(", 1),
+		"no enableSignal":      strings.Replace(signalSource, "func enableSignal(sig int) {}", "", 1),
+		"ref":                  strings.Replace(signalSource, "\tref      [numSig]int64\n", "\tref      []int64\n", 1),
 		"no process":           strings.Replace(signalSource, "func process(", "func deliver(", 1),
 		"other loop":           strings.Replace(signalSource, "range handlers.m {\n\t\tif h.want(n)", "range handlers.m {\n\t\t_ = 0\n\t\tif h.want(n)", 1),
 		"other condition":      strings.Replace(signalSource, "if h.want(n) {\n\t\t\tselect {\n\t\t\tcase c <-", "if n > 0 {\n\t\t\tselect {\n\t\t\tcase c <-", 1),

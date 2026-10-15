@@ -336,10 +336,16 @@ func TryPushCiVisibilityPreCloseAction(action ciVisibilityCloseAction) bool {
 // events of the tests that ran and the session are sent. ddto's testing
 // overlay registers it as a runtime exit hook, which runs inside os.Exit with
 // any status. After the tests, CI Visibility is already closed and it returns
-// at once.
+// at once; while another goroutine closes it, it waits for that shutdown.
+//
+// It does not wait for the signal handler's goroutine, which can be the one
+// calling os.Exit after a signal; the process ends anyway.
 //
 //go:linkname forcedExit
 func forcedExit() {
+	if IsProcessRetryChild() {
+		return
+	}
 	// The runtime ends the process with a fatal error, instead of the status
 	// that os.Exit received, when an exit hook panics.
 	defer func() {
@@ -350,7 +356,8 @@ func forcedExit() {
 	if civisibility.GetState() == civisibility.StateInitialized {
 		log.Debug("civisibility: os.Exit before CI Visibility closed; closing it")
 	}
-	ExitCiVisibility()
+	markCIVisibilitySignalHandlerStopping()
+	exitCiVisibility(false)
 }
 
 // ExitCiVisibility executes all registered close actions and stops the tracer.
@@ -423,11 +430,19 @@ func exitCiVisibility(stopSignalHandler bool) {
 		log.Debug("civisibility: shutdown barriers finished duration=%s actions=%d", time.Since(stageStarted), len(barriers))
 	}
 
+	// Run the actions without the lock: an object that registers its action
+	// while holding its own lock, as a module creating a suite does, would
+	// otherwise deadlock with its close action. Actions registered from now on
+	// do not run.
 	closeActionsMutex.Lock()
-	defer closeActionsMutex.Unlock()
+	actions := closeActions
+	closeActions = nil
+	closeActionsMutex.Unlock()
 	defer func() {
+		closeActionsMutex.Lock()
 		closeActions = []ciVisibilityCloseAction{}
 		preCloseActions = []ciVisibilityCloseAction{}
+		closeActionsMutex.Unlock()
 		log.Debug("civisibility: flushing and stopping the logger")
 		if debug {
 			stageStarted = time.Now()
@@ -453,11 +468,11 @@ func exitCiVisibility(stopSignalHandler bool) {
 	if debug {
 		stageStarted = time.Now()
 	}
-	for i := len(closeActions) - 1; i >= 0; i-- {
-		closeActions[i]()
+	for i := len(actions) - 1; i >= 0; i-- {
+		actions[i]()
 	}
 	if debug {
-		log.Debug("civisibility: close actions finished duration=%s actions=%d", time.Since(stageStarted), len(closeActions))
+		log.Debug("civisibility: close actions finished duration=%s actions=%d", time.Since(stageStarted), len(actions))
 	}
 }
 

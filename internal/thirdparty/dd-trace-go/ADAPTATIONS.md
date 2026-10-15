@@ -69,11 +69,19 @@ action per test, so prepending a copied slice would allocate quadratically.
 
 Keep LIFO ordering within each list, and run every pre-close barrier before the
 ordinary actions. A barrier can register an ordinary action; shutdown must
-include it. The existing locks, single shutdown owner and wait for that owner
-also apply to signal-triggered shutdown.
+include it. The single shutdown owner and the wait for that owner also apply
+to signal-triggered shutdown and to `os.Exit` (see [forced exits](#forced-exits)).
+
+Shutdown takes the ordinary actions under the lock and runs them after
+releasing it; upstream ran them holding it. A module registers a new suite's
+close action while holding its own lock, and its own close action takes that
+lock, so a suite created during shutdown deadlocked the two goroutines.
+Actions registered after shutdown took the list do not run, as upstream,
+where they waited for the lock and were then cleared.
 
 Checks: `TestCloseActionsKeepLIFOAndRunBarriersFirst`,
-`TestConcurrentCloseActionsRunOnce` and the signal-handler tests. Use
+`TestConcurrentCloseActionsRunOnce`, `TestCloseActionsRunWithoutTheRegistrationLock`
+and the signal-handler tests. Use
 `BenchmarkCloseActionRegistration` to compare allocation growth at 1,000,
 4,000 and 16,000 registrations.
 
@@ -1255,9 +1263,12 @@ channel receives a signal only when no other channel wants it. Channels that
 `Stop` is removing count too, as `process` still delivers to them, and so does
 a channel that the test stops right after its delivery: the check runs under
 the lock that `process` holds. It also edits `Reset`, which removes a signal
-from every channel, Mini's included, to register Mini's channel again for the
-signals it wanted, so that a later signal that ends the process still reaches
-Mini first. Both edits stay on their lines, so os/signal keeps its positions.
+from every channel, Mini's included, and disables it: `Reset` passes `cancel`
+the hook's `__dd_civisibility_resetSignal` instead of `disableSignal`. Under
+the same lock, that action registers Mini's channel again for a signal that
+Mini wanted and keeps the signal enabled, so it never ends the process without
+reaching Mini first; other signals are disabled as before. Both edits stay on
+their lines, so os/signal keeps its positions.
 
 `SignalHook` sets `signalNotify` and `signalStop` in
 [`civisibility.go`](civisibility/integrations/civisibility.go) through
@@ -1265,8 +1276,9 @@ linknamed variables while os/signal initializes. It does not call Mini, because
 os/signal initializes before Mini: a Mini function that runs first and that
 `-coverpkg` instruments records its coverage counters without a package, and
 Go reports `internal error in coverage meta-data tracking` when it writes the
-profile. Mini stops its channel through `signalStop`, so that `Reset` does
-not register it again afterwards.
+profile. Mini's channel and its signals change under handlers' lock. Mini
+stops its channel through `signalStop`, so that `Reset` does not register it
+again afterwards.
 
 On such a signal Mini closes CI Visibility as before, stops its channel, and
 sends the signal to its own process again. With no channel left, the runtime
@@ -1290,9 +1302,12 @@ testing overlay file that registers `forcedExit` in
 [`civisibility.go`](civisibility/integrations/civisibility.go) as a runtime
 exit hook (`internal/runtime/exithook`, which coverage uses to write its
 counters). `os.Exit` runs it before the process ends, with any status.
-`forcedExit` calls `ExitCiVisibility`; after a normal end CI Visibility is
-already closed, and it returns at once. It recovers a panic, because the
-runtime ends the process with a fatal error when an exit hook panics. The test
+`forcedExit` runs CI Visibility's shutdown; after a normal end CI Visibility
+is already closed, and it returns at once, and while another goroutine shuts
+it down it waits for that shutdown. It does not wait for the signal handler's
+goroutine: on Windows that goroutine calls `os.Exit` after a signal, and would
+wait for itself. It recovers a panic, because the runtime ends the process
+with a fatal error when an exit hook panics. The test
 that was running is not reported, as after a signal. Mini closes a test when
 its body returns, before testing runs the test's cleanups, so a test whose
 cleanup exits reports the result of its body. `os.Exit(0)` during a test
@@ -1308,7 +1323,8 @@ Checks: `TestMiniSignalsKeepGoTestBehavior`, `TestMiniForcedExitKeepsEvents`,
 `TestToolchainProvidesExitHook`, `TestExitHookTypeChecks`,
 `TestExitHookMatchesMiniRegistration`, `TestPrepareSignalHook`,
 `TestPrepareExitHook`, `TestForcedExitClosesCIVisibility`,
-`TestForcedExitRecoversPanics`, `TestCIVisibilitySignalHandlerNeedsTheOverlay`
+`TestForcedExitRecoversPanics`, `TestForcedExitFromTheSignalHandlerReturns`,
+`TestCIVisibilitySignalHandlerNeedsTheOverlay`
 and `TestCIVisibilitySignalHandlerKeepsIgnoredSignalsIgnored`. This package's
 own tests run without the overlays and use `signal.Notify` and `signal.Stop`
 in place of the hook's functions.

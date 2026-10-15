@@ -23,20 +23,20 @@ import (
 // still counts. Channels that Stop is removing still receive the signal, as
 // in process, and count too.
 //
-// Reset returns signals to their default action for every channel, Mini's
-// included. TransformSignal edits it to register Mini's channel again for the
-// signals that Mini wanted, so a signal that later ends the process still
-// reaches Mini first. Mini's own stop goes through the hook, so that Reset
-// does not register a channel that Mini has stopped.
+// Reset removes a signal from every channel, Mini's included, and returns it
+// to its default action. TransformSignal gives Reset's cancel the action
+// __dd_civisibility_resetSignal instead of disableSignal: for a signal that
+// Mini wanted, it registers Mini's channel again under the same lock, so the
+// signal never ends the process without reaching Mini first.
 //
 // The hook sets Mini's variables instead of calling Mini: os/signal
 // initializes before Mini, and a Mini function that coverage instruments
-// would record its counters under package ID zero if it ran first.
+// would record its counters under package ID zero if it ran first. Mini's
+// channel and the signals it wants change under handlers' lock.
 const SignalHook = `package signal
 
 import (
 	"os"
-	"sync"
 	_ "unsafe"
 )
 
@@ -47,26 +47,22 @@ var __dd_civisibility_signalNotify func(chan<- os.Signal, ...os.Signal)
 var __dd_civisibility_signalStop func(chan<- os.Signal)
 
 var (
-	// __dd_civisibility_registration orders Mini's registration, its stop and
-	// Reset's registration. Take it before handlers' lock.
-	__dd_civisibility_registration sync.Mutex
-	// Mini's channel and the signals it wants, written holding both locks.
-	__dd_civisibility_signals chan<- os.Signal
-	__dd_civisibility_wanted  []os.Signal
+	__dd_civisibility_signals chan<- os.Signal // Mini's channel
+	__dd_civisibility_wanted  []int            // the signal numbers that Mini registered
 )
 
 func init() {
 	__dd_civisibility_signalNotify = func(c chan<- os.Signal, sig ...os.Signal) {
-		__dd_civisibility_registration.Lock()
-		defer __dd_civisibility_registration.Unlock()
+		var wanted []int
+		for _, s := range sig {
+			wanted = append(wanted, signum(s))
+		}
 		handlers.Lock()
-		__dd_civisibility_signals, __dd_civisibility_wanted = c, sig
+		__dd_civisibility_signals, __dd_civisibility_wanted = c, wanted
 		handlers.Unlock()
 		Notify(c, sig...)
 	}
 	__dd_civisibility_signalStop = func(c chan<- os.Signal) {
-		__dd_civisibility_registration.Lock()
-		defer __dd_civisibility_registration.Unlock()
 		handlers.Lock()
 		if __dd_civisibility_signals == c {
 			__dd_civisibility_signals, __dd_civisibility_wanted = nil, nil
@@ -95,27 +91,30 @@ func __dd_civisibility_signalWantedElsewhere(c chan<- os.Signal, n int) bool {
 	return false
 }
 
-// __dd_civisibility_reset runs Reset's reset of sig, all signals when empty,
-// then registers Mini's channel again for the signals of sig that it wanted.
-func __dd_civisibility_reset(sig []os.Signal, reset func()) {
-	__dd_civisibility_registration.Lock()
-	defer __dd_civisibility_registration.Unlock()
-	reset()
-	var again []os.Signal
-	for _, s := range __dd_civisibility_wanted {
-		for _, r := range sig {
-			if r == s {
-				again = append(again, s)
-				break
-			}
-		}
-		if len(sig) == 0 {
-			again = append(again, s)
-		}
+// __dd_civisibility_resetSignal is Reset's action for signal n, which cancel
+// calls holding handlers' lock after removing n from every channel. It
+// disables n, as Reset does, unless Mini wanted n: then Mini's channel wants
+// it again, as after Notify, and n stays enabled throughout.
+func __dd_civisibility_resetSignal(n int) {
+	c := __dd_civisibility_signals
+	wanted := false
+	for _, w := range __dd_civisibility_wanted {
+		wanted = wanted || w == n
 	}
-	if len(again) != 0 {
-		Notify(__dd_civisibility_signals, again...)
+	if c == nil || !wanted {
+		disableSignal(n)
+		return
 	}
+	h := handlers.m[c]
+	if h == nil {
+		h = new(handler)
+		handlers.m[c] = h
+	}
+	if !h.want(n) {
+		h.set(n)
+		handlers.ref[n]++
+	}
+	enableSignal(n)
 }
 `
 
@@ -125,12 +124,18 @@ func __dd_civisibility_reset(sig []os.Signal, reset func()) {
 var signalHookAPI = []string{
 	"embed handlers sync.Mutex",
 	"field handlers.m map[chan<- os.Signal]*handler",
+	"field handlers.ref [numSig]int64",
 	"field handlers.stopping []stopping",
 	"field stopping.c chan<- os.Signal",
 	"field stopping.h *handler",
 	"func (*handler) want(int) bool",
+	"func (*handler) set(int)",
 	"func Notify(chan<- os.Signal, ...os.Signal)",
 	"func Stop(chan<- os.Signal)",
+	"func cancel([]os.Signal, func(int))",
+	"func enableSignal(int)",
+	"func disableSignal(int)",
+	"func signum(os.Signal) int",
 }
 
 // signalRuntimeAPI is what SignalHook's linknames name in Mini's integrations
@@ -142,9 +147,8 @@ var signalRuntimeAPI = []string{
 
 // TransformSignal checks that package os/signal, given as the sources that the
 // build compiles, declares what SignalHook uses, and returns its file whose
-// process asks the hook about Mini's channel and whose Reset registers Mini's
-// channel again. The edits stay on their lines, so os/signal keeps its
-// positions.
+// process asks the hook about Mini's channel and whose Reset keeps Mini's
+// channel. The edits stay on their lines, so os/signal keeps its positions.
 func TransformSignal(files map[string][]byte) (map[string][]byte, error) {
 	if err := declarationsError(files, signalHookAPI, "os/signal lacks %s"); err != nil {
 		return nil, err
@@ -183,9 +187,8 @@ func TransformSignal(files map[string][]byte) (map[string][]byte, error) {
 					deliveries++
 				}
 			case "Reset":
-				if call, param := resetCancel(fn); call != nil {
-					edits = append(edits, edit{fs.Position(call.Pos()).Offset, fs.Position(call.End()).Offset,
-						fmt.Sprintf("__dd_civisibility_reset(%s, func() { %s })", param, text(call))})
+				if action := resetAction(fn); action != nil {
+					edits = append(edits, edit{fs.Position(action.Pos()).Offset, fs.Position(action.End()).Offset, "__dd_civisibility_resetSignal"})
 					resets++
 				}
 			}
@@ -267,28 +270,29 @@ func processDeliveries(body *ast.BlockStmt) []signalDelivery {
 	return found
 }
 
-// resetCancel returns Reset's only statement, "cancel(sig, disableSignal)",
-// and the name of its variadic os.Signal parameter, or nil.
-func resetCancel(fn *ast.FuncDecl) (*ast.CallExpr, string) {
+// resetAction returns the action of Reset's only statement,
+// "cancel(sig, disableSignal)" with Reset's variadic os.Signal parameter, or
+// nil.
+func resetAction(fn *ast.FuncDecl) *ast.Ident {
 	params := fn.Type.Params.List
 	if len(params) != 1 || len(params[0].Names) != 1 || render(params[0].Type) != "...os.Signal" || len(fn.Body.List) != 1 {
-		return nil, ""
+		return nil
 	}
 	stmt, ok := fn.Body.List[0].(*ast.ExprStmt)
 	if !ok {
-		return nil, ""
+		return nil
 	}
 	call, ok := stmt.X.(*ast.CallExpr)
 	if !ok || len(call.Args) != 2 || call.Ellipsis.IsValid() {
-		return nil, ""
+		return nil
 	}
 	cancel, ok := call.Fun.(*ast.Ident)
 	param, paramOK := call.Args[0].(*ast.Ident)
 	action, actionOK := call.Args[1].(*ast.Ident)
 	if !ok || !paramOK || !actionOK || cancel.Name != "cancel" || param.Name != params[0].Names[0].Name || action.Name != "disableSignal" {
-		return nil, ""
+		return nil
 	}
-	return call, param.Name
+	return action
 }
 
 // SignalHookRuntimeError reports why the selected runtime's integrations
