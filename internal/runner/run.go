@@ -67,8 +67,9 @@ type Plan struct {
 	coverOverlay bool
 	// fileCoverage reports that the build has file marks; the test
 	// processes then get fileCoverageParallel, for
-	// --experimental-file-coverage=parallel, whatever they would inherit.
-	fileCoverage, fileCoverageParallel bool
+	// --experimental-file-coverage=parallel and =context, whatever they
+	// would inherit. fileCoverageContext reports context file coverage.
+	fileCoverage, fileCoverageParallel, fileCoverageContext bool
 	orchestrionChain                   string
 	launcher                           *goLauncher
 	orchestrion                        bool
@@ -676,6 +677,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	if opts.fileCoverage {
 		phase := debug.start("file coverage")
 		refusal := fileCoverageRefusal(&plan, opts, vendorProvided, listed, replacements)
+		contextRefusal := ""
 		var summary fileCoverageSummary
 		if refusal == "" {
 			// The build with tests also links what only tests import.
@@ -691,16 +693,59 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 				if plan.gorootMirror != nil {
 					excluded = append(excluded, plan.gorootMirror.root)
 				}
-				summary, refusal, e = prepareFileCoverage(tested, repositoryRoots(dir, listed), excluded, replacements, userOverlay, temp, add)
+				// Context file coverage edits the toolchain first: marks
+				// leave the files that ddto edits unmarked. A refusal of
+				// file coverage takes the edits back.
+				var changes contextChanges
+				if opts.fileCoverageContext {
+					changes, contextRefusal, e = prepareContextCoverage(tested, listed, replacements, temp)
+					if e != nil {
+						phase.finish(e)
+						return plan, e
+					}
+				}
+				context := opts.fileCoverageContext && contextRefusal == ""
+				previous := map[string]*string{}
+				if context {
+					for logical, backing := range changes.replace {
+						if old, ok := replacements[logical]; ok {
+							previous[logical] = &old
+						} else {
+							previous[logical] = nil
+						}
+						replacements[logical] = backing
+					}
+				}
+				summary, refusal, e = prepareFileCoverage(tested, repositoryRoots(dir, listed), excluded, replacements, userOverlay, temp, context, add)
 				if e != nil {
 					phase.finish(e)
 					return plan, e
+				}
+				if context && refusal != "" {
+					for logical, old := range previous {
+						if old == nil {
+							delete(replacements, logical)
+						} else {
+							replacements[logical] = *old
+						}
+					}
+				}
+				if context && refusal == "" {
+					for logical, content := range changes.add {
+						if e = add(logical, content); e != nil {
+							phase.finish(e)
+							return plan, e
+						}
+					}
+					plan.fileCoverageContext = true
 				}
 			}
 		}
 		phase.finish(nil)
 		plan.fileCoverage = refusal == ""
-		plan.fileCoverageParallel = plan.fileCoverage && opts.fileCoverageParallel
+		// A refused =context runs the tests one at a time, as the reference
+		// that it would match.
+		plan.fileCoverageParallel = plan.fileCoverage && opts.fileCoverageParallel && (!opts.fileCoverageContext || plan.fileCoverageContext)
 		if plan.fileCoverageParallel {
 			// A selected runtime from before =parallel runs the tests one
 			// at a time; say so instead of leaving it unnoticed.
@@ -709,7 +754,10 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 				plan.Warnings = append(plan.Warnings, "--experimental-file-coverage=parallel: "+parallelRefusal+"; tests run one at a time while coverage is collected")
 			}
 		}
-		debug.printf("file coverage installed=%t reason=%q packages=%d marked_files=%d always_files=%d parallel=%t", refusal == "", refusal, summary.packages, summary.marked, summary.always, plan.fileCoverageParallel)
+		debug.printf("file coverage installed=%t reason=%q packages=%d marked_files=%d always_files=%d parallel=%t context=%t context_reason=%q", refusal == "", refusal, summary.packages, summary.marked, summary.always, plan.fileCoverageParallel, plan.fileCoverageContext, contextRefusal)
+		if refusal == "" && contextRefusal != "" {
+			plan.Warnings = append(plan.Warnings, "--experimental-file-coverage=context: "+contextRefusal+"; tests run one at a time while coverage is collected")
+		}
 		if refusal != "" {
 			plan.Warnings = append(plan.Warnings, "--experimental-file-coverage: "+refusal+"; per-test coverage keeps Go's coverage counters")
 		}
@@ -813,7 +861,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 	if warning != "" {
 		fmt.Fprintln(stderr, version.BuildLogPrefix+" WARN: "+warning)
 	}
-	opts.fileCoverage, opts.fileCoverageParallel = cli.FileCoverage, cli.FileCoverageParallel
+	opts.fileCoverage, opts.fileCoverageParallel, opts.fileCoverageContext = cli.FileCoverage, cli.FileCoverageParallel, cli.FileCoverageContext
 	dir := workingDirectory(cwd, opts)
 	debug.printf("working_directory=%q package_patterns=%d build_flags=%d", dir, len(opts.packages), len(opts.buildFlags))
 	if opts.help || explicitFiles(dir, opts.packages) {

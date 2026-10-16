@@ -52,9 +52,14 @@ var fileCoverageState struct {
 	available bool
 }
 
-// fileCoverageAvailable reports registered banks of the known layout. A bank
-// of another layout turns file coverage off: its files would be missing.
+// fileCoverageAvailable reports registered banks of the known layout, of
+// marks or of contexts. A bank of another layout turns file coverage off: its
+// files would be missing.
 func fileCoverageAvailable() bool {
+	return markCoverageAvailable() || contextCoverageAvailable()
+}
+
+func markCoverageAvailable() bool {
 	fileCoverageState.once.Do(func() {
 		banks, files := 0, 0
 		for p := atomic.LoadPointer(&fileCoverageBanksV1); p != nil; p = (*fileCoverageBank)(p).next {
@@ -97,6 +102,9 @@ func FileCoverageParallel() bool {
 
 // beginFileCoverage starts a test's window and returns its epoch.
 func beginFileCoverage() uint64 {
+	if contextCoverageAvailable() {
+		return beginContextCoverage()
+	}
 	return atomic.AddUint64(&fileCoverageEpoch, 1)
 }
 
@@ -104,6 +112,9 @@ func beginFileCoverage() uint64 {
 // that every test reports. It runs when the test's coverage is captured: a
 // later scan would also see the marks of tests that start afterwards.
 func scanFileCoverage(epoch uint64) []string {
+	if contextCoverageAvailable() {
+		return scanContextCoverage(epoch)
+	}
 	var names []string
 	for p := atomic.LoadPointer(&fileCoverageBanksV1); p != nil; p = (*fileCoverageBank)(p).next {
 		bank := (*fileCoverageBank)(p)

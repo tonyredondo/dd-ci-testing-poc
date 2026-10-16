@@ -39,28 +39,31 @@ type CLIOptions struct {
 	// entries. FileCoverageParallel also keeps t.Parallel
 	// (--experimental-file-coverage=parallel): each test then reports the
 	// files that ran during its window, its parallel neighbors' too.
-	FileCoverage, FileCoverageParallel bool
+	// FileCoverageContext, for =context, keeps t.Parallel too, and each
+	// test reports the files that ran for it, which goroutines, channels
+	// and timers carry (instrument.TransformContextRuntime).
+	FileCoverage, FileCoverageParallel, FileCoverageContext bool
 }
 
 // FileCoverageEnv enables --experimental-file-coverage without the flag:
-// true for one test at a time, parallel for =parallel. The flag, when given,
-// decides instead.
+// true for one test at a time, parallel for =parallel, context for =context.
+// The flag, when given, decides instead.
 const FileCoverageEnv = "DD_CIVISIBILITY_EXPERIMENTAL_FILE_COVERAGE"
 
 // WithFileCoverageEnvironment applies FileCoverageEnv's value to options that
 // do not set --experimental-file-coverage. It returns why it ignores a value
-// that is not a boolean or parallel, or "".
+// that is not a boolean, parallel or context, or "".
 func (o CLIOptions) WithFileCoverageEnvironment(value string) (CLIOptions, string) {
 	if o.FileCoverage || value == "" {
 		return o, ""
 	}
-	if value == "parallel" {
-		o.FileCoverage, o.FileCoverageParallel = true, true
+	if value == "parallel" || value == "context" {
+		o.FileCoverage, o.FileCoverageParallel, o.FileCoverageContext = true, true, value == "context"
 		return o, ""
 	}
 	enabled, err := strconv.ParseBool(value)
 	if err != nil {
-		return o, fmt.Sprintf("%s=%q is neither a boolean nor parallel; ignoring it", FileCoverageEnv, value)
+		return o, fmt.Sprintf("%s=%q is not a boolean, parallel or context; ignoring it", FileCoverageEnv, value)
 	}
 	o.FileCoverage = enabled
 	return o, ""
@@ -102,11 +105,12 @@ func ParseCLIArgs(args []string) (CLIOptions, []string, error) {
 		}
 		if strings.HasPrefix(arg, "--") && name == "experimental-file-coverage" {
 			// No separate value: it would be taken for a package.
-			if hasValue && value != "parallel" {
-				return CLIOptions{}, nil, fmt.Errorf("--experimental-file-coverage takes no value or =parallel, not %q", value)
+			if hasValue && value != "parallel" && value != "context" {
+				return CLIOptions{}, nil, fmt.Errorf("--experimental-file-coverage takes no value, =parallel or =context, not %q", value)
 			}
 			options.FileCoverage = true
 			options.FileCoverageParallel = options.FileCoverageParallel || hasValue
+			options.FileCoverageContext = options.FileCoverageContext || value == "context"
 			args = args[1:]
 			continue
 		}

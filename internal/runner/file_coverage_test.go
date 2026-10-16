@@ -84,7 +84,7 @@ func TestPrepareFileCoverage(t *testing.T) {
 		replacements[logical] = "generated"
 		return nil
 	}
-	summary, refusal, err := prepareFileCoverage(tested, []string{repo}, []string{dir("repo/cache")}, replacements, userOverlay, t.TempDir(), add)
+	summary, refusal, err := prepareFileCoverage(tested, []string{repo}, []string{dir("repo/cache")}, replacements, userOverlay, t.TempDir(), false, add)
 	if err != nil || refusal != "" {
 		t.Fatalf("refusal %q, err %v", refusal, err)
 	}
@@ -162,7 +162,7 @@ func TestPrepareFileCoverageCollision(t *testing.T) {
 	})
 	tested := []goPackage{{Dir: filepath.Join(root, "a"), Name: "a", ImportPath: "example.com/a", GoFiles: []string{"a.go"}}}
 	replacements := map[string]string{}
-	_, refusal, err := prepareFileCoverage(tested, []string{root}, nil, replacements, nil, t.TempDir(), func(string, string) error {
+	_, refusal, err := prepareFileCoverage(tested, []string{root}, nil, replacements, nil, t.TempDir(), false, func(string, string) error {
 		t.Fatal("added a file after a collision")
 		return nil
 	})
@@ -183,7 +183,7 @@ func TestPrepareFileCoverageNameClash(t *testing.T) {
 		{Dir: filepath.Join(root, "b"), Name: "b", ImportPath: "example.com/b", GoFiles: []string{"b.go"}},
 	}
 	replacements := map[string]string{}
-	_, refusal, err := prepareFileCoverage(tested, []string{root}, nil, replacements, nil, t.TempDir(), func(string, string) error {
+	_, refusal, err := prepareFileCoverage(tested, []string{root}, nil, replacements, nil, t.TempDir(), false, func(string, string) error {
 		t.Fatal("added a file after a name clash")
 		return nil
 	})
@@ -201,7 +201,7 @@ func TestPrepareFileCoverageTestSuffix(t *testing.T) {
 		{Dir: filepath.Join(root, "helper"), Name: "main", ImportPath: "example.com/other.test", GoFiles: []string{filepath.Join(root, "cache", "testmain")}},
 	}
 	generated := map[string]bool{}
-	_, refusal, err := prepareFileCoverage(tested, []string{root}, nil, map[string]string{}, nil, t.TempDir(), func(logical, _ string) error {
+	_, refusal, err := prepareFileCoverage(tested, []string{root}, nil, map[string]string{}, nil, t.TempDir(), false, func(logical, _ string) error {
 		generated[logical] = true
 		return nil
 	})
@@ -225,7 +225,7 @@ func TestPrepareFileCoverageEmbedPatterns(t *testing.T) {
 			{Dir: filepath.Join(root, "sub"), Name: "sub", ImportPath: "example.com/a/sub", GoFiles: []string{"s.go"}},
 		}
 		replacements := map[string]string{}
-		_, refusal, err := prepareFileCoverage(tested, []string{root}, nil, replacements, nil, t.TempDir(), func(string, string) error {
+		_, refusal, err := prepareFileCoverage(tested, []string{root}, nil, replacements, nil, t.TempDir(), false, func(string, string) error {
 			t.Fatal("added a bank that an embed pattern matches")
 			return nil
 		})
@@ -250,7 +250,7 @@ func TestPrepareFileCoverageNameClashUnmarked(t *testing.T) {
 		} else {
 			p.CgoFiles = []string{"c.go"}
 		}
-		_, refusal, err := prepareFileCoverage([]goPackage{p}, []string{root}, nil, map[string]string{}, nil, t.TempDir(), func(string, string) error {
+		_, refusal, err := prepareFileCoverage([]goPackage{p}, []string{root}, nil, map[string]string{}, nil, t.TempDir(), false, func(string, string) error {
 			t.Fatal("added a bank next to a clashing file")
 			return nil
 		})
@@ -269,7 +269,7 @@ func TestPrepareFileCoverageRefusesPlugins(t *testing.T) {
 		{Name: "plugin", ImportPath: "plugin", Standard: true},
 	}
 	replacements := map[string]string{}
-	_, refusal, err := prepareFileCoverage(tested, []string{root}, nil, replacements, nil, t.TempDir(), func(string, string) error {
+	_, refusal, err := prepareFileCoverage(tested, []string{root}, nil, replacements, nil, t.TempDir(), false, func(string, string) error {
 		t.Fatal("added a bank in a build with plugin")
 		return nil
 	})
