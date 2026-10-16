@@ -1728,6 +1728,22 @@ of them without changing any event:
   instead of converting a string variable to `any`; its four calls replace the
   original lines. Checks: `TestExistingModulesAndSuitesAllocateNothing`,
   `TestTestOptionsWithoutOptionsAllocateNothing` and `TestFinalStatusValue`.
+- `executeInternalTest`'s function calls `t.Helper()` only when an additional
+  feature wrapper calls it: `directTestFunc` (at the end of
+  `gotesting/testing.go`) records, at setup, whether testing runs it directly.
+  The call allocates the test's helper map, and testing reads helper marks only
+  to choose the frame that a log, failure or skip reports. When that search
+  reaches the function that tRunner calls in a top-level test, it reports that
+  function's frame, marked or not, so a direct function's mark changes no
+  location; a wrapper's frames lie between it and tRunner, so a wrapped one
+  keeps the call. The condition replaces the comment, the call and the blank
+  line after it, the flag shares the known-test line of `commonInfo`, and the
+  return line calls `directTestFunc` in place, so no line moves. With flaky
+  test retries enabled, every test is wrapped, and a test that calls a helper
+  allocates the map itself.
+  Checks: `TestDirectTestFunc`, and `TestMiniHelperMarksKeepLocations`, which
+  pins the locations of a test that calls `t.Helper()` itself, directly and
+  with a retry wrapper.
 
 CI string snapshots use the revision/escaped-map contract below; numeric CI
 metrics remain fresh per call. Checks: `TestTestifyLookupMatchesReflection`,
