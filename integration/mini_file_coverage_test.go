@@ -216,6 +216,31 @@ func TestMiniFileCoverageRefusals(t *testing.T) {
 	}
 }
 
+// A test binary that can load plugins keeps Go's counters, as the in-memory
+// coverage hook does: a plugin shares packages with the binary, and one built
+// without the marks would not load. Here only a test imports the package that
+// uses plugin.
+func TestMiniFileCoverageRefusesPlugins(t *testing.T) {
+	dir, driver := prepareMiniFixture(t)
+	writeFileCoverageFixture(t, dir)
+	if err := os.Mkdir(filepath.Join(dir, "loader"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	writeBuildFixture(t, dir, map[string]string{
+		"loader/loader.go": "package loader\n\nimport \"plugin\"\n\nfunc Open(path string) error {\n\t_, err := plugin.Open(path)\n\treturn err\n}\n",
+		"loader_test.go":   "package fixture_test\n\nimport (\n\t\"testing\"\n\n\t\"example.com/dd-ci-testing-fixture/loader\"\n)\n\nfunc TestLoader(t *testing.T) { _ = loader.Open }\n",
+	})
+	bin := filepath.Join(t.TempDir(), executableName("plugin.test"))
+	out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false", "DD_TRACE_DEBUG=true"), driver,
+		"test", "--runtime=mini", "--experimental-file-coverage", "-c", "-o", bin, ".")
+	if code != 0 {
+		t.Fatal(out, stderr)
+	}
+	if want := `file coverage installed=false reason="plugin"`; !strings.Contains(stderr, want) {
+		t.Fatalf("build log lacks %q:\n%s", want, stderr)
+	}
+}
+
 // File marks keep go test's output and its test cache: a second run is
 // cached, and a run with marks does not reuse the result of a run without.
 func TestMiniFileCoverageTestCache(t *testing.T) {

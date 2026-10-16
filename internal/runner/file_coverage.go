@@ -113,6 +113,13 @@ func prepareFileCoverage(tested []goPackage, roots, excluded []string, replaceme
 		}
 		return false
 	}
+	// A plugin built without the marks would not load: Go checks that the
+	// packages it shares with the test binary are the same.
+	for _, p := range tested {
+		if base, _, _ := strings.Cut(p.ImportPath, " ["); base == "plugin" {
+			return summary, "plugin", nil
+		}
+	}
 	testsBuilt := map[string]bool{}
 	// Embedding reads the overlay: a Go file that a package embeds keeps
 	// its content and is reported for every test. A pattern can match the

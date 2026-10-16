@@ -482,6 +482,8 @@ selected Mini that reads banks. Otherwise ddto prints
 `--experimental-file-coverage: <reason>; per-test coverage keeps Go's coverage counters`
 and builds as without the flag. It also refuses in these cases:
 - Orchestrion's `-toolexec`;
+- a test binary that can load plugins: a plugin built without the marks
+  would not load next to the packages it shares with the binary;
 - vendored dependencies that ddto provides from its cache, outside the
   repository;
 - an embed pattern that would match a generated file, since patterns resolve

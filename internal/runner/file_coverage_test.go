@@ -259,6 +259,24 @@ func TestPrepareFileCoverageNameClashUnmarked(t *testing.T) {
 	}
 }
 
+// A test binary that can load plugins keeps Go's counters: a plugin built
+// without the marks would not load next to the marked packages it shares.
+func TestPrepareFileCoverageRefusesPlugins(t *testing.T) {
+	root := fileCoverageTree(t, map[string]string{"a.go": "package a\n\nfunc F() {}\n"})
+	tested := []goPackage{
+		{Dir: root, Name: "a", ImportPath: "example.com/a", GoFiles: []string{"a.go"}},
+		{Name: "plugin", ImportPath: "plugin", Standard: true},
+	}
+	replacements := map[string]string{}
+	_, refusal, err := prepareFileCoverage(tested, []string{root}, nil, replacements, nil, t.TempDir(), func(string, string) error {
+		t.Fatal("added a bank in a build with plugin")
+		return nil
+	})
+	if err != nil || refusal != "plugin" || len(replacements) != 0 {
+		t.Fatalf("refusal %q, err %v, replacements %v", refusal, err, replacements)
+	}
+}
+
 func TestRepositoryRoots(t *testing.T) {
 	root := fileCoverageTree(t, map[string]string{"repo/.git/HEAD": "ref: refs/heads/main\n", "repo/sub/go.mod": "module x\n", "plain/go.mod": "module y\n"})
 	if got := repositoryRoots(filepath.Join(root, "repo", "sub"), nil); !slices.Equal(got, []string{filepath.Join(root, "repo")}) {
