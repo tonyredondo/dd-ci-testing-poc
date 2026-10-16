@@ -297,9 +297,8 @@ It extends three places that upstream gates on Go's counters:
   order, without bitmaps.
 
 `FileCoverageParallel` also reads `DD_CIVISIBILITY_INTERNAL_FILE_COVERAGE_PARALLEL`,
-which ddto hands for `--experimental-file-coverage=parallel`. With it, the test
-wrapper leaves the parent's barrier alone, so `t.Parallel()` keeps working and
-the windows of parallel tests overlap. `registerTestCoverageCleanup` then puts
+which ddto hands for `--experimental-file-coverage=context`. With it, the test
+wrapper leaves the parent's barrier alone, so `t.Parallel()` keeps working. `registerTestCoverageCleanup` then puts
 back only a barrier that the test replaced; restoring the nil one it never
 took would have turned `t.Parallel()` off for the tests after it.
 

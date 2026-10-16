@@ -394,13 +394,6 @@ func FileCoverageContextRuntimeError(sources map[string][]byte) error {
 	return declarationsError(sources, fileCoverageContextRuntimeAPI, "the runtime's coverage package lacks %s")
 }
 
-// FileCoverageParallelRuntimeError reports why the selected runtime, whose
-// coverage package is given as the sources that the build compiles, does not
-// keep t.Parallel with file coverage, or nil.
-func FileCoverageParallelRuntimeError(sources map[string][]byte) error {
-	return declarationsError(sources, []string{"func FileCoverageParallel() bool"}, "the runtime's coverage package lacks %s")
-}
-
 // FileCoveragePackage is the Mini package that declares the epoch and the
 // bank list that instrumented packages link to.
 const FileCoveragePackage = "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations/gotesting/coverage"

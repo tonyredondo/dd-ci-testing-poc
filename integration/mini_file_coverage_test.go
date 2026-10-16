@@ -241,10 +241,9 @@ func TestMiniFileCoverageRefusesPlugins(t *testing.T) {
 	}
 }
 
-// --experimental-file-coverage=parallel keeps t.Parallel: two parallel
+// --experimental-file-coverage=context keeps t.Parallel: two parallel
 // top-level tests wait for each other, so they pass only when they run at the
-// same time. Each still reports the files its own code ran; overlapping
-// windows can add its neighbor's.
+// same time. Each still reports the files its own code ran.
 func TestMiniFileCoverageParallel(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
 	writeFileCoverageFixture(t, dir)
@@ -296,7 +295,7 @@ func TestFileParallelB(t *testing.T) {
 }
 `})
 	got, exec := runParityCase(t, dir, driver, parityCase{
-		Args:     []string{"test", "--runtime=mini", "--experimental-file-coverage=parallel", "-count=1", "-v", "-run=^TestFileParallel", "-parallel=2", "."},
+		Args:     []string{"test", "--runtime=mini", "--experimental-file-coverage=context", "-count=1", "-v", "-run=^TestFileParallel", "-parallel=2", "."},
 		Policy:   policySettings{Coverage: true},
 		Coverage: true,
 		Env:      []string{"DD_TRACE_DEBUG=true"},
@@ -304,7 +303,7 @@ func TestFileParallelB(t *testing.T) {
 	if exec.code != 0 {
 		t.Fatalf("exit %d:\n%s\n%s", exec.code, exec.out, exec.stderr)
 	}
-	if !strings.Contains(exec.stderr, "file coverage installed=true") || !strings.Contains(exec.stderr, "parallel=true") {
+	if !strings.Contains(exec.stderr, "file coverage installed=true") || !strings.Contains(exec.stderr, "parallel=true context=true") {
 		t.Fatalf("build log lacks parallel file coverage:\n%s", exec.stderr)
 	}
 	files, _ := fileCoverageRows(t, &got.miniWireCapture)
@@ -319,7 +318,7 @@ func TestFileParallelB(t *testing.T) {
 		}
 	}
 	// The bare flag runs the tests one at a time, even when the environment
-	// says parallel, as a test that ran ddto with =parallel would hand on.
+	// says parallel, as a test that ran ddto with =context would hand on.
 	_, exec = runParityCase(t, dir, driver, parityCase{
 		Args:     []string{"test", "--runtime=mini", "--experimental-file-coverage", "-count=1", "-v", "-run=^TestFileParallel", "-parallel=2", "."},
 		Policy:   policySettings{Coverage: true},
@@ -332,8 +331,8 @@ func TestFileParallelB(t *testing.T) {
 }
 
 // DD_CIVISIBILITY_EXPERIMENTAL_FILE_COVERAGE enables file coverage without
-// the flag, with parallel for =parallel; the flag decides when it is given,
-// and a value that is neither a boolean nor parallel only warns.
+// the flag, with context for =context; the flag decides when it is given,
+// and a value that is neither a boolean nor context only warns.
 func TestMiniFileCoverageEnvironment(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
 	writeFileCoverageFixture(t, dir)
@@ -342,9 +341,10 @@ func TestMiniFileCoverageEnvironment(t *testing.T) {
 		flags             []string
 	}{
 		{"true", "true", "file coverage installed=true", nil},
-		{"parallel", "parallel", "parallel=true", nil},
-		{"flag decides", "parallel", "parallel=false", []string{"--experimental-file-coverage"}},
-		{"invalid", "sometimes", `DD_CIVISIBILITY_EXPERIMENTAL_FILE_COVERAGE="sometimes" is neither a boolean nor parallel; ignoring it`, nil},
+		{"context", "context", "parallel=true context=true", nil},
+		{"flag decides", "context", "parallel=false context=false", []string{"--experimental-file-coverage"}},
+		{"invalid", "sometimes", `DD_CIVISIBILITY_EXPERIMENTAL_FILE_COVERAGE="sometimes" is neither a boolean nor context; ignoring it`, nil},
+		{"parallel", "parallel", `DD_CIVISIBILITY_EXPERIMENTAL_FILE_COVERAGE="parallel" is neither a boolean nor context; ignoring it`, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			bin := filepath.Join(t.TempDir(), executableName("env.test"))

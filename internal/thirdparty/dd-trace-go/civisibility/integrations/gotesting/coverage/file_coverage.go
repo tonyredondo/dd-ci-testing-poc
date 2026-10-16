@@ -85,7 +85,7 @@ func FileCoverageActive() bool {
 	return coverageUploadEnabled && mode == "" && fileCoverageAvailable()
 }
 
-// fileCoverageParallelEnv is set by ddto's --experimental-file-coverage=parallel.
+// fileCoverageParallelEnv is set by ddto's --experimental-file-coverage=context.
 const fileCoverageParallelEnv = "DD_CIVISIBILITY_INTERNAL_FILE_COVERAGE_PARALLEL"
 
 var fileCoverageParallel = sync.OnceValue(func() bool {
@@ -94,8 +94,7 @@ var fileCoverageParallel = sync.OnceValue(func() bool {
 })
 
 // FileCoverageParallel reports whether tests keep t.Parallel while file
-// coverage is collected. Windows of parallel tests then overlap, and each
-// test reports every file that ran during its window, its neighbors' too.
+// coverage is collected: context file coverage tells their files apart.
 func FileCoverageParallel() bool {
 	return FileCoverageActive() && fileCoverageParallel()
 }

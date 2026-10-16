@@ -69,8 +69,8 @@ type Plan struct {
 	coverOverlay bool
 	// fileCoverage reports that the build has file marks; the test
 	// processes then get fileCoverageParallel, for
-	// --experimental-file-coverage=parallel and =context, whatever they
-	// would inherit. fileCoverageContext reports context file coverage.
+	// --experimental-file-coverage=context, whatever they would inherit.
+	// fileCoverageContext reports context file coverage.
 	fileCoverage, fileCoverageParallel bool
 	fileCoverageContext                bool
 	singleflight                       bool
@@ -775,17 +775,9 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		}
 		phase.finish(nil)
 		plan.fileCoverage = refusal == ""
-		// A refused =context runs the tests one at a time, as the reference
-		// that it would match.
-		plan.fileCoverageParallel = plan.fileCoverage && opts.fileCoverageParallel && (!opts.fileCoverageContext || plan.fileCoverageContext)
-		if plan.fileCoverageParallel {
-			// A selected runtime from before =parallel runs the tests one
-			// at a time; say so instead of leaving it unnoticed.
-			if parallelRefusal := checkSources(findPackage(listed, miniCoveragePackage), replacements, instrument.FileCoverageParallelRuntimeError); parallelRefusal != "" {
-				plan.fileCoverageParallel = false
-				plan.Warnings = append(plan.Warnings, "--experimental-file-coverage=parallel: "+parallelRefusal+"; tests run one at a time while coverage is collected")
-			}
-		}
+		// Only context file coverage keeps t.Parallel; a refused =context
+		// runs the tests one at a time, as the reference that it would match.
+		plan.fileCoverageParallel = plan.fileCoverageContext
 		debug.printf("file coverage installed=%t reason=%q packages=%d marked_files=%d always_files=%d parallel=%t context=%t context_reason=%q", refusal == "", refusal, summary.packages, summary.marked, summary.always, plan.fileCoverageParallel, plan.fileCoverageContext, contextRefusal)
 		if refusal == "" && contextRefusal != "" {
 			plan.Warnings = append(plan.Warnings, "--experimental-file-coverage=context: "+contextRefusal+"; tests run one at a time while coverage is collected")
@@ -893,7 +885,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 	if warning != "" {
 		fmt.Fprintln(stderr, version.BuildLogPrefix+" WARN: "+warning)
 	}
-	opts.fileCoverage, opts.fileCoverageParallel, opts.fileCoverageContext = cli.FileCoverage, cli.FileCoverageParallel, cli.FileCoverageContext
+	opts.fileCoverage, opts.fileCoverageContext = cli.FileCoverage, cli.FileCoverageContext
 	dir := workingDirectory(cwd, opts)
 	debug.printf("working_directory=%q package_patterns=%d build_flags=%d", dir, len(opts.packages), len(opts.buildFlags))
 	if opts.help || explicitFiles(dir, opts.packages) {
