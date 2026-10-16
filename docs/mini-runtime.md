@@ -429,6 +429,35 @@ because the compiler applies the directives. The coverage of `testing`'s own
 code is also attributed by timing: `T.Run` continues in the parent goroutine
 while the attempt it started takes its first snapshot.
 
+With `-race`, `ddto` overlays Mini's sources with copies that mark each
+function declaration `//go:norace`, so the race detector does not instrument
+Mini's own memory accesses: with 2,000 empty tests, about 22 µs less per test.
+Client code and `testing` stay instrumented, and Mini's locks, channels and
+atomics still order client accesses, so client races are reported as before.
+Races inside Mini's functions are not, except in function literals, which cannot
+be annotated and stay instrumented. A `/*line*/` directive keeps every source
+position.
+
+Some of Mini stays fully instrumented. Packages that `-coverpkg` covers do,
+because Go's cover tool reads their original sources. When client code imports
+Mini's packages, directly or through a helper package, as tests that use
+`testopt` do, Mini keeps full instrumentation, so memory that the client passes
+to Mini's API, such as a pointer tag value, stays checked as under
+`go test -race`. Mini's own tests also keep it, with `go test -race` or when the
+named packages belong to Mini. Compiling Mini with `-race=false` would remove
+more, but the compiler would then make Mini's atomics invisible to the
+detector, which would report races that do not exist.
+
+The [validation guide](validation.md) lists loopback wire checks, imported SDK
+assertions, concurrency and platform coverage. Workflow results are evidence
+for their exact inputs only. Live intake/UI acceptance, real Bazel execution
+and long-running fuzz campaigns need separate validation. The
+[benchmark report](benchmarks.md) retains timings for its recorded revision.
+
+For source revisions, licenses, codecs, platform subsets and update commands,
+read [source maintenance](maintenance.md) and the
+[incorporated-source records](../internal/thirdparty/README.md).
+
 ### Experimental file coverage
 
 `ddto test --experimental-file-coverage` takes per-test coverage from file
@@ -451,7 +480,8 @@ the repository's packages:
   - after every statement with a call or a channel operation, where a
     goroutine that blocked before the test can resume.
 
-  Only computation that cannot block runs between two sites. A site uses only
+  Between two sites, code waits for no other goroutine, though the runtime
+  can still suspend it briefly (see Limits). A site uses only
   `sync/atomic`'s intrinsics, which cost the compiler's inliner little, and
   raises the mark with a compare-and-swap loop, so a mark never goes down.
   Sites and the import that they need stay on their lines, and a `//line`
