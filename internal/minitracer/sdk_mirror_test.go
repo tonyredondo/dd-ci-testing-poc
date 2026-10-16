@@ -16,7 +16,7 @@ func TestSDKMirrorScopeAndCancellation(t *testing.T) {
 	ctx := ContextWithTest(native, owner)
 	root := sdkMirrorStart(ctx, nil, "root").(*sdkMirror)
 	child := sdkMirrorStart(context.Background(), root, "child").(*sdkMirror)
-	if child.span.event.Content.ParentID != root.span.carrier.Carried.SpanID || child.span.carrier.Carried.TraceID != owner.carrier.Carried.TraceID {
+	if child.span.event.Content.ParentID != root.span.identity.SpanID || child.span.identity.TraceID != owner.identity.TraceID {
 		t.Fatal("explicit SDK parent lost its CI scope")
 	}
 	if sdkMirrorStart(context.Background(), nil, "outside") != nil {
@@ -24,17 +24,17 @@ func TestSDKMirrorScopeAndCancellation(t *testing.T) {
 	}
 	returned := sdkMirrorContext(ctx, root)
 	identity, _ := propagation.FromContext(returned)
-	if identity != root.span.carrier.Carried {
+	if identity != root.span.identity {
 		t.Fatal("SDK child context lost its independent identity")
 	}
 	detached := sdkMirrorContext(returned, nil)
 	newRoot := sdkMirrorStart(detached, nil, "detached").(*sdkMirror)
-	if newRoot.span.event.Content.ParentID != owner.carrier.Carried.SpanID {
+	if newRoot.span.event.Content.ParentID != owner.identity.SpanID {
 		t.Fatal("SDK detach retained the previous copy as a parent")
 	}
 	otherTest, _ := newSpan(client, context.Background(), "another test")
 	other := sdkMirrorStart(ContextWithTest(returned, otherTest), root, "other").(*sdkMirror)
-	if other.span.event.Content.ParentID != otherTest.carrier.Carried.SpanID || other.span.carrier.Carried.TraceID != otherTest.carrier.Carried.TraceID {
+	if other.span.event.Content.ParentID != otherTest.identity.SpanID || other.span.identity.TraceID != otherTest.identity.TraceID {
 		t.Fatal("a previous SDK parent overrode the current test")
 	}
 	cancel()
@@ -98,7 +98,25 @@ func TestSDKMirrorContextOnFreshParent(t *testing.T) {
 	ctx := sdkMirrorContext(context.Background(), root)
 	detached := sdkMirrorContext(ctx, nil)
 	state := sdkMirrorStart(detached, nil, "new root")
-	if state == nil || state.(*sdkMirror).span.event.Content.ParentID != owner.carrier.Carried.SpanID {
+	if state == nil || state.(*sdkMirror).span.event.Content.ParentID != owner.identity.SpanID {
 		t.Fatal("ContextWithSpan lost the owning test on a fresh context")
+	}
+}
+
+// An SDK span whose metrics are all filtered sends an empty metrics map, as
+// its filtered copy did, not an absent one.
+func TestSDKMirrorKeepsAnEmptyMetricSet(t *testing.T) {
+	owner, _ := newSpan(&Client{}, context.Background(), "test")
+	mirror := sdkMirrorStart(ContextWithTest(context.Background(), owner), nil, "initial").(*sdkMirror)
+	metrics := map[string]float64{"_sampling_priority_v1": 1, "_dd.top_level": 1}
+	delivery := sdkMirrorCapture(mirror, "span", "", "", "", 1, 1, 0, maps.All(map[string]string{}), metrics, [16]byte{}, 1).(*sdkMirrorDelivery)
+	if m := delivery.event.Content.Metrics; m.IsZero() || m.len() != 0 {
+		t.Fatalf("metrics: zero=%t len=%d", m.IsZero(), m.len())
+	}
+	empty, _ := newSpan(&Client{}, context.Background(), "test")
+	mirror = sdkMirrorStart(ContextWithTest(context.Background(), empty), nil, "initial").(*sdkMirror)
+	delivery = sdkMirrorCapture(mirror, "span", "", "", "", 1, 1, 0, maps.All(map[string]string{}), nil, [16]byte{}, 1).(*sdkMirrorDelivery)
+	if !delivery.event.Content.Metrics.IsZero() {
+		t.Fatal("an SDK span without metrics sends a metrics map")
 	}
 }

@@ -22,7 +22,7 @@ import (
 type Span struct {
 	mu           sync.Mutex
 	client       *Client
-	carrier      propctx.Carrier[propagation.Context] // The span's identity, and the context that newSpan returns.
+	identity     propagation.Context
 	event        ciEvent
 	finished     bool
 	hierarchy    [3]string
@@ -33,7 +33,7 @@ type SpanContext struct{ identity propagation.Context }
 func (c *SpanContext) SpanID() uint64                { return c.identity.SpanID }
 func (c *SpanContext) TraceID() uint64               { return binary.BigEndian.Uint64(c.identity.TraceID[8:]) }
 func (c *SpanContext) Portable() propagation.Context { return c.identity }
-func (s *Span) Context() *SpanContext                { return &SpanContext{identity: s.carrier.Carried} }
+func (s *Span) Context() *SpanContext                { return &SpanContext{identity: s.identity} }
 
 // StartSpanOption sets a property of a new span. newSpan reserves a metadata
 // entry for each Tag option; options that set fields or shared defaults
@@ -73,8 +73,22 @@ func FuncOption(apply func(*Span)) StartSpanOption {
 	return StartSpanOption{apply: apply, tag: true}
 }
 
-// Func returns the function that applies the option.
-func (o StartSpanOption) Func() func(*Span) { return o.apply }
+// Func returns the function that applies the option, for testopt, whose callers
+// can apply it to a span at any time. Options that set fields then take the
+// span's lock and leave a finished span, whose event the client may be
+// sending, unchanged; Tag options do so through SetTag.
+func (o StartSpanOption) Func() func(*Span) {
+	if o.tag {
+		return o.apply
+	}
+	return func(s *Span) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if !s.finished {
+			o.apply(s)
+		}
+	}
+}
 
 // Service returns the span's service.
 func (s *Span) Service() string {
@@ -528,7 +542,7 @@ func newSpan(client *Client, ctx context.Context, name string, options ...StartS
 	if ctx == nil {
 		panic("cannot create context from nil parent") // As context.WithValue.
 	}
-	s := &Span{client: client, carrier: propctx.Carrier[propagation.Context]{Context: ctx, Carried: identity}, event: ciEvent{Content: eventContent{Name: name, Resource: name, Start: time.Now().UnixNano(), SpanID: identity.SpanID, TraceID: binary.BigEndian.Uint64(identity.TraceID[8:]), ParentID: parent, Meta: metaSet{newEntrySet[string](metadataCapacity(client, options))}}}}
+	s := &Span{client: client, identity: identity, event: ciEvent{Content: eventContent{Name: name, Resource: name, Start: time.Now().UnixNano(), SpanID: identity.SpanID, TraceID: binary.BigEndian.Uint64(identity.TraceID[8:]), ParentID: parent, Meta: metaSet{newEntrySet[string](metadataCapacity(client, options))}}}}
 	if client != nil {
 		s.event.Content.Service = client.service
 		for k, v := range client.tags {
@@ -546,5 +560,7 @@ func newSpan(client *Client, ctx context.Context, name string, options ...StartS
 	for _, option := range options {
 		option.apply(s)
 	}
-	return s, &s.carrier
+	// A carrier boxes nothing, unlike context.WithValue. It is not part of the
+	// span, so a context kept after the span finishes does not retain its tags.
+	return s, &propctx.Carrier[propagation.Context]{Context: ctx, Carried: identity}
 }

@@ -23,8 +23,9 @@ receiver with --gomaxprocs. The report gives the test process's wall time, CPU
 time (user and system) and peak RSS, and what ddto adds per test over plain go
 test. The first run of each tree decodes every payload and checks that each
 test event arrived. A last run of each binary, -test.count=--alloc-count with
-every allocation profiled, counts the objects and bytes allocated per test in
-the whole test process. --report copies results.json and README.md into DIR, such
+every allocation profiled from the process's start (GODEBUG=memprofilerate=1),
+counts the objects and bytes that it allocates per test until testing writes
+the profile, before Mini's final delivery. --report copies results.json and README.md into DIR, such
 as a directory of docs/results; never edit those by hand.
 """
 import argparse
@@ -215,14 +216,17 @@ def pprof_total(binary, profile, index):
 
 def allocations(args, out, fixture):
     """Runs each test binary -test.count=--alloc-count with every allocation
-    profiled, and returns the objects and bytes allocated per test."""
+    profiled from its start, and returns the objects and bytes allocated per
+    test. testing would otherwise set the rate after Mini's setup."""
     result = {}
     for variant in VARIANTS:
         receiver = Receiver(out / 'allocations' / variant, False)
         profile = out / variant / 'allocations.pprof'
         command = [str(out / variant / 'fixture.test'), f'-test.count={args.alloc_count}',
                    f'-test.memprofile={profile}', '-test.memprofilerate=1']
-        output, usage = measure(command, fixture, binary_env(args, variant, receiver.url))
+        env = binary_env(args, variant, receiver.url)
+        env['GODEBUG'] = ','.join(filter(None, (env.get('GODEBUG'), 'memprofilerate=1')))
+        output, usage = measure(command, fixture, env)
         receiver.bodies.clear()
         receiver.close()
         if usage['exit'] or not output.rstrip().endswith(b'PASS'):
@@ -307,8 +311,9 @@ def report(results):
         lines += ['', f"The first {tree} run delivered " + ', '.join(f'{n} `{kind}`' for kind, n in sorted(events.items())) + ' events.']
     allocs = results['allocations']
     lines += ['', '## Allocations per test', '',
-              f"Each binary runs `-test.count={results['alloc_count']}` once more with `-test.memprofilerate=1`. The "
-              'objects and bytes are those that the whole test process allocates, divided by the test events.', '',
+              f"Each binary runs `-test.count={results['alloc_count']}` once more, with every allocation profiled from "
+              "its start (`GODEBUG=memprofilerate=1`). The objects and bytes are those that the test process "
+              "allocates until testing writes the profile, before Mini's final delivery, divided by the test events.", '',
               '| Binary | Objects per test | Bytes per test |', '| --- | --- | --- |']
     for variant in VARIANTS:
         lines.append(f"| {labels[variant]} | {allocs[variant]['objects_per_test']} | {allocs[variant]['bytes_per_test']} |")

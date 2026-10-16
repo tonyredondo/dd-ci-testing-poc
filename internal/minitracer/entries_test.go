@@ -5,8 +5,10 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
+	"weak"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
 	"github.com/tonyredondo/dd-ci-testing-poc/propagation"
@@ -151,11 +153,11 @@ func TestSpanContext(t *testing.T) {
 	type key struct{}
 	parent, cancel := context.WithCancel(context.WithValue(context.Background(), key{}, "value"))
 	span, ctx := newSpan(nil, parent, "test")
-	if identity, ok := propagation.FromContext(ctx); !ok || identity != span.carrier.Carried {
+	if identity, ok := propagation.FromContext(ctx); !ok || identity != span.identity {
 		t.Fatalf("identity %v, %t", identity, ok)
 	}
 	child, _ := newSpan(nil, context.WithValue(ctx, "other", 1), "child")
-	if child.event.Content.ParentID != span.carrier.Carried.SpanID {
+	if child.event.Content.ParentID != span.identity.SpanID {
 		t.Fatal("a child of a derived context lost its parent")
 	}
 	if ctx.Value(key{}) != "value" {
@@ -168,5 +170,34 @@ func TestSpanContext(t *testing.T) {
 	case <-derived.Done():
 	case <-time.After(5 * time.Second):
 		t.Fatal("cancellation did not reach a context derived from the span's")
+	}
+}
+
+// The context that newSpan returns does not keep the span, or its tags, alive.
+func TestSpanContextDoesNotRetainTheSpan(t *testing.T) {
+	span, ctx := newSpan(nil, context.Background(), "test", Tag("large", string(make([]byte, 1<<20))))
+	span.Finish()
+	finished := weak.Make(span)
+	span = nil
+	runtime.GC()
+	if finished.Value() != nil {
+		t.Fatal("a kept context retains its finished span")
+	}
+	if _, ok := propagation.FromContext(ctx); !ok {
+		t.Fatal("the context lost the identity")
+	}
+}
+
+// Options that testopt hands out leave a finished span's event, which the
+// client may be sending, unchanged.
+func TestPublicOptionsLeaveFinishedSpansUnchanged(t *testing.T) {
+	span, _ := newSpan(nil, context.Background(), "test", SpanType("test"), ResourceName("resource"), Service("service"))
+	span.Finish()
+	before := span.event.Content
+	for _, option := range []StartSpanOption{ResourceName("changed"), SpanType("changed"), Service("changed"), StartTime(time.Unix(1, 0)), Tag("tag", "changed")} {
+		option.Func()(span)
+	}
+	if !sameContent(span.event.Content, before) {
+		t.Fatalf("event changed after Finish: %+v", span.event.Content)
 	}
 }
