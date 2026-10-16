@@ -34,6 +34,7 @@ func TestPrepareFileCoverage(t *testing.T) {
 		"repo/a/user.go":      code("a"),
 		"repo/a/user.backing": "package a\n\nfunc FromOverlay() int { return 2 }\n",
 		"repo/a/hooked.go":    code("a"),
+		"ddto-hook.go":        code("a"),
 		"repo/a/deleted.go":   code("a"),
 		"repo/t/t_test.go":    code("t"),
 		"repo/c/c.go":         "package c\n\n// int one() { return 1; }\nimport \"C\"\n",
@@ -53,7 +54,8 @@ func TestPrepareFileCoverage(t *testing.T) {
 		{Dir: dir("repo/a"), Name: "a", ImportPath: "example.com/r/a", GoFiles: []string{"a.go", "user.go", "hooked.go", "deleted.go"}, TestGoFiles: []string{"a_test.go"}, XTestGoFiles: []string{"x_test.go"}, EmbedFiles: []string{"data.txt"}},
 		{Dir: dir("repo/a"), Name: "a", ImportPath: "example.com/r/a [example.com/r/a.test]", ForTest: "example.com/r/a"},
 		{Dir: dir("repo/a"), Name: "a_test", ImportPath: "example.com/r/a_test [example.com/r/a.test]", ForTest: "example.com/r/a"},
-		{Dir: dir("repo/a"), Name: "main", ImportPath: "example.com/r/a.test"},
+		// go list -test's test main: its Go file is in the build cache.
+		{Dir: dir("repo/a"), Name: "main", ImportPath: "example.com/r/a.test", GoFiles: []string{dir("gocache/testmain-d")}},
 		// q imports a and only a's tests import q: listed only as recompiled.
 		{Dir: dir("repo/q"), Name: "q", ImportPath: "example.com/r/q [example.com/r/a.test]", ForTest: "example.com/r/a", GoFiles: []string{"q.go"}},
 		{Dir: dir("repo/t"), Name: "t", ImportPath: "example.com/r/t", TestGoFiles: []string{"t_test.go"}},
@@ -185,6 +187,69 @@ func TestPrepareFileCoverageNameClash(t *testing.T) {
 	})
 	if err != nil || !strings.HasSuffix(refusal, "identifier with prefix __ddto_") || len(replacements) != 0 {
 		t.Fatalf("refusal %q, err %v, replacements %v", refusal, err, replacements)
+	}
+}
+
+// A package whose import path ends in .test is instrumented; only the test
+// main that go list synthesizes, with its Go file in the build cache, is not.
+func TestPrepareFileCoverageTestSuffix(t *testing.T) {
+	root := fileCoverageTree(t, map[string]string{"helper/h.go": "package helper\n\nfunc F() {}\n"})
+	tested := []goPackage{
+		{Dir: filepath.Join(root, "helper"), Name: "helper", ImportPath: "example.com/helper.test", GoFiles: []string{"h.go"}},
+		{Dir: filepath.Join(root, "helper"), Name: "main", ImportPath: "example.com/other.test", GoFiles: []string{filepath.Join(root, "cache", "testmain")}},
+	}
+	generated := map[string]bool{}
+	_, refusal, err := prepareFileCoverage(tested, []string{root}, nil, map[string]string{}, nil, t.TempDir(), func(logical, _ string) error {
+		generated[logical] = true
+		return nil
+	})
+	if err != nil || refusal != "" || !generated[filepath.Join(root, "helper", fileCoverageBankFile)] || len(generated) != 1 {
+		t.Fatalf("refusal %q, err %v, generated %v", refusal, err, generated)
+	}
+}
+
+// Embed patterns resolve through the overlay: a bank they would match
+// refuses file coverage, through a glob or a directory that holds it.
+func TestPrepareFileCoverageEmbedPatterns(t *testing.T) {
+	for _, pattern := range []string{"*coverage.go", "all:sub", "sub/*"} {
+		root := fileCoverageTree(t, map[string]string{"a.go": "package a\n\nfunc F() {}\n", "sub/s.go": "package sub\n\nfunc G() {}\n"})
+		tested := []goPackage{
+			{Dir: root, Name: "a", ImportPath: "example.com/a", GoFiles: []string{"a.go"}, EmbedPatterns: []string{pattern}},
+			{Dir: filepath.Join(root, "sub"), Name: "sub", ImportPath: "example.com/a/sub", GoFiles: []string{"s.go"}},
+		}
+		replacements := map[string]string{}
+		_, refusal, err := prepareFileCoverage(tested, []string{root}, nil, replacements, nil, t.TempDir(), func(string, string) error {
+			t.Fatal("added a bank that an embed pattern matches")
+			return nil
+		})
+		if err != nil || !strings.Contains(refusal, "embed pattern") || len(replacements) != 0 {
+			t.Errorf("%s: refusal %q, err %v", pattern, refusal, err)
+		}
+	}
+}
+
+// Files that are never marked are checked for the prefix too: embedded and
+// cgo files still compile next to the bank.
+func TestPrepareFileCoverageNameClashUnmarked(t *testing.T) {
+	for _, tc := range []struct{ name, file string }{{"embedded", "e.go"}, {"cgo", "c.go"}} {
+		root := fileCoverageTree(t, map[string]string{
+			"a.go": "package a\n\nfunc F() {}\n",
+			"e.go": "package a\n\nvar __ddto_epoch uint64\n\nfunc E() {}\n",
+			"c.go": "package a\n\nimport \"C\"\n\nvar __ddto_banks int\n",
+		})
+		p := goPackage{Dir: root, Name: "a", ImportPath: "example.com/a", GoFiles: []string{"a.go"}}
+		if tc.name == "embedded" {
+			p.GoFiles, p.TestEmbedFiles = append(p.GoFiles, "e.go"), []string{"e.go"}
+		} else {
+			p.CgoFiles = []string{"c.go"}
+		}
+		_, refusal, err := prepareFileCoverage([]goPackage{p}, []string{root}, nil, map[string]string{}, nil, t.TempDir(), func(string, string) error {
+			t.Fatal("added a bank next to a clashing file")
+			return nil
+		})
+		if err != nil || !strings.Contains(refusal, tc.file) || !strings.HasSuffix(refusal, "identifier with prefix __ddto_") {
+			t.Errorf("%s: refusal %q, err %v", tc.name, refusal, err)
+		}
 	}
 }
 

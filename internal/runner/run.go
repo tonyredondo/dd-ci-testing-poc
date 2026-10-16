@@ -35,6 +35,7 @@ type goPackage struct {
 	// ForTest and the other files are listed only for file coverage.
 	ForTest                                               string
 	CgoFiles, EmbedFiles, TestEmbedFiles, XTestEmbedFiles []string
+	EmbedPatterns, TestEmbedPatterns, XTestEmbedPatterns  []string
 	SFiles, CFiles, CXXFiles, MFiles, HFiles, FFiles      []string
 	SwigFiles, SwigCXXFiles, SysoFiles                    []string
 	Module                                                *struct {

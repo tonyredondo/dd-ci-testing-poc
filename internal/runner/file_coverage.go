@@ -3,6 +3,7 @@ package runner
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -24,7 +25,7 @@ const (
 	// fileCoverageListFields are what file coverage needs from the build
 	// with tests: every source file, including test embeds that only the
 	// test build resolves.
-	fileCoverageListFields = "Dir,Name,ImportPath,ForTest,Standard,Module,Error,GoFiles,CgoFiles,TestGoFiles,XTestGoFiles,EmbedFiles,TestEmbedFiles,XTestEmbedFiles,SFiles,CFiles,CXXFiles,MFiles,HFiles,FFiles,SwigFiles,SwigCXXFiles,SysoFiles"
+	fileCoverageListFields = "Dir,Name,ImportPath,ForTest,Standard,Module,Error,GoFiles,CgoFiles,TestGoFiles,XTestGoFiles,EmbedPatterns,TestEmbedPatterns,XTestEmbedPatterns,EmbedFiles,TestEmbedFiles,XTestEmbedFiles,SFiles,CFiles,CXXFiles,MFiles,HFiles,FFiles,SwigFiles,SwigCXXFiles,SysoFiles"
 )
 
 // fileCoverageSummary is what a build with file coverage instrumented.
@@ -63,6 +64,36 @@ type fileCoverageBankPlan struct {
 	logical string
 	bank    instrument.FileCoverageBank
 	files   []string // marked candidates, absolute, in candidate order
+	// compiled are the package variant's other Go files: its cgo files.
+	compiled []string
+}
+
+// isTestMain reports the test main that go list -test synthesizes for p.test:
+// its only Go file is in the build cache, so its name is absolute. A package
+// whose own import path ends in .test lists relative names.
+func isTestMain(p goPackage) bool {
+	base, _, _ := strings.Cut(p.ImportPath, " [")
+	return p.Name == "main" && strings.HasSuffix(base, ".test") && len(p.GoFiles) == 1 && filepath.IsAbs(p.GoFiles[0])
+}
+
+// matchingEmbedPattern returns the pattern of a package in dir that would
+// embed the generated file, or "": the file itself matches, or a directory
+// that holds it, which a pattern embeds with everything inside.
+func matchingEmbedPattern(dir string, patterns []string, generated string) string {
+	rel, err := filepath.Rel(dir, generated)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return ""
+	}
+	rel = filepath.ToSlash(rel)
+	for _, pattern := range patterns {
+		glob := strings.TrimPrefix(pattern, "all:")
+		for candidate := rel; candidate != "." && candidate != "/"; candidate = path.Dir(candidate) {
+			if ok, _ := path.Match(glob, candidate); ok {
+				return pattern
+			}
+		}
+	}
+	return ""
 }
 
 // prepareFileCoverage instruments the listed packages of the build with
@@ -105,7 +136,7 @@ func prepareFileCoverage(tested []goPackage, roots, excluded []string, replaceme
 	seen := map[string]bool{}
 	for _, p := range tested {
 		base, _, _ := strings.Cut(p.ImportPath, " [")
-		if strings.HasSuffix(base, ".test") || p.ForTest != "" && base == p.ForTest+"_test" || seen[base] {
+		if isTestMain(p) || p.ForTest != "" && base == p.ForTest+"_test" || seen[base] {
 			continue
 		}
 		seen[base] = true
@@ -134,9 +165,10 @@ func prepareFileCoverage(tested []goPackage, roots, excluded []string, replaceme
 		regular := len(p.GoFiles)+len(p.CgoFiles) > 0
 		if regular {
 			plans = append(plans, fileCoverageBankPlan{
-				logical: filepath.Join(p.Dir, fileCoverageBankFile),
-				bank:    instrument.FileCoverageBank{Package: p.Name, Marks: "__ddto_m", Always: always, Shared: true},
-				files:   join(p.GoFiles),
+				logical:  filepath.Join(p.Dir, fileCoverageBankFile),
+				bank:     instrument.FileCoverageBank{Package: p.Name, Marks: "__ddto_m", Always: always, Shared: true},
+				files:    join(p.GoFiles),
+				compiled: join(p.CgoFiles),
 			})
 		}
 		if !testsBuilt[p.ImportPath] {
@@ -170,6 +202,34 @@ func prepareFileCoverage(tested []goPackage, roots, excluded []string, replaceme
 		if _, err := os.Lstat(plan.logical); err == nil {
 			return summary, "generated file already exists: " + plan.logical, nil
 		}
+		// Embed patterns resolve through the overlay: a bank they matched
+		// would change what a package embeds.
+		for _, p := range packages {
+			for _, patterns := range [][]string{p.EmbedPatterns, p.TestEmbedPatterns, p.XTestEmbedPatterns} {
+				if pattern := matchingEmbedPattern(p.Dir, patterns, plan.logical); pattern != "" {
+					return summary, fmt.Sprintf("%s's embed pattern %q would match %s", p.ImportPath, pattern, plan.logical), nil
+				}
+			}
+		}
+	}
+	// Every compiled Go file of a package shares names with its bank.
+	for _, plan := range plans {
+		for _, path := range append(append([]string(nil), plan.files...), plan.compiled...) {
+			actual, replaced := replacements[path]
+			if replaced && actual == "" {
+				continue
+			}
+			if !replaced {
+				actual = path
+			}
+			src, err := os.ReadFile(actual)
+			if err != nil {
+				return summary, "", err
+			}
+			if err := instrument.FileCoverageNameClashError(path, src); err != nil {
+				return summary, err.Error(), nil
+			}
+		}
 	}
 	// Mark every file in memory first: a file that declares an identifier
 	// with the generated code's prefix could collide with its package's
@@ -198,9 +258,6 @@ func prepareFileCoverage(tested []goPackage, roots, excluded []string, replaceme
 				return summary, "", err
 			}
 			source, refusal := instrument.MarkFileCoverage(path, src, plan.bank.Marks, len(plan.bank.Names))
-			if refusal == instrument.FileCoverageNameClash {
-				return summary, path + ": " + string(refusal), nil
-			}
 			if refusal != "" {
 				plan.bank.Always = append(plan.bank.Always, path)
 				continue

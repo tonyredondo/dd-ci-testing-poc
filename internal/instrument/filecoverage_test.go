@@ -2,6 +2,8 @@ package instrument
 
 import (
 	"bytes"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -256,5 +258,44 @@ func TestFileCoverageRuntimeError(t *testing.T) {
 	older := map[string][]byte{"c.go": []byte("package coverage\n\nvar mode string\n")}
 	if err := FileCoverageRuntimeError(older); err == nil || !strings.Contains(err.Error(), "fileCoverageEpoch") {
 		t.Fatalf("older runtime: %v", err)
+	}
+}
+
+// A byte order mark stays out of the rewritten file: it is valid only at
+// the start, where the line directive goes.
+func TestMarkFileCoverageByteOrderMark(t *testing.T) {
+	out, refusal := MarkFileCoverage("/src/p/f.go", []byte("\uFEFFpackage p\n\nfunc F() {}\n"), "__ddto_m", 0)
+	if refusal != "" {
+		t.Fatal(refusal)
+	}
+	if bytes.Contains(out, []byte("\uFEFF")) || !bytes.HasPrefix(out, []byte("//line /src/p/f.go:1\npackage p")) {
+		t.Fatalf("rewritten:\n%q", out)
+	}
+	if _, err := parser.ParseFile(token.NewFileSet(), "f.go", out, 0); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A function literal in an initializer runs while the package initializes:
+// it does not make the file's code run after that.
+func TestMarkFileCoverageInitializerLiteral(t *testing.T) {
+	src := "package p\n\nvar Limit = func() int { return 5 }()\n"
+	if _, refusal := MarkFileCoverage("/src/p/f.go", []byte(src), "__ddto_m", 0); !strings.HasPrefix(string(refusal), "no code") {
+		t.Fatalf("refusal %q", refusal)
+	}
+}
+
+// The prefix check comes before the refusals that leave a file unmarked, and
+// covers files that are never marked.
+func TestFileCoverageNameClash(t *testing.T) {
+	cgo := "package p\n\nimport \"C\"\n\nvar __ddto_epoch uint64\n"
+	if _, refusal := MarkFileCoverage("/src/p/c.go", []byte(cgo), "__ddto_m", 0); refusal != FileCoverageNameClash {
+		t.Fatalf("cgo file: refusal %q", refusal)
+	}
+	if err := FileCoverageNameClashError("/src/p/c.go", []byte(cgo)); err == nil {
+		t.Fatal("no clash for a cgo file")
+	}
+	if err := FileCoverageNameClashError("/src/p/f.go", []byte("package p\n\n// __ddto_ in a comment\nfunc F() {}\n")); err != nil {
+		t.Fatalf("clash for a comment: %v", err)
 	}
 }

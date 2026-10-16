@@ -47,10 +47,16 @@ var directivesWithoutMarks = []string{"//go:nosplit", "//go:norace", "//go:syste
 // statement, the logical name kept in a line directive, or why the file stays
 // unmarked. hit is the package's hit function and marks its mark array.
 func MarkFileCoverage(logical string, src []byte, marks string, index int) ([]byte, FileCoverageRefusal) {
+	// A byte order mark is valid only at the start of the file, before the
+	// line directive goes: the rewritten file leaves it out.
+	src = bytes.TrimPrefix(src, []byte("\uFEFF"))
 	fs := token.NewFileSet()
 	file, err := parser.ParseFile(fs, logical, src, parser.ParseComments|parser.SkipObjectResolution)
 	if err != nil {
 		return nil, FileCoverageRefusal("parse: " + err.Error())
+	}
+	if declaresFileCoveragePrefix(file) {
+		return nil, FileCoverageNameClash
 	}
 	for _, spec := range file.Imports {
 		if path, _ := strconv.Unquote(spec.Path.Value); path == "C" {
@@ -65,16 +71,6 @@ func MarkFileCoverage(logical string, src []byte, marks string, index int) ([]by
 				}
 			}
 		}
-	}
-	prefixed := false
-	ast.Inspect(file, func(n ast.Node) bool {
-		if id, ok := n.(*ast.Ident); ok && strings.HasPrefix(id.Name, fileCoveragePrefix) {
-			prefixed = true
-		}
-		return !prefixed
-	})
-	if prefixed {
-		return nil, FileCoverageNameClash
 	}
 	call := fmt.Sprintf("%shit(&%s[%d]);", fileCoveragePrefix, marks, index)
 	offset := func(p token.Pos) int { return fs.Position(p).Offset }
@@ -105,12 +101,12 @@ func MarkFileCoverage(logical string, src []byte, marks string, index int) ([]by
 	ast.Inspect(file, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.FuncDecl:
+			// Function literals outside such declarations, as in a variable's
+			// initializer, may run only while the package initializes.
 			if n.Body != nil && (n.Recv != nil || n.Name.Name != "init") {
 				code = true
 			}
 			return n.Body != nil
-		case *ast.FuncLit:
-			code = true
 		case *ast.SwitchStmt:
 			clauses[n.Body] = true
 		case *ast.TypeSwitchStmt:
@@ -147,6 +143,32 @@ func MarkFileCoverage(logical string, src []byte, marks string, index int) ([]by
 	}
 	buf.Write(src[cursor:])
 	return buf.Bytes(), ""
+}
+
+// FileCoverageNameClashError reports a Go file that the build compiles and
+// that declares or uses an identifier with the generated code's prefix, or
+// nil. Every compiled file of a package is checked, marked or not: the bank
+// declares package-level names with the prefix.
+func FileCoverageNameClashError(logical string, src []byte) error {
+	if !bytes.Contains(src, []byte(fileCoveragePrefix)) {
+		return nil
+	}
+	file, err := parser.ParseFile(token.NewFileSet(), logical, bytes.TrimPrefix(src, []byte("\uFEFF")), parser.SkipObjectResolution)
+	if err != nil || !declaresFileCoveragePrefix(file) {
+		return nil
+	}
+	return fmt.Errorf("%s: %s", logical, FileCoverageNameClash)
+}
+
+func declaresFileCoveragePrefix(file *ast.File) bool {
+	prefixed := false
+	ast.Inspect(file, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && strings.HasPrefix(id.Name, fileCoveragePrefix) {
+			prefixed = true
+		}
+		return !prefixed
+	})
+	return prefixed
 }
 
 // isControl reports a statement that a labeled break or continue can target,

@@ -466,8 +466,8 @@ statement of theirs:
   rest;
 - Go files that a package embeds, which keep their content because embedding
   reads the overlay;
-- files whose only code runs while packages initialize: declarations and
-  `init` functions;
+- files whose only code runs while packages initialize: declarations,
+  `init` functions and function literals outside functions;
 - cgo files;
 - files with a function directive under which the call could change behavior,
   such as `//go:nosplit` or `//go:norace`;
@@ -480,9 +480,14 @@ flags, which would make cover count the marks, and without `-race`, where the
 marks' atomics would order goroutines for the race detector. It also needs a
 selected Mini that reads banks. Otherwise ddto prints
 `--experimental-file-coverage: <reason>; per-test coverage keeps Go's coverage counters`
-and builds as without the flag. It also refuses with Orchestrion's
-`-toolexec`, and when ddto provides vendored dependencies from its cache,
-outside the repository.
+and builds as without the flag. It also refuses in these cases:
+- Orchestrion's `-toolexec`;
+- vendored dependencies that ddto provides from its cache, outside the
+  repository;
+- an embed pattern that would match a generated file, since patterns resolve
+  through the overlay;
+- a compiled Go file that uses an identifier with the generated code's prefix
+  `__ddto_`.
 
 **Limits.**
 - Top-level tests still run one at a time while coverage is collected, as
