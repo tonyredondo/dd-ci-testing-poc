@@ -69,7 +69,8 @@ type Plan struct {
 	// processes then get fileCoverageParallel, for
 	// --experimental-file-coverage=parallel and =context, whatever they
 	// would inherit. fileCoverageContext reports context file coverage.
-	fileCoverage, fileCoverageParallel, fileCoverageContext bool
+	fileCoverage, fileCoverageParallel bool
+	fileCoverageContext                bool
 	orchestrionChain                   string
 	launcher                           *goLauncher
 	orchestrion                        bool
