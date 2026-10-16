@@ -251,6 +251,7 @@ func TestMiniFileCoverageParallel(t *testing.T) {
 	writeBuildFixture(t, dir, map[string]string{"par_test.go": `package fixture_test
 
 import (
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -270,9 +271,16 @@ func meet(t *testing.T) {
 	}
 	select {
 	case <-rendezvous:
-	case <-time.After(30 * time.Second):
+	case <-time.After(meetTimeout()):
 		t.Fatal("the parallel tests did not run at the same time")
 	}
+}
+
+func meetTimeout() time.Duration {
+	if d, err := time.ParseDuration(os.Getenv("FILECOV_MEET_TIMEOUT")); err == nil {
+		return d
+	}
+	return 30 * time.Second
 }
 
 func TestFileParallelA(t *testing.T) {
@@ -309,6 +317,17 @@ func TestFileParallelB(t *testing.T) {
 				t.Errorf("%s lacks %s: %v", test, file, files[test])
 			}
 		}
+	}
+	// The bare flag runs the tests one at a time, even when the environment
+	// says parallel, as a test that ran ddto with =parallel would hand on.
+	_, exec = runParityCase(t, dir, driver, parityCase{
+		Args:     []string{"test", "--runtime=mini", "--experimental-file-coverage", "-count=1", "-v", "-run=^TestFileParallel", "-parallel=2", "."},
+		Policy:   policySettings{Coverage: true},
+		Coverage: true,
+		Env:      []string{"DD_CIVISIBILITY_INTERNAL_FILE_COVERAGE_PARALLEL=true", "FILECOV_MEET_TIMEOUT=1s"},
+	})
+	if exec.code == 0 || !strings.Contains(exec.out, "did not run at the same time") {
+		t.Fatalf("serial file coverage kept t.Parallel from the environment: exit %d\n%s", exec.code, exec.out)
 	}
 }
 
