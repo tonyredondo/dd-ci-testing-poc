@@ -656,9 +656,9 @@ type-only constraint files, and, in fiber and Gin, files with only
 declarations, such as each fiber middleware's `config.go`.
 
 `=context` also adds the files of goroutines that may work for anyone, which
-go to every running test. Examples are fiber's connection goroutines after
-they read a socket, and goroutines started before the tests. On lo it matches
-serial marks. On fiber it reports 29% more files per test than serial marks
+go to every running test. In a fiber run, Mini's debug log counts 48
+goroutines that read a socket or pipe, against 3 receives that added tests to
+a context and no incomplete stack walk. On lo it matches serial marks. On fiber it reports 29% more files per test than serial marks
 (35.17 against 27.17), and selects 29% more tests per changed file (371.5
 against 287.1); Go's counters, with fewer packages, select 146.6.
 
