@@ -31,7 +31,8 @@ type Client = minitracer.Client
 // Span represents one CI event; Finish seals it exactly once.
 type Span = minitracer.Span
 
-// StartSpanOption specifies an event property.
+// StartSpanOption specifies an event property. Build options with the
+// functions of this package, such as Tag.
 type StartSpanOption = minitracer.StartSpanOption
 
 // FinishOption specifies how an event ends.

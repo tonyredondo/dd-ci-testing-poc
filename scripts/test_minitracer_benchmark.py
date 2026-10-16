@@ -1,4 +1,7 @@
+import os
 import sys
+import tempfile
+import time
 import unittest
 
 import minitracer_benchmark as benchmark
@@ -30,6 +33,28 @@ class MeasureTests(unittest.TestCase):
         self.assertEqual(3, usage["exit"])
         self.assertGreater(usage["maxrss_kb"], 0)
         self.assertGreaterEqual(usage["wall"], usage["cpu"] / 64)
+
+    def test_timeout_kills_the_command(self):
+        with tempfile.TemporaryDirectory() as directory:
+            pidfile = os.path.join(directory, "pid")
+            command = [sys.executable, "-c", "import os, sys, time; open(sys.argv[1], 'w').write(str(os.getpid())); time.sleep(60)", pidfile]
+            with self.assertRaises(SystemExit):
+                benchmark.measure(command, ".", None, timeout=2)
+            with open(pidfile) as f:
+                pid = f.read()
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline and running(pid):
+                time.sleep(0.05)
+            self.assertFalse(running(pid), "the measured command outlived the timeout")
+
+
+def running(pid):
+    """Reports whether pid exists and is not a zombie waiting for its reaper."""
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            return f.read().rsplit(")", 1)[1].split()[0] != "Z"
+    except (FileNotFoundError, ProcessLookupError):
+        return False
 
 
 class ReportTests(unittest.TestCase):

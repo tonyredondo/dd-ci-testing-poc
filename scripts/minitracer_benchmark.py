@@ -31,6 +31,7 @@ from pathlib import Path
 import platform
 import re
 import shutil
+import signal
 import statistics
 import subprocess
 import sys
@@ -142,14 +143,21 @@ def microbenchmarks(args, out):
     return samples
 
 
-def measure(command, cwd, env):
+def measure(command, cwd, env, timeout=3600):
     """Returns the output of command and its wall time, CPU seconds, peak RSS
-    and exit code, measured by MEASURE."""
-    result = subprocess.run([sys.executable, '-I', '-c', MEASURE, *command], cwd=cwd, env=env,
-                            capture_output=True, timeout=3600)
-    if result.returncode:
-        raise SystemExit(f'measuring {" ".join(command)}: exit {result.returncode}\n{result.stderr[-4000:].decode(errors="replace")}')
-    return result.stdout, json.loads(result.stderr.decode().splitlines()[-1])
+    and exit code, measured by MEASURE. After timeout seconds it kills the
+    command too, which runs in MEASURE's process group."""
+    process = subprocess.Popen([sys.executable, '-I', '-c', MEASURE, *command], cwd=cwd, env=env,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGKILL)
+        process.communicate()
+        raise SystemExit(f'{" ".join(command)}: still running after {timeout} s')
+    if process.returncode:
+        raise SystemExit(f'measuring {" ".join(command)}: exit {process.returncode}\n{stderr[-4000:].decode(errors="replace")}')
+    return stdout, json.loads(stderr.decode().splitlines()[-1])
 
 
 def run_binary(args, out, fixture, variant, directory, verify):
