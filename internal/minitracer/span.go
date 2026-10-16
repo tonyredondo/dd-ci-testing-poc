@@ -34,17 +34,37 @@ func (c *SpanContext) TraceID() uint64               { return binary.BigEndian.U
 func (c *SpanContext) Portable() propagation.Context { return c.identity }
 func (s *Span) Context() *SpanContext                { return &SpanContext{identity: s.identity} }
 
-type StartSpanOption func(*Span)
-type FinishOption func(*finishConfig)
+// StartSpanOption sets a property of a new span. newSpan reserves a metadata
+// entry for each Tag option; options that set fields or shared defaults
+// reserve none.
+type StartSpanOption struct {
+	apply func(*Span)
+	tag   bool
+}
+
+// FinishOption passes the configuration by value, so finishing keeps it on
+// the stack.
+type FinishOption func(finishConfig) finishConfig
 type finishConfig struct{ time time.Time }
 
-func ResourceName(v string) StartSpanOption { return func(s *Span) { s.content.Resource = v } }
-func SpanType(v string) StartSpanOption     { return func(s *Span) { s.content.Type = v } }
-func StartTime(v time.Time) StartSpanOption { return func(s *Span) { s.content.Start = v.UnixNano() } }
-func Tag(k string, v any) StartSpanOption   { return func(s *Span) { s.SetTag(k, v) } }
+func ResourceName(v string) StartSpanOption {
+	return StartSpanOption{apply: func(s *Span) { s.content.Resource = v }}
+}
+func SpanType(v string) StartSpanOption {
+	return StartSpanOption{apply: func(s *Span) { s.content.Type = v }}
+}
+func StartTime(v time.Time) StartSpanOption {
+	return StartSpanOption{apply: func(s *Span) { s.content.Start = v.UnixNano() }}
+}
+
+func Tag(k string, v any) StartSpanOption {
+	return StartSpanOption{apply: func(s *Span) { s.SetTag(k, v) }, tag: true}
+}
 
 // Service sets the span's service instead of the client's.
-func Service(v string) StartSpanOption { return func(s *Span) { s.content.Service = v } }
+func Service(v string) StartSpanOption {
+	return StartSpanOption{apply: func(s *Span) { s.content.Service = v }}
+}
 
 // Service returns the span's service.
 func (s *Span) Service() string {
@@ -52,7 +72,9 @@ func (s *Span) Service() string {
 	defer s.mu.Unlock()
 	return s.content.Service
 }
-func FinishTime(v time.Time) FinishOption { return func(c *finishConfig) { c.time = v } }
+func FinishTime(v time.Time) FinishOption {
+	return func(c finishConfig) finishConfig { c.time = v; return c }
+}
 
 // SetTag follows dd-trace-go's Span.SetTag for the values CI events carry:
 // pointers to basic values are dereferenced, numbers that fit a float64
@@ -389,7 +411,7 @@ func (s *Span) FinishWithTags(tags map[string]any, options ...FinishOption) {
 func (s *Span) finish(tags map[string]any, options ...FinishOption) {
 	cfg := finishConfig{time: time.Now()}
 	for _, option := range options {
-		option(&cfg)
+		cfg = option(cfg)
 	}
 	s.mu.Lock()
 	if s.finished {
@@ -426,6 +448,30 @@ func (s *Span) finish(tags map[string]any, options ...FinishOption) {
 		s.client.add(event)
 	}
 }
+
+// metadataCapacity bounds the entries that newSpan adds: _dd.origin and
+// _dd.p.tid, the client's tags, env and version, and one per Tag option. A
+// test event's 27 options, 22 of them tags, then reserve a 32-slot map for its
+// 22 entries, instead of 64 slots when every option counted.
+func metadataCapacity(client *Client, options []StartSpanOption) int {
+	capacity := 2
+	for _, option := range options {
+		if option.tag {
+			capacity++
+		}
+	}
+	if client != nil {
+		capacity += len(client.tags)
+		if client.env != "" {
+			capacity++
+		}
+		if client.serviceVersion != "" {
+			capacity++
+		}
+	}
+	return capacity
+}
+
 func newSpan(client *Client, ctx context.Context, name string, options ...StartSpanOption) (*Span, context.Context) {
 	identity, ok := propagation.FromContext(ctx)
 	parent := uint64(0)
@@ -439,11 +485,7 @@ func newSpan(client *Client, ctx context.Context, name string, options ...StartS
 	if err != nil {
 		panic("cannot generate CI trace identifiers")
 	}
-	capacity := len(options) + 3
-	if client != nil {
-		capacity += len(client.tags)
-	}
-	s := &Span{client: client, identity: identity, content: eventContent{Name: name, Resource: name, Start: time.Now().UnixNano(), SpanID: identity.SpanID, TraceID: binary.BigEndian.Uint64(identity.TraceID[8:]), ParentID: parent, Meta: make(map[string]string, capacity)}}
+	s := &Span{client: client, identity: identity, content: eventContent{Name: name, Resource: name, Start: time.Now().UnixNano(), SpanID: identity.SpanID, TraceID: binary.BigEndian.Uint64(identity.TraceID[8:]), ParentID: parent, Meta: make(map[string]string, metadataCapacity(client, options))}}
 	if client != nil {
 		s.content.Service = client.service
 		for k, v := range client.tags {
@@ -459,7 +501,7 @@ func newSpan(client *Client, ctx context.Context, name string, options ...StartS
 	s.content.Meta["_dd.origin"] = "ciapp-test"
 	s.content.Meta["_dd.p.tid"] = hex.EncodeToString(identity.TraceID[:8])
 	for _, option := range options {
-		option(s)
+		option.apply(s)
 	}
 	return s, propagation.WithContext(ctx, identity)
 }
