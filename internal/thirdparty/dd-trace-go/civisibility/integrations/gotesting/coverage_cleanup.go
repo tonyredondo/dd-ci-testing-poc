@@ -23,8 +23,7 @@ func registerTestCoverageCleanup(t *testing.T, collector coverage.TestCoverage, 
 	t.Cleanup(func() {
 		defer testCoverageShutdown.Delete(ptr)
 		collector.CollectCoverageAfterTestExecution()
-		// Only a barrier that the test replaced goes back.
-		if parent := getTestParentPrivateFields(t); parentBarrier != nil && parent != nil && parent.barrier != nil {
+		if parent := getTestParentPrivateFields(t); parentBarrier != nil && parent != nil && parent.barrier != nil { // only a barrier the test replaced
 			*parent.barrier = parentBarrier
 		}
 		if shutdown.Load() {

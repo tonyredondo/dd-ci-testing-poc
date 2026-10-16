@@ -477,7 +477,7 @@
     {
       "path": "civisibility/integrations/gotesting/coverage_cleanup.go",
       "role": "local",
-      "sha256": "42b1fdff88e42f06d3c73edd8b6bd3f4579ed207d08e9625aa0f98bd187b6989"
+      "sha256": "bf7d5e6eff15be216f7254f57c72be2add045df0ee382b3fa640851f66291b4f"
     },
     {
       "path": "civisibility/integrations/gotesting/efd_faulty_session.go",
@@ -786,7 +786,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/testing.go",
-      "sha256": "837795ca238a669c9b4c03a445e1d884e660b738b470489a59ec856e132b7c62",
+      "sha256": "f371ff10f10567b3297c2e763a2bfa32b5cf5fa82d35429b0ced0d9786762b82",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testing.go",
       "source_sha256": "73324a56f1b1c581df8620a4f67a51743b198b2470d43f9b645425fff6a63646"

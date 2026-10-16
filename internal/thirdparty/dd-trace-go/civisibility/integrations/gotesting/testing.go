@@ -800,8 +800,7 @@ func (ddm *M) executeInternalTest(testInfo *testingTInfo, wrapperOpts additional
 				test.TestID(),
 				testFile)
 
-			// now we need to disable parallelism for the test in order to collect the test coverage,
-			// unless file coverage keeps it and attributes each test's window
+			// now we need to disable parallelism for the test in order to collect the test coverage, unless file coverage keeps it
 			tParent := getTestParentPrivateFields(t)
 			if tParent != nil && tParent.barrier != nil && !coverage.FileCoverageParallel() {
 				tParentOldBarrier = *tParent.barrier
