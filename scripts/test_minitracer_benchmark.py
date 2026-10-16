@@ -1,5 +1,6 @@
 import os
 import signal
+import struct
 import subprocess
 import sys
 import tempfile
@@ -97,10 +98,71 @@ class HierarchyTests(unittest.TestCase):
                                                              "test_suite_id": 200 if moved else 100, "test_module_id": 10, "test_session_id": 1}}]
         return [{"version": 1, "metadata": {}, "events": events}]
 
+    def test_resources_cannot_forge_ancestry(self):
+        # A suite "x@module:b" of module "a" and a suite "x" of module "b@module:a".
+        def payload(suite):
+            events = [{"type": "test_session_end", "version": 1, "content": {"test_session_id": 1, "resource": "s", "start": 1, "duration": 1}},
+                      {"type": "test_module_end", "version": 1, "content": {"test_module_id": 10, "test_session_id": 1, "resource": "a", "start": 1, "duration": 1}},
+                      {"type": "test_module_end", "version": 1, "content": {"test_module_id": 20, "test_session_id": 1, "resource": "b@module:a", "start": 1, "duration": 1}},
+                      {"type": "test_suite_end", "version": 1, "content": {"test_suite_id": 100, "test_module_id": 10, "resource": "x@module:b", "start": 1, "duration": 1}},
+                      {"type": "test_suite_end", "version": 1, "content": {"test_suite_id": 200, "test_module_id": 20, "resource": "x", "start": 1, "duration": 1}},
+                      {"type": "test", "version": 2, "content": {"span_id": 5, "trace_id": 5, "start": 1, "duration": 1, "test_suite_id": suite}}]
+            return [{"version": 1, "metadata": {}, "events": events}]
+        result = benchmark.compare_wire(benchmark.wire_content(payload(100), "/b"), benchmark.wire_content(payload(200), "/c"))
+        self.assertFalse(result["identical"])
+
     def test_suites_of_the_same_name_in_other_modules_differ(self):
         result = benchmark.compare_wire(benchmark.wire_content(self.payload(False), "/b"), benchmark.wire_content(self.payload(True), "/c"))
         self.assertFalse(result["identical"])
         self.assertTrue(benchmark.compare_wire(benchmark.wire_content(self.payload(False), "/b"), benchmark.wire_content(self.payload(False), "/c"))["identical"])
+
+
+def pack(value):
+    """Encodes value as MessagePack: ints, floats (64-bit), str, bytes, bool,
+    None, lists and dicts with string keys."""
+    if value is None or isinstance(value, bool):
+        return bytes([{None: 0xc0, False: 0xc2, True: 0xc3}[value]])
+    if isinstance(value, int):
+        return bytes([value]) if 0 <= value <= 0x7f else b"\xd3" + struct.pack(">q", value)
+    if isinstance(value, float):
+        return b"\xcb" + struct.pack(">d", value)
+    if isinstance(value, str):
+        data = value.encode()
+        return b"\xda" + struct.pack(">H", len(data)) + data
+    if isinstance(value, bytes):
+        return b"\xc5" + struct.pack(">H", len(value)) + value
+    if isinstance(value, list):
+        return b"\xdc" + struct.pack(">H", len(value)) + b"".join(pack(v) for v in value)
+    return b"\xde" + struct.pack(">H", len(value)) + b"".join(pack(k) + pack(v) for k, v in value.items())
+
+
+class UnpackTests(unittest.TestCase):
+    def test_round_trip(self):
+        value = {"version": 1, "metadata": {"*": {"language": "go"}}, "events": [{"type": "test", "content": {
+            "span_id": 1 << 62, "start": -5, "error": 0, "ok": True, "none": None, "f": 0.5, "meta": {"k": "v"}}}]}
+        self.assertEqual(value, benchmark.unpack(pack(value)))
+
+    def test_types_that_json_merges_stay_apart(self):
+        self.assertEqual(1, benchmark.unpack(pack(1)))
+        self.assertIsInstance(benchmark.unpack(pack(1.0)), float)
+        self.assertEqual({"bin": "6162"}, benchmark.unpack(pack(b"ab")))
+        self.assertEqual({"float32": 1.5}, benchmark.unpack(b"\xca" + struct.pack(">f", 1.5)))
+        self.assertEqual(200, benchmark.unpack(b"\xcc\xc8"))
+        self.assertEqual(-1, benchmark.unpack(b"\xff"))
+
+    def test_malformed_input_fails(self):
+        for data in (b"\xda\x00\x05ab", pack(1) + b"\x00", b"\x81\x01\x02", b"\xc1"):
+            with self.subTest(data=data), self.assertRaises(ValueError):
+                benchmark.unpack(data)
+
+    def test_wire_types_count(self):
+        def payload(duration, tid):
+            return pack({"version": 1, "metadata": {}, "events": [{"type": "test", "version": 2, "content": {
+                "span_id": 7, "trace_id": 7, "start": 1, "duration": duration, "meta": {"_dd.p.tid": tid}}}]})
+        base = benchmark.wire_content([benchmark.unpack(payload(1, "0123456789abcdef"))], "/b")
+        for name, candidate in {"float duration": payload(1.0, "0123456789abcdef"), "binary tid": payload(1, b"0123456789abcdef")}.items():
+            with self.subTest(name):
+                self.assertFalse(benchmark.compare_wire(base, benchmark.wire_content([benchmark.unpack(candidate)], "/c"))["identical"])
 
 
 class MeasureTests(unittest.TestCase):

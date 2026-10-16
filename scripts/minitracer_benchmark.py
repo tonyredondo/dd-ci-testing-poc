@@ -22,7 +22,8 @@ ddto test -c. Each binary runs -test.count=--count against the loopback
 receiver with --gomaxprocs. The report gives the test process's wall time, CPU
 time (user and system) and peak RSS, and what ddto adds per test over plain go
 test. The first run of each tree decodes every payload and checks that each
-test event arrived. It also compares the trees' payloads: every event, with
+test event arrived. It also compares the trees' payloads, decoded with their
+MessagePack types (integers, floats, strings and binary data stay apart): every event, with
 its envelope's version and the metadata that it inherits. IDs, timestamps,
 _dd.p.tid and the runtime ID, which differ between runs, count by presence and
 type, hierarchy IDs by what they reference, and the binary's path is masked.
@@ -43,11 +44,12 @@ import re
 import shutil
 import signal
 import statistics
+import struct
 import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from benchmark_receiver import Receiver, decode  # noqa: E402
+from benchmark_receiver import Receiver  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 BENCHMARKS = '^(BenchmarkTestEventLifecycle|BenchmarkEventLifecycle|BenchmarkSpanMetadata)$'
@@ -211,9 +213,76 @@ def mark(value, kind, valid):
     return {'marker': kind} if valid else {'raw': value}
 
 
+# MessagePack types whose size follows them: (length bytes, kind).
+SIZED = {0xc4: (1, 'bin'), 0xc5: (2, 'bin'), 0xc6: (4, 'bin'), 0xd9: (1, 'str'), 0xda: (2, 'str'), 0xdb: (4, 'str'),
+         0xdc: (2, 'array'), 0xdd: (4, 'array'), 0xde: (2, 'map'), 0xdf: (4, 'map')}
+NUMBERS = {0xca: '>f', 0xcb: '>d', 0xcc: '>B', 0xcd: '>H', 0xce: '>I', 0xcf: '>Q', 0xd0: '>b', 0xd1: '>h', 0xd2: '>i', 0xd3: '>q'}
+
+
+def unpack(data):
+    """Decodes one MessagePack value and keeps the types that JSON merges:
+    integers stay int and 64-bit floats float, a 32-bit float becomes
+    {"float32": v} and binary data {"bin": hex}. Map keys must be strings."""
+    def take(i, n):
+        if i + n > len(data):
+            raise ValueError('truncated MessagePack value')
+        return data[i:i + n]
+
+    def value(i):
+        b = take(i, 1)[0]
+        i += 1
+        if b <= 0x7f:
+            return b, i
+        if b >= 0xe0:
+            return b - 0x100, i
+        if b <= 0x8f:
+            return mapping(i, b & 0x0f)
+        if b <= 0x9f:
+            return array(i, b & 0x0f)
+        if b <= 0xbf:
+            return take(i, b & 0x1f).decode(), i + (b & 0x1f)
+        if b in (0xc0, 0xc2, 0xc3):
+            return {0xc0: None, 0xc2: False, 0xc3: True}[b], i
+        if b in SIZED:
+            width, kind = SIZED[b]
+            n = int.from_bytes(take(i, width), 'big')
+            i += width
+            if kind == 'bin':
+                return {'bin': take(i, n).hex()}, i + n
+            if kind == 'str':
+                return take(i, n).decode(), i + n
+            return (array if kind == 'array' else mapping)(i, n)
+        if b in NUMBERS:
+            width = struct.calcsize(NUMBERS[b])
+            number = struct.unpack(NUMBERS[b], take(i, width))[0]
+            return ({'float32': number} if b == 0xca else number), i + width
+        raise ValueError(f'unsupported MessagePack type 0x{b:02x}')
+
+    def array(i, n):
+        items = []
+        for _ in range(n):
+            item, i = value(i)
+            items.append(item)
+        return items, i
+
+    def mapping(i, n):
+        out = {}
+        for _ in range(n):
+            key, i = value(i)
+            if not isinstance(key, str):
+                raise ValueError(f'map key {key!r} is not a string')
+            out[key], i = value(i)
+        return out, i
+
+    decoded, end = value(0)
+    if end != len(data):
+        raise ValueError(f'{len(data) - end} bytes after the MessagePack value')
+    return decoded
+
+
 def hierarchy_labels(payloads, binary_dir):
     """Returns, for each hierarchy ID field, the label of each ID: the kind and
-    resource of the end event that has it, followed by its ancestors'."""
+    resource of the end event that has it, and its parent's label."""
     ends = {kind: {} for kind in HIERARCHY}
     for payload in payloads:
         for event in payload.get('events', []):
@@ -223,10 +292,10 @@ def hierarchy_labels(payloads, binary_dir):
                 ends[event['type']][content[field]] = content
     def resource(content):
         return normalize(str(content.get('resource', '')), binary_dir)
-    sessions = {i: 'session:' + resource(c) for i, c in ends['test_session_end'].items()}
-    modules = {i: 'module:' + resource(c) + '@' + sessions.get(c.get('test_session_id'), '<unresolved>')
+    sessions = {i: ['session', resource(c)] for i, c in ends['test_session_end'].items()}
+    modules = {i: ['module', resource(c), sessions.get(c.get('test_session_id'), '<unresolved>')]
                for i, c in ends['test_module_end'].items()}
-    suites = {i: 'suite:' + resource(c) + '@' + modules.get(c.get('test_module_id'), '<unresolved>')
+    suites = {i: ['suite', resource(c), modules.get(c.get('test_module_id'), '<unresolved>')]
               for i, c in ends['test_suite_end'].items()}
     return {'test_session_id': sessions, 'test_module_id': modules, 'test_suite_id': suites}
 
@@ -290,7 +359,7 @@ def run_binary(args, out, fixture, variant, directory, verify):
     events = None
     if verify:
         events = {}
-        payloads = [decode(args.decoder, receiver.bodies[request['file']]) for request in cycle]
+        payloads = [unpack(receiver.bodies[request['file']]) for request in cycle]
         for payload in payloads:
             for event in payload.get('events', []):
                 events[event['type']] = events.get(event['type'], 0) + 1
@@ -460,8 +529,6 @@ def main():
     args.base, args.candidate = args.base.resolve(), args.candidate.resolve()
     out = args.output.resolve()
     out.mkdir(parents=True)
-    args.decoder = out / 'decode'
-    run(['go', 'build', '-o', str(args.decoder), './scripts/testdata/runtime-benchmark/decode.go'], ROOT)
     fixture = build(args, out)
     results = {'base': describe(args.base), 'candidate': describe(args.candidate),
                'go': run(['go', 'version'], ROOT).strip(), 'cpu': cpu_model(), 'os': f'{platform.system()} {platform.release()}',
