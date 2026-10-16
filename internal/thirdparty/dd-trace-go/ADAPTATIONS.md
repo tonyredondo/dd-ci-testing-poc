@@ -1735,12 +1735,13 @@ of them without changing any event:
   to choose the frame that a log, failure or skip reports. When that search
   reaches the function that tRunner calls in a top-level test, it reports that
   function's frame, marked or not, so a direct function's mark changes no
-  location; a wrapper's frames lie between it and tRunner, so a wrapped one
-  keeps the call. The condition replaces the comment, the call and the blank
-  line after it, the flag shares the known-test line of `commonInfo`, and the
-  return line calls `directTestFunc` in place, so no line moves. With flaky
-  test retries enabled, every test is wrapped, and a test that calls a helper
-  allocates the map itself.
+  location, except in the case below; a wrapper's frames lie between it and
+  tRunner, so a wrapped one keeps the call. The condition replaces the comment,
+  the call and the blank line after it, the flag shares the known-test line of
+  `commonInfo`, and the return line calls `directTestFunc` in place, so no line
+  moves. Flaky test retries wrap every test while the retry count and the
+  session's retry budget are positive, and a test that calls a helper allocates
+  the map itself.
 
   One case changes, which we accepted for the cost. testing looks at no more
   than 50 frames (`maxStackLen`) when it chooses the frame. A test function that
