@@ -13,14 +13,19 @@ import (
 
 // File coverage (ddto's --experimental-file-coverage) replaces Go's coverage
 // counters as the source of per-test coverage with one mark per source file.
-// Before every statement, a rewritten file calls its package's hit function,
-// which raises the file's mark to Mini's current epoch. Mini advances the
-// epoch when a test starts and, after the test, reports the files whose mark
-// reached the test's epoch.
+// A mark site raises the file's mark to Mini's current epoch. Mini advances
+// the epoch when a test starts and, after the test, reports the files whose
+// mark reached the test's epoch.
 //
-// A mark before every statement, rather than one per basic block as cover
-// counts, keeps every position where any supported Go version puts a
-// counter, so a test's files are never fewer than Go's counters give.
+// Sites go where code can start running during a test: at the start of every
+// statement list, after every statement that ends a basic block, as cover
+// counts, and after every statement with a call or a channel operation,
+// where a goroutine that blocked before the test can resume during it.
+// Between two sites, code waits for no other goroutine, though the runtime
+// can still suspend it briefly, to preempt it or to assist the garbage
+// collector, as it can inside any statement. A site uses only
+// sync/atomic's intrinsics, so it costs the compiler's inliner little, and
+// it raises the mark with a compare-and-swap loop, so a mark never goes down.
 
 // FileCoverageBankVersion is the layout of the bank records that instrumented
 // packages register with Mini. Mini ignores the marks of other versions.
@@ -43,9 +48,9 @@ const FileCoverageNameClash FileCoverageRefusal = "identifier with prefix " + fi
 // atomic load may be unsafe or change behavior.
 var directivesWithoutMarks = []string{"//go:nosplit", "//go:norace", "//go:systemstack", "//go:nowritebarrier", "//go:nowritebarrierrec", "//go:yeswritebarrierrec", "//go:nocheckptr", "//go:uintptrkeepalive", "//go:uintptrescapes"}
 
-// MarkFileCoverage returns src with a call to hit for mark index before every
-// statement, the logical name kept in a line directive, or why the file stays
-// unmarked. hit is the package's hit function and marks its mark array.
+// MarkFileCoverage returns src with sites that raise mark index of the mark
+// array marks, an import of sync/atomic for them and the logical name kept
+// in a line directive, or why the file stays unmarked.
 func MarkFileCoverage(logical string, src []byte, marks string, index int) ([]byte, FileCoverageRefusal) {
 	// A byte order mark is valid only at the start of the file, before the
 	// line directive goes: the rewritten file leaves it out.
@@ -72,10 +77,13 @@ func MarkFileCoverage(logical string, src []byte, marks string, index int) ([]by
 			}
 		}
 	}
-	call := fmt.Sprintf("%shit(&%s[%d]);", fileCoveragePrefix, marks, index)
+	p, m := fileCoveragePrefix, fmt.Sprintf("&%s[%d]", marks, index)
+	site := fmt.Sprintf("if %se := %satomic.LoadUint64(&%sepoch); %satomic.LoadUint64(%s) < %se { for { %so := %satomic.LoadUint64(%s); if %so >= %se || %satomic.CompareAndSwapUint64(%s, %so, %se) { break } } };",
+		p, p, p, p, m, p, p, p, m, p, p, p, m, p, p)
 	offset := func(p token.Pos) int { return fs.Position(p).Offset }
-	var edits []edit
-	insert := func(p token.Pos) { edits = append(edits, edit{offset(p), offset(p), call}) }
+	// The import goes on the package clause's line, so no line moves.
+	edits := []edit{{offset(file.Name.End()), offset(file.Name.End()), "; import " + p + "atomic \"sync/atomic\""}}
+	insert := func(p token.Pos) { edits = append(edits, edit{offset(p), offset(p), site}) }
 	// list marks a statement list that starts at start.
 	var list func(start token.Pos, stmts []ast.Stmt)
 	list = func(start token.Pos, stmts []ast.Stmt) {
@@ -84,13 +92,10 @@ func MarkFileCoverage(logical string, src []byte, marks string, index int) ([]by
 			if label, ok := stmt.(*ast.LabeledStmt); ok && !isControl(label.Stmt) {
 				// A goto may reach the statement through its label: mark it
 				// between the two, as cover counts it.
-				if i > 0 {
-					insert(label.Pos())
-				}
 				insert(label.Colon + 1)
 				continue
 			}
-			if i > 0 {
+			if i > 0 && (endsBasicBlock(stmts[i-1]) || mayBlock(stmts[i-1])) {
 				insert(stmt.Pos())
 			}
 		}
@@ -133,7 +138,7 @@ func MarkFileCoverage(logical string, src []byte, marks string, index int) ([]by
 	sort.SliceStable(edits, func(i, j int) bool { return edits[i].start < edits[j].start })
 	var buf bytes.Buffer
 	header := "//line " + logical + ":1\n"
-	buf.Grow(len(header) + len(src) + len(edits)*len(call))
+	buf.Grow(len(header) + len(src) + len(edits)*len(site))
 	buf.WriteString(header)
 	cursor := 0
 	for _, e := range edits {
@@ -171,6 +176,52 @@ func declaresFileCoveragePrefix(file *ast.File) bool {
 	return prefixed
 }
 
+// endsBasicBlock reports a statement after which cover starts a new basic
+// block: control flow, a label, a panic, or a function literal, whose body is
+// a block of its own.
+func endsBasicBlock(s ast.Stmt) bool {
+	switch s := s.(type) {
+	case *ast.BlockStmt, *ast.BranchStmt, *ast.ForStmt, *ast.IfStmt, *ast.LabeledStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.SelectStmt, *ast.TypeSwitchStmt:
+		return true
+	case *ast.ExprStmt:
+		if call, ok := s.X.(*ast.CallExpr); ok {
+			if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "panic" {
+				return true
+			}
+		}
+	}
+	literal := false
+	ast.Inspect(s, func(n ast.Node) bool {
+		if _, ok := n.(*ast.FuncLit); ok {
+			literal = true
+		}
+		return !literal
+	})
+	return literal
+}
+
+// mayBlock reports a statement with a call or a channel operation, outside
+// function literals: a goroutine can block in it and resume later. Without
+// types, every call counts, a builtin's or a conversion's too, which only
+// adds sites.
+func mayBlock(s ast.Stmt) bool {
+	found := false
+	ast.Inspect(s, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.FuncLit:
+			return false
+		case *ast.CallExpr, *ast.SendStmt:
+			found = true
+		case *ast.UnaryExpr:
+			if n.Op == token.ARROW {
+				found = true
+			}
+		}
+		return !found
+	})
+	return found
+}
+
 // isControl reports a statement that a labeled break or continue can target,
 // whose label must stay attached to it.
 func isControl(s ast.Stmt) bool {
@@ -186,14 +237,14 @@ func isControl(s ast.Stmt) bool {
 type FileCoverageBank struct {
 	// Package is the package clause, such as "p" or "p_test".
 	Package string
-	// Marks is the name of the mark array; the hit function indexes it.
+	// Marks is the name of the mark array, which the sites index.
 	Marks string
 	// Names are the coverage names of the marked files, in mark order.
 	Names []string
 	// Always are the coverage names that every test reports.
 	Always []string
-	// Shared declares the epoch, the bank list and the hit function, which
-	// a package variant declares once.
+	// Shared declares the epoch and the bank list, which a package variant
+	// declares once.
 	Shared bool
 }
 
@@ -208,8 +259,6 @@ func (b FileCoverageBank) Source() string {
 	if b.Shared {
 		fmt.Fprintf(&s, "//go:linkname %sepoch %s.fileCoverageEpoch\nvar %sepoch uint64\n\n", p, FileCoveragePackage, p)
 		fmt.Fprintf(&s, "//go:linkname %sbanks %s.fileCoverageBanksV1\nvar %sbanks %sunsafe.Pointer\n\n", p, FileCoveragePackage, p, p)
-		fmt.Fprintf(&s, "func %shit(m *uint64) {\n\tif %satomic.LoadUint64(m) < %satomic.LoadUint64(&%sepoch) {\n\t\t%smark(m)\n\t}\n}\n\n", p, p, p, p, p)
-		fmt.Fprintf(&s, "func %smark(m *uint64) {\n\tfor {\n\t\tepoch, old := %satomic.LoadUint64(&%sepoch), %satomic.LoadUint64(m)\n\t\tif old >= epoch || %satomic.CompareAndSwapUint64(m, old, epoch) {\n\t\t\treturn\n\t\t}\n\t}\n}\n\n", p, p, p, p, p)
 	}
 	n, always := len(b.Names), len(b.Always)
 	marksRef, namesRef, alwaysRef := "nil", "nil", "nil"

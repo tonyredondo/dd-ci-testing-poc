@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -108,12 +109,64 @@ func TestMarkFileCoverageKeepsLines(t *testing.T) {
 	}
 	for i, line := range strings.Split(body, "\n") {
 		original := strings.Split(fileCoverageConstructs, "\n")[i]
-		if strings.ReplaceAll(line, "__ddto_hit(&__ddto_m[0]);", "") != original {
+		stripped := strings.ReplaceAll(fileCoverageSite.ReplaceAllString(line, ""), `; import __ddto_atomic "sync/atomic"`, "")
+		if stripped != original {
 			t.Fatalf("line %d changed beyond marks:\n%s\n%s", i+1, original, line)
 		}
 	}
 	if again, _ := MarkFileCoverage("/src/lib/flow.go", []byte(fileCoverageConstructs), "__ddto_m", 0); !bytes.Equal(again, out) {
 		t.Fatal("output is not deterministic")
+	}
+}
+
+// fileCoverageSite matches one mark site of mark array __ddto_m.
+var fileCoverageSite = regexp.MustCompile(`if __ddto_e := __ddto_atomic\.LoadUint64\(&__ddto_epoch\); .*?\{ break \} \} \};`)
+
+// Sites go at the start of a statement list and after statements that end a
+// basic block or can block: a call, other than to a builtin that cannot, or
+// a channel operation. Pure computation in between gets none.
+func TestMarkFileCoveragePlacement(t *testing.T) {
+	src := "package p\n\nfunc F(ch chan int) int {\n\tx := 1\n\ty := x + 2\n\tz := g(y)\n\tw := <-ch\n\tv := len(\"ab\")\n\tif v > 0 {\n\t\tv++\n\t}\n\treturn x + y + z + w + v\n}\n\nfunc g(n int) int { return n }\n"
+	out, refusal := MarkFileCoverage("/src/p/f.go", []byte(src), "__ddto_m", 0)
+	if refusal != "" {
+		t.Fatal(refusal)
+	}
+	// Each line of the function, without its sites, and whether it has one.
+	marked := map[string]bool{}
+	for _, line := range strings.Split(string(out), "\n") {
+		marked[strings.TrimSpace(fileCoverageSite.ReplaceAllString(line, ""))] = fileCoverageSite.MatchString(line)
+	}
+	for line, want := range map[string]bool{
+		"func F(ch chan int) int {":      true, // the list starts
+		"x := 1":                         false,
+		"y := x + 2":                     false,
+		"z := g(y)":                      false,
+		"w := <-ch":                      true, // after a call
+		"v := len(\"ab\")":               true, // after a receive
+		"if v > 0 {":                     true, // after a call, and its body starts
+		"v++":                            false,
+		"return x + y + z + w + v":       true, // after the if, which ends a block
+		"func g(n int) int { return n }": true,
+	} {
+		if got, ok := marked[line]; !ok || got != want {
+			t.Errorf("%q: site %t (listed %t), want %t\n%s", line, got, ok, want, out)
+		}
+	}
+}
+
+// A call stays found after a later expression in the same statement, a
+// function literal ends its block, and a call to anything named like a
+// builtin counts: without types, the name proves nothing.
+func TestMarkFileCoveragePlacementAccumulates(t *testing.T) {
+	src := "package p\n\nfunc F(ch, done chan int) {\n\tx := wait(ch) + -1\n\tdone <- x\n\tf := func() {}\n\tf()\n\ty := len(\"ab\")\n\tdone <- y\n}\n\nfunc wait(ch chan int) int { return <-ch }\n\nfunc len(s string) int { return 0 }\n"
+	out, refusal := MarkFileCoverage("/src/p/f.go", []byte(src), "__ddto_m", 0)
+	if refusal != "" {
+		t.Fatal(refusal)
+	}
+	for _, statement := range []string{"done <- x", "f()", "done <- y"} {
+		if !regexp.MustCompile(fileCoverageSite.String() + regexp.QuoteMeta(statement)).Match(out) {
+			t.Errorf("no site before %q:\n%s", statement, out)
+		}
 	}
 }
 

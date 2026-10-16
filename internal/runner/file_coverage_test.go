@@ -135,7 +135,7 @@ func TestPrepareFileCoverage(t *testing.T) {
 		t.Errorf("regular bank of a:\n%s", regular)
 	}
 	marked, err := os.ReadFile(replacements[user])
-	if err != nil || !strings.Contains(string(marked), "FromOverlay") || !strings.Contains(string(marked), "__ddto_hit(&__ddto_m[1])") {
+	if err != nil || !strings.Contains(string(marked), "FromOverlay") || !strings.Contains(string(marked), "__ddto_atomic.LoadUint64(&__ddto_m[1])") {
 		t.Errorf("user overlay file: err %v\n%s", err, marked)
 	}
 	if replacements[hooked] != filepath.Join(root, "ddto-hook.go") || replacements[deleted] != "" {

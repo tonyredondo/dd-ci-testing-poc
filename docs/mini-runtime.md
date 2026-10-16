@@ -444,10 +444,19 @@ the repository's packages:
   the working directory, or, outside Git, inside the main modules. That
   includes `vendor/`, local `replace` targets and packages that only tests
   import.
-- **The mark:** before every statement, a call to the package's hit function
-  raises the file's mark to Mini's current epoch. The call stays on the
-  statement's line, and a `//line` directive keeps the file's name, so stack
-  traces and test output keep their positions.
+- **The mark:** a site raises the file's mark to Mini's current epoch. Sites
+  go where code can start running during a test:
+  - at the start of every statement list;
+  - after every statement that ends a basic block, as cover counts;
+  - after every statement with a call or a channel operation, where a
+    goroutine that blocked before the test can resume.
+
+  Only computation that cannot block runs between two sites. A site uses only
+  `sync/atomic`'s intrinsics, which cost the compiler's inliner little, and
+  raises the mark with a compare-and-swap loop, so a mark never goes down.
+  Sites and the import that they need stay on their lines, and a `//line`
+  directive keeps the file's name, so stack traces and test output keep their
+  positions.
 - **The bank:** a generated file per package (`zz_ddto_file_coverage.go`), per
   internal test package (`zz_ddto_file_coverage_test.go`) and per external
   test package (`zz_ddto_file_coverage_x_test.go`) holds the marks and the
