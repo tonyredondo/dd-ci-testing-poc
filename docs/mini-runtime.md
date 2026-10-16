@@ -624,10 +624,10 @@ also measured `=parallel`, a mode with overlapping windows:
 It was as fast as `=context`, but each test reported its neighbors' files
 too, so it was dropped.
 
-**Differences from Go's counters.** Every file that a `=context` run misses
-against Go's counters comes from work that another test started. A run one at
-a time gives that work to whichever test is running; context mode gives it to
-the test that started it:
+**Differences from Go's counters.** The files that every `=context` run
+misses against Go's counters come from work that another test started. A run
+one at a time gives that work to whichever test is running; context mode
+gives it to the test that started it:
 - **fiber:**
   - five tests get the garbage collection ticks of in-memory storages that
     earlier tests created;
@@ -644,15 +644,23 @@ the test that started it:
   goes to 361 of the 403 tests, and these 76 never call it themselves.
 
 The remaining differences between runs come from Go's counters, which
-report these files in some runs only. Neither marks mode reports them:
+report these files in some runs only, while no marks run reports them:
 - fiber's `Test_Listen_Graceful_Shutdown` with
   `internal/fieldname/fieldname.go`, in 2 of 3 runs;
 - Gin's `TestBasicAuthFails` with `internal/bytesconv/bytesconv.go`, in 1 of 3
-  runs.
+  runs. The test ranges over a map: whether it converts an account with
+  `bytesconv` before its expected panic depends on the iteration order.
 
-**The extra files** go to every test: lo's type-only constraint files, and,
-in fiber and Gin, files with only declarations, such as each fiber
-middleware's `config.go`.
+**The extra files.** Serial marks add the files that go to every test: lo's
+type-only constraint files, and, in fiber and Gin, files with only
+declarations, such as each fiber middleware's `config.go`.
+
+`=context` also adds the files of goroutines that may work for anyone, which
+go to every running test. Examples are fiber's connection goroutines after
+they read a socket, and goroutines started before the tests. On lo it matches
+serial marks. On fiber it reports 29% more files per test than serial marks
+(35.17 against 27.17), and selects 29% more tests per changed file (371.5
+against 287.1); Go's counters, with fewer packages, select 146.6.
 
 On fiber's router benchmarks, in ns/op:
 
