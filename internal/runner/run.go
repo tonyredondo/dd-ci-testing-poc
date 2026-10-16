@@ -19,6 +19,7 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/goenv"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/instrument"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/toolwrap"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
@@ -47,9 +48,10 @@ type goPackage struct {
 	Error *struct{ Err string }
 }
 type Overlay struct {
-	Replace map[string]string
-	Testify *LibraryEntry `json:",omitempty"`
-	Goleak  *LibraryEntry `json:",omitempty"`
+	Replace      map[string]string
+	Testify      *LibraryEntry `json:",omitempty"`
+	Goleak       *LibraryEntry `json:",omitempty"`
+	Singleflight *LibraryEntry `json:",omitempty"`
 }
 
 type Plan struct {
@@ -71,6 +73,7 @@ type Plan struct {
 	// would inherit. fileCoverageContext reports context file coverage.
 	fileCoverage, fileCoverageParallel bool
 	fileCoverageContext                bool
+	singleflight                       bool
 	orchestrionChain                   string
 	launcher                           *goLauncher
 	orchestrion                        bool
@@ -617,7 +620,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			return plan, e
 		}
 	}
-	var goleak *LibraryEntry
+	var goleak, singleflight *LibraryEntry
 	if runtime == Mini {
 		goleakPhase := debug.start("instrument goleak")
 		goleak, warning, e = prepareGoleak(libraries[instrument.GoleakImport], replacements, temp)
@@ -679,6 +682,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		phase := debug.start("file coverage")
 		refusal := fileCoverageRefusal(&plan, opts, vendorProvided, listed, replacements)
 		contextRefusal := ""
+		var singleflightPackage *goPackage
 		var summary fileCoverageSummary
 		if refusal == "" {
 			// The build with tests also links what only tests import.
@@ -700,6 +704,11 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 				var changes contextChanges
 				if opts.fileCoverageContext {
 					changes, contextRefusal, e = prepareContextCoverage(tested, listed, replacements, temp)
+					if e == nil && contextRefusal == "" {
+						if singleflightPackage = findPackage(tested, toolwrap.SingleflightImport); singleflightPackage != nil {
+							singleflight, contextRefusal, e = prepareSingleflight(singleflightPackage, replacements, temp)
+						}
+					}
 					if e != nil {
 						phase.finish(e)
 						return plan, e
@@ -739,6 +748,18 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 						}
 					}
 					plan.fileCoverageContext = true
+					if singleflight != nil {
+						var flag string
+						if flag, e = packageCompilerCacheFlag(dir, opts, singleflightPackage, singleflightCacheMarker(singleflight.Fingerprint)); e != nil {
+							phase.finish(e)
+							return plan, e
+						}
+						plan.singleflight = true
+						plan.compilerCache = append(plan.compilerCache, flag)
+					}
+				}
+				if !plan.fileCoverageContext {
+					singleflight = nil
 				}
 			}
 		}
@@ -767,7 +788,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	plan.File = filepath.Join(temp, "overlay.json")
 	plan.InstrumentedFiles = len(rewritten.Files)
 	writePhase := debug.start("write overlay")
-	encoded, e := json.Marshal(Overlay{Replace: replacements, Testify: testify, Goleak: goleak})
+	encoded, e := json.Marshal(Overlay{Replace: replacements, Testify: testify, Goleak: goleak, Singleflight: singleflight})
 	if e != nil {
 		writePhase.finish(e)
 		return plan, e
@@ -928,7 +949,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 	}
 	var tool string
 	var env []string
-	if plan.coverOverlay || plan.testify || plan.goleak || plan.orchestrion || plan.sdkCI || plan.linkSignal {
+	if plan.coverOverlay || plan.testify || plan.goleak || plan.singleflight || plan.orchestrion || plan.sdkCI || plan.linkSignal {
 		executable, e := os.Executable()
 		if e != nil {
 			fmt.Fprintln(stderr, e)

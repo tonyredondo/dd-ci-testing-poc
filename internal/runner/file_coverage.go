@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/instrument"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/toolwrap"
 )
 
 // --experimental-file-coverage: the packages of the repository compile with
@@ -266,7 +267,8 @@ func prepareFileCoverage(tested []goPackage, roots, excluded []string, replaceme
 			if replaced && actual == "" {
 				continue // The overlay removes the file from the build.
 			}
-			if replaced && !userOverlay[path] || embedded[path] {
+			// ddto's compiler wrapper edits a vendored singleflight.
+			if replaced && !userOverlay[path] || embedded[path] || context && plan.bank.Path == toolwrap.SingleflightImport {
 				plan.bank.Always = append(plan.bank.Always, path)
 				continue
 			}
