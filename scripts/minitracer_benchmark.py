@@ -145,16 +145,19 @@ def microbenchmarks(args, out):
 
 def measure(command, cwd, env, timeout=3600):
     """Returns the output of command and its wall time, CPU seconds, peak RSS
-    and exit code, measured by MEASURE. After timeout seconds it kills the
-    command too, which runs in MEASURE's process group."""
+    and exit code, measured by MEASURE. The command runs in MEASURE's process
+    group, which is killed after timeout seconds or when waiting fails, such as
+    on Ctrl+C."""
     process = subprocess.Popen([sys.executable, '-I', '-c', MEASURE, *command], cwd=cwd, env=env,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
     try:
         stdout, stderr = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
+    except BaseException as error:
         os.killpg(process.pid, signal.SIGKILL)
         process.communicate()
-        raise SystemExit(f'{" ".join(command)}: still running after {timeout} s')
+        if isinstance(error, subprocess.TimeoutExpired):
+            raise SystemExit(f'{" ".join(command)}: still running after {timeout} s') from None
+        raise
     if process.returncode:
         raise SystemExit(f'measuring {" ".join(command)}: exit {process.returncode}\n{stderr[-4000:].decode(errors="replace")}')
     return stdout, json.loads(stderr.decode().splitlines()[-1])

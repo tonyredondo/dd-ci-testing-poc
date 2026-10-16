@@ -136,10 +136,11 @@ func BenchmarkTestEventLifecycle(b *testing.B) {
 		Tag("test.suite", "project_test.go"),
 	}
 	finishTags := map[string]any{"test.final_status": "pass"}
-	options := make([]StartSpanOption, 0, 27)
+	var options []StartSpanOption
 	test := func() *Span {
 		start := time.Now()
-		options = append(options[:0], ResourceName("project_test.go.TestProject"), SpanType("test"), StartTime(start))
+		// The integrations build each test's option slice.
+		options = append(make([]StartSpanOption, 0, 27), ResourceName("project_test.go.TestProject"), SpanType("test"), StartTime(start))
 		options = append(options, shared...)
 		options = append(options, Tag("test.name", "TestProject"), Service("project"))
 		s, _ := c.StartSpan(context.Background(), "golang.org/pkg/testing.test", options...)

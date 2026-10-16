@@ -1,4 +1,6 @@
 import os
+import signal
+import subprocess
 import sys
 import tempfile
 import time
@@ -37,15 +39,45 @@ class MeasureTests(unittest.TestCase):
     def test_timeout_kills_the_command(self):
         with tempfile.TemporaryDirectory() as directory:
             pidfile = os.path.join(directory, "pid")
-            command = [sys.executable, "-c", "import os, sys, time; open(sys.argv[1], 'w').write(str(os.getpid())); time.sleep(60)", pidfile]
             with self.assertRaises(SystemExit):
-                benchmark.measure(command, ".", None, timeout=2)
-            with open(pidfile) as f:
-                pid = f.read()
-            deadline = time.monotonic() + 10
-            while time.monotonic() < deadline and running(pid):
-                time.sleep(0.05)
-            self.assertFalse(running(pid), "the measured command outlived the timeout")
+                benchmark.measure(sleeper(pidfile), ".", None, timeout=2)
+            self.assertTrue(ended(read_pid(pidfile)), "the measured command outlived the timeout")
+
+    def test_interrupt_kills_the_command(self):
+        with tempfile.TemporaryDirectory() as directory:
+            pidfile = os.path.join(directory, "pid")
+            harness = subprocess.Popen(
+                [sys.executable, "-c", "import sys, minitracer_benchmark as b; b.measure(sys.argv[1:], '.', None)", *sleeper(pidfile)],
+                cwd=os.path.dirname(os.path.abspath(__file__)), env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
+                stderr=subprocess.DEVNULL)
+            pid = read_pid(pidfile)
+            harness.send_signal(signal.SIGINT)
+            harness.wait(timeout=10)
+            self.assertTrue(ended(pid), "the measured command outlived Ctrl+C")
+
+
+def sleeper(pidfile):
+    """Returns a command that writes its pid to pidfile, then sleeps."""
+    return [sys.executable, "-c", "import os, sys, time; open(sys.argv[1] + '.tmp', 'w').write(str(os.getpid())); "
+            "os.rename(sys.argv[1] + '.tmp', sys.argv[1]); time.sleep(60)", pidfile]
+
+
+def read_pid(pidfile):
+    deadline = time.monotonic() + 10
+    while not os.path.exists(pidfile):
+        if time.monotonic() > deadline:
+            raise AssertionError("the command did not start")
+        time.sleep(0.05)
+    with open(pidfile) as f:
+        return f.read()
+
+
+def ended(pid):
+    """Waits up to 10 s for pid to exit."""
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and running(pid):
+        time.sleep(0.05)
+    return not running(pid)
 
 
 def running(pid):
