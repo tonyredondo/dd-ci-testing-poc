@@ -402,7 +402,9 @@ process allocates per test, from its start until testing writes the memory
 profile, before Mini's final delivery. With `--own-benchmarks`, each tree runs its own
 benchmarks, for a candidate whose benchmarks use internals that the base lacks.
 The [third results](results/minitracer-test-span-20261016-linux-go1.27/README.md)
-measure test events started without option lists. Every run also compares the
+measure test events started without option lists, and the
+[fourth](results/minitracer-test-path-20261016-linux-go1.27/README.md) the
+per-test lookups and options without allocations. Every run also compares the
 two trees' payloads: each event with its envelope's version and the metadata
 that it inherits, counting IDs, timestamps and other values that differ between
 runs by presence and type, and hierarchy IDs by what they reference.
