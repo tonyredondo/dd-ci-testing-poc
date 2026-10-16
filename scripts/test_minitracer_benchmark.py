@@ -50,8 +50,8 @@ class WireTests(unittest.TestCase):
     def test_a_changed_tag_differs(self):
         result = self.compare([self.payload("/out/base", 1)], [self.payload("/out/candidate", 1, meta={"k": "other"})])
         self.assertFalse(result["identical"])
-        self.assertIn('"k": "v"', result["only_base"][0])
-        self.assertIn('"k": "other"', result["only_candidate"][0])
+        self.assertIn('["k", ["str", "v"]]', result["only_base"][0])
+        self.assertIn('["k", ["str", "other"]]', result["only_candidate"][0])
 
     def test_a_missing_event_differs(self):
         one = self.payload("/out/base", 1)
@@ -145,8 +145,8 @@ class UnpackTests(unittest.TestCase):
     def test_types_that_json_merges_stay_apart(self):
         self.assertEqual(1, benchmark.unpack(pack(1)))
         self.assertIsInstance(benchmark.unpack(pack(1.0)), float)
-        self.assertEqual({"bin": "6162"}, benchmark.unpack(pack(b"ab")))
-        self.assertEqual({"float32": 1.5}, benchmark.unpack(b"\xca" + struct.pack(">f", 1.5)))
+        self.assertEqual(b"ab", benchmark.unpack(pack(b"ab")))
+        self.assertIsInstance(benchmark.unpack(b"\xca" + struct.pack(">f", 1.5)), benchmark.Float32)
         self.assertEqual(200, benchmark.unpack(b"\xcc\xc8"))
         self.assertEqual(-1, benchmark.unpack(b"\xff"))
 
@@ -154,6 +154,23 @@ class UnpackTests(unittest.TestCase):
         for data in (b"\xda\x00\x05ab", pack(1) + b"\x00", b"\x81\x01\x02", b"\xc1"):
             with self.subTest(data=data), self.assertRaises(ValueError):
                 benchmark.unpack(data)
+
+    def test_maps_cannot_stand_for_scalars_or_markers(self):
+        def payload(metric, meta_value, span):
+            return {"version": 1, "metadata": {}, "events": [{"type": "test", "version": 2, "content": {
+                "span_id": span, "metrics": {"m": metric}, "meta": {"k": meta_value}}}]}
+        def content(data):
+            return benchmark.wire_content([benchmark.unpack(data)], "/b")
+        float32 = b"\xca" + struct.pack(">f", 1.5)
+        base = pack(payload(0, "v", 7)).replace(pack({"m": 0}), b"\xde\x00\x01" + pack("m") + float32)
+        for name, candidate in {
+            "a map for a 32-bit float": pack(payload({"float32": 1.5}, "v", 7)),
+            "a map for binary data": pack(payload(0, {"bin": "6162"}, 7)),
+            "a map for a marker": pack(payload(0, "v", {"marker": "id"})),
+        }.items():
+            with self.subTest(name):
+                reference = base if name == "a map for a 32-bit float" else pack(payload(0, b"ab" if "binary" in name else "v", 7))
+                self.assertFalse(benchmark.compare_wire(content(reference), content(candidate))["identical"])
 
     def test_wire_types_count(self):
         def payload(duration, tid):

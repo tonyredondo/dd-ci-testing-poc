@@ -185,10 +185,11 @@ def binary_env(args, variant, url):
     return env
 
 
-# Values that differ between two runs of one binary. A valid one becomes
-# {"marker": kind} and any other {"raw": value}, which no wire value can pass
-# for. Hierarchy IDs name the session, module or suite that they reference,
-# with its ancestors.
+# Values that differ between two runs of one binary. A valid one becomes a
+# Marker of its kind; any other stays as it is. Hierarchy IDs become a Marker
+# that names the session, module or suite that they reference, with its
+# ancestors. canonical tags every value with its type, so no wire value can
+# stand for a marker or for a value of another type.
 HIERARCHY = {'test_session_end': 'test_session_id', 'test_module_end': 'test_module_id', 'test_suite_end': 'test_suite_id'}
 TID = re.compile(r'[0-9a-f]{16}')
 UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
@@ -205,12 +206,47 @@ def normalize(value, binary_dir):
     return value
 
 
+class Float32(float):
+    """A 32-bit MessagePack float."""
+
+
+class Marker(tuple):
+    """What replaces a value that differs between runs."""
+
+
 def integer(value, minimum):
     return isinstance(value, int) and not isinstance(value, bool) and value >= minimum
 
 
 def mark(value, kind, valid):
-    return {'marker': kind} if valid else {'raw': value}
+    return Marker((kind,)) if valid else value
+
+
+def canonical(value):
+    """Returns value with each of its parts tagged by its type."""
+    if isinstance(value, Marker):
+        return ['marker', [canonical(v) for v in value]]
+    if isinstance(value, tuple):
+        return ['tuple', [canonical(v) for v in value]]
+    if isinstance(value, dict):
+        return ['map', sorted([k, canonical(v)] for k, v in value.items())]
+    if isinstance(value, list):
+        return ['array', [canonical(v) for v in value]]
+    if isinstance(value, bool):
+        return ['bool', value]
+    if isinstance(value, int):
+        return ['int', value]
+    if isinstance(value, Float32):
+        return ['float32', value]
+    if isinstance(value, float):
+        return ['float64', value]
+    if isinstance(value, bytes):
+        return ['bin', value.hex()]
+    if isinstance(value, str):
+        return ['str', value]
+    if value is None:
+        return ['nil']
+    raise TypeError(f'unexpected decoded value {value!r}')
 
 
 # MessagePack types whose size follows them: (length bytes, kind).
@@ -221,8 +257,8 @@ NUMBERS = {0xca: '>f', 0xcb: '>d', 0xcc: '>B', 0xcd: '>H', 0xce: '>I', 0xcf: '>Q
 
 def unpack(data):
     """Decodes one MessagePack value and keeps the types that JSON merges:
-    integers stay int and 64-bit floats float, a 32-bit float becomes
-    {"float32": v} and binary data {"bin": hex}. Map keys must be strings."""
+    integers are int, 64-bit floats float, 32-bit floats Float32 and binary
+    data bytes. Map keys must be strings."""
     def take(i, n):
         if i + n > len(data):
             raise ValueError('truncated MessagePack value')
@@ -248,14 +284,14 @@ def unpack(data):
             n = int.from_bytes(take(i, width), 'big')
             i += width
             if kind == 'bin':
-                return {'bin': take(i, n).hex()}, i + n
+                return bytes(take(i, n)), i + n
             if kind == 'str':
                 return take(i, n).decode(), i + n
             return (array if kind == 'array' else mapping)(i, n)
         if b in NUMBERS:
             width = struct.calcsize(NUMBERS[b])
             number = struct.unpack(NUMBERS[b], take(i, width))[0]
-            return ({'float32': number} if b == 0xca else number), i + width
+            return (Float32(number) if b == 0xca else number), i + width
         raise ValueError(f'unsupported MessagePack type 0x{b:02x}')
 
     def array(i, n):
@@ -291,11 +327,11 @@ def hierarchy_labels(payloads, binary_dir):
             if field and field in content:
                 ends[event['type']][content[field]] = content
     def resource(content):
-        return normalize(str(content.get('resource', '')), binary_dir)
-    sessions = {i: ['session', resource(c)] for i, c in ends['test_session_end'].items()}
-    modules = {i: ['module', resource(c), sessions.get(c.get('test_session_id'), '<unresolved>')]
+        return normalize(content.get('resource'), binary_dir)
+    sessions = {i: ('session', resource(c)) for i, c in ends['test_session_end'].items()}
+    modules = {i: ('module', resource(c), sessions.get(c.get('test_session_id'), ('unresolved',)))
                for i, c in ends['test_module_end'].items()}
-    suites = {i: ['suite', resource(c), modules.get(c.get('test_module_id'), '<unresolved>')]
+    suites = {i: ('suite', resource(c), modules.get(c.get('test_module_id'), ('unresolved',)))
               for i, c in ends['test_suite_end'].items()}
     return {'test_session_id': sessions, 'test_module_id': modules, 'test_suite_id': suites}
 
@@ -318,7 +354,8 @@ def wire_content(payloads, binary_dir):
             for field, known in labels.items():
                 if field in content:
                     value = content[field]
-                    content[field] = {'reference': known[value]} if integer(value, 1) and value in known else {'raw': value}
+                    if integer(value, 1) and value in known:
+                        content[field] = Marker(('reference', known[value]))
             span = content.get('span_id')
             for field in ('span_id', 'parent_id'):
                 if field in content:
@@ -335,7 +372,7 @@ def wire_content(payloads, binary_dir):
             inherited = {kind: values for kind, values in metadata.items() if kind in ('*', event.get('type'))}
             key = {'payload_version': payload.get('version'), 'metadata': inherited,
                    'type': event.get('type'), 'version': event.get('version'), 'content': content}
-            events[json.dumps(normalize(key, binary_dir), sort_keys=True)] += 1
+            events[json.dumps(canonical(normalize(key, binary_dir)))] += 1
     return events
 
 
