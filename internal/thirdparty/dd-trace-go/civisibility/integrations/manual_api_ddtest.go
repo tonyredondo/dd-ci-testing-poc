@@ -310,8 +310,6 @@ func (t *tslvTest) SetTestFunc(fn *runtime.Func) {
 		log.Debug("civisibility: resolving test source location [function:%s file:%s start_line:%d relative_file:%s runtime_file:%s filesystem_file:%s filesystem_known:%t entry:%#x]",
 			fn.Name(), runtimePath, runtimeStartLine, file, sourcePath.RuntimePath, sourcePath.FilesystemPath, sourcePath.FilesystemKnown, fn.Entry())
 	}
-	// Typed setters: these tags change no test context value, and avoid an
-	// interface conversion per test.
 	setCIVisibilitySpanStringTag(t.span, constants.TestSourceFile, file)
 	t.span.SetMetric(constants.TestSourceStartLine, float64(runtimeStartLine))
 	setCIVisibilitySpanStringTag(t.suite.span, constants.TestSourceFile, file)

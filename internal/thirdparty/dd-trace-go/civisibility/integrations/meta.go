@@ -23,12 +23,6 @@ func setCIVisibilitySpanTag(span *tracer.Span, key string, value any) {
 	span.SetTag(key, truncateCIVisibilityTagValue(value))
 }
 
-// setCIVisibilitySpanStringTag is setCIVisibilitySpanTag for a string, which
-// it passes without the allocation of an interface conversion.
-func setCIVisibilitySpanStringTag(span *tracer.Span, key, value string) {
-	span.SetStringTag(key, truncateCIVisibilityMetaValue(value))
-}
-
 // truncateCIVisibilityTagValue limits string tag values while leaving metric
 // and boolean tag values unchanged.
 func truncateCIVisibilityTagValue(value any) any {
@@ -52,4 +46,10 @@ func truncateCIVisibilityMetaValue(v string) string {
 		count++
 	}
 	return v
+}
+
+// setCIVisibilitySpanStringTag is setCIVisibilitySpanTag for a string, which
+// it passes without the allocation of an interface conversion.
+func setCIVisibilitySpanStringTag(span *tracer.Span, key, value string) {
+	span.SetStringTag(key, truncateCIVisibilityMetaValue(value))
 }
