@@ -68,7 +68,7 @@ func sdkMirrorStart(ctx context.Context, parent any, name string) any {
 	// Test defaults are immutable. Read hierarchy under its lock because tests
 	// may finish concurrently with child creation; never retain their maps.
 	scope.test.mu.Lock()
-	span.common = scope.test.common
+	span.event.common = scope.test.event.common
 	span.hierarchy, span.hierarchySet = scope.test.hierarchy, scope.test.hierarchySet
 	scope.test.mu.Unlock()
 	return &sdkMirror{span: span, scope: scope}
@@ -113,8 +113,8 @@ func sdkMirrorCapture(state any, name, service, resource, kind string, start, du
 		return nil
 	}
 	s.finished = true
-	s.content.Name, s.content.Service, s.content.Resource, s.content.Type = name, service, resource, kind
-	s.content.Start, s.content.Duration, s.content.Error = start, max(duration, 0), failed
+	s.event.Content.Name, s.event.Content.Service, s.event.Content.Resource, s.event.Content.Type = name, service, resource, kind
+	s.event.Content.Start, s.event.Content.Duration, s.event.Content.Error = start, max(duration, 0), failed
 	meta(func(key, value string) bool {
 		switch key {
 		case "_dd.origin", "_dd.p.tid", "_dd.p.dm", "_dd.parent_id", "runtime-id", "test_session_id", "test_module_id", "test_suite_id":
@@ -128,16 +128,16 @@ func sdkMirrorCapture(state any, name, service, resource, kind string, start, du
 		switch key {
 		case "_sampling_priority_v1", "_dd.top_level", "_dd.profiling.enabled", "_dd.agent_psr", "_dd.rule_psr", "_dd.limit_psr", "test_session_id", "test_module_id", "test_suite_id":
 		default:
-			s.content.Metrics.set(key, value)
+			s.event.Content.Metrics.set(key, value)
 		}
 	}
 	// Keep the original APM identity for diagnosis without modifying its trace.
 	s.setMeta("apm.trace_id", hex.EncodeToString(originalTrace[:]))
 	s.setMeta("apm.span_id", strconv.FormatUint(originalSpan, 10))
-	s.content.TraceID = binary.BigEndian.Uint64(s.carrier.Carried.TraceID[8:])
-	event := &ciEvent{Type: "span", Version: 1, Content: s.content, common: s.common}
-	s.sealHierarchy(&event.Content)
-	return &sdkMirrorDelivery{client: s.client, event: event}
+	s.event.Content.TraceID = binary.BigEndian.Uint64(s.carrier.Carried.TraceID[8:])
+	s.event.Type, s.event.Version = "span", 1
+	s.sealHierarchy(&s.event.Content)
+	return &sdkMirrorDelivery{client: s.client, event: &s.event}
 }
 
 //go:linkname sdkMirrorDeliver

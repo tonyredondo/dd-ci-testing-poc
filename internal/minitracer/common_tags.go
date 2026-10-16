@@ -43,13 +43,13 @@ func NewCommonTags(values map[string]string) *CommonTags {
 // tags win; an earlier tag of the same name is replaced, as with ordinary Tag.
 func (c *CommonTags) Option() StartSpanOption {
 	return StartSpanOption{apply: func(s *Span) {
-		if s.common != nil {
+		if s.event.common != nil {
 			// Multiple common options are uncommon, but retain earlier keys that
 			// the new option does not replace, just as individual Tag options do.
-			for key, value := range s.common.values {
-				if _, text := s.content.Meta.get(key); !text {
-					if _, numeric := s.content.Metrics.get(key); !numeric {
-						s.content.Meta.set(key, value)
+			for key, value := range s.event.common.values {
+				if _, text := s.event.Content.Meta.get(key); !text {
+					if _, numeric := s.event.Content.Metrics.get(key); !numeric {
+						s.event.Content.Meta.set(key, value)
 					}
 				}
 			}
@@ -61,9 +61,9 @@ func (c *CommonTags) Option() StartSpanOption {
 			_, replace := c.values[key]
 			return replace
 		}
-		s.content.Meta.deleteIf(replaced)
-		s.content.Metrics.deleteIf(replaced)
-		s.common = c
+		s.event.Content.Meta.deleteIf(replaced)
+		s.event.Content.Metrics.deleteIf(replaced)
+		s.event.common = c
 	}}
 }
 

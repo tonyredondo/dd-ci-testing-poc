@@ -78,7 +78,7 @@ func TestCommonTagsWireOverridesAndGetters(t *testing.T) {
 					t.Fatal("common Git value repeated on event")
 				}
 			}
-			if _, text := spans[2].Meta("os.platform"); text || spans[2].content.Metrics.asMap()["os.platform"] != 42 {
+			if _, text := spans[2].Meta("os.platform"); text || spans[2].event.Content.Metrics.asMap()["os.platform"] != 42 {
 				t.Fatal("numeric getter changed")
 			}
 			if _, text := effectiveCommonMeta(&payload, payload.Events[2])["os.platform"]; text {
@@ -118,7 +118,7 @@ func TestCommonTagsKeepOnlySharedKeys(t *testing.T) {
 		}
 	}
 	span.Finish()
-	metadata, _ := prepareCommonMetadata(nil, ciEvents{{Type: "test", Content: span.content, common: common}})
+	metadata, _ := prepareCommonMetadata(nil, ciEvents{{Type: "test", Content: span.event.Content, common: common}})
 	if !maps.Equal(metadata["test"], want) {
 		t.Fatalf("lifted metadata: %v", metadata["test"])
 	}
@@ -155,7 +155,7 @@ func TestCommonMetadataConcurrentProjectionAndBounds(t *testing.T) {
 	common := NewCommonTags(map[string]string{"git.commit.sha": "commit", "ci.large": strings.Repeat("a", 32<<10)})
 	span, _ := newSpan(nil, context.Background(), "test", common.Option(), Tag("test.name", "name"))
 	span.Finish()
-	event := &ciEvent{Type: "test", Content: span.content, common: common}
+	event := &ciEvent{Type: "test", Content: span.event.Content, common: common}
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		wg.Go(func() {

@@ -51,7 +51,7 @@ func TestFinishedSpanSharesSealedMaps(t *testing.T) {
 			t.Fatal("hierarchy duplicated in metadata")
 		}
 	}
-	if fmt.Sprintf("%p", event.Content.Meta) != fmt.Sprintf("%p", span.content.Meta) || fmt.Sprintf("%p", event.Content.Metrics) != fmt.Sprintf("%p", span.content.Metrics) {
+	if fmt.Sprintf("%p", event.Content.Meta) != fmt.Sprintf("%p", span.event.Content.Meta) || fmt.Sprintf("%p", event.Content.Metrics) != fmt.Sprintf("%p", span.event.Content.Metrics) {
 		t.Fatal("Finish copied sealed maps")
 	}
 	var wg sync.WaitGroup

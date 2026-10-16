@@ -44,7 +44,7 @@ func TestMetadataCapacityCountsTagOptions(t *testing.T) {
 	}
 	text := []StartSpanOption{Tag("one", "1"), Tag("two", "2"), Tag("three", "3")}
 	span, _ := newSpan(nil, context.Background(), "test", text...)
-	if got, want := span.content.Meta.len(), metadataCapacity(nil, text); got != want {
+	if got, want := span.event.Content.Meta.len(), metadataCapacity(nil, text); got != want {
 		t.Fatalf("text-only span has %d entries, reserved %d", got, want)
 	}
 }
@@ -94,10 +94,10 @@ func TestErrorTagsFollowSDK(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			span, _ := newSpan(nil, context.Background(), "test")
-			span.content.Error = 1 - tc.flag // Every case must set the flag explicitly.
+			span.event.Content.Error = 1 - tc.flag // Every case must set the flag explicitly.
 			span.SetTag(tc.key, tc.value)
-			if span.content.Error != tc.flag {
-				t.Fatalf("error flag=%d, want %d", span.content.Error, tc.flag)
+			if span.event.Content.Error != tc.flag {
+				t.Fatalf("error flag=%d, want %d", span.event.Content.Error, tc.flag)
 			}
 			if got, _ := span.Meta(ext.ErrorMsg); got != tc.message {
 				t.Fatalf("message=%q", got)

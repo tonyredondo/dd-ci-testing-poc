@@ -27,8 +27,7 @@ type ciEvent struct {
 	common  *CommonTags  `msg:"-"` // Immutable defaults, projected onto the event at delivery.
 	// overrides is eventSize's result, set by Client.add: a local tag or metric
 	// replaces one of common's values.
-	overrides bool         `msg:"-"`
-	finish    finishConfig `msg:"-"` // Set by FinishOptions before the span is sealed.
+	overrides bool `msg:"-"`
 }
 type eventContent struct {
 	SessionID     uint64    `msg:"test_session_id,omitempty"`    // identifier of this session
