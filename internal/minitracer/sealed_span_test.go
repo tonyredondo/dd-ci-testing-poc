@@ -13,21 +13,26 @@ import (
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/msgp/msgp"
 )
 
-// Finishing allocates only the event: the finish options' configuration stays
-// on the stack.
-func TestFinishAllocatesOnlyTheEvent(t *testing.T) {
-	spans := make([]*Span, 101) // AllocsPerRun calls once more to warm up.
-	for i := range spans {
-		spans[i], _ = newSpan(nil, context.Background(), "test", SpanType("test"))
-	}
+// Finishing seals the span's own event: it allocates nothing, or only the
+// configuration that finish options take.
+func TestFinishAllocations(t *testing.T) {
 	end := time.Now()
-	next := 0
-	allocs := testing.AllocsPerRun(100, func() {
-		spans[next].Finish(FinishTime(end))
-		next++
-	})
-	if allocs != 1 {
-		t.Fatalf("Finish allocated %v objects, want only the event", allocs)
+	for _, tc := range []struct {
+		options []FinishOption
+		want    float64
+	}{{nil, 0}, {[]FinishOption{FinishTime(end)}, 1}} {
+		spans := make([]*Span, 101) // AllocsPerRun calls once more to warm up.
+		for i := range spans {
+			spans[i], _ = newSpan(nil, context.Background(), "test", SpanType("test"))
+		}
+		next := 0
+		allocs := testing.AllocsPerRun(100, func() {
+			spans[next].Finish(tc.options...)
+			next++
+		})
+		if allocs != tc.want {
+			t.Fatalf("Finish with %d options allocated %v objects, want %v", len(tc.options), allocs, tc.want)
+		}
 	}
 }
 

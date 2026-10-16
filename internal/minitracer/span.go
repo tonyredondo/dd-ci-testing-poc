@@ -43,8 +43,8 @@ type StartSpanOption struct {
 	tag   bool
 }
 
-// FinishOption sets the configuration that the finished event holds, so
-// finishing allocates nothing else.
+// FinishOption sets the finish configuration. Options take its address, so
+// it moves to the heap; Finish creates it only when options are given.
 type FinishOption func(*finishConfig)
 type finishConfig struct{ end int64 } // Unix nanoseconds.
 
@@ -447,9 +447,13 @@ func (s *Span) FinishWithTags(tags map[string]any, options ...FinishOption) {
 }
 
 func (s *Span) finish(tags map[string]any, options ...FinishOption) {
-	cfg := finishConfig{end: time.Now().UnixNano()}
-	for _, option := range options {
-		option(&cfg)
+	end := time.Now().UnixNano()
+	if len(options) != 0 {
+		cfg := &finishConfig{end: end}
+		for _, option := range options {
+			option(cfg)
+		}
+		end = cfg.end
 	}
 	s.mu.Lock()
 	if s.finished {
@@ -462,7 +466,7 @@ func (s *Span) finish(tags map[string]any, options ...FinishOption) {
 	s.finished = true
 	// Getters read only the service, metadata and metrics of a finished span.
 	event := &s.event
-	event.Content.Duration = max(cfg.end-event.Content.Start, 0)
+	event.Content.Duration = max(end-event.Content.Start, 0)
 	event.Type, event.Version = event.Content.Type, 1
 	s.sealHierarchy(&event.Content)
 	switch event.Type {
