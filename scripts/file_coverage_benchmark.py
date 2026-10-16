@@ -39,7 +39,6 @@ MODES = {
     'none': ('ddto, no per-test coverage', [], False),
     'counters': ("ddto, Go's counters", COVERAGE, True),
     'marks': ('ddto, file marks', ['--experimental-file-coverage'], True),
-    'parallel': ('ddto, file marks =parallel', ['--experimental-file-coverage=parallel'], True),
     'context': ('ddto, file marks =context', ['--experimental-file-coverage=context'], True),
 }
 COVERED = [mode for mode, (_, _, coverage) in MODES.items() if coverage]
