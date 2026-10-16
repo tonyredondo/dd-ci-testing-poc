@@ -35,7 +35,8 @@ class WireTests(unittest.TestCase):
                         "metrics": {"m": 1}}
         test_content.update(test or {})
         return {"version": version,
-                "metadata": metadata or {"*": {"runtime-id": "id-%d" % ids, "language": "go"}, "test": {"git.branch": "main", "cmd": binary + "/fixture.test"}},
+                "metadata": metadata or {"*": {"runtime-id": "%08x-0000-4000-8000-%012x" % (ids, ids), "language": "go"},
+                                         "test": {"git.branch": "main", "cmd": binary + "/fixture.test"}},
                 "events": [{"type": "test_suite_end", "version": 1, "content": {"test_suite_id": 20 + ids, "resource": "suite", "start": 3 + ids, "duration": 1}},
                            {"type": "test", "version": 2, "content": test_content}]}
 
@@ -71,12 +72,35 @@ class WireTests(unittest.TestCase):
             "broken suite reference": self.payload("/out/candidate", 1, test={"test_suite_id": 999}),
             "duration of another type": self.payload("/out/candidate", 1, test={"duration": "1"}),
             "envelope version": self.payload("/out/candidate", 1, version=2),
+            "integer _dd.p.tid": self.payload("/out/candidate", 1, test={"meta": {"k": "v", "_dd.p.tid": 1234567890123456}}),
+            "string that reads like a marker": self.payload("/out/candidate", 1, test={"duration": {"marker": "duration"}}),
         }.items():
             with self.subTest(name):
                 self.assertFalse(self.compare([self.payload("/out/base", 1)], [candidate])["identical"])
         missing = self.payload("/out/candidate", 1)
         del missing["events"][1]["content"]["start"]
         self.assertFalse(self.compare([self.payload("/out/base", 1)], [missing])["identical"])
+
+
+class HierarchyTests(unittest.TestCase):
+    def payload(self, moved):
+        """Two modules, each with a suite named shared_test.go; moved points a
+        test of module A at module B's suite."""
+        def end(kind, fields, resource):
+            return {"type": kind, "version": 1, "content": dict(fields, resource=resource, start=1, duration=1)}
+        events = [end("test_session_end", {"test_session_id": 1}, "session"),
+                  end("test_module_end", {"test_module_id": 10, "test_session_id": 1}, "a"),
+                  end("test_module_end", {"test_module_id": 20, "test_session_id": 1}, "b"),
+                  end("test_suite_end", {"test_suite_id": 100, "test_module_id": 10, "test_session_id": 1}, "shared_test.go"),
+                  end("test_suite_end", {"test_suite_id": 200, "test_module_id": 20, "test_session_id": 1}, "shared_test.go"),
+                  {"type": "test", "version": 2, "content": {"span_id": 5, "trace_id": 5, "start": 1, "duration": 1, "resource": "T",
+                                                             "test_suite_id": 200 if moved else 100, "test_module_id": 10, "test_session_id": 1}}]
+        return [{"version": 1, "metadata": {}, "events": events}]
+
+    def test_suites_of_the_same_name_in_other_modules_differ(self):
+        result = benchmark.compare_wire(benchmark.wire_content(self.payload(False), "/b"), benchmark.wire_content(self.payload(True), "/c"))
+        self.assertFalse(result["identical"])
+        self.assertTrue(benchmark.compare_wire(benchmark.wire_content(self.payload(False), "/b"), benchmark.wire_content(self.payload(False), "/c"))["identical"])
 
 
 class MeasureTests(unittest.TestCase):

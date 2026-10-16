@@ -183,10 +183,13 @@ def binary_env(args, variant, url):
     return env
 
 
-# Values that differ between two runs of one binary. They become markers that
-# keep their presence and type; hierarchy IDs name what they reference.
+# Values that differ between two runs of one binary. A valid one becomes
+# {"marker": kind} and any other {"raw": value}, which no wire value can pass
+# for. Hierarchy IDs name the session, module or suite that they reference,
+# with its ancestors.
 HIERARCHY = {'test_session_end': 'test_session_id', 'test_module_end': 'test_module_id', 'test_suite_end': 'test_suite_id'}
 TID = re.compile(r'[0-9a-f]{16}')
+UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
 
 
 def normalize(value, binary_dir):
@@ -200,48 +203,66 @@ def normalize(value, binary_dir):
     return value
 
 
-def marker(value, name, minimum):
-    """Returns name for an integer of at least minimum, and value otherwise."""
-    return name if isinstance(value, int) and not isinstance(value, bool) and value >= minimum else value
+def integer(value, minimum):
+    return isinstance(value, int) and not isinstance(value, bool) and value >= minimum
 
 
-def wire_content(payloads, binary_dir):
-    """Returns a count of the payloads' normalized events. Each carries its
-    envelope's version and the event-kind metadata that it inherits. IDs,
-    timestamps, _dd.p.tid and the runtime ID become markers of their presence
-    and type, and hierarchy IDs the kind and resource of the session, module or
-    suite event that has them, or <unresolved>."""
-    entities = {}
+def mark(value, kind, valid):
+    return {'marker': kind} if valid else {'raw': value}
+
+
+def hierarchy_labels(payloads, binary_dir):
+    """Returns, for each hierarchy ID field, the label of each ID: the kind and
+    resource of the end event that has it, followed by its ancestors'."""
+    ends = {kind: {} for kind in HIERARCHY}
     for payload in payloads:
         for event in payload.get('events', []):
             field = HIERARCHY.get(event.get('type'))
             content = event.get('content', {})
             if field and field in content:
-                entities[content[field]] = event['type'] + ':' + normalize(content.get('resource', ''), binary_dir)
+                ends[event['type']][content[field]] = content
+    def resource(content):
+        return normalize(str(content.get('resource', '')), binary_dir)
+    sessions = {i: 'session:' + resource(c) for i, c in ends['test_session_end'].items()}
+    modules = {i: 'module:' + resource(c) + '@' + sessions.get(c.get('test_session_id'), '<unresolved>')
+               for i, c in ends['test_module_end'].items()}
+    suites = {i: 'suite:' + resource(c) + '@' + modules.get(c.get('test_module_id'), '<unresolved>')
+              for i, c in ends['test_suite_end'].items()}
+    return {'test_session_id': sessions, 'test_module_id': modules, 'test_suite_id': suites}
+
+
+def wire_content(payloads, binary_dir):
+    """Returns a count of the payloads' normalized events. Each carries its
+    envelope's version and the event-kind metadata that it inherits."""
+    labels = hierarchy_labels(payloads, binary_dir)
     events = Counter()
     for payload in payloads:
         metadata = {}
         for kind, values in payload.get('metadata', {}).items():
             values = dict(values)
-            if isinstance(values.get('runtime-id'), str) and values['runtime-id']:
-                values['runtime-id'] = '<runtime-id>'
+            if 'runtime-id' in values:
+                runtime = values['runtime-id']
+                values['runtime-id'] = mark(runtime, 'runtime-id', isinstance(runtime, str) and UUID.fullmatch(runtime))
             metadata[kind] = values
         for event in payload.get('events', []):
             content = dict(event.get('content', {}))
-            for field in HIERARCHY.values():
+            for field, known in labels.items():
                 if field in content:
-                    content[field] = entities.get(content[field], '<unresolved>')
+                    value = content[field]
+                    content[field] = {'reference': known[value]} if integer(value, 1) and value in known else {'raw': value}
             span = content.get('span_id')
             for field in ('span_id', 'parent_id'):
                 if field in content:
-                    content[field] = marker(content[field], '<id>', 1)
+                    content[field] = mark(content[field], 'id', integer(content[field], 1))
             if 'trace_id' in content:
-                content['trace_id'] = '=span_id' if span is not None and content['trace_id'] == span else marker(content['trace_id'], '<id>', 1)
-            for field, name, minimum in (('start', '<time>', 1), ('duration', '<duration>', 0)):
+                trace = content['trace_id']
+                content['trace_id'] = mark(trace, 'span_id' if trace == span else 'id', integer(trace, 1))
+            for field, minimum in (('start', 1), ('duration', 0)):
                 if field in content:
-                    content[field] = marker(content[field], name, minimum)
-            if isinstance(content.get('meta'), dict) and TID.fullmatch(str(content['meta'].get('_dd.p.tid', ''))):
-                content['meta'] = dict(content['meta'], **{'_dd.p.tid': '<tid>'})
+                    content[field] = mark(content[field], field, integer(content[field], minimum))
+            if isinstance(content.get('meta'), dict) and '_dd.p.tid' in content['meta']:
+                tid = content['meta']['_dd.p.tid']
+                content['meta'] = dict(content['meta'], **{'_dd.p.tid': mark(tid, 'tid', isinstance(tid, str) and TID.fullmatch(tid))})
             inherited = {kind: values for kind, values in metadata.items() if kind in ('*', event.get('type'))}
             key = {'payload_version': payload.get('version'), 'metadata': inherited,
                    'type': event.get('type'), 'version': event.get('version'), 'content': content}
