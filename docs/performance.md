@@ -385,8 +385,10 @@ commands, raw repetitions and limits in a task-scoped artifact directory.
 It runs these microbenchmarks in both trees, with the candidate's benchmarks,
 then a test binary of many empty tests, built with `go test` and with each
 tree's ddto, and checks that every test event arrives. Its
-[first results](results/minitracer-20261016-linux-go1.27/README.md) measure the
-changes in the last four rows of the optimization table above.
+[first results](results/minitracer-20261016-linux-go1.27/README.md) measure four
+rows of the optimization table above: metadata capacity from `Tag` options,
+overrides recorded at enqueue, the shared-tag key filter and finish options by
+value.
 Alternate execution order and retain slow or failed samples. Record CPU,
 allocations, complete wall time, wire bytes and peak memory when they apply. A
 hot function's profile share does not predict the percentage that a change will

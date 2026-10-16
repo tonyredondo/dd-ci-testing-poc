@@ -22,3 +22,13 @@ func TestStartSpanOptionsAreFunctions(t *testing.T) {
 		}
 	}
 }
+
+// A nil client still starts events, which are never sent.
+func TestNilClientStartsEvents(t *testing.T) {
+	var client *Client
+	span, _ := client.StartSpan(context.Background(), "test", Tag("key", "value"))
+	span.Finish()
+	if got, _ := span.Meta("key"); got != "value" {
+		t.Fatalf("key = %q", got)
+	}
+}

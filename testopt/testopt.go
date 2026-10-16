@@ -47,13 +47,18 @@ func New(c Config) (*Client, error) {
 }
 
 // StartSpan starts an event, as a child of ctx's event if it has one. Each
-// option reserves an entry in the event's metadata map.
+// option reserves an entry in the event's metadata map. A nil client starts an
+// event that is never sent.
 func (c *Client) StartSpan(ctx context.Context, name string, options ...StartSpanOption) (*Span, context.Context) {
 	converted := make([]minitracer.StartSpanOption, len(options))
 	for i, option := range options {
 		converted[i] = minitracer.FuncOption(option)
 	}
-	return c.client.StartSpan(ctx, name, converted...)
+	var client *minitracer.Client
+	if c != nil {
+		client = c.client
+	}
+	return client.StartSpan(ctx, name, converted...)
 }
 
 // Flush delivers every buffered event and waits for the result.
