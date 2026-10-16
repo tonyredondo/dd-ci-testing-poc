@@ -44,7 +44,7 @@ func TestMetadataCapacityCountsTagOptions(t *testing.T) {
 	}
 	text := []StartSpanOption{Tag("one", "1"), Tag("two", "2"), Tag("three", "3")}
 	span, _ := newSpan(nil, context.Background(), "test", text...)
-	if got, want := len(span.content.Meta), metadataCapacity(nil, text); got != want {
+	if got, want := span.content.Meta.len(), metadataCapacity(nil, text); got != want {
 		t.Fatalf("text-only span has %d entries, reserved %d", got, want)
 	}
 }
@@ -133,10 +133,10 @@ func TestTestEventKeepsITRCorrelationInMeta(t *testing.T) {
 	client.mu.Lock()
 	test, session := client.events[0], client.events[1]
 	client.mu.Unlock()
-	if test.Content.CorrelationID != "correlation" || test.Content.Meta[key] != "correlation" {
+	if test.Content.CorrelationID != "correlation" || test.Content.Meta.asMap()[key] != "correlation" {
 		t.Fatalf("test event: field=%q meta=%v", test.Content.CorrelationID, test.Content.Meta)
 	}
-	if session.Content.CorrelationID != "" || session.Content.Meta[key] != "correlation" {
+	if session.Content.CorrelationID != "" || session.Content.Meta.asMap()[key] != "correlation" {
 		t.Fatalf("session event: field=%q meta=%v", session.Content.CorrelationID, session.Content.Meta)
 	}
 }

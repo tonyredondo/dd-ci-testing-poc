@@ -47,7 +47,7 @@ func TestFinishedSpanSharesSealedMaps(t *testing.T) {
 		t.Fatal("lost hierarchy")
 	}
 	for _, key := range []string{"test_session_id", "test_module_id", "test_suite_id"} {
-		if _, ok := event.Content.Meta[key]; ok {
+		if _, ok := event.Content.Meta.asMap()[key]; ok {
 			t.Fatal("hierarchy duplicated in metadata")
 		}
 	}
@@ -84,7 +84,7 @@ func TestFinishedSpanSharesSealedMaps(t *testing.T) {
 		}
 	}()
 	wg.Wait()
-	if event.Content.Meta["test.name"] != "original" || event.Content.Metrics["coverage"] != 0.5 {
+	if event.Content.Meta.asMap()["test.name"] != "original" || event.Content.Metrics.asMap()["coverage"] != 0.5 {
 		t.Fatal("event changed after Finish")
 	}
 	client.mu.Lock()
@@ -141,13 +141,13 @@ func TestNonNumericHierarchyTagsStayInMeta(t *testing.T) {
 	}
 	for i, event := range payload.Events {
 		content := event.Content
-		if session, ok := content.Meta["test_session_id"]; !ok || session != "session-a" || content.SessionID != 0 {
+		if session, ok := content.Meta.asMap()["test_session_id"]; !ok || session != "session-a" || content.SessionID != 0 {
 			t.Fatalf("%s: session meta=%q native=%d", event.Type, session, content.SessionID)
 		}
-		if suite, ok := content.Meta["test_suite_id"]; !ok || suite != "" || content.SuiteID != 0 {
+		if suite, ok := content.Meta.asMap()["test_suite_id"]; !ok || suite != "" || content.SuiteID != 0 {
 			t.Fatalf("%s: empty suite meta=%q/%t native=%d", event.Type, suite, ok, content.SuiteID)
 		}
-		if _, alias := content.Meta["test_module_id"]; alias || content.ModuleID != 42 {
+		if _, alias := content.Meta.asMap()["test_module_id"]; alias || content.ModuleID != 42 {
 			t.Fatalf("%s: numeric module ID meta=%v native=%d", event.Type, content.Meta, content.ModuleID)
 		}
 		for key, want := range values {

@@ -53,16 +53,16 @@ func TestSDKMirrorCaptureOwnsFinalData(t *testing.T) {
 	clear(meta)
 	clear(metrics) // Model the SDK clearing a pooled span before delivery.
 	e := delivery.event
-	if e.Type != "span" || e.Version != 1 || e.Content.Name != "final" || e.Content.Duration != 200 || e.Content.Meta["custom"] != "final" || e.Content.Metrics["custom"] != 42 || e.Content.Meta["apm.span_id"] != "101" {
+	if e.Type != "span" || e.Version != 1 || e.Content.Name != "final" || e.Content.Duration != 200 || e.Content.Meta.asMap()["custom"] != "final" || e.Content.Metrics.asMap()["custom"] != 42 || e.Content.Meta.asMap()["apm.span_id"] != "101" {
 		t.Fatalf("finalized data lost: %+v", e)
 	}
-	if e.common != owner.common || e.Content.SessionID != 11 || e.Content.ModuleID != 22 || e.Content.SuiteID != 33 || e.Content.Meta["_dd.origin"] != "ciapp-test" {
+	if e.common != owner.common || e.Content.SessionID != 11 || e.Content.ModuleID != 22 || e.Content.SuiteID != 33 || e.Content.Meta.asMap()["_dd.origin"] != "ciapp-test" {
 		t.Fatal("CI ownership was replaced by APM metadata")
 	}
-	if _, exists := e.Content.Metrics["_sampling_priority_v1"]; exists {
+	if _, exists := e.Content.Metrics.asMap()["_sampling_priority_v1"]; exists {
 		t.Fatal("APM sampling leaked into CI")
 	}
-	if _, exists := e.Content.Meta["_dd.parent_id"]; exists {
+	if _, exists := e.Content.Meta.asMap()["_dd.parent_id"]; exists {
 		t.Fatal("APM reparenting metadata leaked into CI")
 	}
 	if sdkMirrorCapture(mirror, "again", "", "", "", 0, 0, 0, maps.All(meta), metrics, [16]byte{}, 0) != nil {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
-	"maps"
 	"strconv"
 	"sync/atomic"
 	_ "unsafe" // compiler hooks use go:linkname without importing the SDK
@@ -125,10 +124,11 @@ func sdkMirrorCapture(state any, name, service, resource, kind string, start, du
 		}
 		return true
 	})
-	if len(metrics) != 0 {
-		s.content.Metrics = maps.Clone(metrics)
-		for _, key := range []string{"_sampling_priority_v1", "_dd.top_level", "_dd.profiling.enabled", "_dd.agent_psr", "_dd.rule_psr", "_dd.limit_psr", "test_session_id", "test_module_id", "test_suite_id"} {
-			delete(s.content.Metrics, key)
+	for key, value := range metrics {
+		switch key {
+		case "_sampling_priority_v1", "_dd.top_level", "_dd.profiling.enabled", "_dd.agent_psr", "_dd.rule_psr", "_dd.limit_psr", "test_session_id", "test_module_id", "test_suite_id":
+		default:
+			s.content.Metrics.set(key, value)
 		}
 	}
 	// Keep the original APM identity for diagnosis without modifying its trace.

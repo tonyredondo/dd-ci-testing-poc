@@ -314,7 +314,7 @@ func safeString(v fmt.Stringer, original any) (result string) {
 // outside the metadata map so serialization never mutates finished spans.
 func (s *Span) setTextTag(key, value string) {
 	s.setMeta(key, value)
-	delete(s.content.Metrics, key)
+	s.content.Metrics.delete(key)
 }
 
 var hierarchyKeys = [3]string{"test_session_id", "test_module_id", "test_suite_id"}
@@ -345,10 +345,9 @@ func (s *Span) sealHierarchy(content *eventContent) {
 			*id = value
 			continue
 		}
-		if content.Meta == nil {
-			content.Meta = make(map[string]string, 1)
-		}
-		content.Meta[hierarchyKeys[i]] = s.hierarchy[i]
+		// setMeta keeps hierarchy keys out of Meta. Adding one to the event's
+		// list never changes the span's entries.
+		content.Meta.set(hierarchyKeys[i], s.hierarchy[i])
 	}
 }
 func (s *Span) setMeta(key, value string) {
@@ -371,14 +370,12 @@ func (s *Span) setMeta(key, value string) {
 		s.hierarchySet |= 1 << i
 		return
 	}
-	s.content.Meta[key] = value
+	s.content.Meta.set(key, value)
 }
+
 func (s *Span) setMetric(key string, value float64) {
-	if s.content.Metrics == nil {
-		s.content.Metrics = make(map[string]float64)
-	}
-	s.content.Metrics[key] = value
-	delete(s.content.Meta, key)
+	s.content.Metrics.set(key, value)
+	s.content.Meta.delete(key)
 	if i := hierarchyIndex(key); i >= 0 {
 		s.hierarchySet &^= 1 << i
 		s.hierarchy[i] = ""
@@ -390,9 +387,9 @@ func (s *Span) Meta(key string) (string, bool) {
 	if i := hierarchyIndex(key); i >= 0 {
 		return s.hierarchy[i], s.hierarchySet&(1<<i) != 0
 	}
-	v, ok := s.content.Meta[key]
+	v, ok := s.content.Meta.get(key)
 	if !ok && s.common != nil {
-		if _, numeric := s.content.Metrics[key]; !numeric {
+		if _, numeric := s.content.Metrics.get(key); !numeric {
 			v, ok = s.common.values[key]
 		}
 	}
@@ -401,8 +398,7 @@ func (s *Span) Meta(key string) (string, bool) {
 func (s *Span) Metric(key string) (float64, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	v, ok := s.content.Metrics[key]
-	return v, ok
+	return s.content.Metrics.get(key)
 }
 
 // Finish seals the event and enqueues it exactly once. Hierarchy IDs are native
@@ -443,7 +439,7 @@ func (s *Span) finish(tags map[string]any, options ...FinishOption) {
 	case "test":
 		// dd-trace-go copies meta before it moves the correlation to this
 		// field, so test events carry it in both places.
-		event.Content.CorrelationID = content.Meta["itr_correlation_id"]
+		event.Content.CorrelationID, _ = content.Meta.get("itr_correlation_id")
 		event.Version = 2
 		event.Content.ParentID = 0
 	case "test_session_end", "test_module_end", "test_suite_end":
@@ -498,21 +494,21 @@ func newSpan(client *Client, ctx context.Context, name string, options ...StartS
 	if ctx == nil {
 		panic("cannot create context from nil parent") // As context.WithValue.
 	}
-	s := &Span{client: client, carrier: propctx.Carrier[propagation.Context]{Context: ctx, Carried: identity}, content: eventContent{Name: name, Resource: name, Start: time.Now().UnixNano(), SpanID: identity.SpanID, TraceID: binary.BigEndian.Uint64(identity.TraceID[8:]), ParentID: parent, Meta: make(map[string]string, metadataCapacity(client, options))}}
+	s := &Span{client: client, carrier: propctx.Carrier[propagation.Context]{Context: ctx, Carried: identity}, content: eventContent{Name: name, Resource: name, Start: time.Now().UnixNano(), SpanID: identity.SpanID, TraceID: binary.BigEndian.Uint64(identity.TraceID[8:]), ParentID: parent, Meta: metaSet{newEntrySet[string](metadataCapacity(client, options))}}}
 	if client != nil {
 		s.content.Service = client.service
 		for k, v := range client.tags {
 			s.setMeta(k, v)
 		}
 		if client.env != "" {
-			s.content.Meta["env"] = client.env
+			s.content.Meta.set("env", client.env)
 		}
 		if client.serviceVersion != "" {
-			s.content.Meta["version"] = client.serviceVersion
+			s.content.Meta.set("version", client.serviceVersion)
 		}
 	}
-	s.content.Meta["_dd.origin"] = "ciapp-test"
-	s.content.Meta["_dd.p.tid"] = hex.EncodeToString(identity.TraceID[:8])
+	s.content.Meta.set("_dd.origin", "ciapp-test")
+	s.content.Meta.set("_dd.p.tid", hex.EncodeToString(identity.TraceID[:8]))
 	for _, option := range options {
 		option.apply(s)
 	}
