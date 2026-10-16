@@ -42,10 +42,10 @@ type StartSpanOption struct {
 	tag   bool
 }
 
-// FinishOption passes the configuration by value, so finishing keeps it on
-// the stack.
-type FinishOption func(finishConfig) finishConfig
-type finishConfig struct{ time time.Time }
+// FinishOption sets the configuration that the finished event holds, so
+// finishing allocates nothing else.
+type FinishOption func(*finishConfig)
+type finishConfig struct{ end int64 } // Unix nanoseconds.
 
 func ResourceName(v string) StartSpanOption {
 	return StartSpanOption{apply: func(s *Span) { s.content.Resource = v }}
@@ -81,9 +81,7 @@ func (s *Span) Service() string {
 	defer s.mu.Unlock()
 	return s.content.Service
 }
-func FinishTime(v time.Time) FinishOption {
-	return func(c finishConfig) finishConfig { c.time = v; return c }
-}
+func FinishTime(v time.Time) FinishOption { return func(c *finishConfig) { c.end = v.UnixNano() } }
 
 // SetTag follows dd-trace-go's Span.SetTag for the values CI events carry:
 // pointers to basic values are dereferenced, numbers that fit a float64
@@ -418,9 +416,11 @@ func (s *Span) FinishWithTags(tags map[string]any, options ...FinishOption) {
 }
 
 func (s *Span) finish(tags map[string]any, options ...FinishOption) {
-	cfg := finishConfig{time: time.Now()}
+	// Options take the configuration's address. A local configuration would
+	// therefore move to the heap; the event is allocated anyway.
+	event := &ciEvent{Version: 1, finish: finishConfig{end: time.Now().UnixNano()}}
 	for _, option := range options {
-		cfg = option(cfg)
+		option(&event.finish)
 	}
 	s.mu.Lock()
 	if s.finished {
@@ -432,11 +432,11 @@ func (s *Span) finish(tags map[string]any, options ...FinishOption) {
 	}
 	s.finished = true
 	content := s.content
-	content.Duration = cfg.time.UnixNano() - content.Start
+	content.Duration = event.finish.end - content.Start
 	if content.Duration < 0 {
 		content.Duration = 0
 	}
-	event := &ciEvent{Type: content.Type, Version: 1, Content: content, common: s.common}
+	event.Type, event.Content, event.common = content.Type, content, s.common
 	s.sealHierarchy(&event.Content)
 	switch content.Type {
 	case "test":

@@ -191,7 +191,7 @@ invocation.
 | Metadata capacity from `Tag` options | Repeated map growth while applying common tags, and a 64-slot map (2.25 kB) for a test event's 22 entries | Count every `Tag` option and the entries that `newSpan` adds itself; options that set fields or shared defaults reserve nothing |
 | Overrides recorded at enqueue | Searching every event's keys when lifting shared defaults into payload metadata | `Client.add` stores `eventSize`'s result on the event; only those events can remove a default |
 | Shared-tag key filter | Snapshot lookups for keys that cannot be shared | A snapshot holds only keys that `IsSharedCITag` selects |
-| Finish options by value | One allocation per finished event | `FinishOption` must not take a pointer to the configuration |
+| Finish configuration in the event | One allocation per finished event | Options apply, outside the span's lock, to the event that `Finish` allocates anyway |
 | Appended close-action lists | Copying all prior actions on every registration | Execute in LIFO order, with pre-close barriers before ordinary actions |
 | Lazy metric maps | A map allocation for events without numeric metrics | Tag type transitions must retain their existing semantics |
 | Direct event encoding | An intermediate encoded event array and its payload copy | Preserve field names, event versions and byte limits |
@@ -387,8 +387,8 @@ then a test binary of many empty tests, built with `go test` and with each
 tree's ddto, and checks that every test event arrives. Its
 [first results](results/minitracer-20261016-linux-go1.27/README.md) measure four
 rows of the optimization table above: metadata capacity from `Tag` options,
-overrides recorded at enqueue, the shared-tag key filter and finish options by
-value.
+overrides recorded at enqueue, the shared-tag key filter and the finish
+configuration in the event.
 Alternate execution order and retain slow or failed samples. Record CPU,
 allocations, complete wall time, wire bytes and peak memory when they apply. A
 hot function's profile share does not predict the percentage that a change will
