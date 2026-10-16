@@ -9,7 +9,8 @@ import (
 
 // A top-level test's instrumented function marks itself with t.Helper only
 // when a wrapper calls it: when tRunner calls it directly, the mark changes no
-// location that testing reports. A test that calls t.Helper itself reaches
+// location that testing reports, except at the stack depth that ADAPTATIONS.md
+// describes. A test that calls t.Helper itself reaches
 // that function's frame through its logs, cleanups and skips; with retries, a
 // wrapper calls the function, and the report goes past its frame.
 func TestMiniHelperMarksKeepLocations(t *testing.T) {

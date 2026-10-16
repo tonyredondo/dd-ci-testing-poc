@@ -1459,8 +1459,10 @@ func collectAndWriteLogs(t *testing.T, test integrations.Test, attemptOutput []b
 // directly, and its t.Helper call would allocate t's helper map for nothing:
 // testing reads helper marks only to find the frame to report, and when that
 // search reaches the function that tRunner calls in a top-level test, it
-// reports that function's frame whether it is marked or not. A wrapper keeps
-// the call, since its frames lie between instrumented and tRunner.
+// reports that function's frame whether it is marked or not. The exception is
+// a stack that testing's search cuts off right after that function: see
+// ADAPTATIONS.md. A wrapper keeps the call, since its frames lie between
+// instrumented and tRunner.
 func directTestFunc(testInfo *testingTInfo, instrumented, test func(*testing.T)) func(*testing.T) {
 	testInfo.directTestFunc = reflect.ValueOf(test).Pointer() == reflect.ValueOf(instrumented).Pointer()
 	return test

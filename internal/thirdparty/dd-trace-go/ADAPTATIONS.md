@@ -1741,6 +1741,15 @@ of them without changing any event:
   return line calls `directTestFunc` in place, so no line moves. With flaky
   test retries enabled, every test is wrapped, and a test that calls a helper
   allocates the map itself.
+
+  One case changes, which we accepted for the cost. testing looks at no more
+  than 50 frames (`maxStackLen`) when it chooses the frame. A test function that
+  calls `t.Helper()` itself, with helpers nested exactly deep enough below it,
+  makes Mini's function the last frame that testing looks at: in Go 1.27, 48
+  nested helper calls. All the frames before it are helpers, so testing used to
+  go past the marked function and report the line that logged; now it reports
+  `testing.go:882`, as Mini already did for any shallower stack. `go test`
+  reports the test function's line there, so neither matched it.
   Checks: `TestDirectTestFunc`, and `TestMiniHelperMarksKeepLocations`, which
   pins the locations of a test that calls `t.Helper()` itself, directly and
   with a retry wrapper.
