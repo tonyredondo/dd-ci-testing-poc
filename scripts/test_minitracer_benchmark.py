@@ -27,6 +27,32 @@ PASS
         self.assertEqual(2, source.count("func Test"))
 
 
+class WireTests(unittest.TestCase):
+    def payload(self, binary, span_id, meta):
+        return {"metadata": {"*": {"runtime-id": span_id, "language": "go"}, "test": {"test_session.name": binary + "/fixture.test"}},
+                "events": [{"type": "test", "version": 2, "content": {"span_id": span_id, "start": span_id, "duration": 1,
+                            "test_suite_id": span_id, "name": "test", "meta": dict(meta, **{"_dd.p.tid": str(span_id)}),
+                            "metrics": {"m": 1}}}]}
+
+    def test_runs_differ_only_in_volatile_fields(self):
+        base = benchmark.wire_content([self.payload("/out/base", 1, {"k": "v", "test.command": "/out/base/fixture.test"})], "/out/base")
+        candidate = benchmark.wire_content([self.payload("/out/candidate", 2, {"k": "v", "test.command": "/out/candidate/fixture.test"})], "/out/candidate")
+        self.assertTrue(benchmark.compare_wire(base, candidate)["identical"])
+
+    def test_a_changed_tag_differs(self):
+        base = benchmark.wire_content([self.payload("/b", 1, {"k": "v"})], "/b")
+        candidate = benchmark.wire_content([self.payload("/c", 1, {"k": "other"})], "/c")
+        result = benchmark.compare_wire(base, candidate)
+        self.assertFalse(result["identical"])
+        self.assertIn('"k": "v"', result["only_base"][0])
+        self.assertIn('"k": "other"', result["only_candidate"][0])
+
+    def test_a_missing_event_differs(self):
+        one = self.payload("/b", 1, {"k": "v"})
+        two = dict(one, events=one["events"] * 2)
+        self.assertFalse(benchmark.compare_wire(benchmark.wire_content([one], "/b"), benchmark.wire_content([two], "/b"))["identical"])
+
+
 class MeasureTests(unittest.TestCase):
     def test_output_and_usage(self):
         command = [sys.executable, "-c", "import sys; print('out', flush=True); print('err', file=sys.stderr); sys.exit(3)"]
@@ -103,6 +129,7 @@ class ReportTests(unittest.TestCase):
                             "candidate": {"objects_per_test": 48.8, "bytes_per_test": 5870}},
             "microbenchmarks": {"base": {"BenchmarkTestEventLifecycle": [(200, 30, 3), (200, 30, 3)]},
                                 "candidate": {"BenchmarkTestEventLifecycle": [(150, 20, 2), (150, 20, 2)]}},
+            "wire": {"identical": True, "distinct_events": 7, "only_base": [], "only_candidate": []},
             "test_binaries": {"native": [run(1.0, 1.0)], "base": [run(1.000004, 1.000008)], "candidate": [run(1.000002, 1.000004)]},
         }
         text = benchmark.report(results)
@@ -113,6 +140,11 @@ class ReportTests(unittest.TestCase):
         self.assertIn("The first base run delivered 4 `test`, 1 `test_suite_end` events.", text)
         self.assertIn("Each tree runs its own `performance_test.go`.", text)
         self.assertIn("| ddto, candidate | 48.8 | 5870 |", text)
+        self.assertIn("payloads hold the same events and event-kind metadata, 7 distinct events", text)
+        results["wire"] = {"identical": False, "distinct_events": 7, "only_base": ["a"], "only_candidate": ["b"]}
+        text = benchmark.report(results)
+        self.assertIn("Only the base has, for example:\n\n- `a`", text)
+        self.assertIn("Only the candidate has:\n\n- `b`", text)
 
     def test_pprof_total(self):
         self.assertEqual("123", benchmark.PPROF_TOTAL.search("Showing nodes accounting for 5, 4% of 123 total").group(1))

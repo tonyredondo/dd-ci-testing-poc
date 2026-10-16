@@ -4,7 +4,7 @@ the minitracer microbenchmarks, and a test binary of many empty tests.
 usage: minitracer_benchmark.py --base DIR --candidate DIR --output DIR
            [--reps N] [--tests N] [--count N] [--alloc-count N]
            [--gomaxprocs N] [--benchtime D] [--own-benchmarks]
-           [--report DIR]
+           [--same-wire] [--report DIR]
 
 --base and --candidate are worktrees of this repository, such as one detached
 at main and one at the change: ddto compiles Mini from the tree it was built
@@ -22,13 +22,17 @@ ddto test -c. Each binary runs -test.count=--count against the loopback
 receiver with --gomaxprocs. The report gives the test process's wall time, CPU
 time (user and system) and peak RSS, and what ddto adds per test over plain go
 test. The first run of each tree decodes every payload and checks that each
-test event arrived. A last run of each binary, -test.count=--alloc-count with
+test event arrived. It also compares the trees' payloads: every event and
+event-kind metadata entry, without what differs between runs (IDs,
+timestamps, _dd.p.tid, the runtime ID and the binary's path). --same-wire
+stops the benchmark when they differ. A last run of each binary, -test.count=--alloc-count with
 every allocation profiled from the process's start (GODEBUG=memprofilerate=1),
 counts the objects and bytes that it allocates per test until testing writes
 the profile, before Mini's final delivery. --report copies results.json and README.md into DIR, such
 as a directory of docs/results; never edit those by hand.
 """
 import argparse
+from collections import Counter
 import hashlib
 import json
 import os
@@ -178,6 +182,50 @@ def binary_env(args, variant, url):
     return env
 
 
+# Event fields and metadata that differ between two runs of one binary.
+VOLATILE_CONTENT = ('span_id', 'trace_id', 'parent_id', 'test_session_id', 'test_module_id', 'test_suite_id', 'start', 'duration')
+VOLATILE_META = ('_dd.p.tid',)
+VOLATILE_METADATA = ('runtime-id',)
+
+
+def normalize(value, binary_dir):
+    """Replaces the binary's directory, which differs between trees."""
+    if isinstance(value, str):
+        return value.replace(binary_dir, '<binary>')
+    if isinstance(value, dict):
+        return {k: normalize(v, binary_dir) for k, v in value.items()}
+    if isinstance(value, list):
+        return [normalize(v, binary_dir) for v in value]
+    return value
+
+
+def wire_content(payloads, binary_dir):
+    """Returns the payloads' events, as a count of each normalized event, and
+    their normalized event-kind metadata entries."""
+    events, metadata = Counter(), set()
+    for payload in payloads:
+        for kind, values in payload.get('metadata', {}).items():
+            kept = {k: v for k, v in values.items() if k not in VOLATILE_METADATA}
+            metadata.add(json.dumps({kind: normalize(kept, binary_dir)}, sort_keys=True))
+        for event in payload.get('events', []):
+            content = {k: v for k, v in event['content'].items() if k not in VOLATILE_CONTENT}
+            if 'meta' in content:
+                content['meta'] = {k: v for k, v in content['meta'].items() if k not in VOLATILE_META}
+            normalized = normalize({'type': event['type'], 'version': event['version'], 'content': content}, binary_dir)
+            events[json.dumps(normalized, sort_keys=True)] += 1
+    return events, metadata
+
+
+def compare_wire(base, candidate):
+    """Returns whether two wire_content results are equal, with examples of
+    what only one of them holds."""
+    (base_events, base_metadata), (candidate_events, candidate_metadata) = base, candidate
+    only_base = list((base_events - candidate_events).elements())[:3] + sorted(base_metadata - candidate_metadata)[:3]
+    only_candidate = list((candidate_events - base_events).elements())[:3] + sorted(candidate_metadata - base_metadata)[:3]
+    return {'identical': base_events == candidate_events and base_metadata == candidate_metadata,
+            'distinct_events': len(candidate_events), 'only_base': only_base, 'only_candidate': only_candidate}
+
+
 def run_binary(args, out, fixture, variant, directory, verify):
     """Runs one test binary and returns its wall time, CPU seconds, peak RSS
     and the receiver's test-cycle traffic. verify decodes every payload."""
@@ -191,11 +239,13 @@ def run_binary(args, out, fixture, variant, directory, verify):
     events = None
     if verify:
         events = {}
-        for request in cycle:
-            for event in decode(args.decoder, receiver.bodies[request['file']]).get('events', []):
+        payloads = [decode(args.decoder, receiver.bodies[request['file']]) for request in cycle]
+        for payload in payloads:
+            for event in payload.get('events', []):
                 events[event['type']] = events.get(event['type'], 0) + 1
         if events.get('test') != args.tests * args.count:
             raise SystemExit(f'{variant}: {events.get("test")} test events arrived, want {args.tests * args.count}')
+        args.wire[variant] = wire_content(payloads, str(out / variant))
     receiver.bodies.clear()  # Only requests.json is kept.
     receiver.close()
     return {'wall': round(usage['wall'], 4), 'cpu': round(usage['cpu'], 4), 'maxrss_kb': usage['maxrss_kb'],
@@ -317,6 +367,16 @@ def report(results):
               '| Binary | Objects per test | Bytes per test |', '| --- | --- | --- |']
     for variant in VARIANTS:
         lines.append(f"| {labels[variant]} | {allocs[variant]['objects_per_test']} | {allocs[variant]['bytes_per_test']} |")
+    wire = results['wire']
+    lines += ['', '## Payload content', '',
+              "Both trees' test-cycle payloads hold the same events and event-kind metadata, "
+              f"{wire['distinct_events']} distinct events, apart from IDs, timestamps, `_dd.p.tid`, the runtime ID "
+              "and the binary's path." if wire['identical'] else
+              "The trees' test-cycle payloads differ, apart from IDs, timestamps, `_dd.p.tid`, the runtime ID and "
+              "the binary's path. Only the base has, for example:", '']
+    if not wire['identical']:
+        lines += [f'- `{item}`' for item in wire['only_base']] + ['', 'Only the candidate has:', '']
+        lines += [f'- `{item}`' for item in wire['only_candidate']] + ['']
     lines.append('')
     return '\n'.join(lines)
 
@@ -343,6 +403,7 @@ def main():
     parser.add_argument('--alloc-count', type=int, default=3)
     parser.add_argument('--benchtime', default='1s')
     parser.add_argument('--own-benchmarks', action='store_true')
+    parser.add_argument('--same-wire', action='store_true')
     parser.add_argument('--report', type=Path)
     args = parser.parse_args()
     args.base, args.candidate = args.base.resolve(), args.candidate.resolve()
@@ -356,7 +417,11 @@ def main():
                'reps': args.reps, 'tests': args.tests, 'count': args.count, 'gomaxprocs': args.gomaxprocs,
                'benchtime': args.benchtime, 'own_benchmarks': args.own_benchmarks, 'alloc_count': args.alloc_count}
     results['microbenchmarks'] = microbenchmarks(args, out)
+    args.wire = {}
     results['test_binaries'] = test_binaries(args, out, fixture)
+    results['wire'] = compare_wire(args.wire['base'], args.wire['candidate'])
+    if args.same_wire and not results['wire']['identical']:
+        raise SystemExit('the payloads differ:\n' + json.dumps(results['wire'], indent=1))
     results['allocations'] = allocations(args, out, fixture)
     (out / 'results.json').write_text(json.dumps(results, indent=1, sort_keys=True) + '\n')
     (out / 'README.md').write_text(report(results))
