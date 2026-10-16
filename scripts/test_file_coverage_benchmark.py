@@ -32,6 +32,8 @@ class CompareTests(unittest.TestCase):
     def test_a_fallback_is_rejected(self):
         with self.assertRaises(SystemExit):
             benchmark.check_mode(["ddto", "test"], "TestOptimization.build v0.1.1 WARN: --experimental-file-coverage=context: x; tests run one at a time\n")
+        with self.assertRaises(SystemExit):
+            benchmark.check_mode(["ddto", "test"], "TestOptimization.build v0.1.1 WARN: toolchain in GOMODCACHE without a mirror - running go test without CI Visibility\n")
         benchmark.check_mode(["ddto", "test"], "ok\n")
 
 

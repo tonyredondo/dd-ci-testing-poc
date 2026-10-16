@@ -66,10 +66,11 @@ def run_tests(args, project, pattern, mode, output):
 
 
 def check_mode(command, stderr):
-    """Rejects a run in which ddto fell back from the requested coverage
-    mode: it warns and builds another one."""
+    """Rejects a run in which ddto fell back from the requested mode: it
+    warns and builds another coverage mode, or runs go test without CI
+    Visibility."""
     for line in stderr.splitlines():
-        if 'WARN: --experimental-file-coverage' in line:
+        if 'WARN: --experimental-file-coverage' in line or 'running go test without CI Visibility' in line:
             raise SystemExit(f'{" ".join(command)} did not install the requested mode: {line}')
 
 
@@ -97,6 +98,8 @@ def per_test_files(decoder, receiver, project):
     for span, covered in files.items():
         if span in names:
             out[names[span]] = sorted(relative(project, f) for f in covered)
+    if not out:
+        raise SystemExit(f'{project}: no per-test coverage arrived')
     return out
 
 
