@@ -1718,8 +1718,9 @@ of them without changing any event:
   which only a new one uses; given options still run. `CreateTest` and
   `closeLocked` allocate their configuration only when options are given
   (`testStartOptions` and `testCloseOptions`, at the end of their files):
-  options take its address, which moves it to the heap, and a passing test
-  starts and closes without any. These functions return before a test's body
+  options take its address, which moves it to the heap, and an ordinary test
+  starts, and closes when it passes, without any. Examples, fuzz roots and
+  benchmarks pass start times, so they keep these allocations. These functions return before a test's body
   runs or start after it, so their frames are not in the error stacks that
   parity compares. `finalizeInstrumentedTestExecution` sets the final status
   through `finalStatusValue`, which returns the known statuses as constants
