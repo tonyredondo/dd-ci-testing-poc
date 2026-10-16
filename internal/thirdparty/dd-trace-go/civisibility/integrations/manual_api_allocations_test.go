@@ -10,16 +10,24 @@ import (
 	"time"
 )
 
-// An existing module or suite, as every test after the first finds, returns
-// without allocating its options or reading the clock, and ignores options as
-// it did.
+// Without options, an existing module or suite, as every test after the first
+// finds, returns without allocating options or reading the clock. Given
+// options still run, and an existing module or suite ignores them as it did.
 func TestExistingModulesAndSuitesAllocateNothing(t *testing.T) {
 	session := CreateTestSession()
 	module := session.GetOrCreateModule("m")
 	suite := module.GetOrCreateSuite("s")
 	start := time.Unix(1, 0)
-	if session.GetOrCreateModule("m", WithTestModuleStartTime(start)) != module || module.GetOrCreateSuite("s", WithTestSuiteStartTime(start)) != suite {
-		t.Fatal("an existing module or suite was replaced")
+	var moduleOptions, suiteOptions int
+	moduleOption := func(o *tslvTestModuleStartOptions) { moduleOptions++; WithTestModuleStartTime(start)(o) }
+	suiteOption := func(o *tslvTestSuiteStartOptions) { suiteOptions++; WithTestSuiteStartTime(start)(o) }
+	for range 2 {
+		if session.GetOrCreateModule("m", moduleOption) != module || module.GetOrCreateSuite("s", suiteOption) != suite {
+			t.Fatal("an existing module or suite was replaced")
+		}
+	}
+	if moduleOptions != 2 || suiteOptions != 2 {
+		t.Fatalf("options ran %d and %d times for 2 lookups each", moduleOptions, suiteOptions)
 	}
 	if module.StartTime().Equal(start) || suite.StartTime().Equal(start) {
 		t.Fatal("options changed an existing module or suite")
