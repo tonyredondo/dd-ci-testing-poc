@@ -140,3 +140,38 @@ func TestTestEventKeepsITRCorrelationInMeta(t *testing.T) {
 		t.Fatalf("session event: field=%q meta=%v", session.Content.CorrelationID, session.Content.Meta)
 	}
 }
+
+// The typed setters leave a span as SetTag does with the same values.
+func TestTypedSettersMatchSetTag(t *testing.T) {
+	steps := []struct {
+		key   string
+		text  string
+		num   float64
+		isNum bool
+	}{
+		{key: "custom", text: "value"}, {key: "custom", num: 3, isNum: true}, {key: "custom", text: "again"},
+		{key: ext.ManualKeep, text: "true"}, {key: ext.Error, text: "failed"}, {key: ext.ResourceName, text: "resource"},
+		{key: "test_session_id", text: "12"}, {key: "test_module_id", num: 7, isNum: true}, {key: "test_suite_id", text: "suite"},
+		{key: ext.ErrorNoStackTrace, num: 0, isNum: true}, {key: "metric", num: 2.5, isNum: true},
+	}
+	viaSetTag, _ := newSpan(nil, context.Background(), "test")
+	typed, _ := newSpan(nil, context.Background(), "test")
+	for _, step := range steps {
+		if step.isNum {
+			viaSetTag.SetTag(step.key, step.num)
+			typed.SetMetric(step.key, step.num)
+		} else {
+			viaSetTag.SetTag(step.key, step.text)
+			typed.SetStringTag(step.key, step.text)
+		}
+	}
+	viaSetTag.Finish()
+	typed.Finish()
+	a, b := viaSetTag.event.Content, typed.event.Content
+	a.Start, a.Duration, a.SpanID, a.TraceID, b.Start, b.Duration, b.SpanID, b.TraceID = 0, 0, 0, 0, 0, 0, 0, 0
+	a.Meta.delete("_dd.p.tid")
+	b.Meta.delete("_dd.p.tid")
+	if !sameContent(a, b) || viaSetTag.hierarchy != typed.hierarchy || viaSetTag.hierarchySet != typed.hierarchySet {
+		t.Fatalf("SetTag %+v %v\ntyped  %+v %v", a, viaSetTag.hierarchy, b, typed.hierarchy)
+	}
+}

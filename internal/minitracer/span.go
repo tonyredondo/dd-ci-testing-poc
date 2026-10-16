@@ -121,6 +121,40 @@ func (s *Span) SetTag(key string, value any) {
 	}
 }
 
+// SetStringTag sets a text tag as SetTag does, without converting the value
+// to an interface, which allocates.
+func (s *Span) SetStringTag(key, value string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.finished {
+		return
+	}
+	switch key {
+	case ext.ManualKeep:
+	case ext.Error, ext.ErrorNoStackTrace:
+		s.event.Content.Error = 1
+	default:
+		s.setTextTag(key, value)
+	}
+}
+
+// SetMetric sets a numeric tag as SetTag does, without converting the value
+// to an interface.
+func (s *Span) SetMetric(key string, value float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.finished {
+		return
+	}
+	switch key {
+	case ext.ManualKeep:
+	case ext.Error, ext.ErrorNoStackTrace:
+		s.event.Content.Error = 1
+	default:
+		s.setMetric(key, value)
+	}
+}
+
 // setScalarTag runs under mu and never invokes methods supplied by the caller.
 func (s *Span) setScalarTag(key string, value any) bool {
 	switch key {
