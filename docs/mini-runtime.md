@@ -504,56 +504,43 @@ and builds as without the flag. It also refuses in these cases:
 - Top-level tests still run one at a time while coverage is collected, as
   with Go's counters.
 - Tests retried in a child process report no per-test coverage.
-- As with Go's counters, a statement that blocks before the test starts and
-  resumes during it does not mark its file again.
+- Code that blocks before the test and resumes during it marks its file
+  again at its next site, which follows every call and channel operation.
+  The runtime can still suspend code briefly between two sites, to preempt
+  it or to assist the garbage collector, as it can inside any statement: a
+  suspension that spans a test's start can leave out the rest of that code.
 - The backend has to accept rows without bitmaps.
 
-**Measured** at GOMAXPROCS=4, comparing marks with Go's counters
+**Measured** at GOMAXPROCS=4. On fiber's router benchmarks, in ns/op:
+
+| Benchmark | Native | Go's counters | File marks |
+| --- | --- | --- | --- |
+| `Router_Chain` | 126 | 532 | 185 |
+| `Router_Handler` | 58 | 311 | 76 |
+| `Router_Next` | 22 | 168 | 34 |
+| `Router_NotFound` | 153 | 733 | 237 |
+
+- **Router benchmarks:** file marks are 3 to 5 times cheaper than Go's
+  counters, at 1.3 to 1.6 times native.
+- **The CPU-bound `Test_Route_Match_SlashBoundsDifferential`:** 0.21 s with
+  marks, against 0.29 s with Go's counters and 0.20 s native.
+- **Whole suites** (lo: 8.45 s against 8.37 s; fiber: 42.44 s against
+  42.57 s) take the same time with both. Running top-level tests one at a
+  time costs fiber 8 seconds either way, and lo waits on its own timers.
+
+Production files per test, against Go's counters
 (`-cover -covermode=atomic -coverpkg=./...`):
-
-| Package | Wall: marks / Go's counters / no per-test coverage | Production files per test: marks / Go's counters |
-| --- | --- | --- |
-| samber/lo, 333 tests | 8.43 / 8.40 / 8.30 s | 4.21 / 1.21 |
-| gofiber/fiber, root package, 1236 tests | 42.44 / 42.56 / 34.28 s | 26.18 / 13.88 |
-
-- **samber/lo:** no test misses a production file that Go's counters report.
-- **gofiber/fiber:** the 30 tests that use its in-memory storage get its file
-  either way. A 10-second garbage collection tick of a storage that an
-  earlier test started lands in the window of a neighboring test, and which
-  neighbor depends on how fast the suite runs: with Go's counters it is
-  `Test_Route_Match_SlashBoundsDifferential`, with marks
-  `Test_RoutePatternMatch_MatchesRouter`. Both attribute that background
-  work by window.
+- **samber/lo, 333 tests:** 4.21 against 1.21, and no test misses a file that
+  Go's counters report.
+- **gofiber/fiber, root package, 1236 tests:** 27.17 against 13.88.
+  - The 30 tests that use fiber's in-memory storage get its file either
+    way. A 10-second garbage collection tick of a storage that an earlier
+    test started lands in the window of a neighboring test, and which
+    neighbor depends on how fast the suite runs.
+  - `Test_GracefulShutdown_PostShutdownFiresOnce` reports three files in
+    some runs and not in others, with both mechanisms: 1 of 3 runs with Go's
+    counters.
 - **The extra files** are those that go to every test:
   - lo's type-only constraint files;
   - in fiber, files with only declarations, such as each middleware's
     `config.go`.
-
-With `-race`, `ddto` overlays Mini's sources with copies that mark each
-function declaration `//go:norace`, so the race detector does not instrument
-Mini's own memory accesses: with 2,000 empty tests, about 22 µs less per test.
-Client code and `testing` stay instrumented, and Mini's locks, channels and
-atomics still order client accesses, so client races are reported as before.
-Races inside Mini's functions are not, except in function literals, which cannot
-be annotated and stay instrumented. A `/*line*/` directive keeps every source
-position.
-
-Some of Mini stays fully instrumented. Packages that `-coverpkg` covers do,
-because Go's cover tool reads their original sources. When client code imports
-Mini's packages, directly or through a helper package, as tests that use
-`testopt` do, Mini keeps full instrumentation, so memory that the client passes
-to Mini's API, such as a pointer tag value, stays checked as under
-`go test -race`. Mini's own tests also keep it, with `go test -race` or when the
-named packages belong to Mini. Compiling Mini with `-race=false` would remove
-more, but the compiler would then make Mini's atomics invisible to the
-detector, which would report races that do not exist.
-
-The [validation guide](validation.md) lists loopback wire checks, imported SDK
-assertions, concurrency and platform coverage. Workflow results are evidence
-for their exact inputs only. Live intake/UI acceptance, real Bazel execution
-and long-running fuzz campaigns need separate validation. The
-[benchmark report](benchmarks.md) retains timings for its recorded revision.
-
-For source revisions, licenses, codecs, platform subsets and update commands,
-read [source maintenance](maintenance.md) and the
-[incorporated-source records](../internal/thirdparty/README.md).
