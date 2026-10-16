@@ -1,3 +1,4 @@
+import sys
 import unittest
 
 import minitracer_benchmark as benchmark
@@ -19,6 +20,16 @@ PASS
         self.assertIn("func TestEmpty00000(t *testing.T) {}\n", source)
         self.assertIn("func TestEmpty00001(t *testing.T) {}\n", source)
         self.assertEqual(2, source.count("func Test"))
+
+
+class MeasureTests(unittest.TestCase):
+    def test_output_and_usage(self):
+        command = [sys.executable, "-c", "import sys; print('out', flush=True); print('err', file=sys.stderr); sys.exit(3)"]
+        output, usage = benchmark.measure(command, ".", None)
+        self.assertEqual(b"out\nerr\n", output)
+        self.assertEqual(3, usage["exit"])
+        self.assertGreater(usage["maxrss_kb"], 0)
+        self.assertGreaterEqual(usage["wall"], usage["cpu"] / 64)
 
 
 class ReportTests(unittest.TestCase):

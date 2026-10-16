@@ -34,7 +34,6 @@ import shutil
 import statistics
 import subprocess
 import sys
-import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from benchmark_receiver import Receiver, decode  # noqa: E402
@@ -44,6 +43,18 @@ BENCHMARKS = '^(BenchmarkTestEventLifecycle|BenchmarkEventLifecycle|BenchmarkSpa
 PERFORMANCE_TEST = Path('internal/minitracer/performance_test.go')
 TREES = ('base', 'candidate')
 VARIANTS = ('native',) + TREES
+# Runs a test binary from a fresh interpreter and prints its wall time and
+# rusage as JSON on stderr; the binary's stderr goes to stdout. A child's peak
+# RSS includes its parent's memory until exec, and the benchmark's own process
+# holds the receiver's payloads.
+MEASURE = """
+import json, os, sys, time
+start = time.perf_counter()
+pid = os.posix_spawn(sys.argv[1], sys.argv[1:], os.environ, file_actions=[(os.POSIX_SPAWN_DUP2, 1, 2)])
+_, status, usage = os.wait4(pid, 0)
+print(json.dumps({'wall': time.perf_counter() - start, 'cpu': usage.ru_utime + usage.ru_stime,
+                  'maxrss_kb': usage.ru_maxrss, 'exit': os.waitstatus_to_exitcode(status)}), file=sys.stderr)
+"""
 BENCH_LINE = re.compile(r'^(Benchmark\S+?)(?:-\d+)?\s+\d+\s+([\d.]+) ns/op\s+([\d.]+) B/op\s+([\d.]+) allocs/op')
 
 
@@ -131,6 +142,16 @@ def microbenchmarks(args, out):
     return samples
 
 
+def measure(command, cwd, env):
+    """Returns the output of command and its wall time, CPU seconds, peak RSS
+    and exit code, measured by MEASURE."""
+    result = subprocess.run([sys.executable, '-I', '-c', MEASURE, *command], cwd=cwd, env=env,
+                            capture_output=True, timeout=3600)
+    if result.returncode:
+        raise SystemExit(f'measuring {" ".join(command)}: exit {result.returncode}\n{result.stderr[-4000:].decode(errors="replace")}')
+    return result.stdout, json.loads(result.stderr.decode().splitlines()[-1])
+
+
 def run_binary(args, out, fixture, variant, directory, verify):
     """Runs one test binary and returns its wall time, CPU seconds, peak RSS
     and the receiver's test-cycle traffic. verify decodes every payload."""
@@ -141,16 +162,10 @@ def run_binary(args, out, fixture, variant, directory, verify):
                    DD_ENV='benchmark', DD_CIVISIBILITY_AGENTLESS_ENABLED='false',
                    DD_CIVISIBILITY_GIT_UPLOAD_ENABLED='false', DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED='false')
     command = [str(out / variant / 'fixture.test'), f'-test.count={args.count}']
-    start = time.perf_counter()
-    process = subprocess.Popen(command, cwd=fixture, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    output = process.stdout.read()
-    process.stdout.close()
-    _, status, usage = os.wait4(process.pid, 0)
-    wall = time.perf_counter() - start
-    process.returncode = os.waitstatus_to_exitcode(status)
-    if process.returncode or not output.rstrip().endswith(b'PASS'):
+    output, usage = measure(command, fixture, env)
+    if usage['exit'] or not output.rstrip().endswith(b'PASS'):
         receiver.close()
-        raise SystemExit(f'{" ".join(command)}: exit {process.returncode}\n{output[-4000:].decode(errors="replace")}')
+        raise SystemExit(f'{" ".join(command)}: exit {usage["exit"]}\n{output[-4000:].decode(errors="replace")}')
     cycle = [r for r in receiver.requests if r['path'].endswith('/citestcycle')]
     events = None
     if verify:
@@ -162,7 +177,7 @@ def run_binary(args, out, fixture, variant, directory, verify):
             raise SystemExit(f'{variant}: {events.get("test")} test events arrived, want {args.tests * args.count}')
     receiver.bodies.clear()  # Only requests.json is kept.
     receiver.close()
-    return {'wall': round(wall, 4), 'cpu': round(usage.ru_utime + usage.ru_stime, 4), 'maxrss_kb': usage.ru_maxrss,
+    return {'wall': round(usage['wall'], 4), 'cpu': round(usage['cpu'], 4), 'maxrss_kb': usage['maxrss_kb'],
             'cycle_requests': len(cycle), 'cycle_bytes': sum(r['wire_bytes'] for r in cycle), 'events': events}
 
 
