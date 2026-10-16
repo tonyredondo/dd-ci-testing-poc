@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -77,16 +78,16 @@ func isTestMain(p goPackage) bool {
 
 // matchingEmbedPattern returns the pattern of a package in dir that would
 // embed the generated file, or "": the file itself matches, or a directory
-// that holds it, which a pattern embeds with everything inside. It matches
-// as go does, with clean host paths: on Windows a backslash in a pattern
-// separates elements, and ".\" names the package's directory.
+// that holds it, which a pattern embeds with everything inside. Patterns
+// separate elements with slashes; on Windows, a pattern with a backslash
+// refuses file coverage before it gets here.
 func matchingEmbedPattern(dir string, patterns []string, generated string) string {
 	rel, err := filepath.Rel(dir, generated)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return ""
 	}
 	for _, pattern := range patterns {
-		glob := filepath.Clean(filepath.FromSlash(strings.TrimPrefix(pattern, "all:")))
+		glob := filepath.FromSlash(strings.TrimPrefix(pattern, "all:"))
 		for candidate := rel; candidate != "." && candidate != string(filepath.Separator); candidate = filepath.Dir(candidate) {
 			if ok, _ := filepath.Match(glob, candidate); ok {
 				return pattern
@@ -203,9 +204,16 @@ func prepareFileCoverage(tested []goPackage, roots, excluded []string, replaceme
 			return summary, "generated file already exists: " + plan.logical, nil
 		}
 		// Embed patterns resolve through the overlay: a bank they matched
-		// would change what a package embeds.
+		// would change what a package embeds. On Windows, go resolves a
+		// backslash in a pattern as a path separator, with rules that are
+		// not worth repeating here.
 		for _, p := range packages {
 			for _, patterns := range [][]string{p.EmbedPatterns, p.TestEmbedPatterns, p.XTestEmbedPatterns} {
+				for _, pattern := range patterns {
+					if runtime.GOOS == "windows" && strings.Contains(pattern, `\`) {
+						return summary, fmt.Sprintf("%s's embed pattern %q has a backslash", p.ImportPath, pattern), nil
+					}
+				}
 				if pattern := matchingEmbedPattern(p.Dir, patterns, plan.logical); pattern != "" {
 					return summary, fmt.Sprintf("%s's embed pattern %q would match %s", p.ImportPath, pattern, plan.logical), nil
 				}

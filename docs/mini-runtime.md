@@ -485,7 +485,7 @@ and builds as without the flag. It also refuses in these cases:
 - vendored dependencies that ddto provides from its cache, outside the
   repository;
 - an embed pattern that would match a generated file, since patterns resolve
-  through the overlay;
+  through the overlay, and, on Windows, an embed pattern with a backslash;
 - a compiled Go file that uses an identifier with the generated code's prefix
   `__ddto_`.
 
