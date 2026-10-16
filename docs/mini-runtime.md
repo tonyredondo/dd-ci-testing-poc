@@ -550,7 +550,7 @@ On fiber's root package (1236 tests, GOMAXPROCS=4):
 
 On samber/lo, whose parallel tests are short, both modes take 8.4 s.
 
-ddto hands the mode to the test processes only when the build has file marks.
+When the build has file marks, ddto hands the mode to the test processes, which do not inherit it from a parent run. A selected Mini that predates the mode gets a warning, and its tests run one at a time.
 
 **Limits.**
 - Tests retried in a child process report no per-test coverage.

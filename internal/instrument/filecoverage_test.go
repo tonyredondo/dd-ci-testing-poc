@@ -312,6 +312,13 @@ func TestFileCoverageRuntimeError(t *testing.T) {
 	if err := FileCoverageRuntimeError(older); err == nil || !strings.Contains(err.Error(), "fileCoverageEpoch") {
 		t.Fatalf("older runtime: %v", err)
 	}
+	if err := FileCoverageParallelRuntimeError(current); err == nil {
+		t.Fatal("a runtime without FileCoverageParallel keeps t.Parallel")
+	}
+	parallel := map[string][]byte{"c.go": []byte("package coverage\n\nfunc FileCoverageParallel() bool { return false }\n")}
+	if err := FileCoverageParallelRuntimeError(parallel); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // A byte order mark stays out of the rewritten file: it is valid only at

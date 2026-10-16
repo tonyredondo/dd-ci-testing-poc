@@ -701,6 +701,14 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		phase.finish(nil)
 		plan.fileCoverage = refusal == ""
 		plan.fileCoverageParallel = plan.fileCoverage && opts.fileCoverageParallel
+		if plan.fileCoverageParallel {
+			// A selected runtime from before =parallel runs the tests one
+			// at a time; say so instead of leaving it unnoticed.
+			if parallelRefusal := checkSources(findPackage(listed, miniCoveragePackage), replacements, instrument.FileCoverageParallelRuntimeError); parallelRefusal != "" {
+				plan.fileCoverageParallel = false
+				plan.Warnings = append(plan.Warnings, "--experimental-file-coverage=parallel: "+parallelRefusal+"; tests run one at a time while coverage is collected")
+			}
+		}
 		debug.printf("file coverage installed=%t reason=%q packages=%d marked_files=%d always_files=%d parallel=%t", refusal == "", refusal, summary.packages, summary.marked, summary.always, plan.fileCoverageParallel)
 		if refusal != "" {
 			plan.Warnings = append(plan.Warnings, "--experimental-file-coverage: "+refusal+"; per-test coverage keeps Go's coverage counters")
