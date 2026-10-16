@@ -3,6 +3,7 @@ package runner
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -211,7 +212,12 @@ func TestPrepareFileCoverageTestSuffix(t *testing.T) {
 // Embed patterns resolve through the overlay: a bank they would match
 // refuses file coverage, through a glob or a directory that holds it.
 func TestPrepareFileCoverageEmbedPatterns(t *testing.T) {
-	for _, pattern := range []string{"*coverage.go", "all:sub", "sub/*"} {
+	patterns := []string{"*coverage.go", "all:sub", "sub/*"}
+	if runtime.GOOS == "windows" {
+		// go resolves patterns with host paths: a backslash separates.
+		patterns = append(patterns, `sub\*coverage.go`)
+	}
+	for _, pattern := range patterns {
 		root := fileCoverageTree(t, map[string]string{"a.go": "package a\n\nfunc F() {}\n", "sub/s.go": "package sub\n\nfunc G() {}\n"})
 		tested := []goPackage{
 			{Dir: root, Name: "a", ImportPath: "example.com/a", GoFiles: []string{"a.go"}, EmbedPatterns: []string{pattern}},
