@@ -1713,6 +1713,17 @@ of them without changing any event:
   former list, so the event is the same. A test's `tags` field stays nil: no
   event inherits it. The new lines replace the list's lines one for one, so no
   line moves, and the `context` and `slices` imports keep their uses.
+- `GetOrCreateModule` and `GetOrCreateSuite` return an existing module or
+  suite before they apply options or read the clock, which only a new one
+  uses. `CreateTest` and `closeLocked` allocate their configuration only when
+  options are given (`testStartOptions` and `testCloseOptions`, at the end of
+  their files): options take its address, which moves it to the heap, and a
+  passing test starts and closes without any. `finalizeInstrumentedTestExecution`
+  sets the final status through `finalStatusValue`, which returns the known
+  statuses as constants instead of converting a string variable to `any`.
+  Each block keeps its number of lines, so no later line moves. Checks:
+  `TestExistingModulesAndSuitesAllocateNothing`,
+  `TestTestOptionsWithoutOptionsAllocateNothing` and `TestFinalStatusValue`.
 
 CI string snapshots use the revision/escaped-map contract below; numeric CI
 metrics remain fresh per call. Checks: `TestTestifyLookupMatchesReflection`,

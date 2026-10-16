@@ -280,11 +280,16 @@ func (t *tslvTestSession) GetOrCreateModule(name string, options ...TestModuleSt
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 
+	// Options, the framework and the start time only matter to a new module:
+	// an existing one, as for every test after the first, returns at once
+	// instead of allocating options and reading the clock.
+	if mod, ok := t.modules[name]; ok {
+		return mod
+	}
 	defaults := &tslvTestModuleStartOptions{}
 	for _, f := range options {
 		f(defaults)
 	}
-
 	if defaults.framework == "" {
 		defaults.framework = t.framework
 		defaults.frameworkVersion = t.frameworkVersion
@@ -293,13 +298,8 @@ func (t *tslvTestSession) GetOrCreateModule(name string, options ...TestModuleSt
 		defaults.startTime = time.Now()
 	}
 
-	var mod TestModule
-	if v, ok := t.modules[name]; ok {
-		mod = v
-	} else {
-		mod = createTestModule(t, name, defaults)
-		t.modules[name] = mod
-	}
+	mod := createTestModule(t, name, defaults)
+	t.modules[name] = mod
 
 	return mod
 }
