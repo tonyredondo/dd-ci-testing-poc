@@ -241,6 +241,77 @@ func TestMiniFileCoverageRefusesPlugins(t *testing.T) {
 	}
 }
 
+// --experimental-file-coverage=parallel keeps t.Parallel: two parallel
+// top-level tests wait for each other, so they pass only when they run at the
+// same time. Each still reports the files its own code ran; overlapping
+// windows can add its neighbor's.
+func TestMiniFileCoverageParallel(t *testing.T) {
+	dir, driver := prepareMiniFixture(t)
+	writeFileCoverageFixture(t, dir)
+	writeBuildFixture(t, dir, map[string]string{"par_test.go": `package fixture_test
+
+import (
+	"sync/atomic"
+	"testing"
+	"time"
+
+	fixture "example.com/dd-ci-testing-fixture"
+)
+
+var (
+	arrived    atomic.Int32
+	rendezvous = make(chan struct{})
+)
+
+// meet returns once both parallel tests reach it.
+func meet(t *testing.T) {
+	if arrived.Add(1) == 2 {
+		close(rendezvous)
+	}
+	select {
+	case <-rendezvous:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the parallel tests did not run at the same time")
+	}
+}
+
+func TestFileParallelA(t *testing.T) {
+	t.Parallel()
+	meet(t)
+	fixture.FileA()
+}
+
+func TestFileParallelB(t *testing.T) {
+	t.Parallel()
+	meet(t)
+	fixture.FileB()
+}
+`})
+	got, exec := runParityCase(t, dir, driver, parityCase{
+		Args:     []string{"test", "--runtime=mini", "--experimental-file-coverage=parallel", "-count=1", "-v", "-run=^TestFileParallel", "-parallel=2", "."},
+		Policy:   policySettings{Coverage: true},
+		Coverage: true,
+		Env:      []string{"DD_TRACE_DEBUG=true"},
+	})
+	if exec.code != 0 {
+		t.Fatalf("exit %d:\n%s\n%s", exec.code, exec.out, exec.stderr)
+	}
+	if !strings.Contains(exec.stderr, "file coverage installed=true") || !strings.Contains(exec.stderr, "parallel=true") {
+		t.Fatalf("build log lacks parallel file coverage:\n%s", exec.stderr)
+	}
+	files, _ := fileCoverageRows(t, &got.miniWireCapture)
+	for test, want := range map[string][]string{
+		"TestFileParallelA": {"filecov.go", "lib.go", "par_test.go"},
+		"TestFileParallelB": {"filecov.go", "par_test.go"},
+	} {
+		for _, file := range want {
+			if !slices.Contains(files[test], file) {
+				t.Errorf("%s lacks %s: %v", test, file, files[test])
+			}
+		}
+	}
+}
+
 // File marks keep go test's output and its test cache: a second run is
 // cached, and a run with marks does not reuse the result of a run without.
 func TestMiniFileCoverageTestCache(t *testing.T) {

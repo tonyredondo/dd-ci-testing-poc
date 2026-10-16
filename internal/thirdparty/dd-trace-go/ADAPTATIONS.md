@@ -296,6 +296,13 @@ It extends three places that upstream gates on Go's counters:
   Its rows are the test file first, then the other files once each, in name
   order, without bitmaps.
 
+`FileCoverageParallel` also reads `DD_CIVISIBILITY_INTERNAL_FILE_COVERAGE_PARALLEL`,
+which ddto hands for `--experimental-file-coverage=parallel`. With it, the test
+wrapper leaves the parent's barrier alone, so `t.Parallel()` keeps working and
+the windows of parallel tests overlap. `registerTestCoverageCleanup` then puts
+back only a barrier that the test replaced; restoring the nil one it never
+took would have turned `t.Parallel()` off for the tests after it.
+
 `CanCollect`, `CanCollectPerTestCoverage`, process retries and quarantined
 race processes keep Go's counters. Tests retried in a child process report no
 per-test coverage in this mode. Session coverage, LCOV reports and backfill
@@ -304,7 +311,8 @@ stay native-only, so file marks never produce a coverage percentage.
 Checks: the unit tests `TestFileCoverageWindows`, `TestFileCoverageRows`,
 `TestFileCoverageRefusals` and `TestFileCoverageCollector`. In integration,
 `TestMiniFileCoverage` compares the rows with Go's counters on a fixture with
-several packages, `TestMiniFileCoverageRefusals` checks the fallbacks, and
+several packages, `TestMiniFileCoverageParallel` runs two parallel tests that pass only together,
+`TestMiniFileCoverageRefusals` checks the fallbacks, and
 `TestMiniFileCoverageTestCache` checks Go's test cache and `-json`.
 
 ## Coverage module identity

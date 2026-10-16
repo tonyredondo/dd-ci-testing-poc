@@ -530,9 +530,29 @@ and builds as without the flag. It also refuses in these cases:
 - a compiled Go file that uses an identifier with the generated code's prefix
   `__ddto_`.
 
+**Keeping `t.Parallel()`.** By default, top-level tests run one at a time
+while coverage is collected, as with Go's counters, so that each test's window
+holds only its own code.
+
+`--experimental-file-coverage=parallel` keeps `t.Parallel()`. The epochs let
+any number of windows overlap: each test reports every file that ran during
+its window, its own and its parallel neighbors'. That is a superset, so it is
+safe, but it holds more files, and changes select more tests. A parallel
+test's window also covers the time it waits for the serial tests.
+
+On fiber's root package (1236 tests, GOMAXPROCS=4):
+
+| Mode | Wall time | Production files per test | Tests selected per changed production file |
+| --- | --- | --- | --- |
+| Serial marks | 42.52 s | 27.2 | 287 |
+| `=parallel` | 34.80 s | 87.9 | 928 |
+| No per-test coverage | 34.30 s | — | — |
+
+On samber/lo, whose parallel tests are short, both modes take 8.4 s.
+
+ddto hands the mode to the test processes only when the build has file marks.
+
 **Limits.**
-- Top-level tests still run one at a time while coverage is collected, as
-  with Go's counters.
 - Tests retried in a child process report no per-test coverage.
 - Code that blocks before the test and resumes during it marks its file
   again at its next site, which follows every call and channel operation.

@@ -62,17 +62,20 @@ type Plan struct {
 	moduleWorkspace  bool // The caller used module mode; translate its module flags for the workspace.
 	workspaceGoFlags string
 	// Warnings name optional integrations skipped for unsupported libraries.
-	Warnings          []string
-	coverOverlay      bool
-	orchestrionChain  string
-	launcher          *goLauncher
-	orchestrion       bool
-	mini              bool
-	sdkCI             bool
-	sdkMirrorDisabled bool
-	testify           bool
-	goleak            bool
-	compilerCache     []string
+	Warnings     []string
+	coverOverlay bool
+	// fileCoverageParallel hands --experimental-file-coverage=parallel to the
+	// test processes when the build has file marks.
+	fileCoverageParallel bool
+	orchestrionChain     string
+	launcher             *goLauncher
+	orchestrion          bool
+	mini                 bool
+	sdkCI                bool
+	sdkMirrorDisabled    bool
+	testify              bool
+	goleak               bool
+	compilerCache        []string
 	// workspaceLock keeps a cached vendor workspace from being pruned.
 	workspaceLock *os.File
 	// gorootMirror runs go from a mirror of a toolchain in GOMODCACHE.
@@ -694,7 +697,8 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			}
 		}
 		phase.finish(nil)
-		debug.printf("file coverage installed=%t reason=%q packages=%d marked_files=%d always_files=%d", refusal == "", refusal, summary.packages, summary.marked, summary.always)
+		plan.fileCoverageParallel = refusal == "" && opts.fileCoverageParallel
+		debug.printf("file coverage installed=%t reason=%q packages=%d marked_files=%d always_files=%d parallel=%t", refusal == "", refusal, summary.packages, summary.marked, summary.always, plan.fileCoverageParallel)
 		if refusal != "" {
 			plan.Warnings = append(plan.Warnings, "--experimental-file-coverage: "+refusal+"; per-test coverage keeps Go's coverage counters")
 		}
@@ -794,7 +798,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 	}
 	applyGoLauncher(ctx, &opts)
 	opts.panicHook = cli.PanicHook
-	opts.fileCoverage = cli.FileCoverage
+	opts.fileCoverage, opts.fileCoverageParallel = cli.FileCoverage, cli.FileCoverageParallel
 	dir := workingDirectory(cwd, opts)
 	debug.printf("working_directory=%q package_patterns=%d build_flags=%d", dir, len(opts.packages), len(opts.buildFlags))
 	if opts.help || explicitFiles(dir, opts.packages) {
@@ -917,6 +921,9 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		debug.printf("github job id handed found=%t", !strings.HasSuffix(handoff[0], "="))
 	}
 	env = append(env, handoff...)
+	if plan.fileCoverageParallel {
+		env = append(env, "DD_CIVISIBILITY_INTERNAL_FILE_COVERAGE_PARALLEL=true")
+	}
 	if plan.launcher != nil {
 		ctx = context.WithValue(ctx, goLauncherKey{}, *plan.launcher)
 	}

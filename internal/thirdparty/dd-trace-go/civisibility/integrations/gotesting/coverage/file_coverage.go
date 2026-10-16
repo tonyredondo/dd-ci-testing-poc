@@ -1,7 +1,9 @@
 package coverage
 
 import (
+	"os"
 	"slices"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -76,6 +78,21 @@ func fileCoverageAvailable() bool {
 // the build has them, Go's coverage is off, and coverage is uploaded.
 func FileCoverageActive() bool {
 	return coverageUploadEnabled && mode == "" && fileCoverageAvailable()
+}
+
+// fileCoverageParallelEnv is set by ddto's --experimental-file-coverage=parallel.
+const fileCoverageParallelEnv = "DD_CIVISIBILITY_INTERNAL_FILE_COVERAGE_PARALLEL"
+
+var fileCoverageParallel = sync.OnceValue(func() bool {
+	parallel, _ := strconv.ParseBool(os.Getenv(fileCoverageParallelEnv))
+	return parallel
+})
+
+// FileCoverageParallel reports whether tests keep t.Parallel while file
+// coverage is collected. Windows of parallel tests then overlap, and each
+// test reports every file that ran during its window, its neighbors' too.
+func FileCoverageParallel() bool {
+	return FileCoverageActive() && fileCoverageParallel()
 }
 
 // beginFileCoverage starts a test's window and returns its epoch.

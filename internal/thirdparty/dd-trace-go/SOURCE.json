@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "b2fcc0fb324545b8f179e09f7efffb15f5311d803bf2e6b3c032e6b2f19f5dda",
+      "sha256": "ec58cee9bd9238bfe8ac44d313e51a660be7088356bb4b0067c90c7334200383",
       "role": "local"
     },
     {
@@ -379,7 +379,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/coverage/file_coverage.go",
-      "sha256": "e51c0cfe9686604c97fc71a82e5aedb7d52fb6b55d6cdb186fb649fcfd5bab12",
+      "sha256": "19cfe2548a908fbc24264a3da27529b6125aa5497dae62ece50e9d1541708d96",
       "role": "local"
     },
     {
@@ -477,7 +477,7 @@
     {
       "path": "civisibility/integrations/gotesting/coverage_cleanup.go",
       "role": "local",
-      "sha256": "bb6b930aba5c8c9c728459a822eb1b9ad22ddbc40da3cf92e2c7d720c8b377db"
+      "sha256": "42b1fdff88e42f06d3c73edd8b6bd3f4579ed207d08e9625aa0f98bd187b6989"
     },
     {
       "path": "civisibility/integrations/gotesting/efd_faulty_session.go",
@@ -786,7 +786,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/testing.go",
-      "sha256": "967a9a9987c56ef2e122403112788dfdf48a470b736df5f9031bd7de50cd658c",
+      "sha256": "837795ca238a669c9b4c03a445e1d884e660b738b470489a59ec856e132b7c62",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testing.go",
       "source_sha256": "73324a56f1b1c581df8620a4f67a51743b198b2470d43f9b645425fff6a63646"
