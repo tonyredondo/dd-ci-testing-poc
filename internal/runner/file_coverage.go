@@ -29,9 +29,16 @@ const (
 	fileCoverageListFields = "Dir,Name,ImportPath,ForTest,Standard,Module,Error,GoFiles,CgoFiles,TestGoFiles,XTestGoFiles,EmbedPatterns,TestEmbedPatterns,XTestEmbedPatterns,EmbedFiles,TestEmbedFiles,XTestEmbedFiles,SFiles,CFiles,CXXFiles,MFiles,HFiles,FFiles,SwigFiles,SwigCXXFiles,SysoFiles"
 )
 
+// contextWords bounds the words of a build's context banks
+// (instrument.FileCoverageContextWords).
+var contextWords = instrument.FileCoverageContextWords
+
 // fileCoverageSummary is what a build with file coverage instrumented.
+// contextRefusal says why context file coverage cannot cover the build, in
+// which case nothing changed and serial marks can.
 type fileCoverageSummary struct {
 	packages, marked, always int
+	contextRefusal           string
 }
 
 // fileCoverageRefusal returns why the build keeps Go's coverage counters for
@@ -300,8 +307,9 @@ func prepareFileCoverage(tested []goPackage, roots, excluded []string, replaceme
 			files += len(plan.bank.Names)
 			words += (len(plan.bank.Names) + 63) / 64
 		}
-		if words > instrument.FileCoverageContextWords {
-			return summary, fmt.Sprintf("%d files need %d words, more than the %d of context file coverage", files, words, instrument.FileCoverageContextWords), nil
+		if words > contextWords {
+			summary.contextRefusal = fmt.Sprintf("%d files need %d words, more than the %d of context file coverage", files, words, contextWords)
+			return summary, "", nil
 		}
 	}
 	for i := range plans {

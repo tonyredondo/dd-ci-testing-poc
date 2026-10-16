@@ -18,30 +18,32 @@ import (
 // goroutine carries a context, the tests and singleflight calls (its sinks)
 // that it works for, with one bit per instrumented file, which a site sets
 // when it runs. ddto's edits of the runtime give a goroutine its creator's
-// context and add a channel's senders to its receivers. A goroutine that
-// reads a socket, pipe or terminal may work for anyone from then on, as may
-// one that never had a context:
-//   - without calls, it has no context, and its sites set bits in the window
-//     of the test that started last, which every test that runs meanwhile
-//     reads;
-//   - with calls, it keeps them in a public context, whose bits every test
-//     reads, and the calls' joiners too.
+// context and add a channel's senders to its receivers.
 //
-// A test's files are those of every context that held it, or held a call that
-// it joined, of every public context, and of every window since it started.
+// A goroutine that reads a socket, pipe or terminal may work for anyone from
+// then on, as may one that never had a context. It has no context, and its
+// sites set bits in the window of the test that started last, which every
+// test that runs meanwhile reads. It keeps the calls that it works for in a
+// call set, which its sends carry on: such a call leaks to windows, and its
+// joiners read the windows since it leaked.
+//
+// A test's files are those of every context that held it, or held a call
+// that it joined, and of every window since it started or since such a call
+// leaked. A call that lost track of its work, because a context or a union
+// held too many sinks, is saturated: its joiners report every file.
 //
 // The runtime and the banks reach these variables through linkname. The
-// runtime initializes fileCoverageUnknown and the two context functions, and
+// runtime initializes fileCoverageUnknown and the two state functions, and
 // calls the hooks, which this package sets before a test can start.
 var (
 	fileCoverageWords       uint64
 	fileCoverageBanksV2     unsafe.Pointer
 	fileCoverageUnknown     unsafe.Pointer
-	fileCoverageGetContext  func() unsafe.Pointer
-	fileCoverageSetContext  func(unsafe.Pointer)
-	fileCoverageSendHook    func(slot *uintptr, ctx unsafe.Pointer) (sent unsafe.Pointer)
-	fileCoverageReceiveHook func(union uintptr, ctx unsafe.Pointer) (merged, seen unsafe.Pointer)
-	fileCoverageIOHook      func(ctx unsafe.Pointer) (next unsafe.Pointer)
+	fileCoverageGetState    func() (unsafe.Pointer, unsafe.Pointer)
+	fileCoverageSetState    func(unsafe.Pointer, unsafe.Pointer)
+	fileCoverageSendHook    func(slot *uintptr, state unsafe.Pointer) (sent unsafe.Pointer)
+	fileCoverageReceiveHook func(union uintptr, ctx, calls unsafe.Pointer) (nextCtx, nextCalls, seen unsafe.Pointer)
+	fileCoverageIOHook      func(ctx unsafe.Pointer) (calls unsafe.Pointer)
 )
 
 // fileCoverageContextBankVersion is the layout of fileCoverageContextBank,
@@ -64,9 +66,7 @@ type fileCoverageContextBank struct {
 	path    string
 }
 
-// maxContextSinks bounds a context. A goroutine whose context would hold more
-// live sinks keeps only its calls, in a public context; with too many calls,
-// it keeps none, and they leak.
+// maxContextSinks bounds a context, a call set and a channel's union.
 const maxContextSinks = 32
 
 // A contextSink is a test or a singleflight call.
@@ -79,11 +79,13 @@ type contextSink struct {
 	// and no call in flight reaches it through joins.
 	dead    bool
 	retired bool
-	// A call leaks once some of its work goes to windows, from the window
-	// leakyEpoch on; unknownJoined, once a goroutine that may work for anyone
-	// joined it.
+	// A call leaks once a goroutine without a context works for it, from the
+	// window leakyEpoch on. It is saturated once a context or a union with
+	// too many sinks dropped it. unknownJoined: a goroutine without a
+	// context joined it.
 	leaky         bool
 	leakyEpoch    uint64
+	saturated     bool
 	unknownJoined bool
 	// joined are the calls that this sink joined, and contexts those that
 	// hold it.
@@ -91,14 +93,14 @@ type contextSink struct {
 	contexts []*fileContext
 }
 
-// A fileContext is an interned set of sinks with its file bits. Goroutines
-// point at the bits' first word. A public context holds calls only, and
-// every test reads its bits.
+// A fileContext is an interned set of sinks. A goroutine's context has file
+// bits, and the goroutine points at their first word. A call set holds the
+// calls of a goroutine without a context, and its one word only names it.
 type fileContext struct {
-	bits   []uint64
-	sinks  []*contextSink
-	public bool
-	key    string
+	bits    []uint64
+	sinks   []*contextSink
+	callSet bool
+	key     string
 }
 
 func (c *fileContext) pointer() unsafe.Pointer {
@@ -116,6 +118,9 @@ type fileWindow struct {
 type contextState struct {
 	once      sync.Once
 	available bool
+	// ready is set once the banks are read, after packages initialized: the
+	// singleflight edits do nothing before.
+	ready atomic.Bool
 
 	// Set once, read without the lock.
 	words   int
@@ -127,7 +132,6 @@ type contextState struct {
 	mu      sync.Mutex
 	byBits  map[uintptr]*fileContext
 	byKey   map[string]*fileContext
-	public  []*fileContext
 	tests   map[uint64]*contextSink
 	calls   map[*contextSink]bool
 	windows []fileWindow
@@ -146,7 +150,7 @@ var contextCoverage contextState
 func contextCoverageAvailable() bool {
 	c := &contextCoverage
 	c.once.Do(func() {
-		if fileCoverageGetContext == nil || fileCoverageSetContext == nil || atomic.LoadPointer(&fileCoverageUnknown) == nil {
+		if fileCoverageGetState == nil || fileCoverageSetState == nil || atomic.LoadPointer(&fileCoverageUnknown) == nil {
 			return
 		}
 		banks := 0
@@ -195,6 +199,7 @@ func (c *contextState) setup() {
 	c.overflow = &fileContext{bits: make([]uint64, 1), key: "overflow"}
 	c.byBits[uintptr(c.overflow.pointer())] = c.overflow
 	fileCoverageSendHook, fileCoverageReceiveHook, fileCoverageIOHook = contextSend, contextReceive, contextIO
+	c.ready.Store(true)
 }
 
 // beginContextCoverage starts a test: a new window becomes current, and the
@@ -212,45 +217,31 @@ func beginContextCoverage() uint64 {
 	c.tests[c.epoch] = test
 	ctx := c.intern([]*contextSink{test}, false)
 	c.mu.Unlock()
-	fileCoverageSetContext(ctx.pointer())
+	fileCoverageSetState(ctx.pointer(), nil)
 	return window.epoch
 }
 
 // scanContextCoverage captures the test that began at epoch: the files of
-// every context that held it, or held a call that it joined, of every public
-// context, of the windows since it began, or since such a call leaked to
-// them, and the files that every test reports. The test's goroutine is left
-// without a context.
+// every context that held it, or held a call that it joined, of the windows
+// since it began, or since such a call leaked to them, and the files that
+// every test reports; every file if such a call is saturated. The test's
+// goroutine is left without a context.
 func scanContextCoverage(epoch uint64) []string {
 	c := &contextCoverage
-	fileCoverageSetContext(nil)
+	fileCoverageSetState(nil, nil)
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	test := c.tests[epoch]
 	if test == nil {
+		c.mu.Unlock()
 		return nil
 	}
 	delete(c.tests, epoch)
-	files := make([]uint64, c.words)
-	from := test.epoch
-	for _, sink := range c.closure([]*contextSink{test}) {
-		for _, ctx := range sink.contexts {
-			orBits(files, ctx.bits)
-		}
-		if sink.leaky {
-			from = min(from, sink.leakyEpoch)
-		}
-	}
-	for _, ctx := range c.public {
-		orBits(files, ctx.bits)
-	}
-	for _, window := range c.windows {
-		if window.epoch >= from {
-			orBits(files, window.bits)
-		}
-	}
+	files := c.sinkFiles(c.closure([]*contextSink{test}), test.epoch)
 	c.kill(test)
 	c.prune()
+	stats := c.stats
+	contexts := len(c.byKey)
+	c.mu.Unlock()
 	var names []string
 	for w, word := range files {
 		for ; word != 0; word &= word - 1 {
@@ -259,9 +250,38 @@ func scanContextCoverage(epoch uint64) []string {
 			}
 		}
 	}
-	log.Debug("civisibility.cov: context coverage [epoch:%d files:%d contexts:%d public:%d merges:%d walks:%d incomplete:%d overflows:%d io:%d leaky:%d]",
-		epoch, len(names), len(c.byKey), len(c.public), c.stats.merges, c.stats.walks, c.stats.incomplete, c.stats.overflows, c.stats.io, c.stats.leaky)
+	log.Debug("civisibility.cov: context coverage [epoch:%d files:%d contexts:%d merges:%d walks:%d incomplete:%d overflows:%d io:%d leaky:%d]",
+		epoch, len(names), contexts, stats.merges, stats.walks, stats.incomplete, stats.overflows, stats.io, stats.leaky)
 	return append(names, c.always...)
+}
+
+// sinkFiles returns the bits of sinks' contexts and of the windows since
+// from, or since a leaky call among sinks leaked; every bit for a saturated
+// call.
+func (c *contextState) sinkFiles(sinks []*contextSink, from uint64) []uint64 {
+	files := make([]uint64, c.words)
+	for _, sink := range sinks {
+		if sink.saturated {
+			for i := range files {
+				files[i] = ^uint64(0)
+			}
+			return files
+		}
+		for _, ctx := range sink.contexts {
+			if !ctx.callSet {
+				orBits(files, ctx.bits)
+			}
+		}
+		if sink.leaky {
+			from = min(from, sink.leakyEpoch)
+		}
+	}
+	for _, window := range c.windows {
+		if window.epoch >= from {
+			orBits(files, window.bits)
+		}
+	}
+	return files
 }
 
 // closure returns sinks and the calls that they joined, through every level.
@@ -291,7 +311,7 @@ func (c *contextState) kill(sink *contextSink) {
 	sink.dead = true
 	delete(c.calls, sink)
 	for _, ctx := range sink.contexts {
-		if !ctx.public && !slices.ContainsFunc(ctx.sinks, func(s *contextSink) bool { return !s.dead }) {
+		if !slices.ContainsFunc(ctx.sinks, func(s *contextSink) bool { return !s.dead }) {
 			delete(c.byBits, uintptr(ctx.pointer()))
 			delete(c.byKey, ctx.key)
 		}
@@ -333,11 +353,11 @@ func (c *contextState) prune() {
 	c.windows = slices.Delete(c.windows, 0, i)
 }
 
-// intern returns the context of sinks, sorted by id.
-func (c *contextState) intern(sinks []*contextSink, public bool) *fileContext {
+// intern returns the context, or the call set, of sinks, sorted by id.
+func (c *contextState) intern(sinks []*contextSink, callSet bool) *fileContext {
 	var key strings.Builder
-	if public {
-		key.WriteString("public:")
+	if callSet {
+		key.WriteString("calls:")
 	}
 	for _, sink := range sinks {
 		key.WriteString(strconv.FormatUint(sink.id, 36))
@@ -346,30 +366,32 @@ func (c *contextState) intern(sinks []*contextSink, public bool) *fileContext {
 	if ctx := c.byKey[key.String()]; ctx != nil {
 		return ctx
 	}
-	ctx := &fileContext{bits: make([]uint64, c.words), sinks: sinks, public: public, key: key.String()}
+	words := c.words
+	if callSet {
+		words = 1
+	}
+	ctx := &fileContext{bits: make([]uint64, words), sinks: sinks, callSet: callSet, key: key.String()}
 	c.byKey[ctx.key], c.byBits[uintptr(ctx.pointer())] = ctx, ctx
 	for _, sink := range sinks {
 		sink.contexts = append(sink.contexts, ctx)
 	}
-	if public {
-		c.public = append(c.public, ctx)
-	}
 	return ctx
 }
 
-// unknown returns the context of a goroutine that may work for anyone and
-// keeps sinks' calls: public, or none without calls. With too many calls, it
-// keeps none, and they leak.
-func (c *contextState) unknown(sinks []*contextSink) *fileContext {
+// callSetOf returns the call set of a goroutine without a context that works
+// for sinks' calls, which leak from now on; nil without calls. With too many
+// calls, it keeps none, and they saturate.
+func (c *contextState) callSetOf(sinks []*contextSink) *fileContext {
 	kept := calls(sinks)
 	switch {
 	case len(kept) == 0:
 		return nil
 	case len(kept) > maxContextSinks:
 		c.stats.overflows++
-		c.markLeaky(kept)
+		saturate(kept)
 		return nil
 	}
+	c.markLeaky(kept)
 	return c.intern(kept, true)
 }
 
@@ -420,12 +442,31 @@ func union(a, b []*contextSink) []*contextSink {
 }
 
 // markLeaky marks the calls among sinks leaky: what runs for them from now on
-// goes to windows.
+// may go to windows.
 func (c *contextState) markLeaky(sinks []*contextSink) {
 	for _, sink := range sinks {
 		if sink.call && !sink.leaky && !sink.dead {
 			sink.leaky, sink.leakyEpoch = true, c.epoch
 			c.stats.leaky++
+		}
+	}
+}
+
+// saturate marks the calls among sinks saturated: what runs for them can no
+// longer be told.
+func saturate(sinks []*contextSink) {
+	for _, sink := range sinks {
+		if sink.call {
+			sink.saturated = true
+		}
+	}
+}
+
+// subscribe makes sinks join call, but call itself.
+func subscribe(sinks []*contextSink, call *contextSink) {
+	for _, sink := range sinks {
+		if sink != call && !slices.Contains(sink.joined, call) {
+			sink.joined = append(sink.joined, call)
 		}
 	}
 }
@@ -438,34 +479,29 @@ func (c *contextState) currentWindow() []uint64 {
 	return nil
 }
 
-// target returns where the files of a goroutine that gets ctx go.
-func (c *contextState) target(ctx *fileContext) []uint64 {
-	if ctx == nil {
-		return c.currentWindow()
-	}
-	return ctx.bits
-}
-
-// contextSend adds the sender's live sinks to a channel's union before the
-// channel holds the sent value, and returns the union, which the sender's
-// goroutine caches.
-func contextSend(slot *uintptr, ctx unsafe.Pointer) unsafe.Pointer {
+// contextSend adds the live sinks of the sender's context, or of its call
+// set, to a channel's union before the channel holds the sent value, and
+// returns the union, which the sender's goroutine caches.
+func contextSend(slot *uintptr, state unsafe.Pointer) unsafe.Pointer {
 	c := &contextCoverage
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	sender := live(c.lookup(uintptr(state)))
 	current := c.lookup(atomic.LoadUintptr(slot))
 	if current == c.overflow {
+		// The receivers lose the sender's calls.
+		saturate(sender)
 		return current.pointer()
 	}
 	existing := live(current)
-	merged := union(existing, live(c.lookup(uintptr(ctx))))
+	merged := union(existing, sender)
 	if current != nil && len(merged) == len(existing) {
 		return current.pointer()
 	}
 	next := c.void
 	if len(merged) > maxContextSinks {
 		c.stats.overflows++
-		c.markLeaky(merged)
+		saturate(merged)
 		next = c.overflow
 	} else if len(merged) > 0 {
 		next = c.intern(merged, false)
@@ -474,65 +510,67 @@ func contextSend(slot *uintptr, ctx unsafe.Pointer) unsafe.Pointer {
 	return next.pointer()
 }
 
-// contextReceive returns the receiver's context once it received a value
-// from a channel with union, its own plus the union's live sinks, and the
-// union, which the receiver's goroutine caches. A receiver that may work for
-// anyone takes only the union's calls: every test reads its files anyway.
-// When the context gains sinks, the files of the receiver's stack go to it:
+// contextReceive returns the receiver's state once it received a value from
+// a channel with union, and the union, which the receiver's goroutine
+// caches. A receiver with a context adds the union's live sinks to it; one
+// without a context adds the union's calls to its call set. When the
+// receiver gains sinks, the files of its stack go where its next hits do:
 // the rest of each frame's statement runs for them before the next site.
-func contextReceive(u uintptr, ctx unsafe.Pointer) (unsafe.Pointer, unsafe.Pointer) {
+func contextReceive(u uintptr, ctx, callSet unsafe.Pointer) (unsafe.Pointer, unsafe.Pointer, unsafe.Pointer) {
 	c := &contextCoverage
 	c.mu.Lock()
 	incoming := c.lookup(u)
 	if incoming == nil {
 		c.mu.Unlock()
-		return ctx, nil
+		return ctx, callSet, nil
 	}
-	receiver := c.lookup(uintptr(ctx))
-	unknown := ctx == nil || receiver != nil && receiver.public
-	mine := live(receiver)
-	added := live(incoming)
-	if unknown {
-		added = calls(added)
-	}
-	var next *fileContext
-	switch merged := union(mine, added); {
-	case incoming == c.overflow && !unknown:
-		// The union's calls leaked when it overflowed; the receiver may
-		// now work for any of its tests.
-		next = c.unknown(mine)
-	case len(merged) == len(mine):
-		c.mu.Unlock()
-		return ctx, incoming.pointer()
-	case unknown || len(merged) > maxContextSinks:
-		next = c.unknown(merged)
-	default:
-		next = c.intern(merged, false)
+	var next, nextCalls *fileContext
+	var target []uint64
+	if ctx == nil {
+		mine := live(c.lookup(uintptr(callSet)))
+		merged := union(mine, calls(live(incoming)))
+		if len(merged) == len(mine) {
+			c.mu.Unlock()
+			return nil, callSet, incoming.pointer()
+		}
+		nextCalls, target = c.callSetOf(merged), c.currentWindow()
+	} else {
+		mine := live(c.lookup(uintptr(ctx)))
+		switch merged := union(mine, live(incoming)); {
+		case incoming == c.overflow:
+			// The union's calls saturated when it overflowed; the receiver
+			// may now work for any of its tests.
+			nextCalls, target = c.callSetOf(mine), c.currentWindow()
+		case len(merged) == len(mine):
+			c.mu.Unlock()
+			return ctx, nil, incoming.pointer()
+		case len(merged) > maxContextSinks:
+			// Every running test reads the windows; the calls go on.
+			c.stats.overflows++
+			nextCalls, target = c.callSetOf(merged), c.currentWindow()
+		default:
+			next = c.intern(merged, false)
+			target = next.bits
+		}
 	}
 	c.stats.merges++
-	target := c.target(next)
 	c.mu.Unlock()
 	c.repair(target)
-	return next.pointer(), incoming.pointer()
+	return next.pointer(), nextCalls.pointer(), incoming.pointer()
 }
 
-// contextIO returns the context of a goroutine that is about to read a
-// socket, pipe or terminal: it may work for anyone from then on, so it keeps
-// only its calls, and its stack's files go where its next hits do.
+// contextIO returns the call set of a goroutine that loses ctx before it
+// reads a socket, pipe or terminal: it may work for anyone from then on, so
+// its stack's files go to the window, and its calls leak.
 func contextIO(ctx unsafe.Pointer) unsafe.Pointer {
 	c := &contextCoverage
 	c.mu.Lock()
-	current := c.lookup(uintptr(ctx))
-	if current != nil && current.public {
-		c.mu.Unlock()
-		return ctx
-	}
 	c.stats.io++
-	next := c.unknown(live(current))
-	target := c.target(next)
+	callSet := c.callSetOf(live(c.lookup(uintptr(ctx))))
+	target := c.currentWindow()
 	c.mu.Unlock()
 	c.repair(target)
-	return next.pointer()
+	return callSet.pointer()
 }
 
 // repair sets the bits of the files of every frame of the calling goroutine's
@@ -606,83 +644,92 @@ func symbolPrefix(function string) string {
 
 // The singleflight edits call these with the address of a call's sink, which
 // the first of them creates. The group's mutex is held for fileCoverageJoin
-// and fileCoverageComplete.
+// and fileCoverageComplete. Before the banks are read, while packages
+// initialize, they do nothing.
 
-// fileCoverageEnter adds the call's sink to the leader's context while it
-// runs the call's function.
+// fileCoverageEnter adds the call's sink to the leader's state while it runs
+// the call's function, and makes the leader's sinks join the call: its
+// function runs for them.
 func fileCoverageEnter(p *unsafe.Pointer) {
-	if !contextCoverageAvailable() {
+	c := &contextCoverage
+	if !c.ready.Load() {
 		return
 	}
-	c := &contextCoverage
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	call := c.call(p)
-	ctx := fileCoverageGetContext()
-	current := c.lookup(uintptr(ctx))
-	merged := union(live(current), []*contextSink{call})
-	var next *fileContext
-	if ctx == nil || current != nil && current.public || len(merged) > maxContextSinks {
-		next = c.unknown(merged)
-	} else {
-		next = c.intern(merged, false)
-	}
-	fileCoverageSetContext(next.pointer())
-}
-
-// fileCoverageLeave removes the call's sink from the leader's context once
-// the call's function returned.
-func fileCoverageLeave(p *unsafe.Pointer) {
-	if !contextCoverageAvailable() {
+	ctx, callSet := fileCoverageGetState()
+	if ctx == nil {
+		mine := live(c.lookup(uintptr(callSet)))
+		subscribe(mine, call)
+		fileCoverageSetState(nil, c.callSetOf(union(mine, []*contextSink{call})).pointer())
 		return
 	}
+	mine := live(c.lookup(uintptr(ctx)))
+	subscribe(mine, call)
+	if merged := union(mine, []*contextSink{call}); len(merged) > maxContextSinks {
+		c.stats.overflows++
+		fileCoverageSetState(nil, c.callSetOf(merged).pointer())
+	} else {
+		fileCoverageSetState(c.intern(merged, false).pointer(), nil)
+	}
+}
+
+// fileCoverageLeave removes the call's sink from the leader's state once the
+// call's function returned.
+func fileCoverageLeave(p *unsafe.Pointer) {
 	c := &contextCoverage
+	if !c.ready.Load() {
+		return
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	call := (*contextSink)(atomic.LoadPointer(p))
-	current := c.lookup(uintptr(fileCoverageGetContext()))
-	if call == nil || current == nil || !slices.Contains(current.sinks, call) {
-		return
+	ctx, callSet := fileCoverageGetState()
+	without := func(state unsafe.Pointer) ([]*contextSink, bool) {
+		current := c.lookup(uintptr(state))
+		if call == nil || current == nil || !slices.Contains(current.sinks, call) {
+			return nil, false
+		}
+		return slices.DeleteFunc(live(current), func(s *contextSink) bool { return s == call }), true
 	}
-	rest := slices.DeleteFunc(live(current), func(s *contextSink) bool { return s == call })
-	if current.public {
-		fileCoverageSetContext(c.unknown(rest).pointer())
-	} else {
-		fileCoverageSetContext(c.intern(rest, false).pointer())
+	if ctx != nil {
+		if rest, ok := without(ctx); ok {
+			fileCoverageSetState(c.intern(rest, false).pointer(), nil)
+		}
+	} else if rest, ok := without(callSet); ok {
+		fileCoverageSetState(nil, c.callSetOf(rest).pointer())
 	}
 }
 
-// fileCoverageJoin subscribes the sinks of a caller that found the call in
-// flight. A caller that may work for anyone makes the call publish its files
-// to the window when it completes.
+// fileCoverageJoin makes the sinks of a caller that found the call in flight
+// join it. A caller without a context makes the call publish its files to
+// the window when it completes.
 func fileCoverageJoin(p *unsafe.Pointer) {
-	if !contextCoverageAvailable() {
+	c := &contextCoverage
+	if !c.ready.Load() {
 		return
 	}
-	c := &contextCoverage
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	call := c.call(p)
-	ctx := fileCoverageGetContext()
-	current := c.lookup(uintptr(ctx))
-	if ctx == nil || current != nil && current.public {
+	ctx, callSet := fileCoverageGetState()
+	if ctx == nil {
 		call.unknownJoined = true
+		subscribe(live(c.lookup(uintptr(callSet))), call)
+		return
 	}
-	for _, sink := range live(current) {
-		if sink != call && !slices.Contains(sink.joined, call) {
-			sink.joined = append(sink.joined, call)
-		}
-	}
+	subscribe(live(c.lookup(uintptr(ctx))), call)
 }
 
 // fileCoverageComplete retires the call before its waiters return. A call
-// that a goroutine that may work for anyone joined publishes its files to the
-// window.
+// that a goroutine without a context joined publishes its files to the
+// window first.
 func fileCoverageComplete(p *unsafe.Pointer) {
-	if !contextCoverageAvailable() {
+	c := &contextCoverage
+	if !c.ready.Load() {
 		return
 	}
-	c := &contextCoverage
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	call := (*contextSink)(atomic.LoadPointer(p))
@@ -691,11 +738,7 @@ func fileCoverageComplete(p *unsafe.Pointer) {
 	}
 	call.retired = true
 	if window := c.currentWindow(); call.unknownJoined && window != nil {
-		for _, sink := range c.closure([]*contextSink{call}) {
-			for _, ctx := range sink.contexts {
-				orBitsAtomic(window, ctx.bits)
-			}
-		}
+		orBitsAtomic(window, c.sinkFiles(c.closure([]*contextSink{call}), c.epoch))
 	}
 }
 

@@ -60,12 +60,14 @@ var contextRuntimeAPI = []string{
 //     context that holds a file's bit. A goroutine without a context gets
 //     Mini's current window, which every running test reads; before Mini sets
 //     one, a scratch array that nobody reads;
-//   - DdtoCtx and DdtoSetCtx read and set the current goroutine's context,
-//     for the context and singleflight edits; Mini gets them through its
-//     variables, which these initialize, so that it compiles without them;
+//   - DdtoState and DdtoSetState read and set the current goroutine's
+//     context and, for a goroutine without one, the singleflight calls that
+//     it works for. The context and net/http edits use them; Mini gets them
+//     through its variables, which these initialize, so that it compiles
+//     without them;
 //   - the channel, timer and poll hooks that the edits call. They call Mini
 //     only from a user goroutine that holds no runtime lock, and, but for a
-//     receive, that has a context. The goroutine caches the last union that
+//     receive, that has a context or calls. The goroutine caches the last union that
 //     it knows its context already includes, for sends and for receives, so
 //     that a channel used by one goroutine calls Mini once. Mini returns what
 //     the goroutine caches as a pointer to a context that it keeps, so that
@@ -86,19 +88,19 @@ var __ddto_scratch [WORDS]uint64
 var __ddto_unknown = unsafe.Pointer(&__ddto_scratch)
 
 //go:linkname __ddto_sendHook MINI.fileCoverageSendHook
-var __ddto_sendHook func(slot *uintptr, ctx unsafe.Pointer) (sent unsafe.Pointer)
+var __ddto_sendHook func(slot *uintptr, state unsafe.Pointer) (sent unsafe.Pointer)
 
 //go:linkname __ddto_receiveHook MINI.fileCoverageReceiveHook
-var __ddto_receiveHook func(union uintptr, ctx unsafe.Pointer) (merged, seen unsafe.Pointer)
+var __ddto_receiveHook func(union uintptr, ctx, calls unsafe.Pointer) (nextCtx, nextCalls, seen unsafe.Pointer)
 
 //go:linkname __ddto_ioHook MINI.fileCoverageIOHook
-var __ddto_ioHook func(ctx unsafe.Pointer) (next unsafe.Pointer)
+var __ddto_ioHook func(ctx unsafe.Pointer) (calls unsafe.Pointer)
 
-//go:linkname __ddto_getContext MINI.fileCoverageGetContext
-var __ddto_getContext = DdtoCtx
+//go:linkname __ddto_getState MINI.fileCoverageGetState
+var __ddto_getState = DdtoState
 
-//go:linkname __ddto_setContext MINI.fileCoverageSetContext
-var __ddto_setContext = DdtoSetCtx
+//go:linkname __ddto_setState MINI.fileCoverageSetState
+var __ddto_setState = DdtoSetState
 
 // DdtoWord returns the word that holds bit i%64 of word i/64 of the current
 // goroutine's file set.
@@ -110,42 +112,44 @@ func DdtoWord(i uintptr) *uint64 {
 	return (*uint64)(add(c, i*8))
 }
 
-// DdtoCtx returns the current goroutine's context.
-func DdtoCtx() unsafe.Pointer {
-	return getg().ddtoCtx
-}
-
-// DdtoSetCtx sets the current goroutine's context.
-func DdtoSetCtx(ctx unsafe.Pointer) {
+// DdtoState returns the current goroutine's context, and, for a goroutine
+// without one, the singleflight calls that it works for.
+func DdtoState() (ctx, calls unsafe.Pointer) {
 	gp := getg()
-	gp.ddtoCtx, gp.ddtoSent, gp.ddtoSeen = ctx, nil, nil
+	return gp.ddtoCtx, gp.ddtoCalls
 }
 
-// __ddto_hooked returns the current goroutine's context when Mini's hooks
-// may run for it, or nil.
-func __ddto_hooked() (*g, unsafe.Pointer) {
+// DdtoSetState sets the current goroutine's context and calls.
+func DdtoSetState(ctx, calls unsafe.Pointer) {
 	gp := getg()
-	if gp.ddtoCtx == nil || gp != gp.m.curg || gp.m.locks != 0 {
-		return gp, nil
-	}
-	return gp, gp.ddtoCtx
+	gp.ddtoCtx, gp.ddtoCalls, gp.ddtoSent, gp.ddtoSeen = ctx, calls, nil, nil
 }
 
-// __ddto_send adds the sender's context to c's union before c holds the
-// value.
+// __ddto_hookable reports whether Mini's hooks may run on gp: a user
+// goroutine that holds no runtime lock.
+func __ddto_hookable(gp *g) bool {
+	return gp == gp.m.curg && gp.m.locks == 0
+}
+
+// __ddto_send adds the sender's context, or its calls, to c's union before c
+// holds the value.
 func __ddto_send(c *hchan) {
 	if c == nil {
 		return
 	}
-	gp, ctx := __ddto_hooked()
-	if ctx == nil {
+	gp := getg()
+	state := gp.ddtoCtx
+	if state == nil {
+		state = gp.ddtoCalls
+	}
+	if state == nil || !__ddto_hookable(gp) {
 		return
 	}
-	if union := atomic.Loaduintptr(&c.ddto); union == uintptr(ctx) || union != 0 && union == uintptr(gp.ddtoSent) {
+	if union := atomic.Loaduintptr(&c.ddto); union == uintptr(state) || union != 0 && union == uintptr(gp.ddtoSent) {
 		return
 	}
 	if hook := __ddto_sendHook; hook != nil {
-		gp.ddtoSent = hook(&c.ddto, ctx)
+		gp.ddtoSent = hook(&c.ddto, state)
 	}
 }
 
@@ -154,7 +158,7 @@ func __ddto_send(c *hchan) {
 // union's singleflight calls.
 func __ddto_receive(c *hchan) {
 	gp := getg()
-	if gp != gp.m.curg || gp.m.locks != 0 {
+	if !__ddto_hookable(gp) {
 		return
 	}
 	ctx := gp.ddtoCtx
@@ -163,9 +167,9 @@ func __ddto_receive(c *hchan) {
 		return
 	}
 	if hook := __ddto_receiveHook; hook != nil {
-		merged, seen := hook(union, ctx)
-		if merged != ctx {
-			gp.ddtoCtx, gp.ddtoSent = merged, nil
+		nextCtx, nextCalls, seen := hook(union, ctx, gp.ddtoCalls)
+		if nextCtx != ctx || nextCalls != gp.ddtoCalls {
+			gp.ddtoCtx, gp.ddtoCalls, gp.ddtoSent = nextCtx, nextCalls, nil
 		}
 		gp.ddtoSeen = seen
 	}
@@ -186,7 +190,7 @@ func __ddto_timerChannel(c *hchan, arg any) {
 // __ddto_selectSend adds the sender's context to every send case's union: the
 // case that sends is not known yet.
 func __ddto_selectSend(cas0 *scase, nsends int) {
-	if getg().ddtoCtx == nil || nsends == 0 {
+	if gp := getg(); gp.ddtoCtx == nil && gp.ddtoCalls == nil || nsends == 0 {
 		return
 	}
 	cases := (*[1 << 16]scase)(unsafe.Pointer(cas0))[:nsends:nsends]
@@ -195,9 +199,10 @@ func __ddto_selectSend(cas0 *scase, nsends int) {
 	}
 }
 
-// __ddto_pollRead gives Mini the current goroutine before it reads a socket,
-// pipe or terminal: what it does next may be for whoever wrote, so its tests
-// no longer tell where its files go. Without Mini, it loses its context.
+// __ddto_pollRead leaves the current goroutine without a context before it
+// reads a socket, pipe or terminal: what it does next may be for whoever
+// wrote, so its files go to every running test. It keeps the singleflight
+// calls that it works for, which Mini returns.
 //
 //go:linkname __ddto_pollRead internal/poll.__ddto_pollRead
 func __ddto_pollRead() {
@@ -206,13 +211,11 @@ func __ddto_pollRead() {
 	if ctx == nil || gp != gp.m.curg {
 		return
 	}
-	next := unsafe.Pointer(nil)
+	calls := unsafe.Pointer(nil)
 	if hook := __ddto_ioHook; hook != nil && gp.m.locks == 0 {
-		next = hook(ctx)
+		calls = hook(ctx)
 	}
-	if next != ctx {
-		gp.ddtoCtx, gp.ddtoSent, gp.ddtoSeen = next, nil, nil
-	}
+	gp.ddtoCtx, gp.ddtoCalls, gp.ddtoSent, gp.ddtoSeen = nil, calls, nil, nil
 }
 `, "MINI", mini), "WORDS", strconv.Itoa(FileCoverageContextWords))
 }
@@ -258,7 +261,7 @@ func TransformContextRuntime(files map[string][]byte) (map[string][]byte, error)
 					case "g":
 						for _, field := range st.Fields.List {
 							if len(field.Names) == 1 && field.Names[0].Name == "labels" {
-								add(offset(field.Type.End()), "; ddtoCtx, ddtoSent, ddtoSeen unsafe.Pointer")
+								add(offset(field.Type.End()), "; ddtoCtx, ddtoCalls, ddtoSent, ddtoSeen unsafe.Pointer")
 								found["g"]++
 							}
 						}
@@ -266,7 +269,7 @@ func TransformContextRuntime(files map[string][]byte) (map[string][]byte, error)
 						add(offset(st.Fields.List[len(st.Fields.List)-1].End()), "; ddto uintptr")
 						found["hchan"]++
 					case "timer":
-						add(offset(st.Fields.List[len(st.Fields.List)-1].End()), "; ddto unsafe.Pointer")
+						add(offset(st.Fields.List[len(st.Fields.List)-1].End()), "; ddto, ddtoCalls unsafe.Pointer")
 						found["timer"]++
 					}
 				}
@@ -283,7 +286,7 @@ func TransformContextRuntime(files map[string][]byte) (map[string][]byte, error)
 							return true
 						}
 						if block, ok := stmt.Else.(*ast.BlockStmt); ok && len(params) > 1 {
-							add(offset(block.Lbrace)+1, " newg.ddtoCtx = "+params[1]+".ddtoCtx;")
+							add(offset(block.Lbrace)+1, " newg.ddtoCtx, newg.ddtoCalls = "+params[1]+".ddtoCtx, "+params[1]+".ddtoCalls;")
 							found[name]++
 						}
 						return false
@@ -296,7 +299,7 @@ func TransformContextRuntime(files map[string][]byte) (map[string][]byte, error)
 						}
 						if sel, ok := stmt.Lhs[0].(*ast.SelectorExpr); ok && sel.Sel.Name == "labels" {
 							gp := render(sel.X)
-							add(offset(stmt.End()), "; "+gp+".ddtoCtx, "+gp+".ddtoSent, "+gp+".ddtoSeen = nil, nil, nil")
+							add(offset(stmt.End()), "; "+gp+".ddtoCtx, "+gp+".ddtoCalls, "+gp+".ddtoSent, "+gp+".ddtoSeen = nil, nil, nil, nil")
 							found[name]++
 						}
 						return false
@@ -351,7 +354,7 @@ func TransformContextRuntime(files map[string][]byte) (map[string][]byte, error)
 						}
 						if call, ok := assign.Rhs[0].(*ast.CallExpr); ok && isIdent(call.Fun, "new") && len(call.Args) == 1 && isIdent(call.Args[0], "timeTimer") {
 							t := render(assign.Lhs[0])
-							add(offset(stmt.End()), "; "+t+".timer.ddto = getg().ddtoCtx; __ddto_timerChannel("+params[4]+", "+params[3]+")")
+							add(offset(stmt.End()), "; "+t+".timer.ddto, "+t+".timer.ddtoCalls = getg().ddtoCtx, getg().ddtoCalls; __ddto_timerChannel("+params[4]+", "+params[3]+")")
 							found[name]++
 						}
 					}
@@ -364,8 +367,8 @@ func TransformContextRuntime(files map[string][]byte) (map[string][]byte, error)
 						}
 						if call, ok := stmt.X.(*ast.CallExpr); ok && isIdent(call.Fun, "f") && len(call.Args) == 3 {
 							start, end := offset(stmt.Pos()), offset(stmt.End())
-							add(start, "if !"+t+".isChan { __ddto_g := getg(); __ddto_saved := __ddto_g.ddtoCtx; __ddto_g.ddtoCtx = "+t+".ddto; ")
-							add(end, "; __ddto_g.ddtoCtx = __ddto_saved } else { "+render(call)+" }")
+							add(start, "if !"+t+".isChan { __ddto_g := getg(); __ddto_ctx, __ddto_calls := __ddto_g.ddtoCtx, __ddto_g.ddtoCalls; __ddto_g.ddtoCtx, __ddto_g.ddtoCalls = "+t+".ddto, "+t+".ddtoCalls; ")
+							add(end, "; __ddto_g.ddtoCtx, __ddto_g.ddtoCalls = __ddto_ctx, __ddto_calls } else { "+render(call)+" }")
 							found[name]++
 						}
 						return true
@@ -411,9 +414,9 @@ const contextCaptureHook = `
 import "runtime"
 
 func __ddto_capture(f func()) func() {
-	ctx := runtime.DdtoCtx()
+	ctx, calls := runtime.DdtoState()
 	return func() {
-		runtime.DdtoSetCtx(ctx)
+		runtime.DdtoSetState(ctx, calls)
 		f()
 	}
 }
@@ -522,8 +525,8 @@ func TransformContextTesting(files map[string][]byte) (map[string][]byte, error)
 					return true
 				}
 				if sel, ok := send.Chan.(*ast.SelectorExpr); ok && sel.Sel.Name == "startParallel" {
-					add(fs.Position(send.Pos()).Offset, "__ddto_ctx := runtime.DdtoCtx(); runtime.DdtoSetCtx(nil); ")
-					add(fs.Position(send.End()).Offset, "; runtime.DdtoSetCtx(__ddto_ctx)")
+					add(fs.Position(send.Pos()).Offset, "__ddto_ctx, __ddto_calls := runtime.DdtoState(); runtime.DdtoSetState(nil, nil); ")
+					add(fs.Position(send.End()).Offset, "; runtime.DdtoSetState(__ddto_ctx, __ddto_calls)")
 					found["release"]++
 				}
 				return true

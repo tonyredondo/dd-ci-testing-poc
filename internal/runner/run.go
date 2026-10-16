@@ -716,6 +716,15 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 				}
 				context := opts.fileCoverageContext && contextRefusal == ""
 				previous := map[string]*string{}
+				restore := func() {
+					for logical, old := range previous {
+						if old == nil {
+							delete(replacements, logical)
+						} else {
+							replacements[logical] = *old
+						}
+					}
+				}
 				if context {
 					for logical, backing := range changes.replace {
 						if old, ok := replacements[logical]; ok {
@@ -727,18 +736,19 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 					}
 				}
 				summary, refusal, e = prepareFileCoverage(tested, repositoryRoots(dir, listed), excluded, replacements, userOverlay, temp, context, add)
+				if e == nil && summary.contextRefusal != "" {
+					// Too many files for contexts: serial marks instead.
+					contextRefusal = summary.contextRefusal
+					restore()
+					context, singleflight = false, nil
+					summary, refusal, e = prepareFileCoverage(tested, repositoryRoots(dir, listed), excluded, replacements, userOverlay, temp, false, add)
+				}
 				if e != nil {
 					phase.finish(e)
 					return plan, e
 				}
 				if context && refusal != "" {
-					for logical, old := range previous {
-						if old == nil {
-							delete(replacements, logical)
-						} else {
-							replacements[logical] = *old
-						}
-					}
+					restore()
 				}
 				if context && refusal == "" {
 					for logical, content := range changes.add {

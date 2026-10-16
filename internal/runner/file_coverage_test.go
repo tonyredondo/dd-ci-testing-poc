@@ -155,6 +155,28 @@ func TestPrepareFileCoverage(t *testing.T) {
 	}
 }
 
+// Context banks that would need more words than the runtime's scratch array
+// change nothing: the caller builds serial marks instead.
+func TestPrepareFileCoverageContextCapacity(t *testing.T) {
+	root := fileCoverageTree(t, map[string]string{"a/a.go": "package a\n\nfunc F() {}\n"})
+	tested := []goPackage{{Dir: filepath.Join(root, "a"), Name: "a", ImportPath: "example.com/a", GoFiles: []string{"a.go"}}}
+	defer func(words int) { contextWords = words }(contextWords)
+	contextWords = 0
+	replacements := map[string]string{}
+	summary, refusal, err := prepareFileCoverage(tested, []string{root}, nil, replacements, nil, t.TempDir(), true, func(string, string) error {
+		t.Fatal("added a file above the capacity")
+		return nil
+	})
+	if err != nil || refusal != "" || !strings.Contains(summary.contextRefusal, "1 files need 1 words") || len(replacements) != 0 {
+		t.Fatalf("summary %+v, refusal %q, err %v, replacements %v", summary, refusal, err, replacements)
+	}
+	contextWords = 1
+	summary, refusal, err = prepareFileCoverage(tested, []string{root}, nil, replacements, nil, t.TempDir(), true, func(string, string) error { return nil })
+	if err != nil || refusal != "" || summary.contextRefusal != "" || summary.marked != 1 {
+		t.Fatalf("within the capacity: summary %+v, refusal %q, err %v", summary, refusal, err)
+	}
+}
+
 func TestPrepareFileCoverageCollision(t *testing.T) {
 	root := fileCoverageTree(t, map[string]string{
 		"a/a.go":                     "package a\n\nfunc F() {}\n",

@@ -9,13 +9,13 @@ import (
 )
 
 // contextHarness stands in for the runtime's edits: one goroutine, whose
-// context the test switches, and the scratch window.
+// context and call set the test switches, and the scratch window.
 type contextHarness struct {
-	t       *testing.T
-	current unsafe.Pointer
-	names   []string
-	base    uintptr
-	scratch [8]uint64
+	t              *testing.T
+	current, calls unsafe.Pointer
+	names          []string
+	base           uintptr
+	scratch        [8]uint64
 }
 
 // withContextCoverage registers one context bank of names and makes context
@@ -26,17 +26,17 @@ func withContextCoverage(t *testing.T, names ...string) *contextHarness {
 	saved := struct {
 		words          uint64
 		banks, unknown unsafe.Pointer
-		get            func() unsafe.Pointer
-		set            func(unsafe.Pointer)
+		get            func() (unsafe.Pointer, unsafe.Pointer)
+		set            func(unsafe.Pointer, unsafe.Pointer)
 		send           func(*uintptr, unsafe.Pointer) unsafe.Pointer
-		receive        func(uintptr, unsafe.Pointer) (unsafe.Pointer, unsafe.Pointer)
+		receive        func(uintptr, unsafe.Pointer, unsafe.Pointer) (unsafe.Pointer, unsafe.Pointer, unsafe.Pointer)
 		io             func(unsafe.Pointer) unsafe.Pointer
 		uploadEnabled  bool
 		previousMode   string
-	}{fileCoverageWords, fileCoverageBanksV2, fileCoverageUnknown, fileCoverageGetContext, fileCoverageSetContext, fileCoverageSendHook, fileCoverageReceiveHook, fileCoverageIOHook, coverageUploadEnabled, mode}
+	}{fileCoverageWords, fileCoverageBanksV2, fileCoverageUnknown, fileCoverageGetState, fileCoverageSetState, fileCoverageSendHook, fileCoverageReceiveHook, fileCoverageIOHook, coverageUploadEnabled, mode}
 	t.Cleanup(func() {
 		fileCoverageWords, fileCoverageBanksV2, fileCoverageUnknown = saved.words, saved.banks, saved.unknown
-		fileCoverageGetContext, fileCoverageSetContext = saved.get, saved.set
+		fileCoverageGetState, fileCoverageSetState = saved.get, saved.set
 		fileCoverageSendHook, fileCoverageReceiveHook, fileCoverageIOHook = saved.send, saved.receive, saved.io
 		coverageUploadEnabled, mode = saved.uploadEnabled, saved.previousMode
 		contextCoverage = contextState{}
@@ -44,8 +44,8 @@ func withContextCoverage(t *testing.T, names ...string) *contextHarness {
 	contextCoverage = contextState{}
 	fileCoverageWords = uint64(len(names)+63) / 64
 	fileCoverageUnknown = unsafe.Pointer(&h.scratch[0])
-	fileCoverageGetContext = func() unsafe.Pointer { return h.current }
-	fileCoverageSetContext = func(ctx unsafe.Pointer) { h.current = ctx }
+	fileCoverageGetState = func() (unsafe.Pointer, unsafe.Pointer) { return h.current, h.calls }
+	fileCoverageSetState = func(ctx, calls unsafe.Pointer) { h.current, h.calls = ctx, calls }
 	bank := &fileCoverageContextBank{version: fileCoverageContextBankVersion, base: &h.base, n: uintptr(len(names)), prefix: "example.com/p", path: "example.com/p"}
 	if len(names) > 0 {
 		bank.names = &names[0]
@@ -69,25 +69,37 @@ func (h *contextHarness) hit(i int) {
 
 // send and receive run the runtime's hooks for a channel's union.
 func (h *contextHarness) send(slot *uintptr) {
-	if h.current != nil {
-		fileCoverageSendHook(slot, h.current)
+	state := h.current
+	if state == nil {
+		state = h.calls
+	}
+	if state != nil {
+		fileCoverageSendHook(slot, state)
 	}
 }
 
 func (h *contextHarness) receive(slot *uintptr) {
 	if *slot != 0 {
-		h.current, _ = fileCoverageReceiveHook(*slot, h.current)
+		h.current, h.calls, _ = fileCoverageReceiveHook(*slot, h.current, h.calls)
 	}
 }
 
-// in runs f as a goroutine that starts with ctx, and returns its context
-// afterwards.
+// in runs f as a goroutine that starts with ctx and no call set, and returns
+// its context afterwards.
 func (h *contextHarness) in(ctx unsafe.Pointer, f func()) unsafe.Pointer {
-	saved := h.current
-	h.current = ctx
-	f()
-	ctx, h.current = h.current, saved
+	ctx, _ = h.inState(ctx, nil, f)
 	return ctx
+}
+
+// inState runs f as a goroutine that starts with ctx and calls, and returns
+// its context and call set afterwards.
+func (h *contextHarness) inState(ctx, calls unsafe.Pointer, f func()) (unsafe.Pointer, unsafe.Pointer) {
+	savedCtx, savedCalls := h.current, h.calls
+	h.current, h.calls = ctx, calls
+	f()
+	ctx, calls = h.current, h.calls
+	h.current, h.calls = savedCtx, savedCalls
+	return ctx, calls
 }
 
 func (h *contextHarness) files(t *testing.T, epoch uint64) []string {
@@ -163,11 +175,11 @@ func TestContextCoverageKeepsCallsAcrossUnknownWorkers(t *testing.T) {
 		h.send(&toWorker)
 	})
 	// W, started by TestMain, receives the call's work and hands it on.
-	worker := h.in(nil, func() {
+	_, workerCalls := h.inState(nil, nil, func() {
 		h.receive(&toWorker)
 		h.send(&toV)
 	})
-	if worker == nil || !contextCoverage.lookup(uintptr(worker)).public {
+	if workerCalls == nil {
 		t.Fatal("the worker without a context dropped the call")
 	}
 	h.in(ctxD, func() {
@@ -181,7 +193,10 @@ func TestContextCoverageKeepsCallsAcrossUnknownWorkers(t *testing.T) {
 	if got := h.files(t, b); !slices.Contains(got, "/repo/f.go") {
 		t.Errorf("the joiner lacks the call's file from the second hop: %v", got)
 	}
-	h.files(t, a)
+	// The leader's test led the call: the work was for it too.
+	if got := h.files(t, a); !slices.Contains(got, "/repo/f.go") {
+		t.Errorf("the leader's test lacks the call's file from the second hop: %v", got)
+	}
 	h.files(t, d)
 }
 
@@ -189,20 +204,20 @@ func TestContextCoverageIOKeepsCalls(t *testing.T) {
 	h := withContextCoverage(t, "/repo/f.go")
 	beginContextCoverage()
 	var call unsafe.Pointer
-	public := h.in(h.current, func() {
+	ctx, callSet := h.inState(h.current, nil, func() {
 		fileCoverageEnter(&call)
-		h.current = fileCoverageIOHook(h.current)
+		h.current, h.calls = nil, fileCoverageIOHook(h.current)
 	})
-	if ctx := contextCoverage.lookup(uintptr(public)); ctx == nil || !ctx.public || len(ctx.sinks) != 1 || !ctx.sinks[0].call {
-		t.Fatalf("after IO: %+v", ctx)
+	if set := contextCoverage.lookup(uintptr(callSet)); ctx != nil || set == nil || !set.callSet || len(set.sinks) != 1 || !set.sinks[0].call || !set.sinks[0].leaky {
+		t.Fatalf("after IO: context %v, call set %+v", ctx, set)
 	}
 	// Without calls, the goroutine loses its context.
 	if next := h.in(nil, func() {}); next != nil {
 		t.Fatal("a goroutine without a context gained one")
 	}
 	beginContextCoverage()
-	if next := fileCoverageIOHook(h.current); next != nil {
-		t.Fatal("IO kept a test's context")
+	if calls := fileCoverageIOHook(h.current); calls != nil {
+		t.Fatal("IO kept a test in a call set")
 	}
 }
 
@@ -330,5 +345,68 @@ func TestSymbolPrefix(t *testing.T) {
 		if got := symbolPrefix(function); got != want {
 			t.Errorf("symbolPrefix(%q) = %q, want %q", function, got, want)
 		}
+	}
+}
+
+// A joiner without a context, which runs for every test, gets the windows
+// that a leaky call's work went to before the joiner's test started.
+func TestContextCoverageUnknownJoinerGetsLeakyWindows(t *testing.T) {
+	h := withContextCoverage(t, "/repo/f.go")
+	a := beginContextCoverage()
+	var call unsafe.Pointer
+	_, leader := h.inState(nil, nil, func() { fileCoverageEnter(&call) })
+	h.inState(nil, leader, func() { h.hit(0) })
+	h.files(t, a)
+	b := beginContextCoverage()
+	h.inState(nil, nil, func() { fileCoverageJoin(&call) })
+	h.inState(nil, leader, func() {
+		fileCoverageLeave(&call)
+		fileCoverageComplete(&call)
+	})
+	if got := h.files(t, b); !slices.Contains(got, "/repo/f.go") {
+		t.Errorf("a test running while an unknown goroutine joined lacks the leaked work: %v", got)
+	}
+}
+
+// Calls sent to an overflowed union saturate: their joiners report every file.
+func TestContextCoverageOverflowSaturates(t *testing.T) {
+	h := withContextCoverage(t, "/repo/a.go", "/repo/b.go")
+	var slot uintptr
+	var epochs []uint64
+	for range maxContextSinks + 1 {
+		epochs = append(epochs, beginContextCoverage())
+		h.send(&slot)
+	}
+	var call unsafe.Pointer
+	leader := h.in(h.current, func() {
+		fileCoverageEnter(&call)
+		h.send(&slot)
+	})
+	joiner := beginContextCoverage()
+	h.in(h.current, func() { fileCoverageJoin(&call) })
+	h.in(leader, func() {
+		fileCoverageLeave(&call)
+		fileCoverageComplete(&call)
+	})
+	if got := h.files(t, joiner); len(got) != 2 {
+		t.Errorf("the joiner of a saturated call reports %v", got)
+	}
+	for _, epoch := range epochs {
+		h.files(t, epoch)
+	}
+}
+
+// Singleflight before the banks are read, as in a package's init, changes
+// nothing.
+func TestContextCoverageSingleflightBeforeReady(t *testing.T) {
+	h := withContextCoverage(t, "/repo/a.go")
+	contextCoverage.ready.Store(false)
+	var call unsafe.Pointer
+	fileCoverageEnter(&call)
+	fileCoverageJoin(&call)
+	fileCoverageLeave(&call)
+	fileCoverageComplete(&call)
+	if call != nil || h.current != nil || h.calls != nil {
+		t.Fatalf("before the banks were read: call %v, state %v %v", call, h.current, h.calls)
 	}
 }

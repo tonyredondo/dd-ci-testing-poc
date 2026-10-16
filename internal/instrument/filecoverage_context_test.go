@@ -122,10 +122,10 @@ import (
 var (
 	fileCoverageUnknown     unsafe.Pointer
 	fileCoverageSendHook    func(slot *uintptr, ctx unsafe.Pointer) unsafe.Pointer
-	fileCoverageReceiveHook func(union uintptr, ctx unsafe.Pointer) (unsafe.Pointer, unsafe.Pointer)
+	fileCoverageReceiveHook func(union uintptr, ctx, calls unsafe.Pointer) (unsafe.Pointer, unsafe.Pointer, unsafe.Pointer)
 	fileCoverageIOHook      func(ctx unsafe.Pointer) unsafe.Pointer
-	fileCoverageGetContext  func() unsafe.Pointer
-	fileCoverageSetContext  func(unsafe.Pointer)
+	fileCoverageGetState    func() (unsafe.Pointer, unsafe.Pointer)
+	fileCoverageSetState    func(unsafe.Pointer, unsafe.Pointer)
 )
 
 // A context is a set of owner names, joined by commas in name order.
@@ -181,9 +181,14 @@ func Name(ctx unsafe.Pointer) string {
 	return names[uintptr(ctx)]
 }
 
-func Current() string           { return Name(fileCoverageGetContext()) }
-func Set(owners string)         { fileCoverageSetContext(Context(owners)) }
+func Current() string           { ctx, _ := fileCoverageGetState(); return Name(ctx) }
+func Set(owners string)         { fileCoverageSetState(Context(owners), nil) }
 func Unknown() unsafe.Pointer    { return fileCoverageUnknown }
+func SetState(owners, calls string) { fileCoverageSetState(Context(owners), Context(calls)) }
+func State() (string, string) {
+	ctx, calls := fileCoverageGetState()
+	return Name(ctx), Name(calls)
+}
 
 func init() {
 	fileCoverageSendHook = func(slot *uintptr, ctx unsafe.Pointer) unsafe.Pointer {
@@ -194,15 +199,15 @@ func init() {
 		*slot = uintptr(merged)
 		return merged
 	}
-	fileCoverageReceiveHook = func(u uintptr, ctx unsafe.Pointer) (unsafe.Pointer, unsafe.Pointer) {
+	fileCoverageReceiveHook = func(u uintptr, ctx, calls unsafe.Pointer) (unsafe.Pointer, unsafe.Pointer, unsafe.Pointer) {
 		mu.Lock()
 		defer mu.Unlock()
 		if ctx == nil {
 			Calls.NilReceive++
-			return nil, pointers[u]
+			return nil, calls, pointers[u]
 		}
 		Calls.Receive++
-		return intern(union(names[u], names[uintptr(ctx)])), pointers[u]
+		return intern(union(names[u], names[uintptr(ctx)])), nil, pointers[u]
 	}
 	fileCoverageIOHook = func(ctx unsafe.Pointer) unsafe.Pointer {
 		mu.Lock()
@@ -348,6 +353,28 @@ func main() {
 	}), "unknown")
 	expect("io hook", fmt.Sprint(mini.Calls.IO), "1")
 	expect("file", in("A", func() { os.ReadFile("go.mod") }), "A")
+
+	// A goroutine without a context passes its calls to its children and its
+	// timers, and its sends carry them.
+	got := make(chan string, 1)
+	go func() {
+		mini.SetState("", "C1")
+		go func() { _, calls := mini.State(); got <- calls }()
+	}()
+	expect("calls inherit", <-got, "C1")
+	go func() {
+		mini.SetState("", "C2")
+		time.AfterFunc(time.Millisecond, func() { _, calls := mini.State(); got <- calls })
+	}()
+	expect("calls timer", <-got, "C2")
+	callsCh := make(chan int, 1)
+	go func() {
+		mini.SetState("", "C3")
+		callsCh <- 1
+		got <- "sent"
+	}()
+	<-got
+	expect("calls send", in("A", func() { <-callsCh }), "A,C3")
 
 	// A goroutine that uses its own channel calls Mini once.
 	own := make(chan int, 1)
