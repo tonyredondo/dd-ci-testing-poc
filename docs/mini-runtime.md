@@ -492,13 +492,26 @@ outside the repository.
   resumes during it does not mark its file again.
 - The backend has to accept rows without bitmaps.
 
-**Measured on samber/lo** (333 tests, GOMAXPROCS=4):
-- No test misses a production file that Go's counters
-  (`-cover -covermode=atomic -coverpkg=./...`) report.
-- Every test has three more files: lo's type-only constraint files, which go
-  to every test.
-- Wall time: 8.43 s with marks, 8.40 s with Go's counters, 8.30 s without
-  per-test coverage.
+**Measured** at GOMAXPROCS=4, comparing marks with Go's counters
+(`-cover -covermode=atomic -coverpkg=./...`):
+
+| Package | Wall: marks / Go's counters / no per-test coverage | Production files per test: marks / Go's counters |
+| --- | --- | --- |
+| samber/lo, 333 tests | 8.43 / 8.40 / 8.30 s | 4.21 / 1.21 |
+| gofiber/fiber, root package, 1236 tests | 42.44 / 42.56 / 34.28 s | 26.18 / 13.88 |
+
+- **samber/lo:** no test misses a production file that Go's counters report.
+- **gofiber/fiber:** the 30 tests that use its in-memory storage get its file
+  either way. A 10-second garbage collection tick of a storage that an
+  earlier test started lands in the window of a neighboring test, and which
+  neighbor depends on how fast the suite runs: with Go's counters it is
+  `Test_Route_Match_SlashBoundsDifferential`, with marks
+  `Test_RoutePatternMatch_MatchesRouter`. Both attribute that background
+  work by window.
+- **The extra files** are those that go to every test:
+  - lo's type-only constraint files;
+  - in fiber, files with only declarations, such as each middleware's
+    `config.go`.
 
 With `-race`, `ddto` overlays Mini's sources with copies that mark each
 function declaration `//go:norace`, so the race detector does not instrument
