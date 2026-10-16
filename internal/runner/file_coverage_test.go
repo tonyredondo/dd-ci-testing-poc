@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -91,15 +92,15 @@ func TestPrepareFileCoverage(t *testing.T) {
 		t.Errorf("%d packages, want a, t, c, e, e/sub, q and u", summary.packages)
 	}
 	want := map[string][]string{
-		"repo/a/zz_ddto_file_coverage.go":        {"package a\n", "__ddto_epoch", `"` + filepath.Join(dir("repo/a"), "a.go") + `"`, `"` + user + `"`, `"` + filepath.Join(dir("repo/a"), "data.txt") + `"`, `"` + hooked + `"`},
+		"repo/a/zz_ddto_file_coverage.go":        {"package a\n", "__ddto_epoch", strconv.Quote(filepath.Join(dir("repo/a"), "a.go")), strconv.Quote(user), strconv.Quote(filepath.Join(dir("repo/a"), "data.txt")), strconv.Quote(hooked)},
 		"repo/a/zz_ddto_file_coverage_test.go":   {"package a\n", "__ddto_t [1]uint64", "a_test.go"},
 		"repo/a/zz_ddto_file_coverage_x_test.go": {"package a_test\n", "__ddto_epoch", "__ddto_x [1]uint64", "x_test.go"},
 		"repo/t/zz_ddto_file_coverage_test.go":   {"package t\n", "__ddto_epoch", "__ddto_t [1]uint64", "t_test.go"},
-		"repo/c/zz_ddto_file_coverage.go":        {"package c\n", "__ddto_m [1]uint64", "c2.go", `"` + filepath.Join(dir("repo/c"), "c.go") + `"`},
+		"repo/c/zz_ddto_file_coverage.go":        {"package c\n", "__ddto_m [1]uint64", "c2.go", strconv.Quote(filepath.Join(dir("repo/c"), "c.go"))},
 		"repo/u/zz_ddto_file_coverage.go":        {"package u\n", "__ddto_m [1]uint64"},
-		"repo/e/zz_ddto_file_coverage.go":        {"package e\n", `"` + filepath.Join(dir("repo/e"), "e.go") + `"`},
+		"repo/e/zz_ddto_file_coverage.go":        {"package e\n", strconv.Quote(filepath.Join(dir("repo/e"), "e.go"))},
 		"repo/e/zz_ddto_file_coverage_test.go":   {"package e\n", "__ddto_t [1]uint64"},
-		"repo/e/sub/zz_ddto_file_coverage.go":    {"package sub\n", `"` + filepath.Join(dir("repo/e/sub"), "s.go") + `"`},
+		"repo/e/sub/zz_ddto_file_coverage.go":    {"package sub\n", strconv.Quote(filepath.Join(dir("repo/e/sub"), "s.go"))},
 		"repo/q/zz_ddto_file_coverage.go":        {"package q\n", "__ddto_m [1]uint64", "q.go"},
 	}
 	var got []string
