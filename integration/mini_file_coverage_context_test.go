@@ -136,7 +136,7 @@ func TestMiniFileCoverageContextSingleflight(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
 	writeFileCoverageFixture(t, dir)
 	writeBuildFixture(t, dir, map[string]string{"flight_test.go": singleflightFixture})
-	goGet(t, dir, "golang.org/x/sync@v0.24.0")
+	goGet(t, dir, "golang.org/x/sync@v0.22.0")
 	got, exec := runParityCase(t, dir, driver, parityCase{
 		Args:     []string{"test", "--runtime=mini", "--experimental-file-coverage=context", "-count=1", "-v", "-run=^TestFlight", "-parallel=2", "."},
 		Policy:   policySettings{Coverage: true},

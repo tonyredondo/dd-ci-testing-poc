@@ -19,9 +19,20 @@ class CompareTests(unittest.TestCase):
         self.assertEqual(1.5, got["marks"]["files_per_test"])
         self.assertEqual({"b_test.go/TestB": ["b.go"]}, got["marks"]["missing"])
 
-    def test_only_common_tests_count(self):
+    def test_a_test_without_rows_misses_its_files(self):
+        reference = {"T/A": ["a.go"], "T/B": ["b.go"]}
+        got = benchmark.compare({"counters": reference, "marks": {"T/A": ["a.go"]}}, reference)["marks"]
+        self.assertEqual((2, 1, 1), (got["tests"], got["tests_without_rows"], got["missing_tests"]))
+        self.assertEqual({"T/B": ["b.go"]}, got["missing"])
+
+    def test_tests_that_only_another_mode_reports_do_not_count(self):
         rows = {"counters": {"T/A": ["a.go"]}, "marks": {"T/A": ["a.go"], "T/B": ["b.go"]}}
         self.assertEqual(1, benchmark.compare(rows, rows["counters"])["marks"]["tests"])
+
+    def test_a_fallback_is_rejected(self):
+        with self.assertRaises(SystemExit):
+            benchmark.check_mode(["ddto", "test"], "TestOptimization.build v0.1.1 WARN: --experimental-file-coverage=context: x; tests run one at a time\n")
+        benchmark.check_mode(["ddto", "test"], "ok\n")
 
 
 if __name__ == "__main__":

@@ -568,9 +568,9 @@ The mode needs one build of the edited standard library per toolchain, which
 Go's build cache keeps. When an edit does not match the toolchain or a
 library, or the repository has more than about four million files, ddto
 prints `--experimental-file-coverage=context: <reason>; tests run one at a
-time while coverage is collected` and builds serial marks. ddto hands the
-parallel setting to the test processes explicitly, so they do not inherit it
-from a parent run.
+time while coverage is collected` and builds serial marks. A test binary keeps
+`t.Parallel()` when it has context banks, so one built with `-c` keeps it
+when it runs without ddto.
 
 Context mode has the gaps that .NET's `ExecutionContext` also has:
 - work handed on through a mutex, `sync.Cond` or shared memory without a

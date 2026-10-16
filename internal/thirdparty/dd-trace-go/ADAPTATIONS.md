@@ -296,9 +296,10 @@ It extends three places that upstream gates on Go's counters:
   Its rows are the test file first, then the other files once each, in name
   order, without bitmaps.
 
-`FileCoverageParallel` also reads `DD_CIVISIBILITY_INTERNAL_FILE_COVERAGE_PARALLEL`,
-which ddto hands for `--experimental-file-coverage=context`. With it, the test
-wrapper leaves the parent's barrier alone, so `t.Parallel()` keeps working. `registerTestCoverageCleanup` then puts
+`FileCoverageParallel` reports context banks, which
+`--experimental-file-coverage=context` builds: a binary built with `-c` has
+them too. With them, the test wrapper leaves the parent's barrier alone, so
+`t.Parallel()` keeps working. `registerTestCoverageCleanup` then puts
 back only a barrier that the test replaced; restoring the nil one it never
 took would have turned `t.Parallel()` off for the tests after it.
 
@@ -377,6 +378,7 @@ Checks:
   - `TestContextCoverageUnknownJoiner`,
     `TestContextCoverageUnknownJoinerGetsLeakyWindows`,
     `TestContextCoverageSingleflightBeforeReady`,
+    `TestContextCoverageNestedCalls`, `TestContextCoveragePanickingLeader`,
     `TestContextCoverageRepairsTheStack`, `TestSymbolPrefix`.
 - **Integration tests:** `TestMiniFileCoverageContext`,
   `TestMiniFileCoverageContextSingleflight` and

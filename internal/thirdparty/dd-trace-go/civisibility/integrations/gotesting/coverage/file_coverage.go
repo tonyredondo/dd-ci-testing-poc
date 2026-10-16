@@ -1,9 +1,7 @@
 package coverage
 
 import (
-	"os"
 	"slices"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -85,18 +83,11 @@ func FileCoverageActive() bool {
 	return coverageUploadEnabled && mode == "" && fileCoverageAvailable()
 }
 
-// fileCoverageParallelEnv is set by ddto's --experimental-file-coverage=context.
-const fileCoverageParallelEnv = "DD_CIVISIBILITY_INTERNAL_FILE_COVERAGE_PARALLEL"
-
-var fileCoverageParallel = sync.OnceValue(func() bool {
-	parallel, _ := strconv.ParseBool(os.Getenv(fileCoverageParallelEnv))
-	return parallel
-})
-
 // FileCoverageParallel reports whether tests keep t.Parallel while file
-// coverage is collected: context file coverage tells their files apart.
+// coverage is collected: context file coverage tells their files apart. The
+// banks of the test binary decide, so a binary built with -c keeps it too.
 func FileCoverageParallel() bool {
-	return FileCoverageActive() && fileCoverageParallel()
+	return FileCoverageActive() && contextCoverageAvailable()
 }
 
 // beginFileCoverage starts a test's window and returns its epoch.

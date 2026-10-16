@@ -410,3 +410,55 @@ func TestContextCoverageSingleflightBeforeReady(t *testing.T) {
 		t.Fatalf("before the banks were read: call %v, state %v %v", call, h.current, h.calls)
 	}
 }
+
+// A call's function that joins another call in flight gives that call's
+// files to its own joiners too.
+func TestContextCoverageNestedCalls(t *testing.T) {
+	h := withContextCoverage(t, "/repo/outer.go", "/repo/inner.go")
+	a := beginContextCoverage()
+	var outer, inner unsafe.Pointer
+	innerLeader := h.in(h.current, func() {
+		fileCoverageEnter(&inner)
+		h.hit(1)
+	})
+	b := beginContextCoverage()
+	h.in(h.current, func() {
+		fileCoverageEnter(&outer)
+		h.hit(0)
+		fileCoverageJoin(&inner)
+		fileCoverageLeave(&outer)
+	})
+	c := beginContextCoverage()
+	h.in(h.current, func() { fileCoverageJoin(&outer) })
+	h.in(innerLeader, func() {
+		fileCoverageLeave(&inner)
+		fileCoverageComplete(&inner)
+	})
+	fileCoverageComplete(&outer)
+	if got := h.files(t, c); !slices.Equal(got, []string{"/repo/inner.go", "/repo/outer.go"}) {
+		t.Errorf("the outer call's joiner: %v", got)
+	}
+	h.files(t, a)
+	h.files(t, b)
+}
+
+// A leader whose function panics never leaves the call: what it runs next
+// still counts for the call, a superset, and the joiner gets the function's
+// files.
+func TestContextCoveragePanickingLeader(t *testing.T) {
+	h := withContextCoverage(t, "/repo/f.go", "/repo/after.go")
+	a := beginContextCoverage()
+	var call unsafe.Pointer
+	leader := h.in(h.current, func() {
+		fileCoverageEnter(&call)
+		h.hit(0)
+	})
+	b := beginContextCoverage()
+	h.in(h.current, func() { fileCoverageJoin(&call) })
+	fileCoverageComplete(&call)
+	h.in(leader, func() { h.hit(1) })
+	if got := h.files(t, b); !slices.Equal(got, []string{"/repo/after.go", "/repo/f.go"}) {
+		t.Errorf("the joiner of a call whose leader panicked: %v", got)
+	}
+	h.files(t, a)
+}

@@ -303,7 +303,7 @@ func TestFileParallelB(t *testing.T) {
 	if exec.code != 0 {
 		t.Fatalf("exit %d:\n%s\n%s", exec.code, exec.out, exec.stderr)
 	}
-	if !strings.Contains(exec.stderr, "file coverage installed=true") || !strings.Contains(exec.stderr, "parallel=true context=true") {
+	if !strings.Contains(exec.stderr, "file coverage installed=true") || !strings.Contains(exec.stderr, "context=true") {
 		t.Fatalf("build log lacks parallel file coverage:\n%s", exec.stderr)
 	}
 	files, _ := fileCoverageRows(t, &got.miniWireCapture)
@@ -317,8 +317,22 @@ func TestFileParallelB(t *testing.T) {
 			}
 		}
 	}
-	// The bare flag runs the tests one at a time, even when the environment
-	// says parallel, as a test that ran ddto with =context would hand on.
+	// A binary built with -c keeps t.Parallel when it runs without ddto: its
+	// context banks decide.
+	bin := filepath.Join(t.TempDir(), executableName("par.test"))
+	if out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false"), driver, "test", "--runtime=mini", "--experimental-file-coverage=context", "-c", "-o", bin, "."); code != 0 {
+		t.Fatalf("build: exit %d\n%s\n%s", code, out, stderr)
+	}
+	got, exec = runParityCase(t, dir, bin, parityCase{
+		Args:     []string{"-test.v", "-test.run=^TestFileParallel", "-test.parallel=2"},
+		Policy:   policySettings{Coverage: true},
+		Coverage: true,
+	})
+	if files, _ := fileCoverageRows(t, &got.miniWireCapture); exec.code != 0 || !slices.Contains(files["TestFileParallelA"], "lib.go") {
+		t.Fatalf("the binary built with -c: exit %d, files %v\n%s\n%s", exec.code, files, exec.out, exec.stderr)
+	}
+	// The bare flag runs the tests one at a time, whatever the environment
+	// says.
 	_, exec = runParityCase(t, dir, driver, parityCase{
 		Args:     []string{"test", "--runtime=mini", "--experimental-file-coverage", "-count=1", "-v", "-run=^TestFileParallel", "-parallel=2", "."},
 		Policy:   policySettings{Coverage: true},
@@ -326,7 +340,7 @@ func TestFileParallelB(t *testing.T) {
 		Env:      []string{"DD_CIVISIBILITY_INTERNAL_FILE_COVERAGE_PARALLEL=true", "FILECOV_MEET_TIMEOUT=1s"},
 	})
 	if exec.code == 0 || !strings.Contains(exec.out, "did not run at the same time") {
-		t.Fatalf("serial file coverage kept t.Parallel from the environment: exit %d\n%s", exec.code, exec.out)
+		t.Fatalf("serial file coverage kept t.Parallel: exit %d\n%s", exec.code, exec.out)
 	}
 }
 
@@ -341,8 +355,8 @@ func TestMiniFileCoverageEnvironment(t *testing.T) {
 		flags             []string
 	}{
 		{"true", "true", "file coverage installed=true", nil},
-		{"context", "context", "parallel=true context=true", nil},
-		{"flag decides", "context", "parallel=false context=false", []string{"--experimental-file-coverage"}},
+		{"context", "context", "context=true", nil},
+		{"flag decides", "context", "context=false", []string{"--experimental-file-coverage"}},
 		{"invalid", "sometimes", `DD_CIVISIBILITY_EXPERIMENTAL_FILE_COVERAGE="sometimes" is neither a boolean nor context; ignoring it`, nil},
 		{"parallel", "parallel", `DD_CIVISIBILITY_EXPERIMENTAL_FILE_COVERAGE="parallel" is neither a boolean nor context; ignoring it`, nil},
 	} {

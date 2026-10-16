@@ -61,7 +61,16 @@ def run_tests(args, project, pattern, mode, output):
     receiver.close()
     if result.returncode:
         raise SystemExit(f'{" ".join(command)} in {project}: exit {result.returncode}\n{result.stdout[-4000:]}\n{result.stderr[-4000:]}')
+    check_mode(command, result.stderr)
     return wall, (per_test_files(args.decoder, receiver, project) if coverage else None)
+
+
+def check_mode(command, stderr):
+    """Rejects a run in which ddto fell back from the requested coverage
+    mode: it warns and builds another one."""
+    for line in stderr.splitlines():
+        if 'WARN: --experimental-file-coverage' in line:
+            raise SystemExit(f'{" ".join(command)} did not install the requested mode: {line}')
 
 
 def per_test_files(decoder, receiver, project):
@@ -106,18 +115,21 @@ def production(files):
 
 
 def compare(rows, reference):
-    """Returns the per-test metrics of each mode's rows, and its tests that
-    lack a production file of reference's."""
-    common = set.intersection(*(set(r) for r in rows.values()))
-    every = sorted({f for r in rows.values() for test in common for f in production(r[test])})
+    """Returns the per-test metrics of each mode's rows over reference's
+    tests, and the tests that lack a production file of reference's. A test
+    without a row has no files."""
+    tests = sorted(reference)
+    every = sorted({f for r in rows.values() for test in tests for f in production(r.get(test, []))})
     out = {}
     for mode, r in rows.items():
-        missing = {test: sorted(production(reference[test]) - production(r[test]))
-                   for test in sorted(common) if not production(reference[test]) <= production(r[test])}
+        files = {test: production(r.get(test, [])) for test in tests}
+        missing = {test: sorted(production(reference[test]) - files[test])
+                   for test in tests if not production(reference[test]) <= files[test]}
         out[mode] = {
-            'tests': len(common),
-            'files_per_test': round(statistics.mean(len(production(r[t])) for t in common), 2) if common else 0,
-            'tests_per_changed_file': round(statistics.mean(sum(1 for t in common if f in production(r[t])) for f in every), 1) if every else 0,
+            'tests': len(tests),
+            'tests_without_rows': sum(1 for test in tests if test not in r),
+            'files_per_test': round(statistics.mean(len(files[t]) for t in tests), 2) if tests else 0,
+            'tests_per_changed_file': round(statistics.mean(sum(1 for t in tests if f in files[t]) for f in every), 1) if every else 0,
             'missing_tests': len(missing),
             'missing': dict(list(missing.items())[:10]),
         }
@@ -142,6 +154,7 @@ def run_benchmarks(args, project, regex, output):
         receiver.close()
         if result.returncode:
             raise SystemExit(f'{" ".join(command)}: exit {result.returncode}\n{result.stdout[-4000:]}\n{result.stderr[-4000:]}')
+        check_mode(command, result.stderr)
         samples = {}
         for line in result.stdout.splitlines():
             match = re.match(r'^(Benchmark\S+?)(?:-\d+)?\s+\d+\s+([\d.]+) ns/op', line)
@@ -165,21 +178,24 @@ def report(results):
              f"ddto {results['ddto']['commit']} ({results['ddto']['version']}), {results['go']}, "
              f"GOMAXPROCS={results['gomaxprocs']}, {results['reps']} runs per mode after a warm-up run.", '',
              "Go's counters (`-cover -covermode=atomic -coverpkg=./...`) are what Test Impact Analysis uses "
-             'today, and the reference for missing files. Production files exclude `_test.go` files. '
-             '"Tests per changed file" is the mean number of tests that a change to one production file '
-             'selects.', '']
+             "today, and the reference for missing files: each run compares with the same repetition's Go's "
+             "counters, over every test that they report; a test without a row has no files. Production files "
+             'exclude `_test.go` files. "Tests per changed file" is the mean number of tests that a change to '
+             'one production file selects. The other columns come from the first repetition, and so do the '
+             'listed missing files.', '']
     for name, project in results['projects'].items():
         lines += [f"## {name}", '', f"`{project['origin']}` at `{project['commit'][:12]}`, package `{project['pattern']}`."]
         if project['local_diff_files']:
             lines += ['', f"Local changes: {', '.join(project['local_diff_files'])} (sha256 {project['local_diff_sha256'][:12]})."]
-        lines += ['', '| Mode | Wall time (median) | Production files per test | Tests per changed file | Tests missing a file of Go\'s counters |',
+        lines += ['', '| Mode | Wall time (median) | Production files per test | Tests per changed file | Tests missing a file of Go\'s counters, per run |',
                   '| --- | --- | --- | --- | --- |']
         for mode, (label, _, coverage) in MODES.items():
             walls = project['walls'][mode]
             wall = f'{statistics.median(walls):.2f} s'
             if coverage:
                 m = project['comparison'][mode]
-                lines.append(f"| {label} | {wall} | {m['files_per_test']} | {m['tests_per_changed_file']} | {m['missing_tests']} of {m['tests']} |")
+                runs = ', '.join(str(n) for n in project['missing_tests_per_run'][mode])
+                lines.append(f"| {label} | {wall} | {m['files_per_test']} | {m['tests_per_changed_file']} | {runs} of {m['tests']} |")
             else:
                 lines.append(f'| {label} | {wall} | — | — | — |')
         for mode in COVERED:
@@ -225,7 +241,7 @@ def main():
         project = Path(directory).resolve()
         pattern = pattern or '.'
         entry = dict(describe(project), pattern=pattern, walls={mode: [] for mode in MODES})
-        rows = {}
+        runs = []
         order = list(MODES)
         for rep in range(args.reps + 1):
             for mode in order[rep % len(order):] + order[:rep % len(order)]:
@@ -234,10 +250,15 @@ def main():
                 if rep == 0:
                     continue
                 entry['walls'][mode].append(round(wall, 3))
-                if files is not None and mode not in rows:
-                    rows[mode] = files
-        entry['comparison'] = compare(rows, rows['counters'])
-        every[name] = rows
+                if files is not None:
+                    if len(runs) < rep:
+                        runs.append({})
+                    runs[rep - 1][mode] = files
+        # Each run compares with that run's Go's counters; the first one's
+        # details are reported.
+        entry['comparison'] = compare(runs[0], runs[0]['counters'])
+        entry['missing_tests_per_run'] = {mode: [compare(run, run['counters'])[mode]['missing_tests'] for run in runs] for mode in COVERED}
+        every[name] = runs
         if name in benches:
             entry['benchmarks'] = run_benchmarks(args, project, benches[name], args.output / f'{name}-bench')
         results['projects'][name] = entry

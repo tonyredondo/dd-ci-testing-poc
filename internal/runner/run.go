@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -67,22 +66,19 @@ type Plan struct {
 	// Warnings name optional integrations skipped for unsupported libraries.
 	Warnings     []string
 	coverOverlay bool
-	// fileCoverage reports that the build has file marks; the test
-	// processes then get fileCoverageParallel, for
-	// --experimental-file-coverage=context, whatever they would inherit.
-	// fileCoverageContext reports context file coverage.
-	fileCoverage, fileCoverageParallel bool
-	fileCoverageContext                bool
-	singleflight                       bool
-	orchestrionChain                   string
-	launcher                           *goLauncher
-	orchestrion                        bool
-	mini                               bool
-	sdkCI                              bool
-	sdkMirrorDisabled                  bool
-	testify                            bool
-	goleak                             bool
-	compilerCache                      []string
+	// fileCoverage reports that the build has file marks, and
+	// fileCoverageContext that they are context file coverage's.
+	fileCoverage, fileCoverageContext bool
+	singleflight                      bool
+	orchestrionChain                  string
+	launcher                          *goLauncher
+	orchestrion                       bool
+	mini                              bool
+	sdkCI                             bool
+	sdkMirrorDisabled                 bool
+	testify                           bool
+	goleak                            bool
+	compilerCache                     []string
 	// workspaceLock keeps a cached vendor workspace from being pruned.
 	workspaceLock *os.File
 	// gorootMirror runs go from a mirror of a toolchain in GOMODCACHE.
@@ -777,8 +773,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		plan.fileCoverage = refusal == ""
 		// Only context file coverage keeps t.Parallel; a refused =context
 		// runs the tests one at a time, as the reference that it would match.
-		plan.fileCoverageParallel = plan.fileCoverageContext
-		debug.printf("file coverage installed=%t reason=%q packages=%d marked_files=%d always_files=%d parallel=%t context=%t context_reason=%q", refusal == "", refusal, summary.packages, summary.marked, summary.always, plan.fileCoverageParallel, plan.fileCoverageContext, contextRefusal)
+		debug.printf("file coverage installed=%t reason=%q packages=%d marked_files=%d always_files=%d context=%t context_reason=%q", refusal == "", refusal, summary.packages, summary.marked, summary.always, plan.fileCoverageContext, contextRefusal)
 		if refusal == "" && contextRefusal != "" {
 			plan.Warnings = append(plan.Warnings, "--experimental-file-coverage=context: "+contextRefusal+"; tests run one at a time while coverage is collected")
 		}
@@ -1008,9 +1003,6 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		debug.printf("github job id handed found=%t", !strings.HasSuffix(handoff[0], "="))
 	}
 	env = append(env, handoff...)
-	if plan.fileCoverage {
-		env = append(env, "DD_CIVISIBILITY_INTERNAL_FILE_COVERAGE_PARALLEL="+strconv.FormatBool(plan.fileCoverageParallel))
-	}
 	if plan.launcher != nil {
 		ctx = context.WithValue(ctx, goLauncherKey{}, *plan.launcher)
 	}

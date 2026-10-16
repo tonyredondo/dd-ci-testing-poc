@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "7e3ac7ddc5b9868fee3065be8a35f33436d1eb1321e124814617dc476174991d",
+      "sha256": "8727d6520364f149c63bfd711a639dd990f464acc914f8653f133d3103058972",
       "role": "local"
     },
     {
@@ -379,7 +379,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/coverage/file_coverage.go",
-      "sha256": "15d4530526717d9935d978a00bfb3d7d306afb06eb9c80f70f6ac6e017fcbd75",
+      "sha256": "7eae8ed80bb6a445a78d8523328c98ae3a31f18fc43abd8c4fc6c79a13f31d2a",
       "role": "local"
     },
     {
@@ -2367,7 +2367,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/coverage/file_coverage_context_test.go",
-      "sha256": "059bc318480f48753948f9548b5936ad59f53a133c3e98a5324acb85c52b9158",
+      "sha256": "42a049be12402795dae6bc6c4f68f4d84d24aca8312d5e890ff0882067a86f9a",
       "role": "local"
     }
   ],
