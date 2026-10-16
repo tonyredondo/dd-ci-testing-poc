@@ -257,7 +257,8 @@ tags, and ends with 22 entries. With `DD_ENV` set, its estimate of 25 gives it a
 64 slots, 2.25 kB. Go's maps hold 28 entries in 32 slots, so that shape needs an
 estimate of 28 or less; a few client tags from `DD_TAGS` take it back to 64
 slots. An option is now twice the size of a function value, which adds 216
-bytes to the slice of a test's 27 options.
+bytes to the slice of a test's 27 options. `testopt`'s public options remain
+functions; its client turns each into an option that reserves one entry.
 
 Text-only spans reserve exactly the entries that their tags add. A fixed
 capacity of eight, including a version limited to small option lists, regresses

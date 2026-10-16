@@ -66,6 +66,15 @@ func Service(v string) StartSpanOption {
 	return StartSpanOption{apply: func(s *Span) { s.content.Service = v }}
 }
 
+// FuncOption makes an option of a function, such as testopt's options. It
+// reserves a metadata entry, as Tag does.
+func FuncOption(apply func(*Span)) StartSpanOption {
+	return StartSpanOption{apply: apply, tag: true}
+}
+
+// Func returns the function that applies the option.
+func (o StartSpanOption) Func() func(*Span) { return o.apply }
+
 // Service returns the span's service.
 func (s *Span) Service() string {
 	s.mu.Lock()
