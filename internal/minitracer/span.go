@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/propctx"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/ddtrace/ext"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/stacktrace"
 	"github.com/tonyredondo/dd-ci-testing-poc/propagation"
@@ -20,7 +21,7 @@ import (
 type Span struct {
 	mu           sync.Mutex
 	client       *Client
-	identity     propagation.Context
+	carrier      propctx.Carrier[propagation.Context] // The span's identity, and the context that newSpan returns.
 	content      eventContent
 	finished     bool
 	hierarchy    [3]string
@@ -32,7 +33,7 @@ type SpanContext struct{ identity propagation.Context }
 func (c *SpanContext) SpanID() uint64                { return c.identity.SpanID }
 func (c *SpanContext) TraceID() uint64               { return binary.BigEndian.Uint64(c.identity.TraceID[8:]) }
 func (c *SpanContext) Portable() propagation.Context { return c.identity }
-func (s *Span) Context() *SpanContext                { return &SpanContext{identity: s.identity} }
+func (s *Span) Context() *SpanContext                { return &SpanContext{identity: s.carrier.Carried} }
 
 // StartSpanOption sets a property of a new span. newSpan reserves a metadata
 // entry for each Tag option; options that set fields or shared defaults
@@ -494,7 +495,10 @@ func newSpan(client *Client, ctx context.Context, name string, options ...StartS
 	if err != nil {
 		panic("cannot generate CI trace identifiers")
 	}
-	s := &Span{client: client, identity: identity, content: eventContent{Name: name, Resource: name, Start: time.Now().UnixNano(), SpanID: identity.SpanID, TraceID: binary.BigEndian.Uint64(identity.TraceID[8:]), ParentID: parent, Meta: make(map[string]string, metadataCapacity(client, options))}}
+	if ctx == nil {
+		panic("cannot create context from nil parent") // As context.WithValue.
+	}
+	s := &Span{client: client, carrier: propctx.Carrier[propagation.Context]{Context: ctx, Carried: identity}, content: eventContent{Name: name, Resource: name, Start: time.Now().UnixNano(), SpanID: identity.SpanID, TraceID: binary.BigEndian.Uint64(identity.TraceID[8:]), ParentID: parent, Meta: make(map[string]string, metadataCapacity(client, options))}}
 	if client != nil {
 		s.content.Service = client.service
 		for k, v := range client.tags {
@@ -512,5 +516,5 @@ func newSpan(client *Client, ctx context.Context, name string, options ...StartS
 	for _, option := range options {
 		option.apply(s)
 	}
-	return s, propagation.WithContext(ctx, identity)
+	return s, &s.carrier
 }

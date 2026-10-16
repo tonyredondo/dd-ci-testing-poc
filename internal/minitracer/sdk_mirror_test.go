@@ -16,7 +16,7 @@ func TestSDKMirrorScopeAndCancellation(t *testing.T) {
 	ctx := ContextWithTest(native, owner)
 	root := sdkMirrorStart(ctx, nil, "root").(*sdkMirror)
 	child := sdkMirrorStart(context.Background(), root, "child").(*sdkMirror)
-	if child.span.content.ParentID != root.span.identity.SpanID || child.span.identity.TraceID != owner.identity.TraceID {
+	if child.span.content.ParentID != root.span.carrier.Carried.SpanID || child.span.carrier.Carried.TraceID != owner.carrier.Carried.TraceID {
 		t.Fatal("explicit SDK parent lost its CI scope")
 	}
 	if sdkMirrorStart(context.Background(), nil, "outside") != nil {
@@ -24,17 +24,17 @@ func TestSDKMirrorScopeAndCancellation(t *testing.T) {
 	}
 	returned := sdkMirrorContext(ctx, root)
 	identity, _ := propagation.FromContext(returned)
-	if identity != root.span.identity {
+	if identity != root.span.carrier.Carried {
 		t.Fatal("SDK child context lost its independent identity")
 	}
 	detached := sdkMirrorContext(returned, nil)
 	newRoot := sdkMirrorStart(detached, nil, "detached").(*sdkMirror)
-	if newRoot.span.content.ParentID != owner.identity.SpanID {
+	if newRoot.span.content.ParentID != owner.carrier.Carried.SpanID {
 		t.Fatal("SDK detach retained the previous copy as a parent")
 	}
 	otherTest, _ := newSpan(client, context.Background(), "another test")
 	other := sdkMirrorStart(ContextWithTest(returned, otherTest), root, "other").(*sdkMirror)
-	if other.span.content.ParentID != otherTest.identity.SpanID || other.span.identity.TraceID != otherTest.identity.TraceID {
+	if other.span.content.ParentID != otherTest.carrier.Carried.SpanID || other.span.carrier.Carried.TraceID != otherTest.carrier.Carried.TraceID {
 		t.Fatal("a previous SDK parent overrode the current test")
 	}
 	cancel()
@@ -98,7 +98,7 @@ func TestSDKMirrorContextOnFreshParent(t *testing.T) {
 	ctx := sdkMirrorContext(context.Background(), root)
 	detached := sdkMirrorContext(ctx, nil)
 	state := sdkMirrorStart(detached, nil, "new root")
-	if state == nil || state.(*sdkMirror).span.content.ParentID != owner.identity.SpanID {
+	if state == nil || state.(*sdkMirror).span.content.ParentID != owner.carrier.Carried.SpanID {
 		t.Fatal("ContextWithSpan lost the owning test on a fresh context")
 	}
 }

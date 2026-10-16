@@ -38,7 +38,7 @@ func ContextWithTest(ctx context.Context, test *Span) context.Context {
 	if test == nil {
 		return ctx
 	}
-	return propagation.WithContext(context.WithValue(ctx, sdkTestScopeKey{}, &sdkTestScope{test}), test.identity)
+	return propagation.WithContext(context.WithValue(ctx, sdkTestScopeKey{}, &sdkTestScope{test}), test.carrier.Carried)
 }
 
 // sdkMirrorStart is called after the SDK has selected its own parent. The
@@ -61,9 +61,9 @@ func sdkMirrorStart(ctx context.Context, parent any, name string) any {
 		ctx = context.Background()
 	}
 	if previous != nil && previous.scope == scope {
-		ctx = propagation.WithContext(ctx, previous.span.identity)
-	} else if identity, ok := propagation.FromContext(ctx); !ok || identity.TraceID != scope.test.identity.TraceID {
-		ctx = propagation.WithContext(ctx, scope.test.identity)
+		ctx = propagation.WithContext(ctx, previous.span.carrier.Carried)
+	} else if identity, ok := propagation.FromContext(ctx); !ok || identity.TraceID != scope.test.carrier.Carried.TraceID {
+		ctx = propagation.WithContext(ctx, scope.test.carrier.Carried)
 	}
 	span, _ := newSpan(scope.test.client, ctx, name)
 	// Test defaults are immutable. Read hierarchy under its lock because tests
@@ -89,10 +89,10 @@ func sdkMirrorContext(ctx context.Context, state any) context.Context {
 		if _, present := ctx.Value(sdkTestScopeKey{}).(*sdkTestScope); !present {
 			ctx = context.WithValue(ctx, sdkTestScopeKey{}, mirror.scope)
 		}
-		return propagation.WithContext(ctx, mirror.span.identity)
+		return propagation.WithContext(ctx, mirror.span.carrier.Carried)
 	}
 	if scope, ok := ctx.Value(sdkTestScopeKey{}).(*sdkTestScope); ok {
-		return propagation.WithContext(ctx, scope.test.identity)
+		return propagation.WithContext(ctx, scope.test.carrier.Carried)
 	}
 	return ctx
 }
@@ -134,7 +134,7 @@ func sdkMirrorCapture(state any, name, service, resource, kind string, start, du
 	// Keep the original APM identity for diagnosis without modifying its trace.
 	s.setMeta("apm.trace_id", hex.EncodeToString(originalTrace[:]))
 	s.setMeta("apm.span_id", strconv.FormatUint(originalSpan, 10))
-	s.content.TraceID = binary.BigEndian.Uint64(s.identity.TraceID[8:])
+	s.content.TraceID = binary.BigEndian.Uint64(s.carrier.Carried.TraceID[8:])
 	event := &ciEvent{Type: "span", Version: 1, Content: s.content, common: s.common}
 	s.sealHierarchy(&event.Content)
 	return &sdkMirrorDelivery{client: s.client, event: event}
