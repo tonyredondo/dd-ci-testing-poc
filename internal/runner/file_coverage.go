@@ -78,15 +78,15 @@ func isTestMain(p goPackage) bool {
 // matchingEmbedPattern returns the pattern of a package in dir that would
 // embed the generated file, or "": the file itself matches, or a directory
 // that holds it, which a pattern embeds with everything inside. It matches
-// as go does, with host paths: on Windows a backslash in a pattern
-// separates elements.
+// as go does, with clean host paths: on Windows a backslash in a pattern
+// separates elements, and ".\" names the package's directory.
 func matchingEmbedPattern(dir string, patterns []string, generated string) string {
 	rel, err := filepath.Rel(dir, generated)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return ""
 	}
 	for _, pattern := range patterns {
-		glob := filepath.FromSlash(strings.TrimPrefix(pattern, "all:"))
+		glob := filepath.Clean(filepath.FromSlash(strings.TrimPrefix(pattern, "all:")))
 		for candidate := rel; candidate != "." && candidate != string(filepath.Separator); candidate = filepath.Dir(candidate) {
 			if ok, _ := filepath.Match(glob, candidate); ok {
 				return pattern

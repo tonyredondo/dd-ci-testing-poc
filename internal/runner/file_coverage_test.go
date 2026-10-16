@@ -215,7 +215,7 @@ func TestPrepareFileCoverageEmbedPatterns(t *testing.T) {
 	patterns := []string{"*coverage.go", "all:sub", "sub/*"}
 	if runtime.GOOS == "windows" {
 		// go resolves patterns with host paths: a backslash separates.
-		patterns = append(patterns, `sub\*coverage.go`)
+		patterns = append(patterns, `sub\*coverage.go`, `.\*coverage.go`)
 	}
 	for _, pattern := range patterns {
 		root := fileCoverageTree(t, map[string]string{"a.go": "package a\n\nfunc F() {}\n", "sub/s.go": "package sub\n\nfunc G() {}\n"})
