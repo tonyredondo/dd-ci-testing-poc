@@ -643,9 +643,12 @@ the test that started it:
   `Context.Set` in an endless loop. In a run one at a time, `context.go` then
   goes to 361 of the 403 tests, and these 76 never call it themselves.
 
-The remaining differences between runs appear with serial marks too:
-- fiber's `Test_Listen_Graceful_Shutdown` with `internal/fieldname/fieldname.go`;
-- Gin's `TestBasicAuthFails` with `internal/bytesconv/bytesconv.go`.
+The remaining differences between runs come from Go's counters, which
+report these files in some runs only. Neither marks mode reports them:
+- fiber's `Test_Listen_Graceful_Shutdown` with
+  `internal/fieldname/fieldname.go`, in 2 of 3 runs;
+- Gin's `TestBasicAuthFails` with `internal/bytesconv/bytesconv.go`, in 1 of 3
+  runs.
 
 **The extra files** go to every test: lo's type-only constraint files, and,
 in fiber and Gin, files with only declarations, such as each fiber
