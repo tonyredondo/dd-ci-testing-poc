@@ -402,8 +402,11 @@ profile, before Mini's final delivery. With `--own-benchmarks`, each tree runs i
 benchmarks, for a candidate whose benchmarks use internals that the base lacks.
 The [third results](results/minitracer-test-span-20261016-linux-go1.27/README.md)
 measure test events started without option lists. Every run also compares the
-two trees' payloads, without what differs between runs, and `--same-wire` stops
-it when they differ: a change that must keep the wire contract runs with it.
+two trees' payloads: each event with its envelope's version and the metadata
+that it inherits, counting IDs, timestamps and other values that differ between
+runs by presence and type, and hierarchy IDs by what they reference.
+`--same-wire` stops it when they differ: a change that must keep the wire
+contract runs with it.
 Alternate execution order and retain slow or failed samples. Record CPU,
 allocations, complete wall time, wire bytes and peak memory when they apply. A
 hot function's profile share does not predict the percentage that a change will

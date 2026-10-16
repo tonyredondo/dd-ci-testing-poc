@@ -22,10 +22,11 @@ ddto test -c. Each binary runs -test.count=--count against the loopback
 receiver with --gomaxprocs. The report gives the test process's wall time, CPU
 time (user and system) and peak RSS, and what ddto adds per test over plain go
 test. The first run of each tree decodes every payload and checks that each
-test event arrived. It also compares the trees' payloads: every event and
-event-kind metadata entry, without what differs between runs (IDs,
-timestamps, _dd.p.tid, the runtime ID and the binary's path). --same-wire
-stops the benchmark when they differ. A last run of each binary, -test.count=--alloc-count with
+test event arrived. It also compares the trees' payloads: every event, with
+its envelope's version and the metadata that it inherits. IDs, timestamps,
+_dd.p.tid and the runtime ID, which differ between runs, count by presence and
+type, hierarchy IDs by what they reference, and the binary's path is masked.
+--same-wire stops the benchmark when the payloads differ. A last run of each binary, -test.count=--alloc-count with
 every allocation profiled from the process's start (GODEBUG=memprofilerate=1),
 counts the objects and bytes that it allocates per test until testing writes
 the profile, before Mini's final delivery. --report copies results.json and README.md into DIR, such
@@ -182,10 +183,10 @@ def binary_env(args, variant, url):
     return env
 
 
-# Event fields and metadata that differ between two runs of one binary.
-VOLATILE_CONTENT = ('span_id', 'trace_id', 'parent_id', 'test_session_id', 'test_module_id', 'test_suite_id', 'start', 'duration')
-VOLATILE_META = ('_dd.p.tid',)
-VOLATILE_METADATA = ('runtime-id',)
+# Values that differ between two runs of one binary. They become markers that
+# keep their presence and type; hierarchy IDs name what they reference.
+HIERARCHY = {'test_session_end': 'test_session_id', 'test_module_end': 'test_module_id', 'test_suite_end': 'test_suite_id'}
+TID = re.compile(r'[0-9a-f]{16}')
 
 
 def normalize(value, binary_dir):
@@ -199,31 +200,60 @@ def normalize(value, binary_dir):
     return value
 
 
+def marker(value, name, minimum):
+    """Returns name for an integer of at least minimum, and value otherwise."""
+    return name if isinstance(value, int) and not isinstance(value, bool) and value >= minimum else value
+
+
 def wire_content(payloads, binary_dir):
-    """Returns the payloads' events, as a count of each normalized event, and
-    their normalized event-kind metadata entries."""
-    events, metadata = Counter(), set()
+    """Returns a count of the payloads' normalized events. Each carries its
+    envelope's version and the event-kind metadata that it inherits. IDs,
+    timestamps, _dd.p.tid and the runtime ID become markers of their presence
+    and type, and hierarchy IDs the kind and resource of the session, module or
+    suite event that has them, or <unresolved>."""
+    entities = {}
     for payload in payloads:
-        for kind, values in payload.get('metadata', {}).items():
-            kept = {k: v for k, v in values.items() if k not in VOLATILE_METADATA}
-            metadata.add(json.dumps({kind: normalize(kept, binary_dir)}, sort_keys=True))
         for event in payload.get('events', []):
-            content = {k: v for k, v in event['content'].items() if k not in VOLATILE_CONTENT}
-            if 'meta' in content:
-                content['meta'] = {k: v for k, v in content['meta'].items() if k not in VOLATILE_META}
-            normalized = normalize({'type': event['type'], 'version': event['version'], 'content': content}, binary_dir)
-            events[json.dumps(normalized, sort_keys=True)] += 1
-    return events, metadata
+            field = HIERARCHY.get(event.get('type'))
+            content = event.get('content', {})
+            if field and field in content:
+                entities[content[field]] = event['type'] + ':' + normalize(content.get('resource', ''), binary_dir)
+    events = Counter()
+    for payload in payloads:
+        metadata = {}
+        for kind, values in payload.get('metadata', {}).items():
+            values = dict(values)
+            if isinstance(values.get('runtime-id'), str) and values['runtime-id']:
+                values['runtime-id'] = '<runtime-id>'
+            metadata[kind] = values
+        for event in payload.get('events', []):
+            content = dict(event.get('content', {}))
+            for field in HIERARCHY.values():
+                if field in content:
+                    content[field] = entities.get(content[field], '<unresolved>')
+            span = content.get('span_id')
+            for field in ('span_id', 'parent_id'):
+                if field in content:
+                    content[field] = marker(content[field], '<id>', 1)
+            if 'trace_id' in content:
+                content['trace_id'] = '=span_id' if span is not None and content['trace_id'] == span else marker(content['trace_id'], '<id>', 1)
+            for field, name, minimum in (('start', '<time>', 1), ('duration', '<duration>', 0)):
+                if field in content:
+                    content[field] = marker(content[field], name, minimum)
+            if isinstance(content.get('meta'), dict) and TID.fullmatch(str(content['meta'].get('_dd.p.tid', ''))):
+                content['meta'] = dict(content['meta'], **{'_dd.p.tid': '<tid>'})
+            inherited = {kind: values for kind, values in metadata.items() if kind in ('*', event.get('type'))}
+            key = {'payload_version': payload.get('version'), 'metadata': inherited,
+                   'type': event.get('type'), 'version': event.get('version'), 'content': content}
+            events[json.dumps(normalize(key, binary_dir), sort_keys=True)] += 1
+    return events
 
 
 def compare_wire(base, candidate):
-    """Returns whether two wire_content results are equal, with examples of
-    what only one of them holds."""
-    (base_events, base_metadata), (candidate_events, candidate_metadata) = base, candidate
-    only_base = list((base_events - candidate_events).elements())[:3] + sorted(base_metadata - candidate_metadata)[:3]
-    only_candidate = list((candidate_events - base_events).elements())[:3] + sorted(candidate_metadata - base_metadata)[:3]
-    return {'identical': base_events == candidate_events and base_metadata == candidate_metadata,
-            'distinct_events': len(candidate_events), 'only_base': only_base, 'only_candidate': only_candidate}
+    """Returns whether two wire_content counts are equal, with examples of
+    events that only one of them holds."""
+    return {'identical': base == candidate, 'distinct_events': len(candidate),
+            'only_base': list((base - candidate).elements())[:3], 'only_candidate': list((candidate - base).elements())[:3]}
 
 
 def run_binary(args, out, fixture, variant, directory, verify):
@@ -369,11 +399,11 @@ def report(results):
         lines.append(f"| {labels[variant]} | {allocs[variant]['objects_per_test']} | {allocs[variant]['bytes_per_test']} |")
     wire = results['wire']
     lines += ['', '## Payload content', '',
-              "Both trees' test-cycle payloads hold the same events and event-kind metadata, "
-              f"{wire['distinct_events']} distinct events, apart from IDs, timestamps, `_dd.p.tid`, the runtime ID "
-              "and the binary's path." if wire['identical'] else
-              "The trees' test-cycle payloads differ, apart from IDs, timestamps, `_dd.p.tid`, the runtime ID and "
-              "the binary's path. Only the base has, for example:", '']
+              "Each event is compared with its envelope's version and the metadata that it inherits. IDs, "
+              "timestamps, `_dd.p.tid` and the runtime ID count by presence and type, hierarchy IDs by the "
+              "session, module or suite that they reference, and the binary's path is masked.", '',
+              f"Both trees' test-cycle payloads hold the same events: {wire['distinct_events']} distinct ones."
+              if wire['identical'] else "The trees' test-cycle payloads differ. Only the base has, for example:", '']
     if not wire['identical']:
         lines += [f'- `{item}`' for item in wire['only_base']] + ['', 'Only the candidate has:', '']
         lines += [f'- `{item}`' for item in wire['only_candidate']] + ['']

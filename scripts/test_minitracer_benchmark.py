@@ -28,29 +28,55 @@ PASS
 
 
 class WireTests(unittest.TestCase):
-    def payload(self, binary, span_id, meta):
-        return {"metadata": {"*": {"runtime-id": span_id, "language": "go"}, "test": {"test_session.name": binary + "/fixture.test"}},
-                "events": [{"type": "test", "version": 2, "content": {"span_id": span_id, "start": span_id, "duration": 1,
-                            "test_suite_id": span_id, "name": "test", "meta": dict(meta, **{"_dd.p.tid": str(span_id)}),
-                            "metrics": {"m": 1}}}]}
+    def payload(self, binary, ids, meta=None, metadata=None, version=1, test=None):
+        """A payload with a suite and a test of that suite; ids offsets the IDs."""
+        test_content = {"span_id": 10 + ids, "trace_id": 10 + ids, "start": 5 + ids, "duration": ids, "test_suite_id": 20 + ids,
+                        "name": "test", "resource": "suite.T", "meta": dict(meta or {"k": "v"}, **{"_dd.p.tid": "%016x" % ids}),
+                        "metrics": {"m": 1}}
+        test_content.update(test or {})
+        return {"version": version,
+                "metadata": metadata or {"*": {"runtime-id": "id-%d" % ids, "language": "go"}, "test": {"git.branch": "main", "cmd": binary + "/fixture.test"}},
+                "events": [{"type": "test_suite_end", "version": 1, "content": {"test_suite_id": 20 + ids, "resource": "suite", "start": 3 + ids, "duration": 1}},
+                           {"type": "test", "version": 2, "content": test_content}]}
 
-    def test_runs_differ_only_in_volatile_fields(self):
-        base = benchmark.wire_content([self.payload("/out/base", 1, {"k": "v", "test.command": "/out/base/fixture.test"})], "/out/base")
-        candidate = benchmark.wire_content([self.payload("/out/candidate", 2, {"k": "v", "test.command": "/out/candidate/fixture.test"})], "/out/candidate")
-        self.assertTrue(benchmark.compare_wire(base, candidate)["identical"])
+    def compare(self, base, candidate):
+        return benchmark.compare_wire(benchmark.wire_content(base, "/out/base"), benchmark.wire_content(candidate, "/out/candidate"))
+
+    def test_runs_differ_only_in_what_varies(self):
+        self.assertTrue(self.compare([self.payload("/out/base", 1)], [self.payload("/out/candidate", 2)])["identical"])
 
     def test_a_changed_tag_differs(self):
-        base = benchmark.wire_content([self.payload("/b", 1, {"k": "v"})], "/b")
-        candidate = benchmark.wire_content([self.payload("/c", 1, {"k": "other"})], "/c")
-        result = benchmark.compare_wire(base, candidate)
+        result = self.compare([self.payload("/out/base", 1)], [self.payload("/out/candidate", 1, meta={"k": "other"})])
         self.assertFalse(result["identical"])
         self.assertIn('"k": "v"', result["only_base"][0])
         self.assertIn('"k": "other"', result["only_candidate"][0])
 
     def test_a_missing_event_differs(self):
-        one = self.payload("/b", 1, {"k": "v"})
-        two = dict(one, events=one["events"] * 2)
-        self.assertFalse(benchmark.compare_wire(benchmark.wire_content([one], "/b"), benchmark.wire_content([two], "/b"))["identical"])
+        one = self.payload("/out/base", 1)
+        two = dict(one, events=one["events"] + one["events"][1:])
+        self.assertFalse(self.compare([one], [two])["identical"])
+
+    def test_metadata_counts_for_each_payload(self):
+        # The second payload's events lose an inherited tag, while the first
+        # payload still holds it.
+        base = [self.payload("/out/base", 1), self.payload("/out/base", 2)]
+        bare = {"*": {"runtime-id": "x", "language": "go"}, "test": {"cmd": "/out/candidate/fixture.test"}}
+        candidate = [self.payload("/out/candidate", 1), self.payload("/out/candidate", 2, metadata=bare)]
+        self.assertFalse(self.compare(base, candidate)["identical"])
+
+    def test_structure_counts(self):
+        for name, candidate in {
+            "missing identity": self.payload("/out/candidate", 1, test={"span_id": None}),
+            "trace other than the span": self.payload("/out/candidate", 1, test={"trace_id": 99}),
+            "broken suite reference": self.payload("/out/candidate", 1, test={"test_suite_id": 999}),
+            "duration of another type": self.payload("/out/candidate", 1, test={"duration": "1"}),
+            "envelope version": self.payload("/out/candidate", 1, version=2),
+        }.items():
+            with self.subTest(name):
+                self.assertFalse(self.compare([self.payload("/out/base", 1)], [candidate])["identical"])
+        missing = self.payload("/out/candidate", 1)
+        del missing["events"][1]["content"]["start"]
+        self.assertFalse(self.compare([self.payload("/out/base", 1)], [missing])["identical"])
 
 
 class MeasureTests(unittest.TestCase):
@@ -140,7 +166,7 @@ class ReportTests(unittest.TestCase):
         self.assertIn("The first base run delivered 4 `test`, 1 `test_suite_end` events.", text)
         self.assertIn("Each tree runs its own `performance_test.go`.", text)
         self.assertIn("| ddto, candidate | 48.8 | 5870 |", text)
-        self.assertIn("payloads hold the same events and event-kind metadata, 7 distinct events", text)
+        self.assertIn("payloads hold the same events: 7 distinct ones.", text)
         results["wire"] = {"identical": False, "distinct_events": 7, "only_base": ["a"], "only_candidate": ["b"]}
         text = benchmark.report(results)
         self.assertIn("Only the base has, for example:\n\n- `a`", text)
