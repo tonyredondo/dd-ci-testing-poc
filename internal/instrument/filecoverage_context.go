@@ -502,6 +502,36 @@ func TransformContextHTTP(files map[string][]byte) (map[string][]byte, error) {
 	}, map[string]int{"RegisterOnShutdown": 1})
 }
 
+// TransformContextTesting edits testing, given as the sources that the build
+// compiles, so that the parallel tests' semaphore carries no context:
+// release, which a test with subtests calls before its cleanups and so before
+// its coverage is captured, sends to a waiting test without the sender's.
+func TransformContextTesting(files map[string][]byte) (map[string][]byte, error) {
+	if err := declarationsError(files, []string{"func (*testState) release()", "field testState.startParallel chan bool"}, "testing lacks %s"); err != nil {
+		return nil, err
+	}
+	return editFiles(files, "testing", func(fs *token.FileSet, file *ast.File, add func(int, string), found map[string]int) {
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil || funcName(fn) != "(*testState) release" {
+				continue
+			}
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				send, ok := n.(*ast.SendStmt)
+				if !ok {
+					return true
+				}
+				if sel, ok := send.Chan.(*ast.SelectorExpr); ok && sel.Sel.Name == "startParallel" {
+					add(fs.Position(send.Pos()).Offset, "__ddto_ctx := runtime.DdtoCtx(); runtime.DdtoSetCtx(nil); ")
+					add(fs.Position(send.End()).Offset, "; runtime.DdtoSetCtx(__ddto_ctx)")
+					found["release"]++
+				}
+				return true
+			})
+		}
+	}, map[string]int{"release": 1})
+}
+
 // TransformContextSingleflight edits a singleflight package, either
 // golang.org/x/sync/singleflight or std's internal/singleflight, given as the
 // sources that the build compiles:

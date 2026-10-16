@@ -34,6 +34,7 @@ func contextEdits() []contextEdit {
 		{pkg: "runtime", transform: instrument.TransformContextRuntime, hook: instrument.ContextRuntimeHook(instrument.FileCoveragePackage)},
 		{pkg: "internal/poll", transform: instrument.TransformContextPoll, hook: instrument.ContextPollHook},
 		{pkg: "context", transform: instrument.TransformContextContext, hook: instrument.ContextCaptureHook("context")},
+		{pkg: "testing", transform: instrument.TransformContextTesting},
 		{pkg: "net/http", transform: instrument.TransformContextHTTP, hook: instrument.ContextCaptureHook("http"), optional: true},
 		{pkg: "internal/singleflight", transform: instrument.TransformContextSingleflight, hook: instrument.ContextSingleflightHook("singleflight", instrument.FileCoveragePackage), optional: true},
 	}
@@ -81,7 +82,9 @@ func prepareContextCoverage(tested, listed []goPackage, replacements map[string]
 			}
 			changes.replace[logical] = backing
 		}
-		changes.add[filepath.Join(pkg.Dir, contextHookFile)] = edit.hook
+		if edit.hook != "" {
+			changes.add[filepath.Join(pkg.Dir, contextHookFile)] = edit.hook
+		}
 	}
 	return changes, "", nil
 }

@@ -40,6 +40,7 @@ func TestContextEditsKeepLines(t *testing.T) {
 		{"context", TransformContextContext},
 		{"internal/singleflight", TransformContextSingleflight},
 		{"net/http", TransformContextHTTP},
+		{"testing", TransformContextTesting},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
 			_, sources := toolchainSources(t, tc.path)
