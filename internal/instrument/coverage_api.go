@@ -149,8 +149,14 @@ func declaringSources(sources map[string][]byte, want []string) map[string][]byt
 	}
 	selected := map[string][]byte{}
 	for path, src := range sources {
+		text := src
+		if bytes.IndexByte(text, '\r') >= 0 {
+			// go/parser drops carriage returns from comments, so a
+			// linkname directive can name a declaration only without them.
+			text = bytes.ReplaceAll(text, []byte("\r"), nil)
+		}
 		for _, name := range names {
-			if bytes.Contains(src, name) {
+			if bytes.Contains(text, name) {
 				selected[path] = src
 				break
 			}

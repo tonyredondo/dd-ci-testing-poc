@@ -163,3 +163,27 @@ func TestDeclaringSourcesParsesOnlyNamingFiles(t *testing.T) {
 		t.Fatal("a file that only mentions the name declared it")
 	}
 }
+
+// go/parser drops carriage returns from comments, so a linkname directive
+// split by one names the declaration: the filter keeps its file, as a full
+// parse reads it. CRLF files keep matching too.
+func TestDeclaringSourcesIgnoresCarriageReturns(t *testing.T) {
+	sources := map[string][]byte{
+		"api.go":  []byte("package integrations\nfunc forcedExit() {}\n"),
+		"link.go": []byte("package integrations\nimport _ \"unsafe\"\n//go:linkname f\rorcedExit\nfunc f() {}\n"),
+	}
+	full, err := sourceDeclarations(sources)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !full["linkname forcedExit"] {
+		t.Fatal("a full parse no longer reads the split directive; review this test")
+	}
+	if err := ExitHookRuntimeError(sources); err != nil {
+		t.Fatalf("the split directive's file was left out: %v", err)
+	}
+	crlf := map[string][]byte{"crlf.go": []byte("package integrations\r\n\r\n//go:linkname forcedExit\r\nfunc forcedExit() {}\r\n")}
+	if err := ExitHookRuntimeError(crlf); err != nil {
+		t.Fatalf("a CRLF file was left out: %v", err)
+	}
+}
