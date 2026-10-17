@@ -92,40 +92,45 @@ func runtimeChecksUsed(t *testing.T) map[string]bool {
 	return used
 }
 
-func ownTestPackage(dir, module string) goPackage {
+func ownTestPackage(dir, module, moduleDir string) goPackage {
 	p := goPackage{Dir: dir, GoFiles: []string{"a.go"}}
 	p.Module = &struct {
 		Path, Version, Dir string
 		Main               bool
 		Replace            *struct{ Path, Dir, Version string }
-	}{Path: module}
+	}{Path: module, Dir: moduleDir}
 	return p
 }
 
-// Only the packages of Mini's module under a root that cliMiniRoot returned
-// come from the CLI's own sources.
+// Only the packages of Mini's module whose module root is one that
+// cliMiniRoot returned come from the CLI's own sources: another revision of
+// Mini inside that root, such as a worktree under testdata, is another module.
 func TestMarkOwnRuntime(t *testing.T) {
 	base := t.TempDir()
 	root := filepath.Join(base, "mini")
 	ctx := withOwnRuntimeRoots(context.Background())
 	noteOwnRuntimeRoot(ctx, "")
 	noteOwnRuntimeRoot(ctx, root)
+	replaced := ownTestPackage(filepath.Join(root, "internal", "utils"), miniModule, filepath.Join(base, "cache", "mini@v1"))
+	replaced.Module.Replace = &struct{ Path, Dir, Version string }{Path: root, Dir: root}
 	listed := []goPackage{
-		ownTestPackage(filepath.Join(root, "internal", "integrations"), miniModule),
-		ownTestPackage(filepath.Join(base, "client-mini", "internal", "integrations"), miniModule),
-		ownTestPackage(filepath.Join(base, "mini-other", "internal"), miniModule),
-		ownTestPackage(filepath.Join(root, "testdata", "fixture"), "example.com/fixture"),
+		ownTestPackage(filepath.Join(root, "internal", "integrations"), miniModule, root),
+		replaced,
+		ownTestPackage(filepath.Join(base, "client-mini", "internal", "integrations"), miniModule, filepath.Join(base, "client-mini")),
+		ownTestPackage(filepath.Join(base, "mini-other", "internal"), miniModule, filepath.Join(base, "mini-other")),
+		ownTestPackage(filepath.Join(root, "testdata", "old-mini", "internal"), miniModule, filepath.Join(root, "testdata", "old-mini")),
+		ownTestPackage(filepath.Join(root, "testdata", "fixture"), "example.com/fixture", root),
 		{Dir: filepath.Join(root, "internal", "nomodule")},
 	}
-	if marked := markOwnRuntime(ctx, listed, ""); marked != 1 {
-		t.Fatalf("marked %d packages, want 1", marked)
+	if marked := markOwnRuntime(ctx, listed, ""); marked != 2 {
+		t.Fatalf("marked %d packages, want 2", marked)
 	}
-	for i, want := range []bool{true, false, false, false, false} {
+	for i, want := range []bool{true, true, false, false, false, false, false} {
 		if listed[i].ownRuntime != want {
 			t.Errorf("package %s: ownRuntime=%t, want %t", listed[i].Dir, listed[i].ownRuntime, want)
 		}
 	}
-	other := []goPackage{ownTestPackage(filepath.Join(root, "internal"), miniModule)}
+	other := []goPackage{ownTestPackage(filepath.Join(root, "internal"), miniModule, root)}
 	if markOwnRuntime(context.Background(), other, "") != 0 || other[0].ownRuntime {
 		t.Fatal("a context without roots marked a package")
 	}
@@ -138,13 +143,13 @@ func TestMarkOwnRuntimeFindsTheCLISources(t *testing.T) {
 	if len(roots) == 0 {
 		t.Fatal("no own sources for this checkout")
 	}
-	listed := []goPackage{ownTestPackage(filepath.Join(roots[0], "internal", "thirdparty"), miniModule)}
+	listed := []goPackage{ownTestPackage(filepath.Join(roots[0], "internal", "thirdparty"), miniModule, roots[0])}
 	if markOwnRuntime(context.Background(), listed, "") != 1 {
 		t.Fatalf("the checkout's packages under %s were not marked", roots[0])
 	}
 	cache := t.TempDir()
 	cached := filepath.Join(cache, miniModule+"@v9.9.9")
-	listed = []goPackage{ownTestPackage(filepath.Join(cached, "internal"), miniModule)}
+	listed = []goPackage{ownTestPackage(filepath.Join(cached, "internal"), miniModule, cached)}
 	if markOwnRuntime(context.Background(), listed, cache) != 0 {
 		t.Fatal("a cached version that did not build the CLI was marked")
 	}
@@ -168,15 +173,16 @@ func TestCLIMiniRootRecordsItsRoot(t *testing.T) {
 	}
 }
 
-// A check runs unless the package is the CLI's own and no overlay replaces
-// one of its files.
+// A check runs unless the package is the CLI's own and no overlay entry is in
+// its directory: one that replaces, adds or deletes a file. Go leaves a deleted
+// file out of GoFiles.
 func TestCheckSourcesSkipsOnlyUnreplacedOwnPackages(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "a.go"), []byte("package a\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	refuse := func(map[string][]byte) error { return errors.New("refused") }
-	p := ownTestPackage(dir, miniModule)
+	p := ownTestPackage(dir, miniModule, dir)
 	if got := checkSources(&p, nil, refuse); got != "refused" {
 		t.Fatalf("a package that is not the CLI's own skipped its check: %q", got)
 	}
@@ -184,8 +190,17 @@ func TestCheckSourcesSkipsOnlyUnreplacedOwnPackages(t *testing.T) {
 	if got := checkSources(&p, nil, refuse); got != "" {
 		t.Fatalf("the CLI's own package was checked: %q", got)
 	}
-	replaced := map[string]string{filepath.Join(dir, "a.go"): filepath.Join(dir, "a.go")}
-	if got := checkSources(&p, replaced, refuse); got != "refused" {
-		t.Fatalf("an overlaid package skipped its check: %q", got)
+	for name, overlay := range map[string]map[string]string{
+		"replaced": {filepath.Join(dir, "a.go"): filepath.Join(dir, "a.go")},
+		"deleted":  {filepath.Join(dir, "crash.go"): ""},
+		"added":    {filepath.Join(dir, "new.go"): filepath.Join(dir, "a.go")},
+	} {
+		if got := checkSources(&p, overlay, refuse); got != "refused" {
+			t.Errorf("a package with a %s file skipped its check: %q", name, got)
+		}
+	}
+	elsewhere := map[string]string{filepath.Join(dir, "sub", "a.go"): ""}
+	if got := checkSources(&p, elsewhere, refuse); got != "" {
+		t.Fatalf("an overlay of another directory made the package checked: %q", got)
 	}
 }

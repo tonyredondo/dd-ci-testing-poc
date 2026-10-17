@@ -74,9 +74,13 @@ release's extracted sources when ddto provides them.
 `TestMiniRuntimePassesEveryRuntimeCheck` runs
 every runtime check that the runner calls on Mini's sources, for Linux,
 macOS, Windows and 386, so a change to Mini that would fail one fails there.
-Another runtime that a client selects, or an overlay over a package's files,
-is still checked. In a checkout with local edits that break one of these
-declarations, the build then fails to link instead of going without the hook.
+A package counts only if its module root is exactly one of those sources, so
+another runtime that a client selects, even another revision of Mini inside
+the CLI's checkout, is still checked, and so is any package with an overlay
+entry in its directory: one that replaces, adds or deletes a file. A checkout
+whose files differ from the revision that built ddto, through local edits or
+another checked-out revision, then fails to link a hook whose declaration it
+lacks, instead of going without the hook.
 On 2026-10-17, a cached Gin build took 0.193 s against 0.197 s, in two
 alternating rounds
 ([before](results/own-runtime-checks-20261017-linux-go1.27.1/base-1/README.md),

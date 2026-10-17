@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
-	"strings"
 	"sync"
 )
 
@@ -53,11 +52,11 @@ func cliMiniRoots(moduleCache string) []string {
 	return roots
 }
 
-// markOwnRuntime marks the listed packages of Mini's module that come from the
-// CLI's own sources: those that provisioning used, and those of cliMiniRoots,
-// which a client's replacement or requirement can also select. It returns how
-// many it marked. Another runtime that the client selects lies elsewhere and
-// stays unmarked.
+// markOwnRuntime marks the listed packages of Mini's module whose module root
+// is one of the CLI's own sources: those that provisioning used, and those of
+// cliMiniRoots, which a client's replacement or requirement can also select.
+// It returns how many it marked. Another runtime that the client selects has
+// another root, even inside the CLI's checkout, and stays unmarked.
 func markOwnRuntime(ctx context.Context, listed []goPackage, moduleCache string) int {
 	own := cliMiniRoots(moduleCache)
 	if noted, _ := ctx.Value(ownRuntimeKey{}).(*ownRuntimeRoots); noted != nil {
@@ -71,8 +70,15 @@ func markOwnRuntime(ctx context.Context, listed []goPackage, moduleCache string)
 		if p.Module == nil || p.Module.Path != miniModule {
 			continue
 		}
+		moduleRoot := p.Module.Dir
+		if p.Module.Replace != nil && p.Module.Replace.Dir != "" {
+			moduleRoot = p.Module.Replace.Dir
+		}
+		if moduleRoot == "" {
+			continue
+		}
 		for _, root := range own {
-			if strings.HasPrefix(filepath.Clean(p.Dir)+string(filepath.Separator), root+string(filepath.Separator)) {
+			if filepath.Clean(moduleRoot) == root {
 				p.ownRuntime = true
 				marked++
 				break
@@ -83,15 +89,20 @@ func markOwnRuntime(ctx context.Context, listed []goPackage, moduleCache string)
 }
 
 // ownSources reports whether p's files are the CLI's own runtime sources,
-// unchanged by any overlay. The CLI's tests check those sources against every
-// runtime check (TestMiniRuntimePassesEveryRuntimeCheck in internal/instrument),
-// so the checks need not read them again on every invocation.
+// with no overlay entry in p's directory: none replaces, adds or deletes one of
+// its files. The CLI's tests check those sources against every runtime check
+// (TestMiniRuntimePassesEveryRuntimeCheck), so the checks need not read them
+// again on every invocation. A checkout whose files differ from the revision
+// that built the CLI, through local edits or another checked-out revision,
+// then fails to link a hook whose declaration it lacks, instead of going
+// without the hook.
 func ownSources(p *goPackage, replacements map[string]string) bool {
 	if !p.ownRuntime {
 		return false
 	}
-	for _, name := range p.GoFiles {
-		if _, replaced := replacements[filepath.Join(p.Dir, name)]; replaced {
+	dir := filepath.Clean(p.Dir)
+	for path := range replacements {
+		if filepath.Dir(path) == dir {
 			return false
 		}
 	}
