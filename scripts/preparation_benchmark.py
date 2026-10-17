@@ -69,7 +69,8 @@ def executable(path):
     """Returns path absolute when it names a file, or as found in PATH."""
     if os.sep in path or (os.altsep and os.altsep in path) or Path(path).exists():
         return str(Path(path).resolve())
-    return shutil.which(path) or path
+    found = shutil.which(path)
+    return str(Path(found).resolve()) if found else path
 
 
 def normalize(args):

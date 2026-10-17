@@ -44,6 +44,16 @@ class PreparationBenchmarkTests(unittest.TestCase):
                 self.assertEqual(str(root / 'ddto'), args.binaries['local'])
                 self.assertEqual(str(root / 'ddto'), args.binaries['here'])
                 self.assertTrue(Path(args.binaries['path']).is_absolute())
+                Path('bin').mkdir()
+                Path('bin', 'ddto-relative').write_text('')
+                Path('bin', 'ddto-relative').chmod(0o755)
+                path = os.environ['PATH']
+                os.environ['PATH'] = 'bin' + os.pathsep + path
+                try:
+                    found = benchmark.executable('ddto-relative')
+                finally:
+                    os.environ['PATH'] = path
+                self.assertEqual(str(root / 'bin' / 'ddto-relative'), found)
                 env = benchmark.environment(args.output, 'local')
                 self.assertTrue(Path(env['GOCACHE']).is_absolute() and Path(env['XDG_CACHE_HOME']).is_absolute())
             finally:
