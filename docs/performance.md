@@ -66,27 +66,22 @@ the checked packages has a name that its own file contains, and
 does. A file that is left out is not parsed, so a syntax error there is
 reported by the build instead.
 
-When the runtime is the CLI's own sources, ddto skips its runtime checks
-altogether (`ownSources` in `internal/runner/own_runtime.go`). Those sources
-are the CLI's checkout or its exact version in GOMODCACHE, whether ddto
-provides them or the client's replacement or requirement selects them, and a
-release's extracted sources when ddto provides them.
-`TestMiniRuntimePassesEveryRuntimeCheck` runs
-every runtime check that the runner calls on Mini's sources, for Linux,
-macOS, Windows and 386, so a change to Mini that would fail one fails there.
-A package counts only if its module root is exactly one of those sources, so
-another runtime that a client selects, even another revision of Mini inside
-the CLI's checkout, is still checked, and so is any package with an overlay
-entry in its directory: one that replaces, adds or deletes a file. A checkout
-whose files differ from the revision that built ddto, through local edits or
-another checked-out revision, then fails to link a hook whose declaration it
-lacks, instead of going without the hook.
-On 2026-10-17, a cached Gin build took 0.193 s against 0.197 s, in two
-alternating rounds
-([before](results/own-runtime-checks-20261017-linux-go1.27.1/base-1/README.md),
-[after](results/own-runtime-checks-20261017-linux-go1.27.1/candidate-1/README.md)),
-and preparation 73.6 ms against 77.4 ms, and 72.6 ms on 2026-10-14 before
-these hooks existed: medians of 10 interleaved `DD_TRACE_DEBUG` runs.
+ddto skips its runtime checks altogether when the runtime is the CLI's own
+sources and those cannot differ from the revision that built it
+(`ownSources` in `internal/runner/own_runtime.go`): a release's sources that
+ddto provides, or the CLI's exact version in GOMODCACHE, as `go install`
+fetches it, whether ddto provides it or a client's requirement selects it.
+`TestMiniRuntimePassesEveryRuntimeCheck` runs every runtime check that the
+runner calls on Mini's sources, for Linux, macOS, Windows and 386. A package
+counts only if its module root is exactly one of those sources and no overlay
+entry is in its directory, whether it replaces, adds or deletes a file. A
+checkout keeps the checks. Some hooks only set Mini's variables, so a checkout
+with local edits or another revision would still link and silently go without
+them. On 2026-10-17, with Gin and its runtime provided by ddto, a release
+executable prepared in 81.6 ms against 84.3 ms before, and an executable built
+from a checkout in 83.1 ms: medians of 15 rotating runs of
+`scripts/preparation_benchmark.py`
+([data](results/own-runtime-checks-20261017-linux-go1.27.1/README.md)).
 
 [`PrepareRuntime`](../internal/runner/run.go) requests only the package fields
 it needs from a targeted `go list -deps`, which lists the named packages and
