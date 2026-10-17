@@ -1,3 +1,7 @@
+import argparse
+import os
+from pathlib import Path
+import tempfile
 import unittest
 
 import preparation_benchmark as benchmark
@@ -25,6 +29,25 @@ class PreparationBenchmarkTests(unittest.TestCase):
         results = {'subject': '/x/gin', 'subject_commit': '73726dc606790000', 'go': 'go version go1.27.1',
                    'cpus': 4, 'runs': 3, 'samples': {'release': samples}}
         self.assertIn('| release | 200.0 ms | 75.00 ms | 100.00 ms | 180.00 ms | 51 |', benchmark.report(results))
+
+    def test_normalize_makes_paths_absolute(self):
+        with tempfile.TemporaryDirectory() as directory:
+            previous = os.getcwd()
+            os.chdir(directory)
+            try:
+                Path('ddto').write_text('')
+                args = argparse.Namespace(subject=Path('gin'), output=Path('out'), report=Path('docs'),
+                                          ddto=['local=./ddto', 'here=ddto', 'path=python3'])
+                benchmark.normalize(args)
+                root = Path(directory).resolve()
+                self.assertEqual((root / 'gin', root / 'out', root / 'docs'), (args.subject, args.output, args.report))
+                self.assertEqual(str(root / 'ddto'), args.binaries['local'])
+                self.assertEqual(str(root / 'ddto'), args.binaries['here'])
+                self.assertTrue(Path(args.binaries['path']).is_absolute())
+                env = benchmark.environment(args.output, 'local')
+                self.assertTrue(Path(env['GOCACHE']).is_absolute() and Path(env['XDG_CACHE_HOME']).is_absolute())
+            finally:
+                os.chdir(previous)
 
 
 if __name__ == '__main__':

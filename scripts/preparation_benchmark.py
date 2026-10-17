@@ -65,11 +65,28 @@ def environment(out, name):
     return env
 
 
+def executable(path):
+    """Returns path absolute when it names a file, or as found in PATH."""
+    if os.sep in path or (os.altsep and os.altsep in path) or Path(path).exists():
+        return str(Path(path).resolve())
+    return shutil.which(path) or path
+
+
+def normalize(args):
+    """Makes every path absolute: commands run in the subject's directory, and
+    Go requires an absolute GOCACHE."""
+    args.subject, args.output = args.subject.resolve(), args.output.resolve()
+    if args.report:
+        args.report = args.report.resolve()
+    args.binaries = {name: executable(path) for name, path in (entry.split('=', 1) for entry in args.ddto)}
+    return args
+
+
 def run(args):
     out = args.output
     if out.exists():
         raise SystemExit(f'{out} exists')
-    binaries = dict(entry.split('=', 1) for entry in args.ddto)
+    binaries = args.binaries
     for name in binaries:
         (out / name / 'out').mkdir(parents=True)
         primed = subprocess.run(command(binaries[name], args.cpus, out / name / 'out'), cwd=args.subject,
@@ -130,7 +147,7 @@ def main():
     args = parser.parse_args()
     if any('=' not in entry for entry in args.ddto):
         parser.error('each executable is NAME=DDTO')
-    results = run(args)
+    results = run(normalize(args))
     args.output.joinpath('results.json').write_text(json.dumps(results, indent=1) + '\n')
     args.output.joinpath('README.md').write_text(report(results))
     if args.report:
