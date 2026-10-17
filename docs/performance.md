@@ -66,6 +66,24 @@ the checked packages has a name that its own file contains, and
 does. A file that is left out is not parsed, so a syntax error there is
 reported by the build instead.
 
+When the runtime is the CLI's own sources, ddto skips its runtime checks
+altogether (`ownSources` in `internal/runner/own_runtime.go`). Those sources
+are the CLI's checkout or its exact version in GOMODCACHE, whether ddto
+provides them or the client's replacement or requirement selects them, and a
+release's extracted sources when ddto provides them.
+`TestMiniRuntimePassesEveryRuntimeCheck` runs
+every runtime check that the runner calls on Mini's sources, for Linux,
+macOS, Windows and 386, so a change to Mini that would fail one fails there.
+Another runtime that a client selects, or an overlay over a package's files,
+is still checked. In a checkout with local edits that break one of these
+declarations, the build then fails to link instead of going without the hook.
+On 2026-10-17, a cached Gin build took 0.193 s against 0.197 s, in two
+alternating rounds
+([before](results/own-runtime-checks-20261017-linux-go1.27.1/base-1/README.md),
+[after](results/own-runtime-checks-20261017-linux-go1.27.1/candidate-1/README.md)),
+and preparation 73.6 ms against 77.4 ms, and 72.6 ms on 2026-10-14 before
+these hooks existed: medians of 10 interleaved `DD_TRACE_DEBUG` runs.
+
 [`PrepareRuntime`](../internal/runner/run.go) requests only the package fields
 it needs from a targeted `go list -deps`, which lists the named packages and
 each of their dependencies once. Reachability follows `Imports` through that
