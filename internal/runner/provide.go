@@ -214,17 +214,21 @@ func requireLocalMini(ctx context.Context, dir, modfile, root, selectedVersion, 
 // cliMiniRoot returns local sources of the runtime revision that built the
 // CLI: its checkout, the sources that a release build carries, or its exact
 // version in GOMODCACHE, in that order. It returns "" when none is available.
-func cliMiniRoot(ctx context.Context, sourceFile, moduleCache, version string) (root string) {
-	defer func() { noteOwnRuntimeRoot(ctx, root) }()
+func cliMiniRoot(ctx context.Context, sourceFile, moduleCache, version string) string {
 	if root := miniSourceRoot(sourceFile, "", ""); root != "" {
 		return root
 	}
+	// Only sources that cannot change are the CLI's own for its runtime
+	// checks: see ownSources.
 	if bundled := bundledMiniFrom(ctx); bundled != nil {
 		if root := bundled.sources(ctx); root != "" {
+			noteOwnRuntimeRoot(ctx, root)
 			return root
 		}
 	}
-	return miniSourceRoot("", moduleCache, version)
+	root := miniSourceRoot("", moduleCache, version)
+	noteOwnRuntimeRoot(ctx, root)
+	return root
 }
 
 // publishedVersion excludes development builds, whose version cannot be fetched.

@@ -122,7 +122,7 @@ func TestMarkOwnRuntime(t *testing.T) {
 		ownTestPackage(filepath.Join(root, "testdata", "fixture"), "example.com/fixture", root),
 		{Dir: filepath.Join(root, "internal", "nomodule")},
 	}
-	if marked := markOwnRuntime(ctx, listed, ""); marked != 2 {
+	if marked := markOwnRuntime(ctx, listed, "", ""); marked != 2 {
 		t.Fatalf("marked %d packages, want 2", marked)
 	}
 	for i, want := range []bool{true, true, false, false, false, false, false} {
@@ -131,45 +131,81 @@ func TestMarkOwnRuntime(t *testing.T) {
 		}
 	}
 	other := []goPackage{ownTestPackage(filepath.Join(root, "internal"), miniModule, root)}
-	if markOwnRuntime(context.Background(), other, "") != 0 || other[0].ownRuntime {
+	if markOwnRuntime(context.Background(), other, "", "") != 0 || other[0].ownRuntime {
 		t.Fatal("a context without roots marked a package")
 	}
 }
 
-// A client's replacement or requirement that selects the CLI's own checkout
-// or exact version needs no provisioning to count as its own sources.
-func TestMarkOwnRuntimeFindsTheCLISources(t *testing.T) {
-	roots := cliMiniRoots("")
-	if len(roots) == 0 {
-		t.Fatal("no own sources for this checkout")
-	}
-	listed := []goPackage{ownTestPackage(filepath.Join(roots[0], "internal", "thirdparty"), miniModule, roots[0])}
-	if markOwnRuntime(context.Background(), listed, "") != 1 {
-		t.Fatalf("the checkout's packages under %s were not marked", roots[0])
-	}
+// The CLI's exact version in GOMODCACHE is its own, whatever selects it; a
+// checkout, which can hold local edits or another revision, is not.
+func TestMarkOwnRuntimeFindsOnlyImmutableSources(t *testing.T) {
 	cache := t.TempDir()
-	cached := filepath.Join(cache, miniModule+"@v9.9.9")
-	listed = []goPackage{ownTestPackage(filepath.Join(cached, "internal"), miniModule, cached)}
-	if markOwnRuntime(context.Background(), listed, cache) != 0 {
-		t.Fatal("a cached version that did not build the CLI was marked")
+	cached := filepath.Join(cache, miniModule+"@v1.2.3")
+	if err := os.MkdirAll(filepath.Join(cached, "testopt"), 0700); err != nil {
+		t.Fatal(err)
 	}
-}
-
-// cliMiniRoot records the root that it returns, such as a release's
-// extracted sources, which cliMiniRoots does not find.
-func TestCLIMiniRootRecordsItsRoot(t *testing.T) {
-	ctx := withOwnRuntimeRoots(context.Background())
+	if err := os.WriteFile(filepath.Join(cached, "go.mod"), []byte(testRuntimeFiles["go.mod"]), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if roots := cliMiniRoots(cache, "v1.2.3"); len(roots) != 1 || roots[0] != cached {
+		t.Fatalf("roots %v, want %s", roots, cached)
+	}
+	listed := []goPackage{
+		ownTestPackage(filepath.Join(cached, "internal"), miniModule, cached),
+		ownTestPackage(filepath.Join(cache, miniModule+"@v9.9.9", "internal"), miniModule, filepath.Join(cache, miniModule+"@v9.9.9")),
+	}
+	if markOwnRuntime(context.Background(), listed, cache, "v1.2.3") != 1 || !listed[0].ownRuntime {
+		t.Fatal("the CLI's version in GOMODCACHE was not the only package marked")
+	}
 	source, err := filepath.Abs("provide.go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := cliMiniRoot(ctx, source, "", "")
-	if root == "" {
-		t.Fatal("no root for this checkout")
+	ctx := withOwnRuntimeRoots(context.Background())
+	checkout := cliMiniRoot(ctx, source, "", "")
+	if checkout == "" {
+		t.Fatal("no checkout root")
 	}
-	noted := ctx.Value(ownRuntimeKey{}).(*ownRuntimeRoots).roots
-	if len(noted) != 1 || noted[0] != filepath.Clean(root) {
-		t.Fatalf("noted %v, want %s", noted, root)
+	inCheckout := []goPackage{ownTestPackage(filepath.Join(checkout, "internal", "thirdparty"), miniModule, checkout)}
+	if markOwnRuntime(ctx, inCheckout, "", "") != 0 {
+		t.Fatal("the CLI's checkout counted as its own sources")
+	}
+}
+
+// cliMiniRoot notes a release's extracted sources and the CLI's version in
+// GOMODCACHE, but not its checkout.
+func TestCLIMiniRootNotesOnlyImmutableSources(t *testing.T) {
+	useTestUserCache(t)
+	source, err := filepath.Abs("provide.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	moduleCache := t.TempDir()
+	cached := filepath.Join(moduleCache, miniModule+"@v1.2.3")
+	if err := os.MkdirAll(filepath.Join(cached, "testopt"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cached, "go.mod"), []byte(testRuntimeFiles["go.mod"]), 0600); err != nil {
+		t.Fatal(err)
+	}
+	bundled := &bundledMini{env: testGoEnvironment(t), dir: ".", archive: testRuntimeArchive(t, testRuntimeFiles)}
+	defer bundled.release()
+	noted := func(ctx context.Context) []string { return ctx.Value(ownRuntimeKey{}).(*ownRuntimeRoots).roots }
+
+	ctx := withOwnRuntimeRoots(withBundledMini(t.Context(), bundled))
+	if root := cliMiniRoot(ctx, source, moduleCache, "v1.2.3"); root == "" || len(noted(ctx)) != 0 {
+		t.Fatalf("the checkout %q was noted: %v", root, noted(ctx))
+	}
+	release := cliMiniRoot(ctx, "", moduleCache, "v1.2.3")
+	if got := noted(ctx); len(got) != 1 || got[0] != filepath.Clean(release) {
+		t.Fatalf("noted %v, want the release's sources %s", got, release)
+	}
+	ctx = withOwnRuntimeRoots(t.Context())
+	if root := cliMiniRoot(ctx, "", moduleCache, "v1.2.3"); root != cached {
+		t.Fatalf("root %s, want %s", root, cached)
+	}
+	if got := noted(ctx); len(got) != 1 || got[0] != cached {
+		t.Fatalf("noted %v, want %s", got, cached)
 	}
 }
 

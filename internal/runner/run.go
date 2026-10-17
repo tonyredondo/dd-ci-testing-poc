@@ -459,7 +459,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	if selectedRuntime == nil || native == nil {
 		return plan, fmt.Errorf("missing testing or selected CI runtime package")
 	}
-	debug.printf("runtime own_source_packages=%d", markOwnRuntime(ctx, listed, opts.environment.GOMODCACHE))
+	debug.printf("runtime own_source_packages=%d", markOwnRuntime(ctx, listed, opts.environment.GOMODCACHE, cliModuleVersion()))
 	if e := checkTestingGOROOT(native.Dir, opts.environment, plan.gorootMirror); e != nil {
 		return plan, e
 	}
