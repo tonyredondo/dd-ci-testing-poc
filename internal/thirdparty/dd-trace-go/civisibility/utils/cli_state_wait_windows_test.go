@@ -4,6 +4,7 @@ package utils
 
 import (
 	"path/filepath"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -25,13 +26,14 @@ func TestWaitCLIGitStateFileWaitsForASharedFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var release sync.Once
+	closeHandle := func() { release.Do(func() { _ = syscall.CloseHandle(handle) }) }
+	t.Cleanup(closeHandle)
 	var upload CLIGitUpload
 	if err := ReadCLIGitStateFile(dir, CLIGitUploadFile, &upload); !transientStateFileError(err) {
-		_ = syscall.CloseHandle(handle)
 		t.Fatalf("a held file read as %v", err)
 	}
-	released := time.AfterFunc(200*time.Millisecond, func() { _ = syscall.CloseHandle(handle) })
-	defer released.Stop()
+	time.AfterFunc(200*time.Millisecond, closeHandle)
 	if err := WaitCLIGitStateFile(dir, CLIGitUploadFile, &upload, 10*time.Second); err != nil || upload.Bytes != 7 {
 		t.Fatalf("upload %+v, %v", upload, err)
 	}
