@@ -173,6 +173,10 @@ func WriteCLIGitStateFile(dir, name string, value any) error {
 	return err
 }
 
+// readCLIGitStateFile is ReadCLIGitStateFile; tests replace it to return the
+// errors that another process's hold produces.
+var readCLIGitStateFile = ReadCLIGitStateFile
+
 // ReadCLIGitStateFile reads one state file into value, without recording it
 // in Go's test log (see openUnlogged).
 func ReadCLIGitStateFile(dir, name string, value any) error {
@@ -198,7 +202,7 @@ func WaitCLIGitStateFile(dir, name string, value any, timeout time.Duration) err
 	deadline := time.Now().Add(timeout)
 	delay := 5 * time.Millisecond
 	for {
-		err := ReadCLIGitStateFile(dir, name, value)
+		err := readCLIGitStateFile(dir, name, value)
 		if err == nil || !errors.Is(err, os.ErrNotExist) && !transientStateFileError(err) {
 			return err
 		}
