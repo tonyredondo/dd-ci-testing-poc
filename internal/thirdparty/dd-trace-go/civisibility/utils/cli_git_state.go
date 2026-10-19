@@ -192,13 +192,14 @@ func ReadCLIGitStateFile(dir, name string, value any) error {
 
 // WaitCLIGitStateFile waits up to timeout for the CLI to write a state file.
 // The CLI writes every file it was asked for, if only to record a failure,
-// before go test can exit.
+// before go test can exit. A file that the CLI is still moving into place can
+// refuse to open for a moment, on Windows: see transientStateFileError.
 func WaitCLIGitStateFile(dir, name string, value any, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	delay := 5 * time.Millisecond
 	for {
 		err := ReadCLIGitStateFile(dir, name, value)
-		if err == nil || !errors.Is(err, os.ErrNotExist) {
+		if err == nil || !errors.Is(err, os.ErrNotExist) && !transientStateFileError(err) {
 			return err
 		}
 		if !time.Now().Before(deadline) {
