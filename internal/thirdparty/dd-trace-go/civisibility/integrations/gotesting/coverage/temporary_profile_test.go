@@ -33,6 +33,20 @@ func TestSetTemporaryCoverProfile(t *testing.T) {
 	if err != nil || *value != path || filepath.Dir(path) != dir {
 		t.Fatalf("profile %q %v; the flag is %q", path, err, *value)
 	}
+
+	// A relative temporary directory gives an absolute profile, which a test
+	// that changes directory does not move.
+	t.Chdir(filepath.Dir(dir))
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, filepath.Base(dir))
+	}
+	*value = ""
+	relative, err := setTemporaryCoverProfile(flags.Lookup("test.coverprofile").Value)
+	got, _ := filepath.EvalSymlinks(filepath.Dir(relative))
+	want, _ := filepath.EvalSymlinks(dir)
+	if err != nil || !filepath.IsAbs(relative) || got != want {
+		t.Fatalf("with a relative temporary directory: %q %v", relative, err)
+	}
 	if info, err := os.Stat(path); err != nil || info.Size() != 0 {
 		t.Fatalf("the profile starts empty: %v", err)
 	}

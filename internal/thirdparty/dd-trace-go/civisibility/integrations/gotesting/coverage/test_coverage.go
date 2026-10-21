@@ -413,12 +413,21 @@ func useTemporaryCoverProfile() {
 // with status 2 if it cannot create the file, so a temporary directory where
 // ddto cannot create one leaves value unchanged.
 func setTemporaryCoverProfile(value flag.Value) (string, error) {
-	file, err := os.CreateTemp("", "dd-civisibility-coverage-*.out")
+	// A test may change the directory before testing writes the file.
+	dir, err := filepath.Abs(os.TempDir())
+	if err != nil {
+		return "", err
+	}
+	file, err := os.CreateTemp(dir, "dd-civisibility-coverage-*.out")
 	if err != nil {
 		return "", err
 	}
 	path := file.Name()
-	if err := errors.Join(file.Close(), value.Set(path)); err != nil {
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", err
+	}
+	if err := value.Set(path); err != nil {
 		_ = os.Remove(path)
 		return "", err
 	}
