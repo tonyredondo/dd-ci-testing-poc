@@ -49,23 +49,12 @@ func TestGoShimArgs(t *testing.T) {
 		})
 	}
 	// A go shim in another user cache, as in an environment that a command
-	// filtered, is left too: its go is this executable.
-	self, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	elsewhere := t.TempDir()
-	name := "go"
-	if runtime.GOOS == "windows" {
-		name = "go.exe"
-	}
-	if err := os.Link(self, filepath.Join(elsewhere, name)); err != nil && (runtime.GOOS == "windows" || os.Symlink(self, filepath.Join(elsewhere, name)) != nil) {
-		t.Logf("no link to this executable: %v", err)
-	} else {
-		t.Setenv("PATH", elsewhere+sep+other)
-		if _, fromShim := GoShimArgs([]string{"go", "version"}); !fromShim || os.Getenv("PATH") != other || goShimLeft != elsewhere {
-			t.Fatalf("PATH=%q left %q", os.Getenv("PATH"), goShimLeft)
-		}
+	// filtered, is left too, and look-alike entries are kept.
+	elsewhere := filepath.Join(t.TempDir(), "ddto", "go-shim", "fedcba9876543210")
+	keep := []string{filepath.Join(t.TempDir(), "ddto", "go-shim", "not-a-shim"), filepath.Join(t.TempDir(), "go-shim", "0123456789abcdef"), "ddto/go-shim/0123456789abcdef"}
+	t.Setenv("PATH", strings.Join(append([]string{elsewhere}, keep...), sep))
+	if _, fromShim := GoShimArgs([]string{"go", "version"}); !fromShim || os.Getenv("PATH") != strings.Join(keep, sep) || goShimLeft != elsewhere {
+		t.Fatalf("PATH=%q left %q", os.Getenv("PATH"), goShimLeft)
 	}
 
 	if !IsGotestsum([]string{"/home/user/go/bin/gotestsum", "--"}) || IsGotestsum([]string{"gotestsum-wrapper"}) || IsGotestsum(nil) {
@@ -105,5 +94,20 @@ func TestUseGoShim(t *testing.T) {
 	// A second command reuses it.
 	if again, err := goShimDir(self); err != nil || again != dir {
 		t.Fatalf("goShimDir again: %q %v", again, err)
+	}
+}
+
+// A shim directory that holds the PATH separator would split on PATH, so
+// ddto runs gotestsum without it, after a warning.
+func TestUseGoShimRefusesSeparator(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows quotes the entry")
+	}
+	cache := filepath.Join(t.TempDir(), "cache"+string(os.PathListSeparator)+"ci")
+	defer func(previous func() (string, error)) { userCacheDir = previous }(userCacheDir)
+	userCacheDir = func() (string, error) { return cache, nil }
+	t.Setenv("PATH", "/usr/bin")
+	if err := UseGoShim(); err == nil || os.Getenv("PATH") != "/usr/bin" {
+		t.Fatalf("UseGoShim: %v, PATH=%q", err, os.Getenv("PATH"))
 	}
 }

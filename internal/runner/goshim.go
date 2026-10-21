@@ -30,9 +30,7 @@ var (
 // leaves the go shims off PATH, as written otherwise, so the go that it and
 // its commands run is the toolchain's, and tests see their caller's PATH.
 func GoShimArgs(args []string) ([]string, bool) {
-	root, _ := goShimRoot()
-	self, _ := os.Executable()
-	if kept, left := withoutGoShims(os.Getenv("PATH"), root, self); left != "" {
+	if kept, left := withoutGoShims(os.Getenv("PATH")); left != "" {
 		_ = os.Setenv("PATH", kept)
 		goShimLeft = left
 	}
@@ -80,7 +78,10 @@ func UseGoShim() error {
 		return err
 	}
 	entry := dir
-	if runtime.GOOS == "windows" && strings.ContainsRune(dir, os.PathListSeparator) {
+	if strings.ContainsRune(dir, os.PathListSeparator) {
+		if runtime.GOOS != "windows" {
+			return fmt.Errorf("the go shim directory %s holds the PATH separator", dir)
+		}
 		entry = `"` + dir + `"`
 	}
 	if err := os.Setenv("PATH", entry+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
@@ -162,38 +163,37 @@ func copyExecutableFile(source, target string) error {
 }
 
 // withoutGoShims returns the PATH list without its go shims, keeping the
-// other entries as written, and the last entry that it left. A go shim is an
-// entry in root, or one whose go is self: an environment that a command
-// filtered may name another user cache.
-func withoutGoShims(list, root, self string) (kept, left string) {
-	var selfInfo os.FileInfo
-	if self != "" {
-		selfInfo, _ = os.Stat(self)
-	}
-	name := "go"
-	if runtime.GOOS == "windows" {
-		name = "go.exe"
-	}
+// other entries as written, and the last entry that it left.
+func withoutGoShims(list string) (kept, left string) {
 	var entries []string
 	for _, raw := range pathListEntries(list) {
 		entry := raw
 		if runtime.GOOS == "windows" {
 			entry = strings.ReplaceAll(raw, `"`, "")
 		}
-		if entry != "" && filepath.IsAbs(entry) {
-			shim := root != "" && filePathHasPrefix(filepath.Clean(entry), root)
-			if !shim && selfInfo != nil {
-				goInfo, err := os.Stat(filepath.Join(entry, name))
-				shim = err == nil && os.SameFile(goInfo, selfInfo)
-			}
-			if shim {
-				left = entry
-				continue
-			}
+		if isGoShimEntry(entry) {
+			left = entry
+			continue
 		}
 		entries = append(entries, raw)
 	}
 	return strings.Join(entries, string(os.PathListSeparator)), left
+}
+
+// isGoShimEntry reports whether a PATH entry is a directory that goShimDir
+// makes, ddto/go-shim/ and 16 hexadecimal digits, in any user cache: an
+// environment that a command filtered may name another. It reads no file, so
+// a slow PATH entry does not delay ddto.
+func isGoShimEntry(entry string) bool {
+	if entry == "" || !filepath.IsAbs(entry) {
+		return false
+	}
+	entry = filepath.Clean(entry)
+	name, parent := filepath.Base(entry), filepath.Dir(entry)
+	if len(name) != 16 || strings.Trim(name, "0123456789abcdef") != "" {
+		return false
+	}
+	return filepath.Base(parent) == "go-shim" && filepath.Base(filepath.Dir(parent)) == "ddto"
 }
 
 // pathListEntries splits a PATH list where filepath.SplitList does, but keeps
