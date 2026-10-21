@@ -366,11 +366,6 @@ func runtimeCoverageSnapshotLocked() (*runtimeCoverageSnapshot, error) {
 		// tear-down here would print one.
 		return nil, errors.New("testing wrote no coverage profile")
 	}
-	if temporaryCoverProfile != "" {
-		// An explicitly empty -test.coverprofile replaced ddto's when M.Run
-		// parsed the flags: testing printed its line without a profile.
-		return nil, errors.New("testing wrote no coverage profile")
-	}
 
 	if err := ensureTemporaryDirLocked(); err != nil {
 		return nil, err

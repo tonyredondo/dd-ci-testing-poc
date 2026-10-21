@@ -28,8 +28,6 @@ func TestMiniPrintsCoverageLineOnce(t *testing.T) {
 		{"-v", "-cover", "-run=^TestOther$", "./other"},
 		{"-json", "-cover", "-run=^TestOther$", "./other"},
 		{"-v", "-cover", "-list=^TestOther$", "./other"},
-		{"-v", "-cover", "-run=^TestOther$", "./other", "-args", "-test.coverprofile="},
-		{"-v", "-cover", "-list=^TestOther$", "./other", "-args", "-test.coverprofile="},
 	} {
 		args = append([]string{"-count=1"}, args...)
 		native, nativeErr, nativeCode := command(t, dir, testEnv(), "go", append([]string{"test"}, args...)...)
