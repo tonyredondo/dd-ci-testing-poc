@@ -365,7 +365,7 @@ func runtimeCoverageSnapshotLocked() (*runtimeCoverageSnapshot, error) {
 		return nil, err
 	}
 	coverageFile := filepath.Join(temporaryDir, "global_coverage.out")
-	if _, err := tearDown(coverageFile, ""); err != nil {
+	if err := tearDownWithoutPercentage(coverageFile); err != nil {
 		return nil, err
 	}
 	runtimeSnapshot = &runtimeCoverageSnapshot{path: coverageFile, temporary: true}
@@ -1130,4 +1130,26 @@ func getCoverageStatementsInfo(filename string) (totalStatements, coveredStateme
 	}
 
 	return totalStatements, coveredStatements, scanner.Err()
+}
+
+// tearDownWithoutPercentage writes the runtime coverage profile to path once
+// M.Run has returned. testing's tear-down also prints "coverage: N% of
+// statements" to os.Stdout. testing prints that line itself when M.Run runs
+// tests, and not after -test.list, so this one goes to os.DevNull, as testing
+// redirects os.Stdout around an Example. No test runs then.
+func tearDownWithoutPercentage(path string) error {
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		log.Debug("civisibility.cov: coverage percentage printed again, %s unavailable: %s", os.DevNull, err.Error())
+		_, err = tearDown(path, "")
+		return err
+	}
+	stdout := os.Stdout
+	os.Stdout = devNull
+	defer func() {
+		os.Stdout = stdout
+		_ = devNull.Close()
+	}()
+	_, err = tearDown(path, "")
+	return err
 }

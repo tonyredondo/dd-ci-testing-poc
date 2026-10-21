@@ -329,3 +329,25 @@ func buildPassthroughProgram(t *testing.T) string {
 	}
 	return program
 }
+
+// A go on PATH that starts ddto, as a script that runs ddto go would, makes
+// every ddto command that runs go start another. ddto stops with an error
+// that names that go instead of starting them without end.
+func TestCLIStopsWhenGoStartsDdto(t *testing.T) {
+	dir, driver := prepareMiniFixture(t)
+	bin := t.TempDir()
+	shim, script := filepath.Join(bin, "go"), "#!/bin/sh\nexec \""+driver+"\" go \"$@\"\n"
+	if runtime.GOOS == "windows" {
+		shim, script = filepath.Join(bin, "go.cmd"), "@\""+driver+"\" go %*\r\n"
+	}
+	if err := os.WriteFile(shim, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	env := append(testEnv(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	for _, args := range [][]string{{"go", "version"}, {"test", "--runtime=mini", "-count=1", "."}} {
+		_, stderr, code := command(t, dir, env, driver, args...)
+		if code != 2 || !strings.Contains(stderr, "9 ddto commands run inside each other") || !strings.Contains(stderr, "starts ddto again") {
+			t.Fatalf("ddto %v with a go that starts ddto: exit %d\n%s", args, code, stderr)
+		}
+	}
+}
