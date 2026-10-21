@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -239,6 +240,26 @@ func TestModuleToolRun(t *testing.T) {
 	missing := &moduleTool{name: "gotestsum", path: filepath.Join(t.TempDir(), "missing")}
 	if code := missing.run(); code != 1 {
 		t.Fatalf("a tool that did not start: exit %d; want 1", code)
+	}
+	if !slices.Contains(goToolSignals, os.Signal(syscall.SIGTERM)) || !slices.Contains(goToolSignals, os.Signal(syscall.SIGHUP)) {
+		t.Fatalf("go tool forwards SIGTERM and SIGHUP: %v", goToolSignals)
+	}
+
+	// A toolchain switch gives the tool the selected toolchain's GOROOT.
+	t.Setenv(fakeToolEnv, "")
+	t.Setenv("DDTO_RUN_GO_HELPER", "1")
+	t.Setenv("GOROOT", "/opt/go1.25")
+	report, err := os.CreateTemp(t.TempDir(), "stdout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout := os.Stdout
+	os.Stdout = report
+	switched := &moduleTool{name: "gotestsum", path: os.Args[0], args: []string{"-test.run=^TestRunGoHelperProcess$"}, goroot: "/opt/go1.27"}
+	code := switched.run()
+	os.Stdout = stdout
+	if data, _ := os.ReadFile(report.Name()); code != 0 || !strings.HasPrefix(string(data), "GOROOT=true:/opt/go1.27\n") {
+		t.Fatalf("exit %d: %s", code, data)
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
@@ -221,12 +222,17 @@ func goShimSetup(command []string) ([]string, *moduleTool, error) {
 // GoShimExecMode is ddto's mode as go run's -exec program with the go shim.
 const GoShimExecMode = "go-shim-exec"
 
+// goToolSignals are the signals that go tool forwards to a tool
+// (cmd/go/internal/tool/signal.go).
+var goToolSignals = []os.Signal{syscall.SIGHUP, os.Interrupt, syscall.SIGQUIT, syscall.SIGTERM}
+
 // moduleTool is a module's tool that go tool would run: ddto runs it as go
 // tool does, with the go shim first on its PATH.
 type moduleTool struct {
 	name, path string
 	args       []string
-	gorootBin  string
+	// goroot is the selected toolchain's; gorootBin goes after the shim.
+	goroot, gorootBin string
 	// diagnostics are what go wrote while it built the tool.
 	diagnostics []byte
 }
@@ -237,6 +243,10 @@ func (t *moduleTool) run() int {
 	_, _ = os.Stderr.Write(t.diagnostics)
 	cmd := exec.Command(t.path, t.args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if goroot, set := os.LookupEnv("GOROOT"); set && goroot != t.goroot {
+		// A toolchain switch sets GOROOT for the tool to the selected one.
+		cmd.Env = append(os.Environ(), "GOROOT="+t.goroot)
+	}
 	err := cmd.Start()
 	if err == nil {
 		signals := make(chan os.Signal, 100)
@@ -314,7 +324,7 @@ func goShimGoCommand(self, toolchain string, command []string) ([]string, *modul
 		if err != nil {
 			return nil, nil, err
 		}
-		return nil, &moduleTool{name: rest[0], path: path, args: rest[1:], gorootBin: filepath.Join(env.GOROOT, "bin"), diagnostics: diagnostics.Bytes()}, nil
+		return nil, &moduleTool{name: rest[0], path: path, args: rest[1:], goroot: env.GOROOT, gorootBin: filepath.Join(env.GOROOT, "bin"), diagnostics: diagnostics.Bytes()}, nil
 	}
 	return native, nil, nil
 }
