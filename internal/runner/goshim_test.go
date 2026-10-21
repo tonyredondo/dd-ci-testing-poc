@@ -245,21 +245,63 @@ func TestModuleToolRun(t *testing.T) {
 		t.Fatalf("go tool forwards SIGTERM and SIGHUP: %v", goToolSignals)
 	}
 
-	// A toolchain switch gives the tool the selected toolchain's GOROOT.
+	// A toolchain switch sets GOROOT for the tool to a downloaded toolchain,
+	// and removes it for one on PATH, as go's execGoToolchain does.
 	t.Setenv(fakeToolEnv, "")
 	t.Setenv("DDTO_RUN_GO_HELPER", "1")
-	t.Setenv("GOROOT", "/opt/go1.25")
+	for _, tc := range []struct {
+		tool *moduleTool
+		want string
+	}{
+		{&moduleTool{switchGOROOT: "/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64"}, "GOROOT=true:/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64\n"},
+		{&moduleTool{unsetGOROOT: true}, "GOROOT=false:\n"},
+		{&moduleTool{}, "GOROOT=true:/opt/go1.25\n"},
+	} {
+		t.Setenv("GOROOT", "/opt/go1.25")
+		tc.tool.name, tc.tool.path, tc.tool.args = "runner", os.Args[0], []string{"-test.run=^TestRunGoHelperProcess$"}
+		if got := runToolReport(t, tc.tool); !strings.HasPrefix(got, tc.want) {
+			t.Errorf("tool saw %q; want %q", got, tc.want)
+		}
+	}
+}
+
+// runToolReport runs tool and returns what it printed.
+func runToolReport(t *testing.T, tool *moduleTool) string {
+	t.Helper()
 	report, err := os.CreateTemp(t.TempDir(), "stdout")
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer report.Close()
 	stdout := os.Stdout
 	os.Stdout = report
-	switched := &moduleTool{name: "gotestsum", path: os.Args[0], args: []string{"-test.run=^TestRunGoHelperProcess$"}, goroot: "/opt/go1.27"}
-	code := switched.run()
+	code := tool.run()
 	os.Stdout = stdout
-	if data, _ := os.ReadFile(report.Name()); code != 0 || !strings.HasPrefix(string(data), "GOROOT=true:/opt/go1.27\n") {
-		t.Fatalf("exit %d: %s", code, data)
+	data, err := os.ReadFile(report.Name())
+	if err != nil || code != 0 {
+		t.Fatalf("exit %d, %v", code, err)
+	}
+	return string(data)
+}
+
+// go env reports an exported GOROOT, or the go command's own root, unless
+// go switched toolchains.
+func TestSwitchedToolchain(t *testing.T) {
+	root := t.TempDir()
+	toolchain := filepath.Join(root, "bin", "go")
+	t.Setenv("GOROOT", root)
+	if switchedToolchain(toolchain, root) || !switchedToolchain(toolchain, filepath.Join(t.TempDir(), "other")) {
+		t.Fatal("with GOROOT exported")
+	}
+	if err := os.MkdirAll(filepath.Dir(toolchain), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(toolchain, nil, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	os.Unsetenv("GOROOT")
+	if switchedToolchain(toolchain, root) || !switchedToolchain(toolchain, t.TempDir()) {
+		t.Fatal("without GOROOT")
 	}
 }
 

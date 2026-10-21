@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -231,8 +232,12 @@ var goToolSignals = []os.Signal{syscall.SIGHUP, os.Interrupt, syscall.SIGQUIT, s
 type moduleTool struct {
 	name, path string
 	args       []string
-	// goroot is the selected toolchain's; gorootBin goes after the shim.
-	goroot, gorootBin string
+	// gorootBin, the selected toolchain's bin, goes after the shim.
+	gorootBin string
+	// switchGOROOT is GOROOT for the tool after a toolchain switch, as
+	// go's execGoToolchain sets it; unsetGOROOT removes it instead.
+	switchGOROOT string
+	unsetGOROOT  bool
 	// diagnostics are what go wrote while it built the tool.
 	diagnostics []byte
 }
@@ -243,9 +248,14 @@ func (t *moduleTool) run() int {
 	_, _ = os.Stderr.Write(t.diagnostics)
 	cmd := exec.Command(t.path, t.args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	if goroot, set := os.LookupEnv("GOROOT"); set && goroot != t.goroot {
-		// A toolchain switch sets GOROOT for the tool to the selected one.
-		cmd.Env = append(os.Environ(), "GOROOT="+t.goroot)
+	switch {
+	case t.switchGOROOT != "":
+		cmd.Env = append(os.Environ(), "GOROOT="+t.switchGOROOT)
+	case t.unsetGOROOT:
+		cmd.Env = slices.DeleteFunc(os.Environ(), func(entry string) bool {
+			name, _, _ := strings.Cut(entry, "=")
+			return name == "GOROOT" || runtime.GOOS == "windows" && strings.EqualFold(name, "GOROOT")
+		})
 	}
 	err := cmd.Start()
 	if err == nil {
@@ -324,9 +334,37 @@ func goShimGoCommand(self, toolchain string, command []string) ([]string, *modul
 		if err != nil {
 			return nil, nil, err
 		}
-		return nil, &moduleTool{name: rest[0], path: path, args: rest[1:], goroot: env.GOROOT, gorootBin: filepath.Join(env.GOROOT, "bin"), diagnostics: diagnostics.Bytes()}, nil
+		tool := &moduleTool{name: rest[0], path: path, args: rest[1:], gorootBin: filepath.Join(env.GOROOT, "bin"), diagnostics: diagnostics.Bytes()}
+		if switchedToolchain(toolchain, env.GOROOT) {
+			// execGoToolchain sets GOROOT for a downloaded toolchain and
+			// removes it for one found on PATH.
+			if strings.Contains(filepath.ToSlash(env.GOROOT), "golang.org/toolchain@") {
+				tool.switchGOROOT = env.GOROOT
+			} else {
+				tool.unsetGOROOT = true
+			}
+		}
+		return nil, tool, nil
 	}
 	return native, nil, nil
+}
+
+// switchedToolchain reports whether go switched from toolchain to the one at
+// selected: go env reports an exported GOROOT, or else toolchain's own root,
+// unless it switched.
+func switchedToolchain(toolchain, selected string) bool {
+	if goroot, set := os.LookupEnv("GOROOT"); set {
+		return filepath.Clean(goroot) != filepath.Clean(selected)
+	}
+	resolved, err := filepath.EvalSymlinks(toolchain)
+	if err != nil {
+		return false
+	}
+	root, selected := filepath.Dir(filepath.Dir(resolved)), filepath.Clean(selected)
+	if resolvedSelected, err := filepath.EvalSymlinks(selected); err == nil {
+		selected = resolvedSelected
+	}
+	return root != selected
 }
 
 // goShimEnv is what go computes for a go run or go tool command with the go
