@@ -19,6 +19,7 @@ func TestMiniKeepsGoErrorStatus(t *testing.T) {
 		{args: []string{"-C", "go.mod", "."}},
 		{args: []string{"-count=1", "-C", "other", "."}},
 		{args: []string{"-modfile=missing.mod", "."}},
+		{args: []string{"-modfile=.", "."}},
 		{args: []string{"-cover", "-covermode=bad", "."}},
 	} {
 		env := testEnv(tc.env...)

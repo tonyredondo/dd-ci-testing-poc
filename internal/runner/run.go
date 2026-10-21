@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -926,7 +925,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		return runGo(ctx, cwd, append([]string{"test"}, args...), nil, signals, stdin, stdout, stderr)
 	}
 	var rejected *goRejectedError
-	if errors.As(err, &rejected) && ctx.Err() == nil {
+	if errors.As(err, &rejected) {
 		return runGoAfterError(ctx, cwd, args, err, signals, stdin, stdout, stderr)
 	}
 	if err != nil {
@@ -1078,10 +1077,11 @@ func (e *goRejectedError) Error() string { return e.err.Error() }
 
 func (e *goRejectedError) Unwrap() error { return e.err }
 
-// missingModfile marks a -modfile that does not exist, after the -overlay
-// replacements, which go test reports itself.
-func missingModfile(opts *options, err error) error {
-	if opts.modfile != "" && errors.Is(err, fs.ErrNotExist) {
+// userModfileError marks a -modfile that ddto cannot read, after the
+// -overlay replacements: missing, a directory or unreadable. go reads the same
+// file and reports that itself.
+func userModfileError(opts *options, err error) error {
+	if opts.modfile != "" {
 		return &goRejectedError{err}
 	}
 	return err
@@ -1103,6 +1103,11 @@ func goRejected(err error) error {
 // exit status. If go test passes instead, ddto had added the cause, and it
 // warns that the tests ran without CI Visibility.
 func runGoAfterError(ctx context.Context, cwd string, args []string, cause error, signals <-chan os.Signal, stdin io.Reader, stdout, stderr io.Writer) int {
+	if err := ctx.Err(); err != nil {
+		// Cancellation stops instead.
+		fmt.Fprintln(stderr, version.BuildLogPrefix+" ERROR:", err)
+		return 2
+	}
 	reason, _, _ := strings.Cut(cause.Error(), "\n")
 	debugFromContext(ctx).printf("instrumentation bypass go_rejected=%q", reason)
 	code := runGo(ctx, cwd, append([]string{"test"}, args...), nil, signals, stdin, stdout, stderr)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -805,6 +806,13 @@ func TestRunGoAfterError(t *testing.T) {
 			t.Fatalf("exit %d: stderr %q", status, stderr.String())
 		}
 	}
+	// Cancellation starts no go test.
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	var stdout bytes.Buffer
+	if code := runGoAfterError(canceled, t.TempDir(), []string{"./..."}, cause, nil, nil, &stdout, io.Discard); code != 2 || stdout.Len() != 0 {
+		t.Fatalf("canceled: exit %d, stdout %q", code, stdout.String())
+	}
 }
 
 // go reports a missing working directory itself, and a file given as one.
@@ -836,8 +844,8 @@ func TestGoRejected(t *testing.T) {
 		t.Fatal("a failure without go's exit status is a rejection")
 	}
 	missing := &os.PathError{Op: "open", Path: "missing.mod", Err: os.ErrNotExist}
-	if !errors.As(missingModfile(&options{modfile: "missing.mod"}, missing), &rejected) || errors.As(missingModfile(&options{}, missing), &rejected) {
-		t.Fatal("missingModfile")
+	if !errors.As(userModfileError(&options{modfile: "missing.mod"}, missing), &rejected) || errors.As(userModfileError(&options{}, missing), &rejected) {
+		t.Fatal("userModfileError")
 	}
 	overlaid := filepath.Join(t.TempDir(), "virtual.mod")
 	if _, err := readModuleFile(overlaid, map[string]string{filepath.Clean(overlaid): os.Args[0]}); err != nil {

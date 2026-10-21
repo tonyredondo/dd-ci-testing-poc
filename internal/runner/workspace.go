@@ -98,7 +98,7 @@ func provideOlderModuleWorkspace(ctx context.Context, dir string, opts *options,
 	}
 	data, err := readModuleFile(source, replacements)
 	if err != nil {
-		return missingModfile(opts, err)
+		return userModfileError(opts, err)
 	}
 	if compareGoVersion(moduleDirective(data, "go"), "1.25.0") >= 0 {
 		return nil
