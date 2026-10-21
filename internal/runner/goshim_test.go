@@ -113,31 +113,40 @@ func TestUseGoShimRefusesSeparator(t *testing.T) {
 	}
 }
 
-// --go-shim runs any command with the go shim; gotestsum gets it in any form.
+// --go-shim runs any command with the go shim; gotestsum gets it in any form,
+// and so do go run and go tool that reach ddto through the shim.
 func TestGoShimCommand(t *testing.T) {
 	for _, tc := range []struct {
 		args, want []string
+		fromShim   bool
 		shim       bool
 	}{
 		{args: []string{"--go-shim", "make", "test"}, want: []string{"make", "test"}, shim: true},
 		{args: []string{"--go-shim"}, want: []string{}, shim: true},
-		{args: []string{"gotestsum", "--", "./..."}, want: []string{"gotestsum", "--", "./..."}, shim: true},
+		{args: []string{"gotestsum", "--", "./..."}, shim: true},
 		{args: []string{"go", "tool", "gotestsum", "--format", "testname"}, shim: true},
 		{args: []string{"go", "tool", "gotest.tools/gotestsum"}, shim: true},
+		{args: []string{"go", "-C", "project", "tool", "gotestsum"}, shim: true},
 		{args: []string{"go", "run", "gotest.tools/gotestsum@v1.13.0", "--", "./..."}, shim: true},
 		{args: []string{"go", "run", "-mod=mod", "gotest.tools/gotestsum"}, shim: true},
+		{args: []string{"go", "run", "-tags", "smoke", "gotest.tools/gotestsum@v1.13.0"}, shim: true},
+		{args: []string{"go", "run", "-C", "tools", "gotest.tools/gotestsum"}, shim: true},
 		{args: []string{"go", "run", "./cmd/gotestsum"}},
 		{args: []string{"go", "tool", "cover"}},
 		{args: []string{"go", "build", "gotest.tools/gotestsum"}},
 		{args: []string{"make", "test"}},
 		{args: []string{"make", "--go-shim"}},
+		// Run as the go shim, a launcher keeps the shim for its program.
+		{args: []string{"go", "run", "./tools/testrunner"}, fromShim: true, shim: true},
+		{args: []string{"go", "tool", "mytool"}, fromShim: true, shim: true},
+		{args: []string{"go", "build", "./..."}, fromShim: true},
 	} {
 		want := tc.want
 		if want == nil {
 			want = tc.args
 		}
-		if got, shim := GoShimCommand(tc.args); !slices.Equal(got, want) || shim != tc.shim {
-			t.Errorf("GoShimCommand(%q) = %q, %t; want %q, %t", tc.args, got, shim, want, tc.shim)
+		if got, shim := GoShimCommand(tc.args, tc.fromShim); !slices.Equal(got, want) || shim != tc.shim {
+			t.Errorf("GoShimCommand(%q, %t) = %q, %t; want %q, %t", tc.args, tc.fromShim, got, shim, want, tc.shim)
 		}
 	}
 }
@@ -163,34 +172,71 @@ func TestUseGoShimRunsTheToolchain(t *testing.T) {
 }
 
 // go run and go tool put $GOROOT/bin before the shim on their program's
-// PATH: go run runs its program through ddto, and ddto runs a tool's program
-// itself.
+// PATH: go run runs its program through ddto, and ddto runs a module tool's
+// program itself. What ddto's -exec would replace keeps go's own command.
 func TestGoShimGoCommand(t *testing.T) {
+	defer func(previous func(string, []string) (bool, error)) { goRunCrossCompiles = previous }(goRunCrossCompiles)
+	cross := false
+	goRunCrossCompiles = func(string, []string) (bool, error) { return cross, nil }
+	t.Setenv("GOFLAGS", "")
 	self := filepath.Join(t.TempDir(), "dd to")
-	run, err := goShimGoCommand(self, "/go/bin/go", []string{"go", "run", "-mod=mod", "gotest.tools/gotestsum@v1.13.0", "--", "./..."})
-	if want := []string{"/go/bin/go", "run", "-exec='" + self + "' 'go-shim-exec'", "-mod=mod", "gotest.tools/gotestsum@v1.13.0", "--", "./..."}; err != nil || !slices.Equal(run, want) {
-		t.Fatalf("go run: %q, %v; want %q", run, err, want)
+	exec := "-exec='" + self + "' 'go-shim-exec'"
+	for _, tc := range []struct {
+		command, want []string
+	}{
+		{[]string{"go", "run", "-mod=mod", "gotest.tools/gotestsum@v1.13.0", "--", "./..."}, []string{"/go/bin/go", "run", exec, "-mod=mod", "gotest.tools/gotestsum@v1.13.0", "--", "./..."}},
+		// -C stays first.
+		{[]string{"go", "run", "-C", "tools", "./runner"}, []string{"/go/bin/go", "run", "-C", "tools", exec, "./runner"}},
+		{[]string{"go", "run", "-C=tools", "./runner"}, []string{"/go/bin/go", "run", "-C=tools", exec, "./runner"}},
+		{[]string{"go", "-C", "project", "run", "./runner"}, []string{"/go/bin/go", "-C", "project", "run", exec, "./runner"}},
+		// The program's own -exec argument.
+		{[]string{"go", "run", "./cmd", "-exec"}, []string{"/go/bin/go", "run", exec, "./cmd", "-exec"}},
+		{[]string{"go", "generate", "./..."}, []string{"/go/bin/go", "generate", "./..."}},
+	} {
+		if got, err := goShimGoCommand(self, "/go/bin/go", tc.command); err != nil || !slices.Equal(got, tc.want) {
+			t.Errorf("%q: %q, %v; want %q", tc.command, got, err, tc.want)
+		}
 	}
-	if _, err := goShimGoCommand(self, "/go/bin/go", []string{"go", "run", "-exec=wasmtime", "./cmd"}); err == nil {
-		t.Fatal("go run with the caller's -exec")
+	for name, command := range map[string][]string{
+		"the caller's -exec": {"go", "run", "-exec=wasmtime", "./cmd"},
+		"-exec after a flag": {"go", "run", "-tags", "x", "-exec", "wasmtime", "./cmd"},
+		"go tool flags":      {"go", "tool", "-n", "gotestsum"},
+	} {
+		if _, err := goShimGoCommand(self, "/go/bin/go", command); err == nil {
+			t.Errorf("%s: no error", name)
+		}
 	}
-	// The caller's -exec after the package is the program's argument.
-	if _, err := goShimGoCommand(self, "/go/bin/go", []string{"go", "run", "./cmd", "-exec"}); err != nil {
-		t.Fatal(err)
+	t.Setenv("GOFLAGS", "-exec=wasmtime")
+	if _, err := goShimGoCommand(self, "/go/bin/go", []string{"go", "run", "./cmd"}); err == nil {
+		t.Error("-exec in GOFLAGS: no error")
 	}
-	if other, err := goShimGoCommand(self, "/go/bin/go", []string{"go", "generate", "./..."}); err != nil || !slices.Equal(other, []string{"/go/bin/go", "generate", "./..."}) {
-		t.Fatalf("go generate: %q, %v", other, err)
+	t.Setenv("GOFLAGS", "")
+	cross = true
+	if _, err := goShimGoCommand(self, "/go/bin/go", []string{"go", "run", "./cmd"}); err == nil {
+		t.Error("cross-compilation: no error")
 	}
 
-	// The fake go prints its arguments, which stand for the tool's path.
+	// The fake go prints its arguments for go tool -n.
 	t.Setenv(fakeToolEnv, "1")
-	tool, err := goShimGoCommand(self, os.Args[0], []string{"go", "tool", "gotestsum", "--format", "testname"})
-	if want := []string{"tool\n-n\ngotestsum", "--format", "testname"}; err != nil || !slices.Equal(tool, want) {
-		t.Fatalf("go tool: %q, %v; want %q", tool, err, want)
+	if _, err := goShimGoCommand(self, os.Args[0], []string{"go", "tool", "gotestsum"}); err == nil {
+		t.Error("go tool -n printed more than one program")
 	}
 	t.Setenv(fakeToolExitEnv, "1")
 	if _, err := goShimGoCommand(self, os.Args[0], []string{"go", "tool", "nope"}); err == nil {
-		t.Fatal("an unknown tool")
+		t.Error("an unknown tool: no error")
+	}
+}
+
+// The toolchain's tools are in its pkg/tool directory; module tools are not.
+func TestIsToolchainTool(t *testing.T) {
+	for path, want := range map[string]bool{
+		filepath.FromSlash("/usr/lib/go/pkg/tool/linux_amd64/cover"):         true,
+		filepath.FromSlash("/home/user/.cache/go-build/41/4127-d/gotestsum"): false,
+		filepath.FromSlash("/home/user/go/bin/gotestsum"):                    false,
+	} {
+		if got := isToolchainTool(path); got != want {
+			t.Errorf("isToolchainTool(%q) = %t", path, got)
+		}
 	}
 }
 

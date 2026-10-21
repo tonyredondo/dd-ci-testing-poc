@@ -236,7 +236,10 @@ Each `go test` that the command runs reports its own session, and other go
 commands run unchanged. Only a `go` found on `PATH` reports: a command that
 runs `$GOROOT/bin/go` by its path or sets its own `PATH` runs `go test`
 without CI Visibility, as do commands that `go generate` starts, which find
-`$GOROOT/bin` first. `ddto --go-shim go test …` is `ddto go test …`.
+`$GOROOT/bin` first. A `go run` or `go tool` that the command starts keeps
+ddto's `go` for its program, unless `go run` has its own `-exec` or builds for
+another platform; then ddto warns and runs it without its `go`.
+`ddto --go-shim go test …` is `ddto go test …`.
 
 ## What is supported
 

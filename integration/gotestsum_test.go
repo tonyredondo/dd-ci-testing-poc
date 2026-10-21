@@ -63,8 +63,13 @@ func TestEnvironment(t *testing.T) {
 	}
 }
 `})
-	// A wrapper that runs go test itself, as make or task would.
-	wrapper := filepath.Join(buildProgram(t, goTestWrapperProgram, "gowrapper"), executableName("gowrapper"))
+	// A wrapper that runs go itself, as make or task would, and a test runner
+	// of the module that runs go test.
+	wrapper := filepath.Join(buildProgram(t, goWrapperProgram, "gowrapper"), executableName("gowrapper"))
+	if err := os.MkdirAll(filepath.Join(dir, "testrunner"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeBuildFixture(t, filepath.Join(dir, "testrunner"), map[string]string{"main.go": strings.Replace(goWrapperProgram, `exec.Command("go", os.Args[1:]...)`, `exec.Command("go", append([]string{"test"}, os.Args[1:]...)...)`, 1)})
 	// go tool runs a tool that the module declares.
 	if out, stderr, code := command(t, dir, testEnv("GOFLAGS=", "GOWORK=off"), "go", "get", "-tool", "gotest.tools/gotestsum@"+gotestsumVersion); code != 0 {
 		t.Fatalf("go get -tool: %s %s", out, stderr)
@@ -83,7 +88,11 @@ func TestEnvironment(t *testing.T) {
 		// go run and go tool put $GOROOT/bin first on gotestsum's PATH.
 		{"go run", append([]string{"go", "run", "gotest.tools/gotestsum@" + gotestsumVersion}, gotestsumArgs...)},
 		{"go tool", append([]string{"go", "tool", "gotestsum"}, gotestsumArgs...)},
-		{"--go-shim", []string{"--go-shim", wrapper, "-v", "-count=1", "./gotestsum", "--runtime=container"}},
+		{"--go-shim wrapper", []string{"--go-shim", wrapper, "test", "-v", "-count=1", "./gotestsum", "--runtime=container"}},
+		{"--go-shim go run", []string{"--go-shim", "go", "run", "./testrunner", "-v", "-count=1", "./gotestsum", "--runtime=container"}},
+		// The wrapper's go run reaches ddto through the shim, which keeps it
+		// for the runner's go test.
+		{"--go-shim wrapper go run", []string{"--go-shim", wrapper, "run", "./testrunner", "-v", "-count=1", "./gotestsum", "--runtime=container"}},
 	} {
 		receiver.mu.Lock()
 		receiver.events, receiver.failures = nil, nil
@@ -109,8 +118,8 @@ func TestEnvironment(t *testing.T) {
 	}
 }
 
-// goTestWrapperProgram runs go test with its arguments.
-const goTestWrapperProgram = `package main
+// goWrapperProgram runs go with its arguments.
+const goWrapperProgram = `package main
 
 import (
 	"errors"
@@ -119,7 +128,7 @@ import (
 )
 
 func main() {
-	cmd := exec.Command("go", append([]string{"test"}, os.Args[1:]...)...)
+	cmd := exec.Command("go", os.Args[1:]...)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	var exit *exec.ExitError
 	if err := cmd.Run(); errors.As(err, &exit) {
