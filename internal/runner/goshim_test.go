@@ -9,39 +9,41 @@ import (
 	"testing"
 )
 
-// gotestsum's go is ddto: ddto leaves the shim's directory off PATH, and the
-// go shim runs as ddto go.
+// gotestsum's go is ddto: run as go, ddto runs as ddto go. Every ddto leaves
+// the go shims off PATH, even when gotestsum's command filtered the
+// environment, and keeps the other entries as written.
 func TestGoShimArgs(t *testing.T) {
+	cache := t.TempDir()
+	defer func(previous func() (string, error)) { userCacheDir = previous }(userCacheDir)
+	userCacheDir = func() (string, error) { return cache, nil }
 	sep := string(os.PathListSeparator)
-	shim := filepath.Join(t.TempDir(), "go-shim")
+	shim := filepath.Join(cache, "ddto", "go-shim", "0123456789abcdef")
+	other := "/usr/local/go/bin"
+	if runtime.GOOS == "windows" {
+		// A quoted entry may hold the separator.
+		other = `"C:\Go;1.27\bin"`
+	}
 	for _, tc := range []struct {
-		name string
-		args []string
-		shim bool
-		want []string
-		atGo bool
+		name, path string
+		args       []string
+		want       []string
+		fromShim   bool
 	}{
-		{name: "ddto", args: []string{"/bin/ddto", "test", "./..."}, want: []string{"test", "./..."}},
-		{name: "go shim", args: []string{"go", "test", "-json", "./..."}, shim: true, want: []string{"go", "test", "-json", "./..."}, atGo: true},
-		{name: "ddto under gotestsum", args: []string{"/bin/ddto", "test", "-json"}, shim: true, want: []string{"test", "-json"}},
+		{name: "ddto", path: other, args: []string{"/bin/ddto", "test", "./..."}, want: []string{"test", "./..."}},
+		{name: "go shim", path: shim + sep + other + sep + shim, args: []string{"go", "test", "-json", "./..."}, want: []string{"go", "test", "-json", "./..."}, fromShim: true},
+		{name: "ddto under gotestsum", path: shim + sep + other, args: []string{"/bin/ddto", "test", "-json"}, want: []string{"test", "-json"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("PATH", "/usr/local/go/bin"+sep+"/usr/bin")
+			t.Setenv("PATH", tc.path)
 			goShimLeft = ""
-			if tc.shim {
-				t.Setenv(goShimVariable, shim)
-				t.Setenv("PATH", shim+sep+"/usr/local/go/bin"+sep+shim+sep+"/usr/bin")
+			got, fromShim := GoShimArgs(tc.args)
+			if !slices.Equal(got, tc.want) || fromShim != tc.fromShim {
+				t.Fatalf("GoShimArgs(%q) = %q, %t; want %q, %t", tc.args, got, fromShim, tc.want, tc.fromShim)
 			}
-			if got := GoShimArgs(tc.args); !slices.Equal(got, tc.want) {
-				t.Fatalf("GoShimArgs(%q) = %q; want %q", tc.args, got, tc.want)
+			if path := os.Getenv("PATH"); path != other {
+				t.Fatalf("PATH=%q; want %q", path, other)
 			}
-			if _, set := os.LookupEnv(goShimVariable); set {
-				t.Fatalf("%s stays set", goShimVariable)
-			}
-			if path := os.Getenv("PATH"); path != "/usr/local/go/bin"+sep+"/usr/bin" {
-				t.Fatalf("PATH=%q", path)
-			}
-			if tc.shim != (goShimLeft == shim) {
+			if strings.Contains(tc.path, shim) != (goShimLeft == shim) {
 				t.Fatalf("left %q", goShimLeft)
 			}
 		})
@@ -56,14 +58,14 @@ func TestUseGoShim(t *testing.T) {
 	cache := t.TempDir()
 	defer func(previous func() (string, error)) { userCacheDir = previous }(userCacheDir)
 	userCacheDir = func() (string, error) { return cache, nil }
-	t.Setenv(goShimVariable, "")
+	defer func() { goShimFirst = "" }()
 	t.Setenv("PATH", "/usr/bin")
 	if err := UseGoShim(); err != nil {
 		t.Fatal(err)
 	}
-	dir := os.Getenv(goShimVariable)
+	dir := goShimFirst
 	if !strings.HasPrefix(dir, filepath.Join(cache, "ddto", "go-shim")) || os.Getenv("PATH") != dir+string(os.PathListSeparator)+"/usr/bin" {
-		t.Fatalf("%s=%q PATH=%q", goShimVariable, dir, os.Getenv("PATH"))
+		t.Fatalf("shim %q PATH=%q", dir, os.Getenv("PATH"))
 	}
 	name := "go"
 	if runtime.GOOS == "windows" {

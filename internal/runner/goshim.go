@@ -13,31 +13,33 @@ import (
 	"strings"
 )
 
-// goShimVariable names the directory of the go that ddto puts first on PATH
-// for gotestsum, which runs go test itself. That go is ddto: it leaves the
-// directory off PATH and runs as ddto go, so gotestsum's go test reports to
-// CI Visibility with gotestsum's own arguments.
-const goShimVariable = "DDTO_GO_SHIM"
+// The go that ddto puts first on PATH for gotestsum, which runs go test
+// itself, is ddto, named go in a directory of ddto's user cache. Run as go,
+// ddto runs as ddto go, so gotestsum's go test reports to CI Visibility with
+// gotestsum's own arguments.
+var (
+	// goShimFirst is the go shim directory that this process puts first on
+	// PATH for the command that it runs.
+	goShimFirst string
+	// goShimLeft is the go shim directory that this process left off PATH.
+	goShimLeft string
+)
 
-// goShimLeft is the go shim directory that this process left off PATH.
-var goShimLeft string
-
-// GoShimArgs returns ddto's arguments from its command line: go and its
-// arguments when ddto runs as the go shim. Any ddto under gotestsum leaves the
-// shim's directory off PATH first, so the go that it and its commands run is
-// the toolchain's, and the tests see gotestsum's PATH.
-func GoShimArgs(args []string) []string {
-	dir, set := os.LookupEnv(goShimVariable)
-	if !set {
-		return args[1:]
+// GoShimArgs returns ddto's arguments from its command line, and whether ddto
+// runs as the go shim: then they are go and its arguments. Every ddto first
+// leaves the go shims off PATH, as written otherwise, so the go that it and
+// its commands run is the toolchain's, and tests see their caller's PATH.
+func GoShimArgs(args []string) ([]string, bool) {
+	if root, err := goShimRoot(); err == nil {
+		if kept, left := withoutGoShims(os.Getenv("PATH"), root); left != "" {
+			_ = os.Setenv("PATH", kept)
+			goShimLeft = left
+		}
 	}
-	_ = os.Unsetenv(goShimVariable)
-	_ = os.Setenv("PATH", withoutPathEntry(os.Getenv("PATH"), dir))
-	goShimLeft = dir
 	if isProgram(args[0], "go") {
-		return append([]string{"go"}, args[1:]...)
+		return append([]string{"go"}, args[1:]...), true
 	}
-	return args[1:]
+	return args[1:], false
 }
 
 // logGoShim logs the go shim that this process left off PATH, and the one that
@@ -46,8 +48,8 @@ func (d *cliDebug) logGoShim() {
 	if goShimLeft != "" {
 		d.printf("go_shim left=%q", goShimLeft)
 	}
-	if dir := os.Getenv(goShimVariable); dir != "" {
-		d.printf("go_shim first_on_path=%q", dir)
+	if goShimFirst != "" {
+		d.printf("go_shim first_on_path=%q", goShimFirst)
 	}
 }
 
@@ -77,21 +79,15 @@ func UseGoShim() error {
 	if err != nil {
 		return err
 	}
-	if err := os.Setenv(goShimVariable, dir); err != nil {
+	if err := os.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
 		return err
 	}
-	return os.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	goShimFirst = dir
+	return nil
 }
 
-// goShimDir returns the directory of a go that is this ddto, in ddto's user
-// cache: a symbolic link to it, or on Windows a hard link or copy. Its name
-// changes with ddto's path, size and modification time, so an upgraded ddto
-// gets its own.
-func goShimDir(self string) (string, error) {
-	info, err := os.Stat(self)
-	if err != nil {
-		return "", err
-	}
+// goShimRoot is the directory of every go shim, in ddto's user cache.
+func goShimRoot() (string, error) {
 	cache, err := userCacheDir()
 	if err != nil {
 		return "", err
@@ -99,8 +95,23 @@ func goShimDir(self string) (string, error) {
 	if !filepath.IsAbs(cache) {
 		return "", fmt.Errorf("user cache directory %q is not absolute", cache)
 	}
+	return filepath.Join(cache, "ddto", "go-shim"), nil
+}
+
+// goShimDir returns the directory of a go that is this ddto: a symbolic link
+// to it, or on Windows a hard link or copy. Its name changes with ddto's
+// path, size and modification time, so an upgraded ddto gets its own.
+func goShimDir(self string) (string, error) {
+	info, err := os.Stat(self)
+	if err != nil {
+		return "", err
+	}
+	root, err := goShimRoot()
+	if err != nil {
+		return "", err
+	}
 	sum := sha256.Sum256([]byte(self + "\x00" + strconv.FormatInt(info.Size(), 10) + "\x00" + strconv.FormatInt(info.ModTime().UnixNano(), 10)))
-	dir := filepath.Join(cache, "ddto", "go-shim", hex.EncodeToString(sum[:8]))
+	dir := filepath.Join(root, hex.EncodeToString(sum[:8]))
 	shim := filepath.Join(dir, "go")
 	if runtime.GOOS == "windows" {
 		shim += ".exe"
@@ -146,14 +157,45 @@ func copyExecutableFile(source, target string) error {
 	return errors.Join(err, out.Close())
 }
 
-// withoutPathEntry returns the PATH list without the entries that name dir,
-// as UseGoShim added it.
-func withoutPathEntry(list, dir string) string {
-	var kept []string
-	for _, entry := range filepath.SplitList(list) {
-		if filepath.Clean(entry) != filepath.Clean(dir) {
-			kept = append(kept, entry)
+// withoutGoShims returns the PATH list without its entries in root, keeping
+// the others as written, and the last entry that it left.
+func withoutGoShims(list, root string) (kept, left string) {
+	var entries []string
+	for _, raw := range pathListEntries(list) {
+		entry := raw
+		if runtime.GOOS == "windows" {
+			entry = strings.ReplaceAll(raw, `"`, "")
+		}
+		if entry != "" && filePathHasPrefix(filepath.Clean(entry), root) {
+			left = entry
+			continue
+		}
+		entries = append(entries, raw)
+	}
+	return strings.Join(entries, string(os.PathListSeparator)), left
+}
+
+// pathListEntries splits a PATH list where filepath.SplitList does, but keeps
+// each entry as written: on Windows, quotes may enclose a separator.
+func pathListEntries(list string) []string {
+	if list == "" {
+		return nil
+	}
+	if runtime.GOOS != "windows" {
+		return strings.Split(list, string(os.PathListSeparator))
+	}
+	var entries []string
+	start, quoted := 0, false
+	for i := 0; i < len(list); i++ {
+		switch list[i] {
+		case '"':
+			quoted = !quoted
+		case os.PathListSeparator:
+			if !quoted {
+				entries = append(entries, list[start:i])
+				start = i + 1
+			}
 		}
 	}
-	return strings.Join(kept, string(os.PathListSeparator))
+	return append(entries, list[start:])
 }

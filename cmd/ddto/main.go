@@ -38,7 +38,7 @@ func main() {
 	}
 	// The go that ddto puts first on PATH for gotestsum is ddto: it runs as
 	// ddto go.
-	args := runner.GoShimArgs(os.Args)
+	args, fromGoShim := runner.GoShimArgs(os.Args)
 	// ddto go test is ddto test, as go test is.
 	form, isTest := runner.TestCommand(args)
 	if isTest || runner.IsGoCommand(args) {
@@ -75,7 +75,11 @@ func main() {
 		os.Exit(runner.ExecCommand(args))
 	}
 	ctx := runner.DebugCommand(context.Background(), form.Name)
-	cli, args, err := runner.ParseCLIArgs(form.Args)
+	// gotestsum's go test arguments are go test's: ddto's options are ddto's.
+	cli, args, err := runner.DefaultCLIOptions(), form.Args, error(nil)
+	if !fromGoShim {
+		cli, args, err = runner.ParseCLIArgs(form.Args)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" ERROR:", err)
 		os.Exit(2)
