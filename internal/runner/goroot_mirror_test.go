@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -781,5 +782,48 @@ func TestWrapExecProgram(t *testing.T) {
 	var native *nativeGoError
 	if err := wrapExecProgram(&plan, options{exec: "prog"}, t.TempDir()); !errors.As(err, &native) {
 		t.Fatalf("an unquotable program: %v, wrapper %q", err, plan.execWrapper)
+	}
+}
+
+// After go rejected the command while ddto prepared it, go test runs
+// natively and keeps its own status. Only when go test passes, the failure
+// was ddto's own, and ddto warns that the tests ran without CI Visibility.
+func TestRunGoAfterError(t *testing.T) {
+	t.Setenv(fakeToolEnv, "1")
+	ctx := context.WithValue(context.Background(), goLauncherKey{}, goLauncher{command: []string{os.Args[0]}})
+	cause := errors.New("resolve packages: exit status 1\ngo: -p must be a positive integer: 0")
+	for _, status := range []int{0, 1, 2} {
+		t.Setenv(fakeToolExitEnv, strconv.Itoa(status))
+		var stdout, stderr bytes.Buffer
+		code := runGoAfterError(ctx, t.TempDir(), []string{"-p=0", "./..."}, cause, nil, nil, &stdout, &stderr)
+		if code != status || stdout.String() != "test\n-p=0\n./...\n" {
+			t.Fatalf("exit %d, want %d; stdout %q", code, status, stdout.String())
+		}
+		warned := strings.Contains(stderr.String(), "WARN: resolve packages: exit status 1 - go test ran without CI Visibility")
+		if warned != (status == 0) || strings.Contains(stderr.String(), "positive integer") {
+			t.Fatalf("exit %d: stderr %q", status, stderr.String())
+		}
+	}
+}
+
+// go reports a missing working directory or -modfile itself.
+func TestMissingGoInput(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "alt.mod"), []byte("module example.com/alt\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		dir, modfile string
+		missing      bool
+	}{
+		{dir: dir},
+		{dir: dir, modfile: "alt.mod"},
+		{dir: dir, modfile: filepath.Join(dir, "alt.mod")},
+		{dir: filepath.Join(dir, "nonexistent"), missing: true},
+		{dir: dir, modfile: "missing.mod", missing: true},
+	} {
+		if err := missingGoInput(tc.dir, options{modfile: tc.modfile}); (err != nil) != tc.missing {
+			t.Errorf("missingGoInput(%q, %q) = %v", tc.dir, tc.modfile, err)
+		}
 	}
 }
