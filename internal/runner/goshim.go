@@ -30,11 +30,11 @@ var (
 // leaves the go shims off PATH, as written otherwise, so the go that it and
 // its commands run is the toolchain's, and tests see their caller's PATH.
 func GoShimArgs(args []string) ([]string, bool) {
-	if root, err := goShimRoot(); err == nil {
-		if kept, left := withoutGoShims(os.Getenv("PATH"), root); left != "" {
-			_ = os.Setenv("PATH", kept)
-			goShimLeft = left
-		}
+	root, _ := goShimRoot()
+	self, _ := os.Executable()
+	if kept, left := withoutGoShims(os.Getenv("PATH"), root, self); left != "" {
+		_ = os.Setenv("PATH", kept)
+		goShimLeft = left
 	}
 	if isProgram(args[0], "go") {
 		return append([]string{"go"}, args[1:]...), true
@@ -79,7 +79,11 @@ func UseGoShim() error {
 	if err != nil {
 		return err
 	}
-	if err := os.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
+	entry := dir
+	if runtime.GOOS == "windows" && strings.ContainsRune(dir, os.PathListSeparator) {
+		entry = `"` + dir + `"`
+	}
+	if err := os.Setenv("PATH", entry+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
 		return err
 	}
 	goShimFirst = dir
@@ -157,18 +161,35 @@ func copyExecutableFile(source, target string) error {
 	return errors.Join(err, out.Close())
 }
 
-// withoutGoShims returns the PATH list without its entries in root, keeping
-// the others as written, and the last entry that it left.
-func withoutGoShims(list, root string) (kept, left string) {
+// withoutGoShims returns the PATH list without its go shims, keeping the
+// other entries as written, and the last entry that it left. A go shim is an
+// entry in root, or one whose go is self: an environment that a command
+// filtered may name another user cache.
+func withoutGoShims(list, root, self string) (kept, left string) {
+	var selfInfo os.FileInfo
+	if self != "" {
+		selfInfo, _ = os.Stat(self)
+	}
+	name := "go"
+	if runtime.GOOS == "windows" {
+		name = "go.exe"
+	}
 	var entries []string
 	for _, raw := range pathListEntries(list) {
 		entry := raw
 		if runtime.GOOS == "windows" {
 			entry = strings.ReplaceAll(raw, `"`, "")
 		}
-		if entry != "" && filePathHasPrefix(filepath.Clean(entry), root) {
-			left = entry
-			continue
+		if entry != "" && filepath.IsAbs(entry) {
+			shim := root != "" && filePathHasPrefix(filepath.Clean(entry), root)
+			if !shim && selfInfo != nil {
+				goInfo, err := os.Stat(filepath.Join(entry, name))
+				shim = err == nil && os.SameFile(goInfo, selfInfo)
+			}
+			if shim {
+				left = entry
+				continue
+			}
 		}
 		entries = append(entries, raw)
 	}

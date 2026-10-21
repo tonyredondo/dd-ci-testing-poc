@@ -48,6 +48,26 @@ func TestGoShimArgs(t *testing.T) {
 			}
 		})
 	}
+	// A go shim in another user cache, as in an environment that a command
+	// filtered, is left too: its go is this executable.
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	elsewhere := t.TempDir()
+	name := "go"
+	if runtime.GOOS == "windows" {
+		name = "go.exe"
+	}
+	if err := os.Link(self, filepath.Join(elsewhere, name)); err != nil && (runtime.GOOS == "windows" || os.Symlink(self, filepath.Join(elsewhere, name)) != nil) {
+		t.Logf("no link to this executable: %v", err)
+	} else {
+		t.Setenv("PATH", elsewhere+sep+other)
+		if _, fromShim := GoShimArgs([]string{"go", "version"}); !fromShim || os.Getenv("PATH") != other || goShimLeft != elsewhere {
+			t.Fatalf("PATH=%q left %q", os.Getenv("PATH"), goShimLeft)
+		}
+	}
+
 	if !IsGotestsum([]string{"/home/user/go/bin/gotestsum", "--"}) || IsGotestsum([]string{"gotestsum-wrapper"}) || IsGotestsum(nil) {
 		t.Fatal("IsGotestsum")
 	}
