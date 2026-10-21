@@ -117,41 +117,39 @@ func TestUseGoShimRefusesSeparator(t *testing.T) {
 // --go-shim runs any command with the go shim; gotestsum gets it in any form,
 // and so do go run and go tool that reach ddto through the shim.
 func TestGoShimCommand(t *testing.T) {
-	defer func() { goShimReason = "" }()
 	for _, tc := range []struct {
 		args, want []string
 		fromShim   bool
-		shim       bool
-		// reason is the go_shim reason= debug line's.
+		// reason is why the command runs with the shim, as the go_shim
+		// reason= debug line says, or "" without it.
 		reason string
 	}{
-		{args: []string{"--go-shim", "make", "test"}, want: []string{"make", "test"}, shim: true, reason: "flag"},
-		{args: []string{"--go-shim"}, want: []string{}, shim: true, reason: "flag"},
-		{args: []string{"gotestsum", "--", "./..."}, shim: true, reason: "gotestsum"},
-		{args: []string{"go", "tool", "gotestsum", "--format", "testname"}, shim: true, reason: "gotestsum"},
-		{args: []string{"go", "tool", "gotest.tools/gotestsum"}, shim: true, reason: "gotestsum"},
-		{args: []string{"go", "-C", "project", "tool", "gotestsum"}, shim: true, reason: "gotestsum"},
-		{args: []string{"go", "run", "gotest.tools/gotestsum@v1.13.0", "--", "./..."}, shim: true, reason: "gotestsum"},
-		{args: []string{"go", "run", "-mod=mod", "gotest.tools/gotestsum"}, shim: true, reason: "gotestsum"},
-		{args: []string{"go", "run", "-tags", "smoke", "gotest.tools/gotestsum@v1.13.0"}, shim: true, reason: "gotestsum"},
-		{args: []string{"go", "run", "-C", "tools", "gotest.tools/gotestsum"}, shim: true, reason: "gotestsum"},
+		{args: []string{"--go-shim", "make", "test"}, want: []string{"make", "test"}, reason: "flag"},
+		{args: []string{"--go-shim"}, want: []string{}, reason: "flag"},
+		{args: []string{"gotestsum", "--", "./..."}, reason: "gotestsum"},
+		{args: []string{"go", "tool", "gotestsum", "--format", "testname"}, reason: "gotestsum"},
+		{args: []string{"go", "tool", "gotest.tools/gotestsum"}, reason: "gotestsum"},
+		{args: []string{"go", "-C", "project", "tool", "gotestsum"}, reason: "gotestsum"},
+		{args: []string{"go", "run", "gotest.tools/gotestsum@v1.13.0", "--", "./..."}, reason: "gotestsum"},
+		{args: []string{"go", "run", "-mod=mod", "gotest.tools/gotestsum"}, reason: "gotestsum"},
+		{args: []string{"go", "run", "-tags", "smoke", "gotest.tools/gotestsum@v1.13.0"}, reason: "gotestsum"},
+		{args: []string{"go", "run", "-C", "tools", "gotest.tools/gotestsum"}, reason: "gotestsum"},
 		{args: []string{"go", "run", "./cmd/gotestsum"}},
 		{args: []string{"go", "tool", "cover"}},
 		{args: []string{"go", "build", "gotest.tools/gotestsum"}},
 		{args: []string{"make", "test"}},
 		{args: []string{"make", "--go-shim"}},
 		// Run as the go shim, a launcher keeps the shim for its program.
-		{args: []string{"go", "run", "./tools/testrunner"}, fromShim: true, shim: true, reason: "launcher"},
-		{args: []string{"go", "tool", "mytool"}, fromShim: true, shim: true, reason: "launcher"},
+		{args: []string{"go", "run", "./tools/testrunner"}, fromShim: true, reason: "launcher"},
+		{args: []string{"go", "tool", "mytool"}, fromShim: true, reason: "launcher"},
 		{args: []string{"go", "build", "./..."}, fromShim: true},
 	} {
 		want := tc.want
 		if want == nil {
 			want = tc.args
 		}
-		goShimReason = ""
-		if got, shim := GoShimCommand(tc.args, tc.fromShim); !slices.Equal(got, want) || shim != tc.shim || goShimReason != tc.reason {
-			t.Errorf("GoShimCommand(%q, %t) = %q, %t, reason %q; want %q, %t, reason %q", tc.args, tc.fromShim, got, shim, goShimReason, want, tc.shim, tc.reason)
+		if got, reason := GoShimCommand(tc.args, tc.fromShim); !slices.Equal(got, want) || reason != tc.reason {
+			t.Errorf("GoShimCommand(%q, %t) = %q, %q; want %q, %q", tc.args, tc.fromShim, got, reason, want, tc.reason)
 		}
 	}
 }

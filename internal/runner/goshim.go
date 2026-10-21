@@ -91,26 +91,22 @@ func (d *cliDebug) logGoShim() {
 const goShimFlag = "--go-shim"
 
 // GoShimCommand returns the command that ddto runs, without --go-shim, and
-// whether it runs with the go shim: after --go-shim, for gotestsum in any
-// form, and, for ddto run as the go shim, for go run and go tool, which can
-// start another program that runs go test.
-func GoShimCommand(args []string, fromGoShim bool) ([]string, bool) {
+// why it runs with the go shim, or "" if it does not: after --go-shim, for
+// gotestsum in any form, and, for ddto run as the go shim, for go run and go
+// tool, which can start another program that runs go test.
+func GoShimCommand(args []string, fromGoShim bool) ([]string, string) {
 	if len(args) > 0 && args[0] == goShimFlag {
-		goShimReason = "flag"
-		return args[1:], true
+		return args[1:], "flag"
 	}
 	if runsGotestsum(args) {
-		goShimReason = "gotestsum"
-		return args, true
+		return args, "gotestsum"
 	}
 	if fromGoShim && len(args) > 0 && isProgram(args[0], "go") {
-		_, sub, _ := goSubcommand(args[1:])
-		if sub == "run" || sub == "tool" {
-			goShimReason = "launcher"
-			return args, true
+		if _, sub, _ := goSubcommand(args[1:]); sub == "run" || sub == "tool" {
+			return args, "launcher"
 		}
 	}
-	return args, false
+	return args, ""
 }
 
 // runsGotestsum reports whether args run gotestsum: itself, as a tool of the
@@ -192,10 +188,11 @@ func isProgram(path, name string) bool {
 	return base == name
 }
 
-// RunWithGoShim runs command with the go shim first on its PATH and returns
-// its exit status. If ddto cannot set the shim up, it warns and runs the
-// command without it.
-func RunWithGoShim(command []string) int {
+// RunWithGoShim runs command with the go shim first on its PATH, for the
+// reason that GoShimCommand returned, and returns its exit status. If ddto
+// cannot set the shim up, it warns and runs the command without it.
+func RunWithGoShim(command []string, reason string) int {
+	goShimReason = reason
 	run, tool, err := goShimSetup(command)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" WARN:", err, "- running", command[0], "without CI Visibility")
@@ -298,8 +295,9 @@ func (t *moduleTool) run() int {
 		signal.Notify(signals, goToolSignals...)
 		go func() {
 			for sig := range signals {
-				debug.printf("go_shim module_tool forwarding signal=%q", sig.String())
+				// A blocked debug write must not delay the signal.
 				_ = cmd.Process.Signal(sig)
+				debug.printf("go_shim module_tool forwarded signal=%q", sig.String())
 			}
 		}()
 		err = cmd.Wait()
