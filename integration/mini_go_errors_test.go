@@ -16,11 +16,13 @@ func TestMiniKeepsGoErrorStatus(t *testing.T) {
 		{env: []string{"GOFLAGS=-badflag"}, args: []string{"."}},
 		{env: []string{"GOFLAGS=-p=0"}, args: []string{"."}},
 		{args: []string{"-C", "nonexistent", "."}},
+		{args: []string{"-C", "go.mod", "."}},
+		{args: []string{"-count=1", "-C", "other", "."}},
 		{args: []string{"-modfile=missing.mod", "."}},
 		{args: []string{"-cover", "-covermode=bad", "."}},
 	} {
 		env := testEnv(tc.env...)
-		args := append([]string{"test", "-count=1"}, tc.args...)
+		args := append([]string{"test"}, tc.args...)
 		want, wantErr, wantCode := command(t, dir, env, "go", args...)
 		got, gotErr, gotCode := command(t, dir, env, driver, args...)
 		if wantCode == 0 || gotCode != wantCode || got != want || gotErr != wantErr {

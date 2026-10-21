@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
 	"slices"
@@ -806,24 +807,40 @@ func TestRunGoAfterError(t *testing.T) {
 	}
 }
 
-// go reports a missing working directory or -modfile itself.
+// go reports a missing working directory itself, and a file given as one.
 func TestMissingGoInput(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "alt.mod"), []byte("module example.com/alt\n"), 0o600); err != nil {
+	file := filepath.Join(dir, "go.mod")
+	if err := os.WriteFile(file, []byte("module example.com/m\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
-		dir, modfile string
-		missing      bool
-	}{
-		{dir: dir},
-		{dir: dir, modfile: "alt.mod"},
-		{dir: dir, modfile: filepath.Join(dir, "alt.mod")},
-		{dir: filepath.Join(dir, "nonexistent"), missing: true},
-		{dir: dir, modfile: "missing.mod", missing: true},
-	} {
-		if err := missingGoInput(tc.dir, options{modfile: tc.modfile}); (err != nil) != tc.missing {
-			t.Errorf("missingGoInput(%q, %q) = %v", tc.dir, tc.modfile, err)
+		dir     string
+		missing bool
+	}{{dir: dir}, {dir: filepath.Join(dir, "nonexistent"), missing: true}, {dir: file, missing: true}} {
+		if err := missingGoInput(tc.dir); (err != nil) != tc.missing {
+			t.Errorf("missingGoInput(%q) = %v", tc.dir, err)
 		}
+	}
+}
+
+// Only go's own rejection of the caller's command or its input runs go test
+// natively; a -modfile that an overlay provides is not missing.
+func TestGoRejected(t *testing.T) {
+	exit := exec.Command(os.Args[0], "-test.run=^$", "-test.count=x").Run()
+	var rejected *goRejectedError
+	if !errors.As(goRejected(fmt.Errorf("resolve packages: %w", exit)), &rejected) {
+		t.Fatalf("go's exit status %v is not a rejection", exit)
+	}
+	if errors.As(goRejected(errors.New("other")), &rejected) || goRejected(nil) != nil {
+		t.Fatal("a failure without go's exit status is a rejection")
+	}
+	missing := &os.PathError{Op: "open", Path: "missing.mod", Err: os.ErrNotExist}
+	if !errors.As(missingModfile(&options{modfile: "missing.mod"}, missing), &rejected) || errors.As(missingModfile(&options{}, missing), &rejected) {
+		t.Fatal("missingModfile")
+	}
+	overlaid := filepath.Join(t.TempDir(), "virtual.mod")
+	if _, err := readModuleFile(overlaid, map[string]string{filepath.Clean(overlaid): os.Args[0]}); err != nil {
+		t.Fatalf("an overlay's -modfile: %v", err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -376,7 +377,8 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 				cmd.Env = append(cmd.Env, "GOFLAGS="+plan.workspaceGoFlags)
 			}
 		}
-		return readPackages(ctx, cmd, "resolve packages")
+		packages, err = readPackages(ctx, cmd, "resolve packages")
+		return packages, goRejected(err)
 	}
 	list := func(patterns ...string) ([]goPackage, error) {
 		return listWith("Dir,Name,ImportPath,Standard,DepOnly,GoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,Module,Error", patterns...)
@@ -895,7 +897,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		// Native go test handles -C, help and file mode itself.
 		return runGo(ctx, cwd, append([]string{"test"}, args...), nil, signals, stdin, stdout, stderr)
 	}
-	if err := missingGoInput(dir, opts); err != nil {
+	if err := missingGoInput(dir); err != nil {
 		return runGoAfterError(ctx, cwd, args, err, signals, stdin, stdout, stderr)
 	}
 	gitHubJobID := handGitHubJobID(runtime, debug)
@@ -923,9 +925,8 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		debug.printf("instrumentation bypass %s", native.bypass)
 		return runGo(ctx, cwd, append([]string{"test"}, args...), nil, signals, stdin, stdout, stderr)
 	}
-	var exit *exec.ExitError
-	if errors.As(err, &exit) && ctx.Err() == nil {
-		// go rejected the command or its environment.
+	var rejected *goRejectedError
+	if errors.As(err, &rejected) && ctx.Err() == nil {
 		return runGoAfterError(ctx, cwd, args, err, signals, stdin, stdout, stderr)
 	}
 	if err != nil {
@@ -1058,28 +1059,49 @@ func (e *nativeGoError) Error() string { return e.err.Error() }
 
 func (e *nativeGoError) Unwrap() error { return e.err }
 
-// missingGoInput returns an error for a working directory or -modfile that
-// does not exist: go reports either itself, while ddto would read them first.
-func missingGoInput(dir string, opts options) error {
-	if _, err := os.Stat(dir); err != nil {
-		return err
+// missingGoInput returns an error for a working directory that is missing or
+// not a directory: go reports it itself, while ddto would start go there first.
+func missingGoInput(dir string) error {
+	info, err := os.Stat(dir)
+	if err == nil && !info.IsDir() {
+		err = fmt.Errorf("chdir %s: not a directory", dir)
 	}
-	if opts.modfile == "" {
-		return nil
+	return err
+}
+
+// goRejectedError is a failure of a go command that runs the caller's
+// invocation, or of a file that it names, which go test reports itself: go
+// rejected the command, its environment or its input.
+type goRejectedError struct{ err error }
+
+func (e *goRejectedError) Error() string { return e.err.Error() }
+
+func (e *goRejectedError) Unwrap() error { return e.err }
+
+// missingModfile marks a -modfile that does not exist, after the -overlay
+// replacements, which go test reports itself.
+func missingModfile(opts *options, err error) error {
+	if opts.modfile != "" && errors.Is(err, fs.ErrNotExist) {
+		return &goRejectedError{err}
 	}
-	modfile := opts.modfile
-	if !filepath.IsAbs(modfile) {
-		modfile = filepath.Join(dir, modfile)
+	return err
+}
+
+// goRejected marks the failure of a go command that runs the caller's
+// invocation when go exited with an error.
+func goRejected(err error) error {
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		return &goRejectedError{err}
 	}
-	_, err := os.Stat(modfile)
 	return err
 }
 
 // runGoAfterError runs go test natively after go, or ddto's reading of go's
-// flags, rejected the command while ddto prepared it: go test then reports the
-// error itself, with its own output and exit status. If go test passes
-// instead, the failure was ddto's own, and ddto warns that the tests ran
-// without CI Visibility.
+// flags, rejected the command, its environment or its input while ddto
+// prepared it: go test then reports the error itself, with its own output and
+// exit status. If go test passes instead, ddto had added the cause, and it
+// warns that the tests ran without CI Visibility.
 func runGoAfterError(ctx context.Context, cwd string, args []string, cause error, signals <-chan os.Signal, stdin io.Reader, stdout, stderr io.Writer) int {
 	reason, _, _ := strings.Cut(cause.Error(), "\n")
 	debugFromContext(ctx).printf("instrumentation bypass go_rejected=%q", reason)
