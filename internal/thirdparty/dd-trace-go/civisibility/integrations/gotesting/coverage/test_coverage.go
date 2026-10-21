@@ -212,6 +212,7 @@ func InitializeCoverage(m *testing.M, uploadEnabled bool) {
 	backfillInput = nil
 	backfillFinalized = false
 	backfillResult = BackfillResult{}
+	useTemporaryCoverProfile()
 
 	deferModuleInfo()
 
@@ -356,8 +357,13 @@ func runtimeCoverageSnapshotLocked() (*runtimeCoverageSnapshot, error) {
 
 	if coverProfile := currentCoverProfilePath(); coverProfile != "" {
 		if _, err := os.Stat(coverProfile); err == nil {
-			runtimeSnapshot = &runtimeCoverageSnapshot{path: coverProfile}
+			runtimeSnapshot = &runtimeCoverageSnapshot{path: coverProfile, temporary: coverProfile == temporaryCoverProfile}
 			return runtimeSnapshot, nil
+		}
+		if coverProfile == temporaryCoverProfile {
+			// M.Run ran no tests, as with -test.list, so testing printed no
+			// coverage line; a tear-down here would print one.
+			return nil, errors.New("testing wrote no coverage profile")
 		}
 	}
 
@@ -365,11 +371,42 @@ func runtimeCoverageSnapshotLocked() (*runtimeCoverageSnapshot, error) {
 		return nil, err
 	}
 	coverageFile := filepath.Join(temporaryDir, "global_coverage.out")
-	if err := tearDownWithoutPercentage(coverageFile); err != nil {
+	if _, err := tearDown(coverageFile, ""); err != nil {
 		return nil, err
 	}
 	runtimeSnapshot = &runtimeCoverageSnapshot{path: coverageFile, temporary: true}
 	return runtimeSnapshot, nil
+}
+
+// temporaryCoverProfile is the profile that testing writes for the session's
+// coverage when -coverprofile is not set; see useTemporaryCoverProfile.
+var temporaryCoverProfile string
+
+// useTemporaryCoverProfile has testing write its coverage profile to a
+// temporary file as M.Run ends, when -coverprofile is not set, so the
+// session's coverage reads that profile. Writing one through testing's
+// tear-down after M.Run would print testing's coverage line a second time.
+// The flag keeps its value from the command line, which M.Run may parse
+// later, and Value.Set leaves it unset for flag.Visit. Process-retry children
+// write no profile of their own.
+func useTemporaryCoverProfile() {
+	temporaryCoverProfile = ""
+	coverProfile := flag.Lookup("test.coverprofile")
+	if testing.CoverMode() == "" || coverProfile == nil || coverProfile.Value.String() != "" || integrations.IsProcessRetryChild() {
+		return
+	}
+	coverageStateMu.Lock()
+	defer coverageStateMu.Unlock()
+	if err := ensureTemporaryDirLocked(); err != nil {
+		log.Debug("civisibility.cov: no temporary coverage profile: %s", err.Error())
+		return
+	}
+	path := filepath.Join(temporaryDir, "global_coverage.out")
+	if err := coverProfile.Value.Set(path); err != nil {
+		log.Debug("civisibility.cov: no temporary coverage profile: %s", err.Error())
+		return
+	}
+	temporaryCoverProfile = path
 }
 
 func currentCoverProfilePath() string {
@@ -1130,26 +1167,4 @@ func getCoverageStatementsInfo(filename string) (totalStatements, coveredStateme
 	}
 
 	return totalStatements, coveredStatements, scanner.Err()
-}
-
-// tearDownWithoutPercentage writes the runtime coverage profile to path once
-// M.Run has returned. testing's tear-down also prints "coverage: N% of
-// statements" to os.Stdout. testing prints that line itself when M.Run runs
-// tests, and not after -test.list, so this one goes to os.DevNull, as testing
-// redirects os.Stdout around an Example. No test runs then.
-func tearDownWithoutPercentage(path string) error {
-	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
-	if err != nil {
-		log.Debug("civisibility.cov: coverage percentage printed again, %s unavailable: %s", os.DevNull, err.Error())
-		_, err = tearDown(path, "")
-		return err
-	}
-	stdout := os.Stdout
-	os.Stdout = devNull
-	defer func() {
-		os.Stdout = stdout
-		_ = devNull.Close()
-	}()
-	_, err = tearDown(path, "")
-	return err
 }
