@@ -414,8 +414,13 @@
       "source_sha256": "36fd8cde99baa2dadb093e43ba97f93663eea8b8101bcea38d5ab51619d1ee4a"
     },
     {
+      "path": "civisibility/integrations/gotesting/coverage/temporary_profile_test.go",
+      "sha256": "79072c26978c7f52ae2b6f5166a44391c7ad3bd83e1b88bbe4341a45248b5f98",
+      "role": "local"
+    },
+    {
       "path": "civisibility/integrations/gotesting/coverage/test_coverage.go",
-      "sha256": "e8b97f6e40a9192760bcf055b360ba879eea14a8cfdbe1809945deb483ecd9b6",
+      "sha256": "afe1b5c205324b0c4b7689969d7990140904fea7692a5f5be89b52e520109b6c",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/coverage/test_coverage.go",
       "source_sha256": "90f437bef02e1c4eca6e220f13d128ce8da64109359b66b98db6b5bb3bb5c352"

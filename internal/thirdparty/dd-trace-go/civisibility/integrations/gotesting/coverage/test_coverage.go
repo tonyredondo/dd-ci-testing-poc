@@ -356,7 +356,8 @@ func runtimeCoverageSnapshotLocked() (*runtimeCoverageSnapshot, error) {
 	}
 
 	if coverProfile := currentCoverProfilePath(); coverProfile != "" {
-		if _, err := os.Stat(coverProfile); err == nil {
+		// ddto's temporary profile starts empty.
+		if info, err := os.Stat(coverProfile); err == nil && (coverProfile != temporaryCoverProfile || info.Size() > 0) {
 			runtimeSnapshot = &runtimeCoverageSnapshot{path: coverProfile, temporary: coverProfile == temporaryCoverProfile}
 			return runtimeSnapshot, nil
 		}
@@ -388,7 +389,7 @@ var temporaryCoverProfile string
 // The flag keeps its value from the command line, which M.Run may parse
 // later, and Value.Set leaves it unset for flag.Visit. The file is in the
 // temporary directory itself: a signal can close CI Visibility while tests
-// still run, and testing exits with status 2 if the file's directory is gone.
+// still run, and testing exits with status 2 if it cannot create the file.
 // Process-retry children write no profile of their own.
 func useTemporaryCoverProfile() {
 	temporaryCoverProfile = ""
@@ -396,8 +397,8 @@ func useTemporaryCoverProfile() {
 	if testing.CoverMode() == "" || coverProfile == nil || coverProfile.Value.String() != "" || integrations.IsProcessRetryChild() {
 		return
 	}
-	path := filepath.Join(os.TempDir(), "dd-civisibility-coverage-"+strconv.Itoa(os.Getpid())+"-"+strconv.FormatInt(time.Now().UnixNano(), 36)+".out")
-	if err := coverProfile.Value.Set(path); err != nil {
+	path, err := setTemporaryCoverProfile(coverProfile.Value)
+	if err != nil {
 		log.Debug("civisibility.cov: no temporary coverage profile: %s", err.Error())
 		return
 	}
@@ -405,6 +406,23 @@ func useTemporaryCoverProfile() {
 	integrations.PushCiVisibilityCloseAction(func() {
 		_ = os.Remove(path)
 	})
+}
+
+// setTemporaryCoverProfile creates an empty profile in the temporary
+// directory, which testing then writes, and sets value to it. testing exits
+// with status 2 if it cannot create the file, so a temporary directory where
+// ddto cannot create one leaves value unchanged.
+func setTemporaryCoverProfile(value flag.Value) (string, error) {
+	file, err := os.CreateTemp("", "dd-civisibility-coverage-*.out")
+	if err != nil {
+		return "", err
+	}
+	path := file.Name()
+	if err := errors.Join(file.Close(), value.Set(path)); err != nil {
+		_ = os.Remove(path)
+		return "", err
+	}
+	return path, nil
 }
 
 func currentCoverProfilePath() string {
