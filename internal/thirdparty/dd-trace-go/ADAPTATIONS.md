@@ -172,14 +172,16 @@ file has no directory of its own: a signal can close CI Visibility while tests
 still run, and testing exits with status 2 if it cannot create the file.
 Process-retry and quarantine children, which write no profile of their own,
 keep the tear-down. When a profile is set but testing wrote none, as after
-`-list`, with or without `-coverprofile`, the snapshot fails instead of
-printing a line. The session's percentage now comes from the profile that
+`-list`, with or without `-coverprofile`, or when an explicitly empty
+`-test.coverprofile` replaced ddto's as `M.Run` parsed the flags, the snapshot
+fails instead of printing a line. The session's percentage now comes from the profile that
 testing writes with go test's `-test.gocoverdir`, the one behind the line it
 prints, so with `-coverpkg` it can count statements of selected packages that
 the old tear-down, in a new directory, left out. Redirecting `os.Stdout`
 around the tear-down instead would race with goroutines that a `TestMain`
-leaves printing. Check: `TestMiniPrintsCoverageLineOnce`, which fails without
-the change. The Testify parity tests drop the pinned SDK's repeated line
+leaves printing. Check: `TestMiniPrintsCoverageLineOnce`, with flags that a
+`TestMain` parses before ddto sets the profile and that `M.Run` parses after,
+which fails without the change. The Testify parity tests drop the pinned SDK's repeated line
 (`withoutRepeatedCoverageLine`).
 
 ## Per-test profile subtraction
