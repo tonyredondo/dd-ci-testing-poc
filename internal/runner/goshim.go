@@ -293,16 +293,24 @@ func (t *moduleTool) run() int {
 	if err == nil {
 		signals := make(chan os.Signal, 100)
 		signal.Notify(signals, goToolSignals...)
+		// The loop does not log: a blocked debug write would hold back the
+		// next signal. The signals are logged once the tool ends.
+		var forwarded []string
+		done := make(chan struct{})
 		go func() {
+			defer close(done)
 			for sig := range signals {
-				// A blocked debug write must not delay the signal.
 				_ = cmd.Process.Signal(sig)
-				debug.printf("go_shim module_tool forwarded signal=%q", sig.String())
+				forwarded = append(forwarded, sig.String())
 			}
 		}()
 		err = cmd.Wait()
 		signal.Stop(signals)
 		close(signals)
+		<-done
+		if len(forwarded) != 0 {
+			debug.printf("go_shim module_tool forwarded signals=%q", forwarded)
+		}
 	}
 	if err == nil {
 		debug.printf("go_shim module_tool exited code=0 duration=%s", time.Since(started).Round(time.Microsecond))

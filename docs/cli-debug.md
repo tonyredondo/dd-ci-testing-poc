@@ -402,7 +402,7 @@ command's `PATH`, and logs why and how:
 | `go_shim go=<path>` | For a go command, the toolchain's go that it runs |
 | `go_shim go_command=run_exec\|module_tool\|toolchain_tool\|tool_not_built\|native` | How that go command runs: `go run` with ddto as its `-exec` program; a tool of the module, which ddto runs itself as `go tool` would; a tool of the toolchain, or one that `go tool -n` could not build, which `go tool` runs and reports; or unchanged |
 | `go_shim module_tool="<tool>" path=<path> args=<n>` and `go_shim module_tool goroot=kept\|set\|removed` | The module tool that ddto runs, its binary and its argument count, and whether ddto kept `GOROOT` or, after a toolchain switch, set or removed it as `go` does |
-| `go_shim module_tool forwarded signal="<name>"` | ddto received a signal that `go tool` forwards to its tool, and forwarded it |
+| `go_shim module_tool forwarded signals=["<name>" …]` | The signals that ddto received while the tool ran and forwarded to it, as `go tool` does, logged once the tool ends |
 | `go_shim module_tool exited code=<n> duration=<d>` or `go_shim module_tool ended error="<error>"` | How the tool ended: its exit status, or why it did not start or exit (`signal: killed`, for example), after which ddto exits with status 1, as `go tool` does |
 | `go_shim as_go=true` | This ddto runs as that `go`, so its go test reports with the command's arguments and no ddto options |
 | `go_shim left=<dir>` | Run as that `go`, or under the command, ddto left the directory off `PATH` again, so the tests and the go commands it runs see the caller's `PATH` |
