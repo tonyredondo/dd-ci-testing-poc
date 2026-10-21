@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
 
 // The go that ddto puts first on PATH for gotestsum, which runs go test
@@ -23,6 +26,8 @@ var (
 	goShimFirst string
 	// goShimLeft is the go shim directory that this process left off PATH.
 	goShimLeft string
+	// goShimGo is the go that a go command with the go shim runs.
+	goShimGo string
 )
 
 // GoShimArgs returns ddto's arguments from its command line, and whether ddto
@@ -49,6 +54,46 @@ func (d *cliDebug) logGoShim() {
 	if goShimFirst != "" {
 		d.printf("go_shim first_on_path=%q", goShimFirst)
 	}
+	if goShimGo != "" {
+		d.printf("go_shim go=%q", goShimGo)
+	}
+}
+
+// goShimFlag puts the go shim first on PATH for any command, so that the go
+// test that it, or a command it starts, runs reports to CI Visibility.
+const goShimFlag = "--go-shim"
+
+// GoShimCommand returns the command that ddto runs, without --go-shim, and
+// whether it runs with the go shim: after --go-shim, and for gotestsum, also
+// through go tool or go run.
+func GoShimCommand(args []string) ([]string, bool) {
+	if len(args) > 0 && args[0] == goShimFlag {
+		return args[1:], true
+	}
+	return args, runsGotestsum(args)
+}
+
+// runsGotestsum reports whether args run gotestsum: itself, as a tool of the
+// module, or with go run.
+func runsGotestsum(args []string) bool {
+	if IsGotestsum(args) {
+		return true
+	}
+	if len(args) < 3 || !isProgram(args[0], "go") {
+		return false
+	}
+	switch args[1] {
+	case "tool":
+		return args[2] == "gotestsum" || args[2] == "gotest.tools/gotestsum"
+	case "run":
+		for _, arg := range args[2:] {
+			if !strings.HasPrefix(arg, "-") {
+				pkg, _, _ := strings.Cut(arg, "@")
+				return pkg == "gotest.tools/gotestsum"
+			}
+		}
+	}
+	return false
 }
 
 // IsGotestsum reports whether args run gotestsum.
@@ -66,17 +111,95 @@ func isProgram(path, name string) bool {
 	return base == name
 }
 
-// UseGoShim puts the go shim first on PATH for the command that ddto runs
-// next, which inherits it.
-func UseGoShim() error {
+// UseGoShim puts the go shim first on PATH for command, which ddto runs next,
+// and returns the command to run. A go command runs the go that PATH names
+// before the shim; see goShimGoCommand. On an error, PATH and the command stay
+// as they were.
+func UseGoShim(command []string) ([]string, error) {
 	self, err := os.Executable()
 	if err != nil {
-		return err
+		return command, err
 	}
 	dir, err := goShimDir(self)
 	if err != nil {
-		return err
+		return command, err
 	}
+	run := command
+	if isProgram(command[0], "go") {
+		toolchain, err := exec.LookPath(command[0])
+		if err != nil {
+			return command, err
+		}
+		if run, err = goShimGoCommand(self, toolchain, command); err != nil {
+			return command, err
+		}
+		goShimGo = toolchain
+	}
+	if err := prependGoShim(dir); err != nil {
+		return command, err
+	}
+	return run, nil
+}
+
+// GoShimExecMode is ddto's mode as go run's -exec program with the go shim.
+const GoShimExecMode = "go-shim-exec"
+
+// goShimGoCommand returns the go command to run with the go shim. go run and
+// go tool put $GOROOT/bin before the shim on their program's PATH, so go run
+// runs its program through ddto's GoShimExecMode, which puts the shim first
+// again, and ddto runs a tool's program itself.
+func goShimGoCommand(self, toolchain string, command []string) ([]string, error) {
+	run := append([]string{toolchain}, command[1:]...)
+	if len(command) < 2 {
+		return run, nil
+	}
+	switch command[1] {
+	case "run":
+		for _, arg := range command[2:] {
+			name, _, _ := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+			if !strings.HasPrefix(arg, "-") {
+				break
+			}
+			if name == "exec" {
+				return nil, errors.New("go run -exec starts its program with $GOROOT/bin before the go shim")
+			}
+		}
+		program, err := quoteToolWords([]string{self, GoShimExecMode})
+		if err != nil {
+			return nil, err
+		}
+		return append([]string{toolchain, "run", "-exec=" + program}, command[2:]...), nil
+	case "tool":
+		if len(command) < 3 || strings.HasPrefix(command[2], "-") {
+			return nil, errors.New("go tool takes its flags before the tool with the go shim unsupported")
+		}
+		out, err := exec.Command(toolchain, "tool", "-n", command[2]).Output()
+		if err != nil {
+			return nil, fmt.Errorf("go tool -n %s: %w", command[2], err)
+		}
+		return append([]string{strings.TrimSpace(string(out))}, command[3:]...), nil
+	}
+	return run, nil
+}
+
+// ExecWithGoShim runs args, the program that go run built and its arguments,
+// with the go shim first on its PATH again.
+func ExecWithGoShim(args []string) int {
+	self, err := os.Executable()
+	if err == nil {
+		var dir string
+		if dir, err = goShimDir(self); err == nil {
+			err = prependGoShim(dir)
+		}
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" WARN:", err, "- running", args[0], "without the go shim")
+	}
+	return ExecWithCallerEnvironment("", args)
+}
+
+// prependGoShim puts the go shim directory first on PATH.
+func prependGoShim(dir string) error {
 	entry := dir
 	if strings.ContainsRune(dir, os.PathListSeparator) {
 		if runtime.GOOS != "windows" {
