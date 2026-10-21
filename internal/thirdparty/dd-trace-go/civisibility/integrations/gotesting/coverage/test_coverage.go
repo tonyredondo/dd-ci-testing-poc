@@ -360,11 +360,10 @@ func runtimeCoverageSnapshotLocked() (*runtimeCoverageSnapshot, error) {
 			runtimeSnapshot = &runtimeCoverageSnapshot{path: coverProfile, temporary: coverProfile == temporaryCoverProfile}
 			return runtimeSnapshot, nil
 		}
-		if coverProfile == temporaryCoverProfile {
-			// M.Run ran no tests, as with -test.list, so testing printed no
-			// coverage line; a tear-down here would print one.
-			return nil, errors.New("testing wrote no coverage profile")
-		}
+		// testing writes the profile as M.Run ends when it ran tests. Without
+		// one, as after -test.list, testing printed no coverage line, and a
+		// tear-down here would print one.
+		return nil, errors.New("testing wrote no coverage profile")
 	}
 
 	if err := ensureTemporaryDirLocked(); err != nil {
@@ -387,26 +386,25 @@ var temporaryCoverProfile string
 // session's coverage reads that profile. Writing one through testing's
 // tear-down after M.Run would print testing's coverage line a second time.
 // The flag keeps its value from the command line, which M.Run may parse
-// later, and Value.Set leaves it unset for flag.Visit. Process-retry children
-// write no profile of their own.
+// later, and Value.Set leaves it unset for flag.Visit. The file is in the
+// temporary directory itself: a signal can close CI Visibility while tests
+// still run, and testing exits with status 2 if the file's directory is gone.
+// Process-retry children write no profile of their own.
 func useTemporaryCoverProfile() {
 	temporaryCoverProfile = ""
 	coverProfile := flag.Lookup("test.coverprofile")
 	if testing.CoverMode() == "" || coverProfile == nil || coverProfile.Value.String() != "" || integrations.IsProcessRetryChild() {
 		return
 	}
-	coverageStateMu.Lock()
-	defer coverageStateMu.Unlock()
-	if err := ensureTemporaryDirLocked(); err != nil {
-		log.Debug("civisibility.cov: no temporary coverage profile: %s", err.Error())
-		return
-	}
-	path := filepath.Join(temporaryDir, "global_coverage.out")
+	path := filepath.Join(os.TempDir(), "dd-civisibility-coverage-"+strconv.Itoa(os.Getpid())+"-"+strconv.FormatInt(time.Now().UnixNano(), 36)+".out")
 	if err := coverProfile.Value.Set(path); err != nil {
 		log.Debug("civisibility.cov: no temporary coverage profile: %s", err.Error())
 		return
 	}
 	temporaryCoverProfile = path
+	integrations.PushCiVisibilityCloseAction(func() {
+		_ = os.Remove(path)
+	})
 }
 
 func currentCoverProfilePath() string {

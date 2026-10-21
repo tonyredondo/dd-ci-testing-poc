@@ -163,17 +163,24 @@ returned. That tear-down also prints `coverage: N% of statements` to
 prints none. dd-trace-go `main` still does this.
 
 `useTemporaryCoverProfile`, which `InitializeCoverage` calls before `M.Run`,
-sets an unset `test.coverprofile` to a temporary file instead, so testing
-writes the profile itself, printing its line once, and
+sets an unset `test.coverprofile` to a file in the temporary directory instead,
+so testing writes the profile itself, printing its line once, and
 `runtimeCoverageSnapshotLocked` reads that file. A value from the command line,
 which `M.Run` may parse later, still replaces it. `Value.Set` leaves the flag
-unset for `flag.Visit`, and process-retry children, which write no profile of
-their own, keep the tear-down. When testing wrote no profile, as after
-`-list`, the snapshot fails instead of printing a line. Redirecting
-`os.Stdout` around the tear-down would race with goroutines that a
-`TestMain` leaves printing. Check: `TestMiniPrintsCoverageLineOnce`, which fails
-without the change. The Testify parity tests drop the pinned SDK's repeated
-line (`withoutRepeatedCoverageLine`).
+unset for `flag.Visit`, though `flag.Lookup` shows the temporary path. The
+file has no directory of its own: a signal can close CI Visibility while tests
+still run, and testing exits with status 2 if it cannot create the file.
+Process-retry and quarantine children, which write no profile of their own,
+keep the tear-down. When a profile is set but testing wrote none, as after
+`-list`, with or without `-coverprofile`, the snapshot fails instead of
+printing a line. The session's percentage now comes from the profile that
+testing writes with go test's `-test.gocoverdir`, the one behind the line it
+prints, so with `-coverpkg` it can count statements of selected packages that
+the old tear-down, in a new directory, left out. Redirecting `os.Stdout`
+around the tear-down instead would race with goroutines that a `TestMain`
+leaves printing. Check: `TestMiniPrintsCoverageLineOnce`, which fails without
+the change. The Testify parity tests drop the pinned SDK's repeated line
+(`withoutRepeatedCoverageLine`).
 
 ## Per-test profile subtraction
 

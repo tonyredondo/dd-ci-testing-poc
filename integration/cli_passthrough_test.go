@@ -331,16 +331,26 @@ func buildPassthroughProgram(t *testing.T) string {
 }
 
 // goShimProgram is a go that runs ddto go with its arguments, as a script that
-// runs ddto go would, on every platform.
+// runs ddto go would, on every platform. It ends the chain itself after 20
+// levels, so a ddto that does not stop fails the test instead of filling the
+// machine with processes.
 const goShimProgram = `package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 )
 
 func main() {
+	depth, _ := strconv.Atoi(os.Getenv("GO_SHIM_DEPTH"))
+	if depth >= 20 {
+		fmt.Fprintln(os.Stderr, "go shim: ddto did not stop after 20 levels")
+		os.Exit(3)
+	}
+	os.Setenv("GO_SHIM_DEPTH", strconv.Itoa(depth+1))
 	cmd := exec.Command(os.Getenv("GO_SHIM_DDTO"), append([]string{"go"}, os.Args[1:]...)...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	var exit *exec.ExitError

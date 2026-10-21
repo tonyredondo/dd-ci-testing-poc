@@ -2,13 +2,15 @@ package integration
 
 import (
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
 // Without -coverprofile, the SDK writes the session's coverage profile through
 // testing's tear-down, which also prints the coverage line. ddto prints it as
-// often as go test: once after the tests, and not after -list.
+// often as go test: once after the tests, and not after -list, even with
+// -coverprofile.
 func TestMiniPrintsCoverageLineOnce(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
 	receiver := &capture{}
@@ -19,6 +21,7 @@ func TestMiniPrintsCoverageLineOnce(t *testing.T) {
 		{"-v", "-cover", "-run=^TestPass$"},
 		{"-json", "-cover", "-run=^TestPass$"},
 		{"-v", "-cover", "-list=^TestPass$"},
+		{"-v", "-cover", "-list=^TestPass$", "-coverprofile=" + filepath.Join(t.TempDir(), "coverage.out")},
 	} {
 		args = append([]string{"-count=1"}, append(args, ".")...)
 		native, nativeErr, nativeCode := command(t, dir, testEnv(), "go", append([]string{"test"}, args...)...)
