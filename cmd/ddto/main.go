@@ -75,10 +75,7 @@ func main() {
 		os.Exit(0)
 	default:
 		if goShim {
-			var err error
-			if args, err = runner.UseGoShim(args); err != nil {
-				fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" WARN:", err, "- running", args[0], "without CI Visibility")
-			}
+			os.Exit(runner.RunWithGoShim(args))
 		}
 		// Any other command runs unchanged, before ddto sets anything but
 		// DDTO_NESTED_GO for go: ddto in front of a go command, or any other,

@@ -39,3 +39,6 @@ func Exit(code int) {
 	}
 	os.Exit(code)
 }
+
+// goToolSignals are the signals that go tool forwards to a tool.
+var goToolSignals = []os.Signal{os.Interrupt, syscall.SIGQUIT}

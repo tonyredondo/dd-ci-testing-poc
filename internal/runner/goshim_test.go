@@ -70,8 +70,8 @@ func TestUseGoShim(t *testing.T) {
 	userCacheDir = func() (string, error) { return cache, nil }
 	defer func() { goShimFirst = "" }()
 	t.Setenv("PATH", "/usr/bin")
-	if command, err := UseGoShim([]string{"gotestsum", "--"}); err != nil || !slices.Equal(command, []string{"gotestsum", "--"}) {
-		t.Fatal(command, err)
+	if command, tool, err := goShimSetup([]string{"gotestsum", "--"}); err != nil || tool != nil || !slices.Equal(command, []string{"gotestsum", "--"}) {
+		t.Fatal(command, tool, err)
 	}
 	dir := goShimFirst
 	if !strings.HasPrefix(dir, filepath.Join(cache, "ddto", "go-shim")) || os.Getenv("PATH") != dir+string(os.PathListSeparator)+"/usr/bin" {
@@ -108,8 +108,8 @@ func TestUseGoShimRefusesSeparator(t *testing.T) {
 	defer func(previous func() (string, error)) { userCacheDir = previous }(userCacheDir)
 	userCacheDir = func() (string, error) { return cache, nil }
 	t.Setenv("PATH", "/usr/bin")
-	if _, err := UseGoShim([]string{"make", "test"}); err == nil || os.Getenv("PATH") != "/usr/bin" {
-		t.Fatalf("UseGoShim: %v, PATH=%q", err, os.Getenv("PATH"))
+	if _, _, err := goShimSetup([]string{"make", "test"}); err == nil || os.Getenv("PATH") != "/usr/bin" {
+		t.Fatalf("goShimSetup: %v, PATH=%q", err, os.Getenv("PATH"))
 	}
 }
 
@@ -162,9 +162,9 @@ func TestUseGoShimRunsTheToolchain(t *testing.T) {
 	if err != nil {
 		t.Skip("no go on PATH")
 	}
-	command, err := UseGoShim([]string{"go", "version"})
+	command, _, err := goShimSetup([]string{"go", "version"})
 	if err != nil || !slices.Equal(command, []string{toolchain, "version"}) {
-		t.Fatalf("UseGoShim = %q, %v; want %s first", command, err, toolchain)
+		t.Fatalf("goShimSetup = %q, %v; want %s first", command, err, toolchain)
 	}
 	if found, err := exec.LookPath("go"); err != nil || filepath.Dir(found) != goShimFirst {
 		t.Fatalf("go on PATH is %q, %v; want the shim in %s", found, err, goShimFirst)
@@ -175,10 +175,9 @@ func TestUseGoShimRunsTheToolchain(t *testing.T) {
 // PATH: go run runs its program through ddto, and ddto runs a module tool's
 // program itself. What ddto's -exec would replace keeps go's own command.
 func TestGoShimGoCommand(t *testing.T) {
-	defer func(previous func(string, []string) (bool, error)) { goRunCrossCompiles = previous }(goRunCrossCompiles)
-	cross := false
-	goRunCrossCompiles = func(string, []string) (bool, error) { return cross, nil }
-	t.Setenv("GOFLAGS", "")
+	defer func(previous func(string, []string) (goShimEnv, error)) { readGoShimEnv = previous }(readGoShimEnv)
+	env := goShimEnv{GOROOT: "/go", GOOS: "linux", GOARCH: "amd64", GOHOSTOS: "linux", GOHOSTARCH: "amd64"}
+	readGoShimEnv = func(string, []string) (goShimEnv, error) { return env, nil }
 	self := filepath.Join(t.TempDir(), "dd to")
 	exec := "-exec='" + self + "' 'go-shim-exec'"
 	for _, tc := range []struct {
@@ -193,7 +192,7 @@ func TestGoShimGoCommand(t *testing.T) {
 		{[]string{"go", "run", "./cmd", "-exec"}, []string{"/go/bin/go", "run", exec, "./cmd", "-exec"}},
 		{[]string{"go", "generate", "./..."}, []string{"/go/bin/go", "generate", "./..."}},
 	} {
-		if got, err := goShimGoCommand(self, "/go/bin/go", tc.command); err != nil || !slices.Equal(got, tc.want) {
+		if got, tool, err := goShimGoCommand(self, "/go/bin/go", tc.command); err != nil || tool != nil || !slices.Equal(got, tc.want) {
 			t.Errorf("%q: %q, %v; want %q", tc.command, got, err, tc.want)
 		}
 	}
@@ -202,28 +201,53 @@ func TestGoShimGoCommand(t *testing.T) {
 		"-exec after a flag": {"go", "run", "-tags", "x", "-exec", "wasmtime", "./cmd"},
 		"go tool flags":      {"go", "tool", "-n", "gotestsum"},
 	} {
-		if _, err := goShimGoCommand(self, "/go/bin/go", command); err == nil {
+		if _, _, err := goShimGoCommand(self, "/go/bin/go", command); err == nil {
 			t.Errorf("%s: no error", name)
 		}
 	}
-	t.Setenv("GOFLAGS", "-exec=wasmtime")
-	if _, err := goShimGoCommand(self, "/go/bin/go", []string{"go", "run", "./cmd"}); err == nil {
+	// GOFLAGS as go env reports it, with go env -w settings.
+	env.GOFLAGS = "-exec=wasmtime"
+	if _, _, err := goShimGoCommand(self, "/go/bin/go", []string{"go", "run", "./cmd"}); err == nil {
 		t.Error("-exec in GOFLAGS: no error")
 	}
-	t.Setenv("GOFLAGS", "")
-	cross = true
-	if _, err := goShimGoCommand(self, "/go/bin/go", []string{"go", "run", "./cmd"}); err == nil {
+	env.GOFLAGS, env.GOARCH = "", "arm64"
+	if _, _, err := goShimGoCommand(self, "/go/bin/go", []string{"go", "run", "./cmd"}); err == nil {
 		t.Error("cross-compilation: no error")
 	}
 
-	// The fake go prints its arguments for go tool -n.
+	// The fake go prints its arguments for go tool -n, which are not one
+	// program; one that fails leaves the error to go tool itself.
 	t.Setenv(fakeToolEnv, "1")
-	if _, err := goShimGoCommand(self, os.Args[0], []string{"go", "tool", "gotestsum"}); err == nil {
+	if _, _, err := goShimGoCommand(self, os.Args[0], []string{"go", "tool", "gotestsum"}); err == nil {
 		t.Error("go tool -n printed more than one program")
 	}
 	t.Setenv(fakeToolExitEnv, "1")
-	if _, err := goShimGoCommand(self, os.Args[0], []string{"go", "tool", "nope"}); err == nil {
-		t.Error("an unknown tool: no error")
+	if native, tool, err := goShimGoCommand(self, os.Args[0], []string{"go", "tool", "nope"}); err != nil || tool != nil || !slices.Equal(native, []string{os.Args[0], "tool", "nope"}) {
+		t.Errorf("an unknown tool: %q, %v", native, err)
+	}
+}
+
+// ddto runs a module tool as go tool does: with the tool's exit status, and
+// go tool's report of a tool that did not run or exit cleanly.
+func TestModuleToolRun(t *testing.T) {
+	t.Setenv(fakeToolEnv, "1")
+	t.Setenv(fakeToolExitEnv, "3")
+	tool := &moduleTool{name: "gotestsum", path: os.Args[0], args: []string{"--format", "testname"}, diagnostics: []byte("built\n")}
+	if code := tool.run(); code != 3 {
+		t.Fatalf("exit %d; want the tool's 3", code)
+	}
+	missing := &moduleTool{name: "gotestsum", path: filepath.Join(t.TempDir(), "missing")}
+	if code := missing.run(); code != 1 {
+		t.Fatalf("a tool that did not start: exit %d; want 1", code)
+	}
+}
+
+// PATH gets the shim first, then a module tool's toolchain bin.
+func TestPathWith(t *testing.T) {
+	sep := string(os.PathListSeparator)
+	t.Setenv("PATH", "/usr/bin")
+	if got, err := pathWith([]string{"/shim", "/go/bin"}); err != nil || got != "/shim"+sep+"/go/bin"+sep+"/usr/bin" {
+		t.Fatalf("pathWith = %q, %v", got, err)
 	}
 }
 

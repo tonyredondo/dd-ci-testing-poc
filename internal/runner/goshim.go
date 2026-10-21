@@ -1,13 +1,16 @@
 package runner
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -160,92 +163,184 @@ func isProgram(path, name string) bool {
 	return base == name
 }
 
-// UseGoShim puts the go shim first on PATH for command, which ddto runs next,
-// and returns the command to run. A go command runs the go that PATH names
-// before the shim; see goShimGoCommand. On an error, PATH and the command stay
-// as they were.
-func UseGoShim(command []string) ([]string, error) {
+// RunWithGoShim runs command with the go shim first on its PATH and returns
+// its exit status. If ddto cannot set the shim up, it warns and runs the
+// command without it.
+func RunWithGoShim(command []string) int {
+	run, tool, err := goShimSetup(command)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, version.BuildLogPrefix+" WARN:", err, "- running", command[0], "without CI Visibility")
+		return ExecCommand(command)
+	}
+	if tool != nil {
+		return tool.run()
+	}
+	return ExecCommand(run)
+}
+
+// goShimSetup puts the go shim first on PATH for command and returns the
+// command to run, or the module tool to run. A go command runs the go that
+// PATH names before the shim; see goShimGoCommand. On an error, PATH stays as
+// it was.
+func goShimSetup(command []string) ([]string, *moduleTool, error) {
 	self, err := os.Executable()
 	if err != nil {
-		return command, err
+		return nil, nil, err
 	}
 	dir, err := goShimDir(self)
 	if err != nil {
-		return command, err
+		return nil, nil, err
 	}
-	run := command
+	run, entries := command, []string{dir}
+	var tool *moduleTool
 	if isProgram(command[0], "go") {
 		toolchain, err := exec.LookPath(command[0])
 		if err != nil {
-			return command, err
+			return nil, nil, err
 		}
-		if run, err = goShimGoCommand(self, toolchain, command); err != nil {
-			return command, err
+		if run, tool, err = goShimGoCommand(self, toolchain, command); err != nil {
+			return nil, nil, err
+		}
+		if tool != nil {
+			// go tool puts its toolchain's bin first, here after the shim.
+			entries = append(entries, tool.gorootBin)
 		}
 		goShimGo = toolchain
 	}
-	if err := prependGoShim(dir); err != nil {
-		return command, err
+	path, err := pathWith(entries)
+	if err != nil {
+		return nil, nil, err
 	}
-	return run, nil
+	if err := os.Setenv("PATH", path); err != nil {
+		return nil, nil, err
+	}
+	goShimFirst = dir
+	return run, tool, nil
 }
 
 // GoShimExecMode is ddto's mode as go run's -exec program with the go shim.
 const GoShimExecMode = "go-shim-exec"
 
-// goShimGoCommand returns the go command to run with the go shim. go run and
-// go tool put $GOROOT/bin before the shim on their program's PATH, so go run
-// runs its program through ddto's GoShimExecMode, which puts the shim first
-// again, and ddto runs a module tool's program itself, with the caller's
-// environment, as go tool does. The toolchain's own tools run through go
+// moduleTool is a module's tool that go tool would run: ddto runs it as go
+// tool does, with the go shim first on its PATH.
+type moduleTool struct {
+	name, path string
+	args       []string
+	gorootBin  string
+	// diagnostics are what go wrote while it built the tool.
+	diagnostics []byte
+}
+
+// run runs the tool as go tool does: with the caller's environment, signals
+// forwarded, and go tool's report of a tool that did not exit cleanly.
+func (t *moduleTool) run() int {
+	_, _ = os.Stderr.Write(t.diagnostics)
+	cmd := exec.Command(t.path, t.args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	err := cmd.Start()
+	if err == nil {
+		signals := make(chan os.Signal, 100)
+		signal.Notify(signals, goToolSignals...)
+		go func() {
+			for sig := range signals {
+				_ = cmd.Process.Signal(sig)
+			}
+		}()
+		err = cmd.Wait()
+		signal.Stop(signals)
+		close(signals)
+	}
+	if err == nil {
+		return 0
+	}
+	exit, ok := err.(*exec.ExitError)
+	if !ok || !exit.Exited() {
+		fmt.Fprintf(os.Stderr, "go tool %s: %s\n", t.name, err)
+	}
+	if ok && exit.ExitCode() != -1 {
+		return exit.ExitCode()
+	}
+	return 1
+}
+
+// goShimGoCommand returns the go command to run with the go shim, or the
+// module tool to run. go run and go tool put $GOROOT/bin before the shim on
+// their program's PATH, so go run runs its program through ddto's
+// GoShimExecMode, which puts the shim first again, and ddto runs a module
+// tool itself, as go tool would. The toolchain's own tools run through go
 // tool, which gives them the environment that go computes.
-func goShimGoCommand(self, toolchain string, command []string) ([]string, error) {
+func goShimGoCommand(self, toolchain string, command []string) ([]string, *moduleTool, error) {
 	chdir, sub, rest := goSubcommand(command[1:])
 	native := append([]string{toolchain}, command[1:]...)
 	switch sub {
 	case "run":
-		if err := goRunExecutor(toolchain, chdir, rest); err != nil {
-			return nil, err
+		env, err := readGoShimEnv(toolchain, chdir)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := goRunExecutor(env, rest); err != nil {
+			return nil, nil, err
 		}
 		program, err := quoteToolWords([]string{self, GoShimExecMode})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		// -C stays go run's first flag.
 		runChdir, rest := leadingChdir(rest)
 		run := append(append([]string{toolchain}, chdir...), "run")
 		run = append(append(run, runChdir...), "-exec="+program)
-		return append(run, rest...), nil
+		return append(run, rest...), nil, nil
 	case "tool":
 		if len(rest) == 0 || strings.HasPrefix(rest[0], "-") {
-			return nil, errors.New("go tool takes flags before the tool")
+			return nil, nil, errors.New("go tool takes flags before the tool")
 		}
-		out, err := exec.Command(toolchain, append(append(append([]string(nil), chdir...), "tool", "-n"), rest[0])...).Output()
-		if err != nil {
-			return nil, fmt.Errorf("go tool -n %s: %w", rest[0], err)
-		}
+		var diagnostics bytes.Buffer
+		probe := exec.Command(toolchain, append(append(append([]string(nil), chdir...), "tool", "-n"), rest[0])...)
+		probe.Stderr = &diagnostics
+		out, err := probe.Output()
 		path := strings.TrimSpace(string(out))
-		if isToolchainTool(path) {
-			return native, nil
+		if err != nil || isToolchainTool(path) {
+			// go reports a tool that it cannot build itself.
+			return native, nil, nil
 		}
 		if len(chdir) != 0 {
-			return nil, errors.New("go -C runs a module tool in another directory")
+			return nil, nil, errors.New("go -C runs a module tool in another directory")
 		}
 		// With a cross-compilation executor, go tool -n prints it first.
 		if info, err := os.Stat(path); err != nil || info.IsDir() {
-			return nil, fmt.Errorf("go tool -n %s printed %q, not one program", rest[0], path)
+			return nil, nil, fmt.Errorf("go tool -n %s printed %q, not one program", rest[0], path)
 		}
-		return append([]string{path}, rest[1:]...), nil
+		env, err := readGoShimEnv(toolchain, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+		return nil, &moduleTool{name: rest[0], path: path, args: rest[1:], gorootBin: filepath.Join(env.GOROOT, "bin"), diagnostics: diagnostics.Bytes()}, nil
 	}
-	return native, nil
+	return native, nil, nil
+}
+
+// goShimEnv is what go computes for a go run or go tool command with the go
+// shim, with the settings that go env -w stores.
+type goShimEnv struct {
+	GOROOT, GOFLAGS, GOOS, GOARCH, GOHOSTOS, GOHOSTARCH string
+}
+
+// readGoShimEnv reads goShimEnv from go env; tests replace it.
+var readGoShimEnv = func(toolchain string, chdir []string) (goShimEnv, error) {
+	var env goShimEnv
+	out, err := exec.Command(toolchain, append(append([]string(nil), chdir...), "env", "-json", "GOROOT", "GOFLAGS", "GOOS", "GOARCH", "GOHOSTOS", "GOHOSTARCH")...).Output()
+	if err != nil {
+		return env, fmt.Errorf("go env: %w", err)
+	}
+	return env, json.Unmarshal(out, &env)
 }
 
 // goRunExecutor returns an error when go run would start its program through
 // an executor that ddto's own -exec program would replace: the caller's -exec,
 // in go run's flags or GOFLAGS, or the executor of a cross-compiled program.
-func goRunExecutor(toolchain string, chdir, args []string) error {
+func goRunExecutor(env goShimEnv, args []string) error {
 	flags := args[:runPackage(args)]
-	if fromEnv, err := splitFlags(os.Getenv("GOFLAGS")); err == nil {
+	if fromEnv, err := splitFlags(env.GOFLAGS); err == nil {
 		flags = append(append([]string(nil), flags...), fromEnv...)
 	}
 	for _, flag := range flags {
@@ -253,25 +348,10 @@ func goRunExecutor(toolchain string, chdir, args []string) error {
 			return errors.New("go run -exec starts its program with $GOROOT/bin before the go shim")
 		}
 	}
-	cross, err := goRunCrossCompiles(toolchain, chdir)
-	if err == nil && cross {
-		err = errors.New("go run cross-compiles, so its program would start through another executor")
+	if env.GOOS != env.GOHOSTOS || env.GOARCH != env.GOHOSTARCH {
+		return errors.New("go run cross-compiles, so its program would start through another executor")
 	}
-	return err
-}
-
-// goRunCrossCompiles reports whether go builds for another platform than its
-// host; tests replace it.
-var goRunCrossCompiles = func(toolchain string, chdir []string) (bool, error) {
-	out, err := exec.Command(toolchain, append(append([]string(nil), chdir...), "env", "GOOS", "GOARCH", "GOHOSTOS", "GOHOSTARCH")...).Output()
-	if err != nil {
-		return false, fmt.Errorf("go env: %w", err)
-	}
-	platform := strings.Fields(string(out))
-	if len(platform) != 4 {
-		return false, fmt.Errorf("go env printed %q", out)
-	}
-	return platform[0] != platform[2] || platform[1] != platform[3], nil
+	return nil
 }
 
 // isToolchainTool reports whether path is in the toolchain's pkg/tool
@@ -302,18 +382,31 @@ func ExecWithGoShim(args []string) int {
 
 // prependGoShim puts the go shim directory first on PATH.
 func prependGoShim(dir string) error {
-	entry := dir
-	if strings.ContainsRune(dir, os.PathListSeparator) {
-		if runtime.GOOS != "windows" {
-			return fmt.Errorf("the go shim directory %s holds the PATH separator", dir)
-		}
-		entry = `"` + dir + `"`
+	path, err := pathWith([]string{dir})
+	if err != nil {
+		return err
 	}
-	if err := os.Setenv("PATH", entry+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
+	if err := os.Setenv("PATH", path); err != nil {
 		return err
 	}
 	goShimFirst = dir
 	return nil
+}
+
+// pathWith returns PATH with entries first, in order. On Windows an entry
+// with the separator is quoted; elsewhere it cannot be on PATH.
+func pathWith(entries []string) (string, error) {
+	var first []string
+	for _, entry := range entries {
+		if strings.ContainsRune(entry, os.PathListSeparator) {
+			if runtime.GOOS != "windows" {
+				return "", fmt.Errorf("the directory %s holds the PATH separator", entry)
+			}
+			entry = `"` + entry + `"`
+		}
+		first = append(first, entry)
+	}
+	return strings.Join(append(first, os.Getenv("PATH")), string(os.PathListSeparator)), nil
 }
 
 // goShimRoot is the directory of every go shim, in ddto's user cache.
