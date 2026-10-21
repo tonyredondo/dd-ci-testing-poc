@@ -754,6 +754,7 @@ func CreatePackFiles(commitsToInclude []string, commitsToExclude []string) []str
 		if err == nil {
 			break
 		}
+		log.Debug("civisibility: git pack-objects failed in %s: %s", temporaryPath, err.Error())
 		_ = os.RemoveAll(temporaryPath)
 	}
 
@@ -788,6 +789,7 @@ func CreatePackFiles(commitsToInclude []string, commitsToExclude []string) []str
 func packObjectsFolders() []string {
 	temporary, objectsDir := os.TempDir(), gitObjectsDir()
 	if objectsDir != "" && differentFilesystems(temporary, objectsDir) {
+		log.Debug("civisibility: %s is on another filesystem than the git objects, pack files go to %s", temporary, objectsDir)
 		return []string{objectsDir}
 	}
 	return []string{temporary, objectsDir}

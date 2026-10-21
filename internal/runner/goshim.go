@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/version"
 )
@@ -33,6 +34,13 @@ var (
 	goShimLeft string
 	// goShimGo is the go that a go command with the go shim runs.
 	goShimGo string
+	// goShimAsGo is set when this process runs as the go shim.
+	goShimAsGo bool
+	// goShimReason says why this process puts the go shim first on PATH.
+	goShimReason string
+	// goShimGoMode says how ddto runs a go command with the go shim; see
+	// goShimGoCommand.
+	goShimGoMode string
 )
 
 // GoShimArgs returns ddto's arguments from its command line, and whether ddto
@@ -45,22 +53,36 @@ func GoShimArgs(args []string) ([]string, bool) {
 		goShimLeft = left
 	}
 	if isProgram(args[0], "go") {
+		goShimAsGo = true
 		return append([]string{"go"}, args[1:]...), true
 	}
 	return args[1:], false
 }
 
-// logGoShim logs the go shim that this process left off PATH, and the one that
-// it puts first for the command it runs.
+// logGoShim logs how many ddto go commands enclose this one, whether this
+// process runs as the go shim, the go shim that it left off PATH, and why and
+// how it puts one first for the command it runs.
 func (d *cliDebug) logGoShim() {
+	if nestedGoDepth > 1 {
+		d.printf("nested_go depth=%d", nestedGoDepth)
+	}
+	if goShimAsGo {
+		d.printf("go_shim as_go=true")
+	}
 	if goShimLeft != "" {
 		d.printf("go_shim left=%q", goShimLeft)
+	}
+	if goShimReason != "" {
+		d.printf("go_shim reason=%s", goShimReason)
 	}
 	if goShimFirst != "" {
 		d.printf("go_shim first_on_path=%q", goShimFirst)
 	}
 	if goShimGo != "" {
 		d.printf("go_shim go=%q", goShimGo)
+	}
+	if goShimGoMode != "" {
+		d.printf("go_shim go_command=%s", goShimGoMode)
 	}
 }
 
@@ -74,14 +96,19 @@ const goShimFlag = "--go-shim"
 // start another program that runs go test.
 func GoShimCommand(args []string, fromGoShim bool) ([]string, bool) {
 	if len(args) > 0 && args[0] == goShimFlag {
+		goShimReason = "flag"
 		return args[1:], true
 	}
 	if runsGotestsum(args) {
+		goShimReason = "gotestsum"
 		return args, true
 	}
 	if fromGoShim && len(args) > 0 && isProgram(args[0], "go") {
 		_, sub, _ := goSubcommand(args[1:])
-		return args, sub == "run" || sub == "tool"
+		if sub == "run" || sub == "tool" {
+			goShimReason = "launcher"
+			return args, true
+		}
 	}
 	return args, false
 }
@@ -245,24 +272,33 @@ type moduleTool struct {
 // run runs the tool as go tool does: with the caller's environment, signals
 // forwarded, and go tool's report of a tool that did not exit cleanly.
 func (t *moduleTool) run() int {
+	debug := passThroughDebug()
+	debug.logGoShim()
+	debug.printf("go_shim module_tool=%q path=%q args=%d", t.name, t.path, len(t.args))
 	_, _ = os.Stderr.Write(t.diagnostics)
 	cmd := exec.Command(t.path, t.args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	goroot := "kept"
 	switch {
 	case t.switchGOROOT != "":
+		goroot = "set"
 		cmd.Env = append(os.Environ(), "GOROOT="+t.switchGOROOT)
 	case t.unsetGOROOT:
+		goroot = "removed"
 		cmd.Env = slices.DeleteFunc(os.Environ(), func(entry string) bool {
 			name, _, _ := strings.Cut(entry, "=")
 			return name == "GOROOT" || runtime.GOOS == "windows" && strings.EqualFold(name, "GOROOT")
 		})
 	}
+	debug.printf("go_shim module_tool goroot=%s", goroot)
+	started := time.Now()
 	err := cmd.Start()
 	if err == nil {
 		signals := make(chan os.Signal, 100)
 		signal.Notify(signals, goToolSignals...)
 		go func() {
 			for sig := range signals {
+				debug.printf("go_shim module_tool forwarding signal=%q", sig.String())
 				_ = cmd.Process.Signal(sig)
 			}
 		}()
@@ -271,13 +307,16 @@ func (t *moduleTool) run() int {
 		close(signals)
 	}
 	if err == nil {
+		debug.printf("go_shim module_tool exited code=0 duration=%s", time.Since(started).Round(time.Microsecond))
 		return 0
 	}
 	exit, ok := err.(*exec.ExitError)
 	if !ok || !exit.Exited() {
+		debug.printf("go_shim module_tool ended error=%q", err.Error())
 		fmt.Fprintf(os.Stderr, "go tool %s: %s\n", t.name, err)
 	}
 	if ok && exit.ExitCode() != -1 {
+		debug.printf("go_shim module_tool exited code=%d duration=%s", exit.ExitCode(), time.Since(started).Round(time.Microsecond))
 		return exit.ExitCode()
 	}
 	return 1
@@ -292,6 +331,7 @@ func (t *moduleTool) run() int {
 func goShimGoCommand(self, toolchain string, command []string) ([]string, *moduleTool, error) {
 	chdir, sub, rest := goSubcommand(command[1:])
 	native := append([]string{toolchain}, command[1:]...)
+	goShimGoMode = "native"
 	switch sub {
 	case "run":
 		env, err := readGoShimEnv(toolchain, chdir)
@@ -309,6 +349,7 @@ func goShimGoCommand(self, toolchain string, command []string) ([]string, *modul
 		runChdir, rest := leadingChdir(rest)
 		run := append(append([]string{toolchain}, chdir...), "run")
 		run = append(append(run, runChdir...), "-exec="+program)
+		goShimGoMode = "run_exec"
 		return append(run, rest...), nil, nil
 	case "tool":
 		if len(rest) == 0 || strings.HasPrefix(rest[0], "-") {
@@ -319,8 +360,13 @@ func goShimGoCommand(self, toolchain string, command []string) ([]string, *modul
 		probe.Stderr = &diagnostics
 		out, err := probe.Output()
 		path := strings.TrimSpace(string(out))
-		if err != nil || isToolchainTool(path) {
+		if err != nil {
 			// go reports a tool that it cannot build itself.
+			goShimGoMode = "tool_not_built"
+			return native, nil, nil
+		}
+		if isToolchainTool(path) {
+			goShimGoMode = "toolchain_tool"
 			return native, nil, nil
 		}
 		if len(chdir) != 0 {
@@ -344,6 +390,7 @@ func goShimGoCommand(self, toolchain string, command []string) ([]string, *modul
 				tool.unsetGOROOT = true
 			}
 		}
+		goShimGoMode = "module_tool"
 		return nil, tool, nil
 	}
 	return native, nil, nil
@@ -413,6 +460,7 @@ func isToolchainTool(path string) bool {
 // ExecWithGoShim runs args, the program that go run built and its arguments,
 // with the go shim first on its PATH again.
 func ExecWithGoShim(args []string) int {
+	goShimReason = "go_run_program"
 	self, err := os.Executable()
 	if err == nil {
 		var dir string

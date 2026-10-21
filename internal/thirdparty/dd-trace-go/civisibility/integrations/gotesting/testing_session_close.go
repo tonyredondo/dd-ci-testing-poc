@@ -9,6 +9,7 @@ import (
 	"flag"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/integrations"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 )
 
 // testingMSessionCloseOptions returns the options for closing the session
@@ -18,6 +19,8 @@ func testingMSessionCloseOptions(claim *testingMInstrumentationClaim) []integrat
 	if claim.instrumentedAllWorkloads() {
 		return []integrations.TestSessionCloseOption{integrations.WithTestSessionSkipIfEmpty()}
 	}
+	log.Debug("civisibility: a session that runs nothing will not be reported as skipped: wrapped_tests=%t wrapped_fuzz=%t wrapped_examples=%t wrapped_benchmarks=%t",
+		claim.testDescriptors != nil, claim.fuzzDescriptors != nil, claim.exampleDescriptors != nil, claim.benchmarkDescriptors != nil)
 	return nil
 }
 
