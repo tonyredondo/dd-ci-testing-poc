@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
-	"time"
 )
 
 // A command that runs no test, as with a -run filter that matches nothing,
@@ -27,13 +26,6 @@ func TestMiniEmptyTestSession(t *testing.T) {
 			t.Fatal(err)
 		}
 		writeBuildFixture(t, filepath.Join(dir, pkg), sources)
-		// go test caches no result whose source changed in the last seconds.
-		old := time.Now().Add(-time.Hour)
-		for name := range sources {
-			if err := os.Chtimes(filepath.Join(dir, pkg, name), old, old); err != nil {
-				t.Fatal(err)
-			}
-		}
 	}
 	receiver := &capture{}
 	server := newServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { receiver.handler(w, r) }))

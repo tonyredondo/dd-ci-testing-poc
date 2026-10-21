@@ -1641,7 +1641,9 @@ test processes' runtime version, and the tracer, with the bootstrap's service ru
 (`ciVisibilityService`): no settings, Git upload, signal handler, logs or
 telemetry. The
 session starts with ddto, ends when go test exits, and has go test's exit code
-and status. Its tags merge the processes' records: counts add up, `true` and
+and status, or is skipped when nothing ran (see
+[empty test sessions](#empty-test-sessions)). Its tags merge the processes'
+records: counts add up, `true` and
 EFD's `faulty` win, and other values come from the first process. A process's
 coverage covers only its own run, so the session takes it only when that
 process is the only one that joined, and otherwise the statement total of the
@@ -2234,9 +2236,14 @@ leaves the tag out. A binary with its own session, as with
 `--session-per-binary`, follows the PR. Checks: `TestInstrumentedAllWorkloads`,
 `TestCLISessionRecordsAnEmptyCloseOnlyOnSuccess`,
 `TestFinishCLISessionReportsAnEmptySession` and `TestMiniEmptyTestSession`,
-which fails without the port. The pinned SDK predates the PR, so the tests
-that compare Mini with it expect its session-only events as the PR reports
-them (`withPortedEmptySession`).
+which fails without the port. The port does not include the files of the PR's
+fuzz fixture scenario and `TestTestSessionSkipIfEmpty`:
+`TestMiniEmptyTestSession` runs a fuzz target and an Example,
+`TestFinishCLISessionReportsAnEmptySession` checks the cases without modules,
+and a per-binary session that ran a test, as in
+`TestMiniTestSessionSpansTheCommand`, still passes. The pinned SDK predates
+the PR, so the tests that compare Mini with it expect its session-only events
+as the PR reports them (`withPortedEmptySession`).
 
 ## Fuzz and executable Examples
 
