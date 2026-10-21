@@ -8,6 +8,9 @@ import (
 // runs go test natively: the output and exit status are go test's.
 func TestMiniKeepsGoErrorStatus(t *testing.T) {
 	dir, driver := prepareMiniFixture(t)
+	// A module file for a Go release before ddto's own, under a name that go
+	// rejects: ddto would convert it to a workspace that go accepts.
+	writeBuildFixture(t, dir, map[string]string{"alternate.txt": "module example.com/dd-ci-testing-fixture\n\ngo 1.21\n"})
 	for _, tc := range []struct {
 		env  []string
 		args []string
@@ -20,6 +23,7 @@ func TestMiniKeepsGoErrorStatus(t *testing.T) {
 		{args: []string{"-count=1", "-C", "other", "."}},
 		{args: []string{"-modfile=missing.mod", "."}},
 		{args: []string{"-modfile=.", "."}},
+		{args: []string{"-modfile=alternate.txt", "."}},
 		{args: []string{"-cover", "-covermode=bad", "."}},
 	} {
 		env := testEnv(tc.env...)

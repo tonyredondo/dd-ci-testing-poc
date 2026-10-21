@@ -815,7 +815,8 @@ func TestRunGoAfterError(t *testing.T) {
 	}
 }
 
-// go reports a missing working directory itself, and a file given as one.
+// go reports a missing working directory itself, a file given as one, and a
+// -modfile without the .mod extension.
 func TestMissingGoInput(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "go.mod")
@@ -823,11 +824,17 @@ func TestMissingGoInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
-		dir     string
-		missing bool
-	}{{dir: dir}, {dir: filepath.Join(dir, "nonexistent"), missing: true}, {dir: file, missing: true}} {
-		if err := missingGoInput(tc.dir); (err != nil) != tc.missing {
-			t.Errorf("missingGoInput(%q) = %v", tc.dir, err)
+		dir, modfile string
+		missing      bool
+	}{
+		{dir: dir},
+		{dir: dir, modfile: "alt.mod"},
+		{dir: filepath.Join(dir, "nonexistent"), missing: true},
+		{dir: file, missing: true},
+		{dir: dir, modfile: "alternate.txt", missing: true},
+	} {
+		if err := missingGoInput(tc.dir, tc.modfile); (err != nil) != tc.missing {
+			t.Errorf("missingGoInput(%q, %q) = %v", tc.dir, tc.modfile, err)
 		}
 	}
 }

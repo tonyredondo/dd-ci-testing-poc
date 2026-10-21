@@ -896,7 +896,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		// Native go test handles -C, help and file mode itself.
 		return runGo(ctx, cwd, append([]string{"test"}, args...), nil, signals, stdin, stdout, stderr)
 	}
-	if err := missingGoInput(dir); err != nil {
+	if err := missingGoInput(dir, opts.modfile); err != nil {
 		return runGoAfterError(ctx, cwd, args, err, signals, stdin, stdout, stderr)
 	}
 	gitHubJobID := handGitHubJobID(runtime, debug)
@@ -1059,11 +1059,15 @@ func (e *nativeGoError) Error() string { return e.err.Error() }
 func (e *nativeGoError) Unwrap() error { return e.err }
 
 // missingGoInput returns an error for a working directory that is missing or
-// not a directory: go reports it itself, while ddto would start go there first.
-func missingGoInput(dir string) error {
+// not a directory, or for a -modfile without the .mod extension: go reports
+// them itself, while ddto would start go there first, or convert the file.
+func missingGoInput(dir, modfile string) error {
 	info, err := os.Stat(dir)
 	if err == nil && !info.IsDir() {
 		err = fmt.Errorf("chdir %s: not a directory", dir)
+	}
+	if err == nil && modfile != "" && !strings.HasSuffix(modfile, ".mod") {
+		err = fmt.Errorf("-modfile=%s: file does not have .mod extension", modfile)
 	}
 	return err
 }
