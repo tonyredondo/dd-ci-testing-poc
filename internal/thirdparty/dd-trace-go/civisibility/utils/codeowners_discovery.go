@@ -42,7 +42,6 @@ func GetCodeOwnersWithStatus() (*codeownership.Resolver, bool) {
 	var rules *codeownership.Resolver
 	var err error
 	var info os.FileInfo
-	var searched []string
 	if locations.Workspace != "" {
 		info, err = os.Stat(locations.Workspace)
 		if errors.Is(err, os.ErrNotExist) {
@@ -57,32 +56,36 @@ func GetCodeOwnersWithStatus() (*codeownership.Resolver, bool) {
 		// its CODEOWNERS file is read without looking for an enclosing Git root.
 		// Without one, there are no rules: ddto's Git worker and every test
 		// process must reach the same decision, whatever their directories.
-		searched = append(searched, locations.Workspace)
 		rules, err = codeownership.DiscoverIn(locations.Workspace, locations)
+		if rules == nil && err == nil && logger.DebugEnabled() {
+			logger.Debug("civisibility: no CODEOWNERS file in the CI workspace %q, tests have no owners", locations.Workspace)
+		}
 	default:
 		// Standalone test binaries may have no CI workspace, or one that does
 		// not exist where they run: as a last resort, look in the current
 		// directory, then in the binary's directory.
-		logger.Debug("civisibility: CI workspace %q is not a directory here, looking for CODEOWNERS in the current and binary directories", locations.Workspace)
 		workingDirectory, _ := os.Getwd()
-		for _, directory := range []string{workingDirectory, filepath.Dir(os.Args[0])} {
-			searched = append(searched, directory)
+		binaryDirectory := filepath.Dir(os.Args[0])
+		for _, directory := range []string{workingDirectory, binaryDirectory} {
 			rules, err = codeownership.DiscoverIn(directory, locations)
 			if err != nil || rules != nil {
 				break
 			}
 		}
+		if rules == nil && err == nil && logger.DebugEnabled() {
+			logger.Debug("civisibility: no CODEOWNERS file in %q or %q, where the CI workspace %q is not a directory, tests have no owners", workingDirectory, binaryDirectory, locations.Workspace)
+		}
 	}
 	if err != nil {
-		logger.Debug("civisibility: CODEOWNERS discovery failed, it will be retried: %s", err)
+		if logger.DebugEnabled() {
+			logger.Debug("civisibility: CODEOWNERS discovery failed, it will be retried: %s", err)
+		}
 		return nil, false
 	}
 	codeowners = rules
 	codeownersLookupDone = true
-	if rules != nil {
+	if rules != nil && logger.DebugEnabled() {
 		logger.Debug("civisibility: CODEOWNERS loaded file=%q dialect=%d diagnostics=%d", rules.File(), rules.Dialect(), rules.Diagnostics())
-	} else {
-		logger.Debug("civisibility: no CODEOWNERS file in %q, tests have no owners", searched)
 	}
 	return codeowners, true
 }

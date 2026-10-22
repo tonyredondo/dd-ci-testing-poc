@@ -97,7 +97,9 @@ func adjustedRetryCount(execMeta *testExecutionMetadata, duration time.Duration)
 			return retryCount
 		}
 		if execMeta.isFlakyTestRetriesEnabled {
-			log.Debug("civisibility: EFD has no retries for test=%q first_duration=%s, using automatic test retries", retryLogName(execMeta), duration)
+			if log.DebugEnabled() {
+				log.Debug("civisibility: EFD has no retries for test=%q first_duration=%s, using automatic test retries", retryLogName(execMeta), duration)
+			}
 			execMeta.efdFellBackToFlakyRetries = true
 		}
 	}
@@ -245,7 +247,7 @@ func flakyRetryCountForDuration(execMeta *testExecutionMetadata, duration time.D
 	flakyRetries := integrations.GetFlakyRetriesSettings()
 	if counts := flakyRetries.DynamicRetryCounts; counts != nil {
 		bucket := dynamicRetryDurationBucket(duration)
-		// Once per test: a disabled call would still box its arguments.
+		// A disabled call would still box its arguments.
 		if log.DebugEnabled() {
 			log.Debug("civisibility: dynamic automatic test retries test=%q first_duration=%s bucket=%d retry_count=%d", retryLogName(execMeta), duration, bucket, counts[bucket])
 		}
@@ -257,7 +259,9 @@ func flakyRetryCountForDuration(execMeta *testExecutionMetadata, duration time.D
 // flakyRetryCountAfterSuppressedEFD returns the retries left for a failing test whose EFD retries were suppressed
 // and that switches to automatic test retries. Its first execution counts as one of them.
 func flakyRetryCountAfterSuppressedEFD(execMeta *testExecutionMetadata, duration time.Duration) int64 {
-	log.Debug("civisibility: EFD retries suppressed for failing test=%q, using automatic test retries", retryLogName(execMeta))
+	if log.DebugEnabled() {
+		log.Debug("civisibility: EFD retries suppressed for failing test=%q, using automatic test retries", retryLogName(execMeta))
+	}
 	return flakyRetryCountForDuration(execMeta, duration) - 1
 }
 

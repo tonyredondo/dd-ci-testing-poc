@@ -2288,8 +2288,12 @@ whether an empty session is reported as skipped
 (`gotesting/testing_session_close.go`, `manual_api_ddtestsession.go`), where
 the session's coverage comes from (`gotesting/coverage/test_coverage.go`), where
 CODEOWNERS was searched (`utils/codeowners_discovery.go`), and why `git
-pack-objects` moved to the objects directory (`utils/git.go`). The retry count
-line runs once per test, so it is guarded by `log.DebugEnabled()`. No line that
+pack-objects` moved to the objects directory (`utils/git.go`). Every line with
+arguments is guarded by `log.DebugEnabled()`, including the once-per-process
+and rare-path ones, so a disabled line costs one atomic load and allocates
+nothing; an unguarded `log.Debug` call measured about 15 ns and one
+allocation. Work that only a line needs, such as the directories that
+CODEOWNERS discovery searched, happens inside the guard. No line that
 error stacks show moves: `gotesting/instrumentation.go` changes one line in
 place, to call `flakyRetryCountAfterSuppressedEFD`, and the deferred process
 retry group passes its test's identity to the EFD transition for the test name.

@@ -191,7 +191,7 @@ func (t *tslvTestSession) Close(exitCode int, options ...TestSessionCloseOption)
 	skipIfEmpty, empty := false, false
 	// After unlocking: a client can replace the logger.
 	defer func() {
-		if recordedTags >= 0 {
+		if recordedTags >= 0 && log.DebugEnabled() {
 			log.Debug("civisibility: recorded the close of this process in ddto's test session exit_code=%d tags=%d skip_if_empty=%t empty=%t", exitCode, recordedTags, skipIfEmpty, empty && exitCode == 0)
 		}
 	}()

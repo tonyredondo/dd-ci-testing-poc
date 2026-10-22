@@ -19,8 +19,10 @@ func testingMSessionCloseOptions(claim *testingMInstrumentationClaim) []integrat
 	if claim.instrumentedAllWorkloads() {
 		return []integrations.TestSessionCloseOption{integrations.WithTestSessionSkipIfEmpty()}
 	}
-	log.Debug("civisibility: a session that runs nothing will not be reported as skipped: wrapped_tests=%t wrapped_fuzz=%t wrapped_examples=%t wrapped_benchmarks=%t",
-		claim.testDescriptors != nil, claim.fuzzDescriptors != nil, claim.exampleDescriptors != nil, claim.benchmarkDescriptors != nil)
+	if log.DebugEnabled() {
+		log.Debug("civisibility: a session that runs nothing will not be reported as skipped: wrapped_tests=%t wrapped_fuzz=%t wrapped_examples=%t wrapped_benchmarks=%t",
+			claim.testDescriptors != nil, claim.fuzzDescriptors != nil, claim.exampleDescriptors != nil, claim.benchmarkDescriptors != nil)
+	}
 	return nil
 }
 

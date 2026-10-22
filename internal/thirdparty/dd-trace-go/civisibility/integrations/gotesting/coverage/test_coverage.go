@@ -359,7 +359,9 @@ func runtimeCoverageSnapshotLocked() (*runtimeCoverageSnapshot, error) {
 		// ddto's temporary profile starts empty.
 		if info, err := os.Stat(coverProfile); err == nil && (coverProfile != temporaryCoverProfile || info.Size() > 0) {
 			runtimeSnapshot = &runtimeCoverageSnapshot{path: coverProfile, temporary: coverProfile == temporaryCoverProfile}
-			log.Debug("civisibility.cov: session coverage from the profile that testing wrote: %s", coverProfile)
+			if log.DebugEnabled() {
+				log.Debug("civisibility.cov: session coverage from the profile that testing wrote: %s", coverProfile)
+			}
 			return runtimeSnapshot, nil
 		}
 		// testing writes the profile as M.Run ends when it ran tests. Without
@@ -376,7 +378,9 @@ func runtimeCoverageSnapshotLocked() (*runtimeCoverageSnapshot, error) {
 		return nil, err
 	}
 	runtimeSnapshot = &runtimeCoverageSnapshot{path: coverageFile, temporary: true}
-	log.Debug("civisibility.cov: session coverage from testing's tear-down: %s", coverageFile)
+	if log.DebugEnabled() {
+		log.Debug("civisibility.cov: session coverage from testing's tear-down: %s", coverageFile)
+	}
 	return runtimeSnapshot, nil
 }
 
@@ -407,10 +411,14 @@ func useTemporaryCoverProfile() {
 	}
 	path, err := setTemporaryCoverProfile(coverProfile.Value)
 	if err != nil {
-		log.Debug("civisibility.cov: no temporary coverage profile: %s", err.Error())
+		if log.DebugEnabled() {
+			log.Debug("civisibility.cov: no temporary coverage profile: %s", err.Error())
+		}
 		return
 	}
-	log.Debug("civisibility.cov: testing will write its coverage profile to %s", path)
+	if log.DebugEnabled() {
+		log.Debug("civisibility.cov: testing will write its coverage profile to %s", path)
+	}
 	temporaryCoverProfile = path
 	integrations.PushCiVisibilityCloseAction(func() {
 		_ = os.Remove(path)

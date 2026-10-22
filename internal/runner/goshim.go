@@ -63,6 +63,10 @@ func GoShimArgs(args []string) ([]string, bool) {
 // process runs as the go shim, the go shim that it left off PATH, and why and
 // how it puts one first for the command it runs.
 func (d *cliDebug) logGoShim() {
+	// Without a debug log, nothing is formatted.
+	if d == nil {
+		return
+	}
 	if nestedGoDepth > 1 {
 		d.printf("nested_go depth=%d", nestedGoDepth)
 	}
@@ -270,62 +274,88 @@ type moduleTool struct {
 // forwarded, and go tool's report of a tool that did not exit cleanly.
 func (t *moduleTool) run() int {
 	debug := passThroughDebug()
-	debug.logGoShim()
-	debug.printf("go_shim module_tool=%q path=%q args=%d", t.name, t.path, len(t.args))
+	debug.logModuleTool(t)
 	_, _ = os.Stderr.Write(t.diagnostics)
 	cmd := exec.Command(t.path, t.args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	goroot := "kept"
 	switch {
 	case t.switchGOROOT != "":
-		goroot = "set"
 		cmd.Env = append(os.Environ(), "GOROOT="+t.switchGOROOT)
 	case t.unsetGOROOT:
-		goroot = "removed"
 		cmd.Env = slices.DeleteFunc(os.Environ(), func(entry string) bool {
 			name, _, _ := strings.Cut(entry, "=")
 			return name == "GOROOT" || runtime.GOOS == "windows" && strings.EqualFold(name, "GOROOT")
 		})
 	}
-	debug.printf("go_shim module_tool goroot=%s", goroot)
 	started := time.Now()
+	var forwarded []string
 	err := cmd.Start()
 	if err == nil {
 		signals := make(chan os.Signal, 100)
 		signal.Notify(signals, goToolSignals...)
 		// The loop does not log: a blocked debug write would hold back the
-		// next signal. The signals are logged once the tool ends.
-		var forwarded []string
+		// next signal. The debug log lists the signals once the tool ends.
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
 			for sig := range signals {
 				_ = cmd.Process.Signal(sig)
-				forwarded = append(forwarded, sig.String())
+				if debug != nil {
+					forwarded = append(forwarded, sig.String())
+				}
 			}
 		}()
 		err = cmd.Wait()
 		signal.Stop(signals)
 		close(signals)
 		<-done
-		if len(forwarded) != 0 {
-			debug.printf("go_shim module_tool forwarded signals=%q", forwarded)
+	}
+	code := 0
+	if err != nil {
+		exit, ok := err.(*exec.ExitError)
+		if !ok || !exit.Exited() {
+			fmt.Fprintf(os.Stderr, "go tool %s: %s\n", t.name, err)
+		}
+		code = 1
+		if ok && exit.ExitCode() != -1 {
+			code = exit.ExitCode()
 		}
 	}
-	if err == nil {
-		debug.printf("go_shim module_tool exited code=0 duration=%s", time.Since(started).Round(time.Microsecond))
-		return 0
+	debug.logModuleToolEnd(err, code, started, forwarded)
+	return code
+}
+
+// logModuleTool logs the go shim and the module tool that ddto runs. Like
+// logModuleToolEnd, it returns before formatting anything without a debug
+// log, so a disabled log costs one comparison.
+func (d *cliDebug) logModuleTool(t *moduleTool) {
+	if d == nil {
+		return
 	}
-	exit, ok := err.(*exec.ExitError)
-	if !ok || !exit.Exited() {
-		debug.printf("go_shim module_tool ended error=%q", err.Error())
-		fmt.Fprintf(os.Stderr, "go tool %s: %s\n", t.name, err)
+	d.logGoShim()
+	goroot := "kept"
+	switch {
+	case t.switchGOROOT != "":
+		goroot = "set"
+	case t.unsetGOROOT:
+		goroot = "removed"
 	}
-	if ok && exit.ExitCode() != -1 {
-		debug.printf("go_shim module_tool exited code=%d duration=%s", exit.ExitCode(), time.Since(started).Round(time.Microsecond))
-		return exit.ExitCode()
+	d.printf("go_shim module_tool=%q path=%q args=%d goroot=%s", t.name, t.path, len(t.args), goroot)
+}
+
+// logModuleToolEnd logs the signals that ddto forwarded to the module tool,
+// why it did not start or exit cleanly, and ddto's exit status.
+func (d *cliDebug) logModuleToolEnd(err error, code int, started time.Time, forwarded []string) {
+	if d == nil {
+		return
 	}
-	return 1
+	if len(forwarded) != 0 {
+		d.printf("go_shim module_tool forwarded signals=%q", forwarded)
+	}
+	if exit, ok := err.(*exec.ExitError); err != nil && (!ok || !exit.Exited()) {
+		d.printf("go_shim module_tool ended error=%q", err.Error())
+	}
+	d.printf("go_shim module_tool exited code=%d duration=%s", code, time.Since(started).Round(time.Microsecond))
 }
 
 // goShimGoCommand returns the go command to run with the go shim, or the

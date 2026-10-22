@@ -293,7 +293,8 @@ and, when the crash output names the test,
 ## Decisions in a test process
 
 With `DD_TRACE_DEBUG=true`, a test process also logs the choices that change
-what it reports:
+what it reports. Without it, each of these lines costs one check of the log
+level and allocates nothing:
 
 | Line | Meaning |
 | --- | --- |
@@ -306,7 +307,7 @@ what it reports:
 | `civisibility.cov: testing will write its coverage profile to <file>` | Without `-coverprofile`, testing writes its profile to a temporary file for the session's coverage, so it prints its coverage line once. `no temporary coverage profile: <error>` says why it could not, and `session coverage will read the -coverprofile profile` that the command set one |
 | `civisibility.cov: session coverage from the profile that testing wrote: <file>` or `… from testing's tear-down: <file>` | Where the session's coverage percentage, its ITR backfill and the LCOV upload come from. `error getting coverage file: testing wrote no coverage profile` means no coverage was reported, as after `-list` |
 | `civisibility: CODEOWNERS loaded file="<file>" dialect=<n> diagnostics=<n>` | The ownership rules for `test.codeowners`; `diagnostics` counts the invalid entries |
-| `civisibility: no CODEOWNERS file in ["<dir>" …], tests have no owners` | The directories searched: the CI workspace, or, as `CI workspace "<dir>" is not a directory here` explains, the current and test binary's directories |
+| `civisibility: no CODEOWNERS file in the CI workspace "<dir>", tests have no owners` or `… in "<dir>" or "<dir>", where the CI workspace "<dir>" is not a directory, …` | Where CODEOWNERS was searched: the CI workspace, or, when it is not a directory where the test runs, the current and test binary's directories |
 | `civisibility: CODEOWNERS discovery failed, it will be retried: <error>` | A directory or file could not be read; the next lookup, for another test or suite, tries again |
 
 ddto's Git worker, whose log `--keep-ci-state` keeps in `worker.log`, logs how
@@ -401,9 +402,9 @@ command's `PATH`, and logs why and how:
 | `go_shim first_on_path=<dir>` | The directory of ddto's `go` that the command gets first on `PATH`. Without it after a `reason` line, a `WARN` says why ddto ran the command without its `go` |
 | `go_shim go=<path>` | For a go command, the toolchain's go that it runs |
 | `go_shim go_command=run_exec\|module_tool\|toolchain_tool\|tool_not_built\|native` | How that go command runs: `go run` with ddto as its `-exec` program; a tool of the module, which ddto runs itself as `go tool` would; a tool of the toolchain, or one that `go tool -n` could not build, which `go tool` runs and reports; or unchanged |
-| `go_shim module_tool="<tool>" path=<path> args=<n>` and `go_shim module_tool goroot=kept\|set\|removed` | The module tool that ddto runs, its binary and its argument count, and whether ddto kept `GOROOT` or, after a toolchain switch, set or removed it as `go` does |
+| `go_shim module_tool="<tool>" path=<path> args=<n> goroot=kept\|set\|removed` | The module tool that ddto runs, its binary and its argument count, and whether ddto kept `GOROOT` or, after a toolchain switch, set or removed it as `go` does |
 | `go_shim module_tool forwarded signals=["<name>" …]` | The signals that ddto received while the tool ran and forwarded to it, as `go tool` does, logged once the tool ends |
-| `go_shim module_tool exited code=<n> duration=<d>` or `go_shim module_tool ended error="<error>"` | How the tool ended: its exit status, or why it did not start or exit (`signal: killed`, for example), after which ddto exits with status 1, as `go tool` does |
+| `go_shim module_tool exited code=<n> duration=<d>` | ddto's exit status: the tool's, or 1 when the tool did not start or exit cleanly, as `go tool` does. A `go_shim module_tool ended error="<error>"` line before it says why (`signal: killed`, for example) |
 | `go_shim as_go=true` | This ddto runs as that `go`, so its go test reports with the command's arguments and no ddto options |
 | `go_shim left=<dir>` | Run as that `go`, or under the command, ddto left the directory off `PATH` again, so the tests and the go commands it runs see the caller's `PATH` |
 | `nested_go depth=<n>` | This ddto go command runs inside `<n>-1` other ddto go commands, as gotestsum's `go test` runs inside `ddto go tool gotestsum`. ddto stops at 9 with an error that names the go on `PATH` |
