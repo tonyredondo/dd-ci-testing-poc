@@ -1053,6 +1053,23 @@ and a passing test process ended with a panic. Without a client there is no
 writer, so logs are not sent, as no other event is. Check:
 `TestLogsWriterWithoutClient`.
 
+## Module directory and profile rewrites
+
+`deferModuleInfo` in `gotesting/coverage/test_coverage.go` records where to
+resolve the module of the tested package when coverage initializes, in
+`M.Run`. A `TestMain` that changes directory first, as to the repository root,
+made it resolve another module, and the coverage files' paths with it. The
+directory is now the one that the process started in, read as the package
+initializes (`testPackageDirectory`). Check:
+`TestModuleInfoUsesTheStartingDirectory`.
+
+`orderedCoverProfile.writeAtomic` in `gotesting/coverage/profile_backfill.go`,
+which ITR backfill and retry merges use to rewrite the coverage profile,
+renamed a temporary file over it: a profile path that is a symbolic link, which
+testing writes through, became a regular file, and the profile's mode became
+the temporary file's 0600. It now writes beside the link's target and keeps the
+profile's mode. Check: `TestProfileRewriteKeepsLinkAndMode`.
+
 ## Partial lines of t.Output
 
 `collectAndWriteLogs` in `gotesting/testing.go` ends a partial line that a test

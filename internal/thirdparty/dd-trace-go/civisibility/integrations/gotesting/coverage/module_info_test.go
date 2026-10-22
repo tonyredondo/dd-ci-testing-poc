@@ -26,7 +26,7 @@ func TestModuleInfoResolvesOnFirstUseFromInitialization(t *testing.T) {
 	}
 	t.Setenv("GOWORK", "off")
 	t.Setenv("GOFLAGS", "")
-	t.Chdir(module)
+	startedIn(t, module)
 	calls := 0
 	previous := listModuleInfo
 	listModuleInfo = func(dir string, env []string, goPath string) (string, string) {
@@ -58,7 +58,7 @@ func TestModuleInfoFromCLIState(t *testing.T) {
 	ResetForTesting()
 	t.Cleanup(ResetForTesting)
 	dir := t.TempDir()
-	t.Chdir(dir)
+	startedIn(t, dir)
 	calls := 0
 	previous, previousCLI := listModuleInfo, cliModuleInfo
 	listModuleInfo = func(string, []string, string) (string, string) {
@@ -84,4 +84,12 @@ func TestModuleInfoFromCLIState(t *testing.T) {
 	if calls != 1 || modulePath != "example.com/listed" || moduleDir != "/listed" {
 		t.Fatalf("calls=%d module=%q dir=%q", calls, modulePath, moduleDir)
 	}
+}
+
+// startedIn makes dir the directory that the test process started in.
+func startedIn(t *testing.T, dir string) {
+	t.Helper()
+	previous := testPackageDirectory
+	testPackageDirectory = dir
+	t.Cleanup(func() { testPackageDirectory = previous })
 }

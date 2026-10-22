@@ -353,9 +353,21 @@ func moduleRepositoryRelativePrefix(module string) string {
 }
 
 func (p *orderedCoverProfile) writeAtomic(filename string) error {
+	// testing writes the profile through a symbolic link, with its own mode:
+	// the replacement keeps both.
+	if resolved, err := filepath.EvalSymlinks(filename); err == nil {
+		filename = resolved
+	}
 	tmp, err := os.CreateTemp(filepath.Dir(filename), filepath.Base(filename)+".tmp.")
 	if err != nil {
 		return err
+	}
+	if info, err := os.Stat(filename); err == nil {
+		if err := tmp.Chmod(info.Mode().Perm()); err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmp.Name())
+			return err
+		}
 	}
 	tmpName := tmp.Name()
 	removeTmp := true

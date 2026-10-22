@@ -244,11 +244,17 @@ func InitializeCoverage(m *testing.M, uploadEnabled bool) {
 
 }
 
+// testPackageDirectory is the directory that the test process started in, the
+// package's under go test, read as the package initializes: before TestMain,
+// which can change directory before M.Run.
+var testPackageDirectory, _ = os.Getwd()
+
 // deferModuleInfo captures the directory, environment and go command that
 // resolving the module used at initialization, so a later TestMain chdir or
-// environment change does not alter the result.
+// environment change does not alter the result. The directory is the one that
+// the process started in.
 func deferModuleInfo() {
-	dir, _ := os.Getwd()
+	dir := testPackageDirectory
 	goPath, err := exec.LookPath("go")
 	if err != nil {
 		goPath = "go"

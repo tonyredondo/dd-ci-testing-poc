@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "6bef5548b21269e357aaf72ffa7dbf142c39d05416ddeff887a6028481d8b161",
+      "sha256": "3786d062d9e0ab92790c9c1df7c6491fbcc621ce6bd660c2d77c8ec59fcdc0f1",
       "role": "local"
     },
     {
@@ -363,7 +363,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/coverage/module_info_test.go",
-      "sha256": "5fc3ff85b43dc97c1ef0cea189bdb04f28f5fd36429d814ec6adc7ff5488a5c5",
+      "sha256": "67a97b2a2f57a981be405f337b95c622b3cb3a96a6505e4e125f77a0a3670886",
       "role": "local"
     },
     {
@@ -382,7 +382,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/coverage/profile_backfill.go",
-      "sha256": "67e12e9fc671476ce66393337a92914b7f89c4055ce685f7d334ea81bcff8dcb",
+      "sha256": "b1bd7f84ad959f790838484863ad70a4327a5209c347a18bf6bf490ec28d68ad",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/coverage/profile_backfill.go",
       "source_sha256": "1d60703d0fbf43cda87751312c7ec9c64f434c369ef2d4ac3fb9e75914c0d1fc"
@@ -415,12 +415,12 @@
     },
     {
       "path": "civisibility/integrations/gotesting/coverage/temporary_profile_test.go",
-      "sha256": "05c0435df6436402bb14e80567cd26b2e981078e91513a8d2b4c3770e29a01d4",
+      "sha256": "cbbd99c6ca6a9e059968bdb2642a32cb410152ee7d5d897b440790d9fe4dbac1",
       "role": "local"
     },
     {
       "path": "civisibility/integrations/gotesting/coverage/test_coverage.go",
-      "sha256": "8238dd721c9a58fb999495eb3f0a9205c043db1d28b30f9623b96ea90818e896",
+      "sha256": "d075e3e00e0a27d0c91cc943d26796b824970189704d54dda18df44317626b4a",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/coverage/test_coverage.go",
       "source_sha256": "90f437bef02e1c4eca6e220f13d128ce8da64109359b66b98db6b5bb3bb5c352"

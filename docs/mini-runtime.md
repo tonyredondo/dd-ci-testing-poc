@@ -444,6 +444,11 @@ because the compiler applies the directives. The coverage of `testing`'s own
 code is also attributed by timing: `T.Run` continues in the parent goroutine
 while the attempt it started takes its first snapshot.
 
+Likewise, a `-coverpkg` pattern that selects Mini's packages, such as `all`,
+which follows the runtime import that each tested package gets, covers them
+too: the `-coverprofile` and its percentage count their statements, which
+native `go test` would not build.
+
 With `-race`, `ddto` overlays Mini's sources with copies that mark each
 function declaration `//go:norace`, so the race detector does not instrument
 Mini's own memory accesses: with 2,000 empty tests, about 22 µs less per test.
