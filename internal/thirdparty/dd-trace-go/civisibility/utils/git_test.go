@@ -929,9 +929,12 @@ func TestGetGitDiffNormalizesHeaders(t *testing.T) {
 	git("add", ".")
 	git("commit", "-q", "-m", "files")
 	head := git("rev-parse", "HEAD")
-	for _, setting := range [][]string{{"diff.noprefix", "true"}, {"diff.mnemonicPrefix", "true"}, {"color.diff", "always"}} {
+	for _, setting := range [][]string{{"diff.noprefix", "true"}, {"diff.mnemonicPrefix", "true"}, {"color.diff", "always"}, {"diff.relative", "true"}} {
 		git("config", setting[0], setting[1])
 	}
+	// With diff.relative, a diff run from a subdirectory would list only its
+	// files.
+	t.Chdir("ñ")
 	out, err := GetGitDiff(base, head)
 	if err != nil {
 		t.Fatal(err)
@@ -963,5 +966,42 @@ func TestCommitMessageWithFieldSeparator(t *testing.T) {
 	commit, err := readCommitData(data.CommitSha, false)
 	if err != nil || commit.CommitMessage != message {
 		t.Fatalf("commit data message %q, %v", commit.CommitMessage, err)
+	}
+}
+
+// With log.showSignature, Git adds a signature's verification to log and show
+// output: the commit fields and SHAs stay clean.
+func TestGitReadsIgnoreShowSignature(t *testing.T) {
+	useLocalGitFixture(t)
+	if !isGitFound() {
+		t.Skip("Git not available")
+	}
+	keygen, err := exec.LookPath("ssh-keygen")
+	if err != nil {
+		t.Skip("ssh-keygen not available")
+	}
+	key := filepath.Join(t.TempDir(), "key")
+	if out, err := exec.Command(keygen, "-q", "-t", "ed25519", "-N", "", "-f", key).CombinedOutput(); err != nil {
+		t.Skip("ssh-keygen:", err, string(out))
+	}
+	message := "signed commit"
+	if out, err := exec.Command("git", "-c", "user.name=CI Fixture", "-c", "user.email=ci-fixture@example.invalid", "-c", "gpg.format=ssh", "-c", "user.signingkey="+key, "commit", "-q", "-S", "--allow-empty", "-m", message).CombinedOutput(); err != nil {
+		t.Skip("signed commit:", err, string(out))
+	}
+	if out, err := exec.Command("git", "config", "log.showSignature", "true").CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	data, err := getLocalGitData()
+	if err != nil || data.CommitMessage != message || len(data.CommitSha) != 40 {
+		t.Fatalf("local commit %q %q, %v", data.CommitSha, data.CommitMessage, err)
+	}
+	commit, err := readCommitData(data.CommitSha, false)
+	if err != nil || commit.CommitMessage != message || commit.CommitSha != data.CommitSha {
+		t.Fatalf("commit data %q %q, %v", commit.CommitSha, commit.CommitMessage, err)
+	}
+	for _, sha := range GetLastLocalGitCommitShas() {
+		if len(sha) != 40 || strings.ContainsAny(sha, " :") {
+			t.Fatalf("commit SHA %q", sha)
+		}
 	}
 }

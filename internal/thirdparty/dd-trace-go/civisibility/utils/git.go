@@ -348,7 +348,7 @@ func getLocalGitData() (localGitData, error) {
 
 	// Get commit details from the latest commit using git log (git log -1 --pretty='%H","%aI","%an","%ae","%cI","%cn","%ce","%B')
 	log.Debug("civisibility.git: getting the latest commit details")
-	out, err = execGitString(telemetry.GetGitCommitInfoCommandType, "log", "-1", "--pretty=%H\",\"%at\",\"%an\",\"%ae\",\"%ct\",\"%cn\",\"%ce\",\"%B")
+	out, err = execGitString(telemetry.GetGitCommitInfoCommandType, "log", "--no-show-signature", "-1", "--pretty=%H\",\"%at\",\"%an\",\"%ae\",\"%ct\",\"%cn\",\"%ce\",\"%B")
 	if err != nil {
 		return gitData, err
 	}
@@ -448,7 +448,7 @@ func readCommitData(commitSha string, allowFetch bool) (localCommitData, error) 
 
 	// Get commit details from the latest commit using git log (git show <commitSha> -s --format='%H","%aI","%an","%ae","%cI","%cn","%ce","%B')
 	log.Debug("civisibility.git: getting the latest commit details")
-	out, err := execGitString(telemetry.GetGitCommitInfoCommandType, "show", commitSha, "-s", "--format=%H\",\"%at\",\"%an\",\"%ae\",\"%ct\",\"%cn\",\"%ce\",\"%B")
+	out, err := execGitString(telemetry.GetGitCommitInfoCommandType, "show", "--no-show-signature", commitSha, "-s", "--format=%H\",\"%at\",\"%an\",\"%ae\",\"%ct\",\"%cn\",\"%ce\",\"%B")
 	if err != nil {
 		return commitData, err
 	}
@@ -490,7 +490,7 @@ func commitObjectExists(commitSha string) bool {
 func GetLastLocalGitCommitShas() []string {
 	// git log --format=%H -n 1000 --since=\"1 month ago\"
 	log.Debug("civisibility.git: getting the commit SHAs of the last 1000 commits in the local Git repository")
-	out, err := execGitString(telemetry.GetLocalCommitsCommandsType, "log", "--format=%H", "-n", "1000", "--since=\"1 month ago\"")
+	out, err := execGitString(telemetry.GetLocalCommitsCommandsType, "log", "--no-show-signature", "--format=%H", "-n", "1000", "--since=\"1 month ago\"")
 	if err != nil || out == "" {
 		return []string{}
 	}
@@ -646,7 +646,7 @@ func GetGitDiff(baseCommit, headCommit string) (string, error) {
 	// The parser reads "diff --git a/<path> b/<path>" headers: fix the prefixes
 	// and leave paths unquoted, colors, external diff drivers and textconv
 	// out, whatever the repository's settings.
-	out, err := execGitString(telemetry.DiffCommandType, "-c", "core.quotePath=false", "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/", "-U0", "--word-diff=porcelain", baseCommit, headCommit)
+	out, err := execGitString(telemetry.DiffCommandType, "-c", "core.quotePath=false", "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "-U0", "--word-diff=porcelain", baseCommit, headCommit)
 	if err != nil {
 		return "", fmt.Errorf("civisibility.git: error getting the diff from %s to %s: %s | %s", baseCommit, headCommit, err, out)
 	}
@@ -697,7 +697,7 @@ func isAShallowCloneRepository() (bool, error) {
 // hasTheGitLogHaveMoreThanOneCommits checks if the local Git repository has more than one commit.
 func hasTheGitLogHaveMoreThanOneCommits() (bool, error) {
 	// git log --format=oneline -n 2
-	out, err := execGitString(telemetry.CheckShallowCommandsType, "log", "--format=oneline", "-n", "2")
+	out, err := execGitString(telemetry.CheckShallowCommandsType, "log", "--no-show-signature", "--format=oneline", "-n", "2")
 	if err != nil || out == "" {
 		return false, err
 	}

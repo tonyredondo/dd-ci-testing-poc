@@ -1137,14 +1137,21 @@ Check: `TestCommitMessageWithFieldSeparator`.
 
 `GetGitDiff` in [`civisibility/utils/git.go`](civisibility/utils/git.go)
 runs `git -c core.quotePath=false diff --no-color --no-ext-diff --no-textconv
---src-prefix=a/ --dst-prefix=b/ …`: the parser in
+--no-relative --src-prefix=a/ --dst-prefix=b/ …`: the parser in
 [`utils/impactedtests`](civisibility/utils/impactedtests/impacted_tests.go)
 reads `diff --git a/<path> b/<path>` headers, and the SDK's plain `git diff`
 let `diff.noprefix`, `diff.mnemonicPrefix`, `color.diff=always` or the
-default quoting of non-ASCII paths hide modified files. A header that the
-pattern still cannot read, as for a path with a quote, ends the previous
+default quoting of non-ASCII paths hide modified files, and `diff.relative`
+leave out the files outside the directory that ddto runs in. A header that
+the pattern still cannot read, as for a path with a quote, ends the previous
 file instead of giving it the next file's hunks. Checks:
 `TestGetGitDiffNormalizesHeaders`, `TestParseGitDiffOutputUnreadableHeader`.
+
+The commit reads, `git log` and `git show` with a format, pass
+`--no-show-signature`: with `log.showSignature`, Git prints a signed commit's
+verification with them, which the SDK took as the commit's SHA, fields or the
+list of commits that it searches the backend for. Check:
+`TestGitReadsIgnoreShowSignature`.
 
 ## Settings that require Git
 
