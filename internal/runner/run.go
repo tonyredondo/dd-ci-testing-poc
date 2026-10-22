@@ -253,7 +253,9 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		userOverlay[path] = true
 	}
 	vendorProvided := false
-	temp, e := os.MkdirTemp("", "dd-ci-testing-poc-")
+	// The plan holds Go files. With a temporary directory inside the module, a
+	// leading _ keeps them out of the module's ./... patterns.
+	temp, e := os.MkdirTemp("", "_dd-ci-testing-poc-")
 	if e != nil {
 		return plan, e
 	}

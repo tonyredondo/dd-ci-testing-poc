@@ -644,3 +644,24 @@ func TestMiniUsesSavedGoSettings(t *testing.T) {
 		})
 	}
 }
+
+// A temporary directory inside the module, whose name Go's ./... patterns
+// keep, does not put the Go files of ddto's plan in the module's packages.
+func TestMiniTemporaryDirectoryInsideModule(t *testing.T) {
+	driver := sharedDriver(t, "..")
+	dir := t.TempDir()
+	writeBuildFixture(t, dir, map[string]string{
+		"go.mod":      "module example.com/tmpinside\ngo 1.21\n",
+		"tmp_test.go": "package tmpinside\nimport \"testing\"\nfunc TestInside(t *testing.T){}\n",
+	})
+	temp := filepath.Join(dir, "tmp")
+	if err := os.Mkdir(temp, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	env := append(testEnv("GOPROXY=off", "DD_CIVISIBILITY_ENABLED=false"), "TMPDIR="+temp, "TMP="+temp, "TEMP="+temp)
+	for _, name := range []string{"go", driver} {
+		if out, stderr, code := command(t, dir, env, name, "test", "-count=1", "./..."); code != 0 {
+			t.Fatalf("%s test ./...: exit %d\n%s%s", name, code, out, stderr)
+		}
+	}
+}

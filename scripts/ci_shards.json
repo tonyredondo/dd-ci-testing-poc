@@ -80,6 +80,7 @@
       "TestMiniTemporaryWorkspaceRestoresGoEnvironment",
       "TestMiniTestCacheFollowsCallerEnvironment",
       "TestMiniUsesSavedGoSettings",
+      "TestMiniTemporaryDirectoryInsideModule",
       "TestMiniTestifyDuplicateIdentity",
       "TestMiniTestingCompatibility",
       "TestMiniVendorSelectionMatchesGo",
@@ -239,6 +240,7 @@
       "TestMiniTemporaryWorkspaceRestoresGoEnvironment",
       "TestMiniTestCacheFollowsCallerEnvironment",
       "TestMiniUsesSavedGoSettings",
+      "TestMiniTemporaryDirectoryInsideModule",
       "TestMiniVendorSelectionMatchesGo",
       "TestMiniVendorTreeMatchesGo",
       "TestMiniVendorWorkspaceLinksAndReusesBuildCache"
