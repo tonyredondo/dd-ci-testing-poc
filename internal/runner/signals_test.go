@@ -117,3 +117,16 @@ func TestCLIDebugCanceledPreparation(t *testing.T) {
 		}
 	}
 }
+
+// A signal that arrives after go test ended, as while ddto sends the session,
+// ends ddto with it instead of go test's status.
+func TestStatusAfterSignal(t *testing.T) {
+	signals := make(chan os.Signal, 1)
+	if got := statusAfterSignal(signals, 0, nil); got != 0 {
+		t.Fatalf("without a signal: %d", got)
+	}
+	signals <- os.Interrupt
+	if got, want := statusAfterSignal(signals, 0, nil), interruptedStatus(os.Interrupt); got != want {
+		t.Fatalf("after an interrupt: %d; want %d", got, want)
+	}
+}

@@ -1071,7 +1071,8 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 			plan.goVersion = testRuntimeVersion(ctx, dir, plan.goVersion, plan.goExperiment)
 		}
 	}
-	exitCode = runGo(ctx, dir, forwarded, env, gitWorker.relaySignals(signals), stdin, stdout, stderr)
+	relayed := gitWorker.relaySignals(signals)
+	exitCode = runGo(ctx, dir, forwarded, env, relayed, stdin, stdout, stderr)
 	var coverage *float64
 	if session != nil {
 		if path := coverProfilePath(opts, dir); path != "" {
@@ -1086,7 +1087,20 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		gitState = gitWorker.state
 	}
 	session.finish(ctx, exitCode, plan.goVersion, coverage, gitState)
-	return exitCode
+	return statusAfterSignal(relayed, exitCode, debug)
+}
+
+// statusAfterSignal returns the status of a signal that arrived after go test
+// ended, as while ddto sent the session, instead of code: the signal would
+// have ended go test, and runner.Exit sends it again.
+func statusAfterSignal(signals <-chan os.Signal, code int, debug *cliDebug) int {
+	select {
+	case s := <-signals:
+		debug.printf("signal %q arrived after go test ended", s.String())
+		return interruptedStatus(s)
+	default:
+		return code
+	}
 }
 
 // nativeGoError is a preparation failure after which ddto runs go test
