@@ -50,8 +50,9 @@ The log records:
   provides: Mini is one of its main modules, so `instrumentation bypass
   package_pattern=work` follows the warning, and native `go test` runs.
 - When go rejects the command or its environment while ddto prepares it, as
-  with `-p=0`, an unknown flag in `GOFLAGS`, or a missing `-C` directory or
-  `-modfile`, `instrumentation bypass go_rejected="<reason>"`, and native
+  with `-p=0`, an unknown flag in `GOFLAGS`, a missing `-C` directory or
+  `-modfile`, or an `-overlay` file that go cannot read or parse,
+  `instrumentation bypass go_rejected="<reason>"`, and native
   `go test` runs and reports the error with its own exit status. ddto adds a
   warning only if that `go test` passes, which means the failure was ddto's.
 - With coverage, whether testing gets the in-memory per-test coverage hook:

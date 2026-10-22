@@ -226,16 +226,18 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(dir, path)
 		}
+		// go reads the same file: for one it cannot read or parse, go test
+		// reports the error itself, with its own exit status.
 		phase := debug.start("read user overlay")
 		data, e := os.ReadFile(path)
 		if e != nil {
 			phase.finish(e)
-			return plan, e
+			return plan, &goRejectedError{e}
 		}
 		var overlay Overlay
 		if e = json.Unmarshal(data, &overlay); e != nil {
 			phase.finish(e)
-			return plan, e
+			return plan, &goRejectedError{e}
 		}
 		for from, to := range overlay.Replace {
 			if !filepath.IsAbs(from) {
