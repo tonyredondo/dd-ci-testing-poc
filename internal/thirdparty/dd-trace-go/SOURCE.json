@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "bad6583bbfd43978981f926f3e7db9ee755d8a4f7491f3612ce2947372a0e31d",
+      "sha256": "b57b1671462df54793b5aa74be02bf0de297bf6eee3422597eddaae9fe93c34c",
       "role": "local"
     },
     {
@@ -801,14 +801,14 @@
     },
     {
       "path": "civisibility/integrations/gotesting/testing.go",
-      "sha256": "f11a79559135a4891aa58be38dc206d979a77fb5a8dbdc4dfc6b744a275bca4a",
+      "sha256": "71dc5bcca3ccae8d775e41969266680019bc4960b1768bb0ffd0911c4dedd163",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testing.go",
       "source_sha256": "73324a56f1b1c581df8620a4f67a51743b198b2470d43f9b645425fff6a63646"
     },
     {
       "path": "civisibility/integrations/gotesting/testingB.go",
-      "sha256": "e4d65446c1d7f6aafe04a0f740ef59873497ea982da4940f17182f664236e78d",
+      "sha256": "2c37c58ec54404c2a30970f5b5d1a93696b2b78136dd68714e6098b4be329583",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testingB.go",
       "source_sha256": "b498da5f68b673c1989114d31f5f8e5fe8bb108bb3590d042b22c46832009ef4"
@@ -1081,7 +1081,7 @@
     },
     {
       "path": "civisibility/utils/cli_git_state.go",
-      "sha256": "03a8847db55537dc58fd0443d085943313cda156b66da580a54cdad58e9813fb",
+      "sha256": "054a4b2f51648a98cb356ef962c96c77b8389d49d0d2035a1511fafad33f3ea5",
       "role": "local"
     },
     {

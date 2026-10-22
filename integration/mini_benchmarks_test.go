@@ -2,6 +2,7 @@ package integration
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -44,5 +45,39 @@ func BenchmarkTable(b *testing.B) {
 	// The names that testing gives them: a repeated name gets #01, a space _.
 	if want := []string{"BenchmarkTable", "BenchmarkTable/a", "BenchmarkTable/b", "BenchmarkTable/b#01", "BenchmarkTable/input_size=1"}; got.code != 0 || !slices.Equal(tests, want) {
 		t.Fatalf("exit %d, tests %v; want %v\n%s", got.code, tests, want, got.stderr)
+	}
+
+	// Without -bench on the command line, the benchmarks that a TestMain
+	// selects through flag.Set get their events too.
+	if err := os.Mkdir(filepath.Join(dir, "benchmain"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeBuildFixture(t, dir, map[string]string{"benchmain/main_test.go": `package benchmain
+
+import (
+	"flag"
+	"os"
+	"testing"
+)
+
+func TestMain(m *testing.M) {
+	flag.Parse()
+	flag.Set("test.bench", "^BenchmarkWork$")
+	flag.Set("test.benchtime", "1x")
+	os.Exit(m.Run())
+}
+
+func BenchmarkWork(b *testing.B) {
+	for range b.N {
+	}
+}
+`})
+	receiver := &capture{}
+	server := newServer(http.HandlerFunc(receiver.handler))
+	defer server.Close()
+	env := testEnv("DD_CIVISIBILITY_AGENTLESS_ENABLED=true", "DD_CIVISIBILITY_AGENTLESS_URL="+server.URL, "DD_API_KEY=poc-not-a-real-key")
+	out, stderr, code := command(t, dir, env, driver, "test", "-count=1", "-run=^$", "./benchmain")
+	if events := summarizeSessionEvents(receiver); code != 0 || !slices.Equal(events.tests, []string{"BenchmarkWork pass"}) {
+		t.Fatalf("exit %d, tests %v\n%s\n%s", code, events.tests, out, stderr)
 	}
 }

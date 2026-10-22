@@ -62,6 +62,9 @@ func startTestSession(cli CLIOptions, opts options, plan Plan, dir string, start
 	if mode := bazel.CurrentMode(); mode.ManifestEnabled || mode.PayloadFilesEnabled {
 		return nil, "Bazel's offline mode"
 	}
+	if !sameCheckout(dir, plan.tests.Packages) {
+		return nil, "a test package outside the Git checkout of go test's directory"
+	}
 	identity, err := propagation.New()
 	if err != nil {
 		return nil, err.Error()
@@ -87,6 +90,19 @@ func startTestSession(cli CLIOptions, opts options, plan Plan, dir string, start
 		return nil, err.Error()
 	}
 	return s, ""
+}
+
+// sameCheckout reports whether each test package lies in the Git checkout of
+// dir, or, as dir does, outside any: the session takes its Git metadata and
+// service from dir, and each test process from its package.
+func sameCheckout(dir string, packages []utils.CLITestPackage) bool {
+	folder := utils.CheckoutGitFolder(dir)
+	for _, p := range packages {
+		if folder == "" && utils.CheckoutGitFolder(p.Dir) != "" || folder != "" && !utils.SameCheckout(p.Dir, folder) {
+			return false
+		}
+	}
+	return true
 }
 
 // handoff returns the environment entry for go test.

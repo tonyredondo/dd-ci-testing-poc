@@ -187,7 +187,9 @@ More options follow the same rule:
 
 `ddto` reports one test session per command: every package's tests report in
 it, and it lasts the command and has `go test`'s exit status. A test binary run
-without `ddto` reports its own session. When a test process crashes, the
+without `ddto` reports its own session, and so does each test binary when a
+tested package lies in another Git checkout than `go test`'s directory, whose
+Git metadata and service the session takes. When a test process crashes, the
 session says how; testing's `-timeout` sends the tests' events first, and so
 does an unrecovered panic with `--panic-hook`. For other crashes, `ddto`
 reports, failed, the module and suites that the process left open and the test

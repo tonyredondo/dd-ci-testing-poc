@@ -401,7 +401,7 @@ func instrumentTestingMWithOptions(m *testing.M, wrapperOpts additionalFeatureWr
 	ddm.instrumentInternalExamples(getInternalExampleArray(m), claim)
 
 	// Instrument the internal benchmarks for CI visibility.
-	for _, v := range os.Args {
+	for _, v := range benchmarkArgs(os.Args) {
 		// check if benchmarking is enabled to instrument
 		if strings.Contains(v, "-bench") || strings.Contains(v, "test.bench") {
 			ddm.instrumentInternalBenchmarks(getInternalBenchmarkArray(m), claim)

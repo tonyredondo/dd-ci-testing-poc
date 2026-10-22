@@ -1035,6 +1035,14 @@ the benchmark runs, and the later runs use `recoveringBenchmarkFunc`
 (`gotesting/testingB.go`), which handles a panic and panics again. Check: the
 `benchmark` cases of `TestMiniCrashKeepsEvents`.
 
+## Benchmarks that TestMain selects
+
+`instrumentTestingMWithOptions` (`gotesting/testing.go`) instruments the
+benchmarks only when `-bench` is in `os.Args`: a `TestMain` that selects them
+with `flag.Set("test.bench", …)` ran them without events. `benchmarkArgs`
+(`gotesting/testingB.go`) adds `test.bench` when the flag has a value. Check:
+the `benchmain` package of `TestMiniSubBenchmarksSharingACallback`.
+
 ## Coverage rows of trimmed test files
 
 With `-trimpath`, the runtime names a test's source file by its import path,
@@ -2117,7 +2125,10 @@ result came from Go's cache.
 ddto does not own the session with the SDK runtime, `--session-per-binary`,
 `-c` or `-n`, a launcher, which could run the test binaries where ddto's
 directory is not, CODEOWNERS services, which give each package its own
-service, a disabled CI Visibility, Bazel's offline modes, or a runtime whose
+service, a disabled CI Visibility, Bazel's offline modes, a tested package in
+another Git checkout than go test's directory (`sameCheckout`; the session
+takes its Git metadata and service from that directory, each test process from
+its package; `utils.CheckoutGitFolder`), or a runtime whose
 `civisibility/utils` lacks `HandedCLISession`, as the released ones. A test
 binary run without ddto reports its own session. Tests that finished before a
 fatal error, the race detector's halt or a kill are lost, since only that
