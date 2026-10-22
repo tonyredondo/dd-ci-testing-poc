@@ -879,6 +879,18 @@ test as failed. A test that has already failed is left to its normal
 finalization, which closes it as failed. Check:
 `TestMiniSkipAfterFailureReportsFailure`.
 
+## Failures in quarantined child processes
+
+In a quarantined child process, `markProcessRetryChildFailed` in
+`gotesting/retry_process.go` records a test's own failure as unmasked, so a
+managed descendant's restore of its ancestors keeps it. testing's
+`common.Fail` hook passes the failing test's `*testing.common`, which the
+function ignored, accepting only a `*testing.T`: a quarantined parent that
+called `t.Error` before a quarantined subtest was reported as passed once
+that subtest finished. The failure is now recorded for any receiver; only a
+`*testing.T` still gets the parent-first propagation, which `Fail` does
+itself for the hook. Check: `TestProcessRetryChildFailureThroughCommon`.
+
 ## Sub-benchmarks sharing a callback
 
 `instrumentTestingBFunc` marked the original callback of a sub-benchmark as

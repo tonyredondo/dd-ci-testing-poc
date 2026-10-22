@@ -3521,20 +3521,22 @@ func recordProcessRetryChildErrorInfo(tb testing.TB, errType, errMessage string,
 }
 
 // markProcessRetryChildFailed mirrors testing.common.Fail's parent-first failure
-// propagation without calling a woven testing method again.
+// propagation without calling a woven testing method again. testing's
+// common.Fail hook passes the failing test's *testing.common, which shares its
+// T's metadata and name; Fail itself then propagates the failure.
 func markProcessRetryChildFailed(tb testing.TB) {
-	t, ok := tb.(*testing.T)
-	if !ok {
-		return
-	}
-	current := getTestMetadata(t)
+	current := getTestMetadata(tb)
 	if execMeta := processRetryChildOwnerMetadata(current); execMeta != nil && execMeta.quarantinedRaceChild != nil &&
 		!processRetryChildFailureIsPropagated() && (current == nil || !current.processRetryManagedDescendant) {
 		moduleName, suiteName := "", ""
 		if current != nil && current.identity != nil {
 			moduleName, suiteName = current.identity.ModuleName, current.identity.SuiteName
 		}
-		execMeta.quarantinedRaceChild.markUnmaskedFailure(moduleName, suiteName, t.Name())
+		execMeta.quarantinedRaceChild.markUnmaskedFailure(moduleName, suiteName, tb.Name())
+	}
+	t, ok := tb.(*testing.T)
+	if !ok {
+		return
 	}
 	fields := getTestPrivateFields(t)
 	ancestry := make([]*commonPrivateFields, 0, 4)
