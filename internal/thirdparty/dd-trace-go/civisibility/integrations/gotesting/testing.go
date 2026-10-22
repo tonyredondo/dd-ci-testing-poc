@@ -1431,6 +1431,7 @@ func collectAndWriteLogs(t *testing.T, test integrations.Test, attemptOutput []b
 			chattyOutput := writer.TakeOutput(test.Name())
 			if len(attemptOutput) == 0 && len(chattyOutput) > 0 {
 				sc := bufio.NewScanner(bytes.NewReader(chattyOutput))
+				sc.Buffer(nil, len(chattyOutput)+1) // A longer line would end the scan.
 				for sc.Scan() {
 					test.Log(sc.Text(), "")
 				}
@@ -1448,6 +1449,7 @@ func collectAndWriteLogs(t *testing.T, test integrations.Test, attemptOutput []b
 	}
 	if len(attemptOutput) > 0 {
 		sc := bufio.NewScanner(bytes.NewReader(attemptOutput))
+		sc.Buffer(nil, len(attemptOutput)+1) // A longer line would end the scan.
 		for sc.Scan() {
 			test.Log(sc.Text(), "")
 		}

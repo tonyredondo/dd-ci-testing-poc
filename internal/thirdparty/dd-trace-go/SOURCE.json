@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "75f48efd6214fece2b8a98c6e8a99156677f1a3b0cb77061302e827f8a4e1a6d",
+      "sha256": "5de6fd50e300a6f6c5b50a2f02060c10edb5cd6eb662f2d3acc166f221f081f9",
       "role": "local"
     },
     {
@@ -796,7 +796,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/testing.go",
-      "sha256": "9814ac30fdeb1972aab0bdafd8c8584e1935dede53cd9cfaa8685c9c3f4a5fc0",
+      "sha256": "120cb2249dc611c8ea5bf4345c05dd1943a32725cd4da885b79a4b195e1c79e3",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testing.go",
       "source_sha256": "73324a56f1b1c581df8620a4f67a51743b198b2470d43f9b645425fff6a63646"
@@ -842,6 +842,11 @@
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testingT.go",
       "source_sha256": "79ca5b226980f279f9fc224f27583f1c479ef8bb3ae1d2b087ef071dda45ec4c"
+    },
+    {
+      "path": "civisibility/integrations/gotesting/testing_logs_test.go",
+      "sha256": "7f5b4e1f5d9b9828ca6e29c7513c013a55c701a624686c41fffd416737ca8574",
+      "role": "local"
     },
     {
       "path": "civisibility/integrations/gotesting/testing_m_exit.go",

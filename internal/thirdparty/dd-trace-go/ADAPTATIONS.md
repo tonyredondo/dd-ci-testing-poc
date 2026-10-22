@@ -822,6 +822,14 @@ remote URL can hold a job token, which `git ls-remote --get-url` prints.
 Checks: `TestCIClientDoesNotFollowRedirects`, `TestLogURL` and
 `TestGitDebugLinesHideRemoteCredentials`.
 
+## Long log lines
+
+`collectAndWriteLogs` in `gotesting/testing.go` reads a test's output with
+`bufio.Scanner`, whose default limit is 64 KiB per line: with
+`DD_CIVISIBILITY_LOGS_ENABLED`, a longer line ended the scan, and it and every
+later line of that test were not sent. Each scanner's buffer can now hold the
+whole output. Check: `TestCollectLogsKeepsLongLines`.
+
 ## Sub-benchmark patterns
 
 The SDK's `B.Run` hook (`instrumentTestingBFunc` in
