@@ -422,7 +422,10 @@ func extractBuildkite() map[string]string {
 	}
 
 	tags[constants.GitPrBaseBranch] = env.Get("BUILDKITE_PULL_REQUEST_BASE_BRANCH")
-	tags[constants.PrNumber] = env.Get("BUILDKITE_PULL_REQUEST")
+	// Buildkite sets false outside a pull request.
+	if number := env.Get("BUILDKITE_PULL_REQUEST"); number != "false" {
+		tags[constants.PrNumber] = number
+	}
 
 	return tags
 }
@@ -542,7 +545,10 @@ func extractGithubActions() map[string]string {
 				tags[constants.GitHeadCommit] = eventJSON.PullRequest.Head.Sha
 				tags[constants.GitPrBaseHeadCommit] = eventJSON.PullRequest.Base.Sha
 				tags[constants.GitPrBaseBranch] = eventJSON.PullRequest.Base.Ref
-				tags[constants.PrNumber] = strconv.Itoa(eventJSON.Number)
+				// A push event's JSON has no number: there is no pull request.
+				if eventJSON.Number > 0 {
+					tags[constants.PrNumber] = strconv.Itoa(eventJSON.Number)
+				}
 			}
 		}
 	}

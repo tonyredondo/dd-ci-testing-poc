@@ -835,6 +835,10 @@ change the CI tags:
   lost its branch. Only `GITHUB_REF` names a tag here, with its `refs/tags/`
   prefix, so a push to such a branch keeps it too.
 
+- Outside a pull request, `pr.number` was `0` on GitHub Actions, whose push
+  event JSON has no number, and `false` on Buildkite, which sets
+  `BUILDKITE_PULL_REQUEST=false`. Neither is reported now.
+
 Check: `TestProviderTagsFromUnusualValues`, which fails without each change.
 
 ## Credentials in requests and debug lines

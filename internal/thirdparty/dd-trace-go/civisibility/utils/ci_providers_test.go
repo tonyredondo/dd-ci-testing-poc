@@ -373,6 +373,10 @@ func TestGithubActionsJobIDFromDiagnostics(t *testing.T) {
 // GitLab's CI_COMMIT_AUTHOR may be missing or have an empty email, and a
 // Jenkins branch may hold regular expression syntax: neither stops the CI tags.
 func TestProviderTagsFromUnusualValues(t *testing.T) {
+	pushEventPath := filepath.Join(t.TempDir(), "event.json")
+	if err := os.WriteFile(pushEventPath, []byte(`{"ref":"refs/heads/main","after":"abc"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct {
 		name      string
 		env       map[string]string
@@ -387,6 +391,10 @@ func TestProviderTagsFromUnusualValues(t *testing.T) {
 		{"github branch with tags/", map[string]string{"GITHUB_SHA": "abc", "GITHUB_HEAD_REF": "feature/tags/filter", "GITHUB_REF": "refs/pull/1/merge"}, constants.GitBranch, "feature/tags/filter", constants.GitTag},
 		{"github push to a branch with tags/", map[string]string{"GITHUB_SHA": "abc", "GITHUB_HEAD_REF": "", "GITHUB_REF": "refs/heads/feature/tags/filter"}, constants.GitBranch, "feature/tags/filter", constants.GitTag},
 		{"github tag", map[string]string{"GITHUB_SHA": "abc", "GITHUB_HEAD_REF": "", "GITHUB_REF": "refs/tags/v1.2.3"}, constants.GitTag, "v1.2.3", constants.GitBranch},
+		// Outside a pull request: a push event's JSON, and Buildkite's false.
+		{"github push event", map[string]string{"GITHUB_SHA": "abc", "GITHUB_HEAD_REF": "", "GITHUB_REF": "refs/heads/main", "GITHUB_EVENT_PATH": pushEventPath}, constants.GitBranch, "main", constants.PrNumber},
+		{"buildkite without a pull request", map[string]string{"BUILDKITE": "true", "BUILDKITE_BRANCH": "main", "BUILDKITE_PULL_REQUEST": "false"}, constants.GitBranch, "main", constants.PrNumber},
+		{"buildkite pull request", map[string]string{"BUILDKITE": "true", "BUILDKITE_BRANCH": "main", "BUILDKITE_PULL_REQUEST": "12"}, constants.PrNumber, "12", ""},
 		// A CodeBuild-hosted runner of another CI sets CODEBUILD_INITIATOR.
 		{"github on codebuild", map[string]string{"GITHUB_SHA": "abc", "CODEBUILD_INITIATOR": "GitHub-Hookshot/123"}, constants.CIProviderName, "github", ""},
 		{"jenkins branch with a dot", map[string]string{"JENKINS_URL": "http://jenkins", "GIT_BRANCH": "origin/release-1.2", "JOB_NAME": "job/release-1x2"}, constants.CIPipelineName, "job/release-1x2", ""},
