@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "ff4b8c6a6fec8adc4d1fd6cb492b324bd4f039dddac4386e5297df96b1bfee61",
+      "sha256": "e07e93f601744cca2aad029cb1f4408b279f6f8596e6bb02af2a377be23bbb91",
       "role": "local"
     },
     {
@@ -2013,14 +2013,14 @@
     },
     {
       "path": "osinfo/osinfo_unix.go",
-      "sha256": "0541f9645d5ba5a5ac749fea28052cc5e45b0257738eac0db0b154b8f4731571",
+      "sha256": "2b796d6d2994329d82494c2345fdf1e145cfa0f21275b97230ffa069da4a4bde",
       "role": "adapted",
       "source_path": "internal/osinfo/osinfo_unix.go",
       "source_sha256": "24beb920b042b2f753e409b95c0509b52a4ccf0afc03207f4a897d4701db98aa"
     },
     {
       "path": "osinfo/osinfo_unix_test.go",
-      "sha256": "d6067f813b4b0b49ef3cde88d34fef8aeaab7caa8260ad02201e709cb3b3d5f0",
+      "sha256": "717061263d70e9f5ddb423b868fe89b14f079e982e23a7fb7575f346dfc1ea73",
       "role": "local"
     },
     {

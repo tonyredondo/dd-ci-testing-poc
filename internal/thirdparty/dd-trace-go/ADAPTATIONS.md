@@ -764,6 +764,10 @@ nothing during initialization; `TestMacOSProductVersionSources` covers the
 sysctl, compatibility, error and empty cases; `TestMacOSProductVersionMatchesSWVers`
 compares the sysctl with `sw_vers` on the host.
 
+`readOSRelease` uses `VERSION_ID` when `/etc/os-release` has no `VERSION`, as
+on Alpine. The SDK's fallback checked for an empty version, but the version
+starts as `unknown`, so it never applied. Check: `TestOSReleaseVersionIDFallback`.
+
 ## CI log hostname
 
 Upstream `logs.Initialize` in
