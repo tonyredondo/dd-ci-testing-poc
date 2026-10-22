@@ -444,7 +444,9 @@ Mini's packages, directly or through a helper package, as tests that use
 `testopt` do, Mini keeps full instrumentation, so memory that the client passes
 to Mini's API, such as a pointer tag value, stays checked as under
 `go test -race`. Mini's own tests also keep it, with `go test -race` or when the
-named packages belong to Mini. Compiling Mini with `-race=false` would remove
+named packages belong to Mini. So does Mini in `GOMODCACHE`, where `go install`
+leaves the sources of the `ddto` it builds: Go rejects any overlay entry there.
+Compiling Mini with `-race=false` would remove
 more, but the compiler would then make Mini's atomics invisible to the
 detector, which would report races that do not exist.
 

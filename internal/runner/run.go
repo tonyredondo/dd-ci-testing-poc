@@ -647,7 +647,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	// it instrumented, as noraceOverlay does for the packages in the graph.
 	if plan.mini && opts.race && !testsUseMini {
 		racePhase := debug.start("race annotations")
-		files := noraceOverlay(listed, replacements, temp)
+		files := noraceOverlay(listed, replacements, temp, opts.environment.GOMODCACHE)
 		racePhase.finish(nil)
 		debug.printf("race annotations files=%d", files)
 	}
