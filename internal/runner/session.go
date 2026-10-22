@@ -116,6 +116,11 @@ func (s *testSession) finish(ctx context.Context, exitCode int, goVersion string
 // it: blocks that several test processes report count once, covered if one
 // covered them.
 func profileCoverage(path string) (float64, bool) {
+	// Opening anything but a regular file, such as a FIFO or /dev/stdout, to
+	// read it can wait forever.
+	if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
+		return 0, false
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return 0, false
