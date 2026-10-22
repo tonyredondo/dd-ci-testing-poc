@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -197,6 +198,7 @@ type logSendRecorder struct {
 	mu             sync.Mutex
 	release        <-chan struct{}
 	messagesByText map[string]int
+	sizes          [][2]int
 }
 
 func newLogSendRecorder(release <-chan struct{}) *logSendRecorder {
@@ -220,10 +222,18 @@ func (r *logSendRecorder) send(payload io.Reader) error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.sizes = append(r.sizes, [2]int{len(entries), len(raw)})
 	for _, entry := range entries {
 		r.messagesByText[entry.Message]++
 	}
 	return nil
+}
+
+// requests returns the number of entries and the size of each request.
+func (r *logSendRecorder) requests() [][2]int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([][2]int(nil), r.sizes...)
 }
 
 func (r *logSendRecorder) messages() map[string]int {
@@ -299,4 +309,30 @@ func TestLogsWriterWithoutClient(t *testing.T) {
 	if writer := newLogsWriter(); writer != nil {
 		t.Fatalf("writer without a client: %+v", writer)
 	}
+}
+
+// Each request stays within the intake's limits, 1000 entries and 5 MB
+// uncompressed, and every entry is sent.
+func TestLogsWriterRespectsIntakeLimits(t *testing.T) {
+	writer := newLogsWriter()
+	recorder := newLogSendRecorder(nil)
+	writer.client = &MockClient{SendLogsFunc: recorder.send}
+	large := strings.Repeat("x", 8192)
+	expected := map[string]int{}
+	for i := range 2500 {
+		message := fmt.Sprintf("small-%d", i)
+		if i%3 == 0 {
+			message += large
+		}
+		if writer.add(&logEntry{Message: message}) {
+			expected[message]++
+		}
+	}
+	writer.stop()
+	for _, request := range recorder.requests() {
+		if request[0] > 1000 || request[1] > 5*1024*1024 {
+			t.Errorf("request with %d entries and %d bytes", request[0], request[1])
+		}
+	}
+	assert.Equal(t, expected, recorder.messages())
 }

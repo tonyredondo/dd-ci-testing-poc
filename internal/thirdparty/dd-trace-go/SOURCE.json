@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "3553fad9abf2def5a19ff1c4f99cfe488c64d6f7a7ca128bf12d71f3f864b4a9",
+      "sha256": "59577a49e632f6f761a8463b2d85aa19e92656e59b4673367800c28f63d119aa",
       "role": "local"
     },
     {
@@ -914,14 +914,14 @@
     },
     {
       "path": "civisibility/integrations/logs/logs_writer.go",
-      "sha256": "aa39da8c35bbcb9131f1734a98d4e91e7a9c3e3b335a9bbf90e3e995d90e82de",
+      "sha256": "829784e30b0e62af0f5886e740dfcd1194ce543d01509b3c514433ca9590e1ab",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/logs/logs_writer.go",
       "source_sha256": "19d9142417ff5af2daed0d9142a998c2472a24178e8193cf010fe9bd75bd57d0"
     },
     {
       "path": "civisibility/integrations/logs/logs_writer_test.go",
-      "sha256": "3a0c67c4e0332e103838280478930177def7c66fe89b6da81d7acd821a1e95c6",
+      "sha256": "06910ef9fddd42ecf71ebae29e7c46abc0941dafb3102fb8173a91e5aa4cac5f",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/logs/logs_writer_test.go",
       "source_sha256": "8ef92f56f4ca7061e2998821be6191179a212ee0169ca3dd8aaf7ebbbf77d48d"

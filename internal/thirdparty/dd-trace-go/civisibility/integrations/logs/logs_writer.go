@@ -16,8 +16,13 @@ import (
 // Constants defining the payload size limits for agentless mode.
 const (
 	// agentlessPayloadMaxLimit is the maximum payload size allowed, indicating the
-	// maximum size of the package that the intake can receive.
-	agentlessPayloadMaxLimit = 50 * 1024 * 1024 // 5 MB
+	// maximum size of the package that the intake can receive: the logs
+	// intake rejects a request over 5 MB uncompressed.
+	agentlessPayloadMaxLimit = 5 * 1024 * 1024 // 5 MB
+
+	// agentlessPayloadMaxEntries is the most log entries that the intake
+	// accepts in one request.
+	agentlessPayloadMaxEntries = 1000
 
 	// agentlessPayloadSizeLimit specifies the maximum allowed size of the payload before
 	// it triggers a flush to the transport.
@@ -73,7 +78,7 @@ func (w *logsWriter) add(entry *logEntry) bool {
 		w.mu.Unlock()
 		return false
 	}
-	if w.payload.size() > agentlessPayloadSizeLimit {
+	if w.payload.size() > agentlessPayloadSizeLimit || w.payload.itemCount() >= agentlessPayloadMaxEntries {
 		payloadToFlush = w.rotateAndReserveLocked()
 	}
 	w.mu.Unlock()

@@ -880,6 +880,15 @@ instrumented, as well as its wrapper: in a table such as
 event. Only the wrapper is marked here; the inner `b.Run` that the measuring
 level makes still finds it. Check: `TestMiniSubBenchmarksSharingACallback`.
 
+## Logs intake limits
+
+`integrations/logs/logs_writer.go` sent a payload once it passed 25 MB, from a
+50 MB limit whose comment says 5 MB, and without counting entries. The logs
+intake rejects a request over 5 MB uncompressed or with more than 1000
+entries, so a test process that logged that much lost the whole batch after
+its retries. The limit is 5 MB here, a payload is sent from 2.5 MB, and at
+1000 entries. Check: `TestLogsWriterRespectsIntakeLimits`.
+
 ## Logs without a client
 
 `newLogsWriter` in `integrations/logs/logs_writer.go` built a writer around
