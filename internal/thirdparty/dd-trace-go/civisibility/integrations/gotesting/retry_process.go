@@ -2675,9 +2675,22 @@ func processRetryArtifactPolicyFromArgs(originalArgs []string) (outputDir string
 			break
 		}
 		name, value, hasValue := processRetrySplitFlag(arg)
-		if arity, known := processRetryStripFlags[name]; known && arity == processRetryFlagValue && !hasValue && i+1 < len(originalArgs) {
+		arity, stripped := processRetryStripFlags[name]
+		if stripped && arity == processRetryFlagValue && !hasValue && i+1 < len(originalArgs) {
 			i++
 			value = originalArgs[i]
+		}
+		if !stripped && !hasValue {
+			// Another flag's separate value, as processRetryTimeoutFromArgs
+			// skips it.
+			registered := flag.CommandLine.Lookup(strings.TrimPrefix(name, "-"))
+			if registered == nil {
+				break
+			}
+			if boolFlag, isBool := registered.Value.(processRetryBoolFlag); !isBool || !boolFlag.IsBoolFlag() {
+				i++
+			}
+			continue
 		}
 		switch name {
 		case "-test.outputdir":

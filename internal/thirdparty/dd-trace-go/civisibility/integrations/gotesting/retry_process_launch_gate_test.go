@@ -199,3 +199,24 @@ func (c *processRetryBlockingDoneContext) Done() <-chan struct{} {
 	<-c.release
 	return nil
 }
+
+// A registered flag's separate value, as -args can pass it, does not end the
+// artifact options that a retry child gets back.
+func TestProcessRetryArtifactPolicyAfterSeparateValues(t *testing.T) {
+	for _, tc := range []struct {
+		args      []string
+		outputDir string
+		enabled   bool
+	}{
+		{[]string{"-test.artifacts", "-test.outputdir=/tmp/results"}, "/tmp/results", true},
+		{[]string{"-test.parallel", "1", "-test.artifacts", "-test.outputdir=/tmp/results"}, "/tmp/results", true},
+		{[]string{"-test.v", "-test.artifacts=false", "-test.outputdir", "/tmp/results"}, "/tmp/results", false},
+		// An unknown flag's value is ambiguous, as for the retry's own arguments.
+		{[]string{"-custom", "1", "-test.artifacts"}, "", false},
+	} {
+		outputDir, enabled := processRetryArtifactPolicyFromArgs(tc.args)
+		if outputDir != tc.outputDir || enabled != tc.enabled {
+			t.Errorf("%q: %q, %t; want %q, %t", tc.args, outputDir, enabled, tc.outputDir, tc.enabled)
+		}
+	}
+}

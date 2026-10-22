@@ -891,6 +891,16 @@ that subtest finished. The failure is now recorded for any receiver; only a
 `*testing.T` still gets the parent-first propagation, which `Fail` does
 itself for the hook. Check: `TestProcessRetryChildFailureThroughCommon`.
 
+## Artifact options of retry children
+
+`processRetryArtifactPolicyFromArgs` in `gotesting/retry_process.go` reads the
+`-test.artifacts` and `-test.outputdir` options that a process-retry child gets
+back. It stopped at the separate value of another flag, such as
+`-args -test.parallel 1 -test.artifacts`, so the child ran without artifacts
+and Go removed the files that its tests wrote. A registered flag's separate
+value is skipped here, as `processRetryTimeoutFromArgs` does. Check:
+`TestProcessRetryArtifactPolicyAfterSeparateValues`.
+
 ## Sub-benchmarks sharing a callback
 
 `instrumentTestingBFunc` marked the original callback of a sub-benchmark as
