@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "b2069d6f0d6ca7a890aee597b4e1ec3df6c938ce179a22df44b7a33be77d0ae0",
+      "sha256": "a9293309c581104cb021ee1360c1baffdb3b95ffcf6ca3cad878cf3769561ad9",
       "role": "local"
     },
     {
@@ -522,7 +522,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/instrumentation_orchestrion.go",
-      "sha256": "0d259ebf76ccdef8f3d60efdd7d84a34ac56ec7baf5d32d9fdeb7f4835e1bf25",
+      "sha256": "0c0c90bce25ce9491a12710d1bb33aaa6c471975aab635f6ad35dc5b87c77e2d",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/instrumentation_orchestrion.go",
       "source_sha256": "e07e0e5d272cdf6148fea865f53b1f1f40dfe29b60b4c461bfe29a5dd52784b3"
@@ -801,7 +801,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/testing.go",
-      "sha256": "b81f4eed4d39c31345d2ac872888abcbb3551a22dc94349afb018a278f80cde6",
+      "sha256": "2f9da944b5b03e7e17bee2a377b64fd1325fff34ec77771eda0b5c5a0cf775f4",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testing.go",
       "source_sha256": "73324a56f1b1c581df8620a4f67a51743b198b2470d43f9b645425fff6a63646"

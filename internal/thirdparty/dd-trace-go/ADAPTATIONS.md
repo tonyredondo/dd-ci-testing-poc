@@ -936,9 +936,12 @@ called `t.Skip` or `t.SkipNow`, also after `t.Error`: testing reports such a
 test as failed. A test that has already failed is left to its normal
 finalization, which closes it as failed. A test that skips is left to it too,
 with its reason: a call that the test deferred can still fail it, as a leak
-check can, and testing then reports it as failed. Only a benchmark, whose
-metadata has no test identity, is still closed by the hooks. Check:
-`TestMiniSkipAfterFailureReportsFailure`.
+check can, and testing then reports it as failed. A benchmark is too: its
+wrappers, in `gotesting/testing.go` and `gotesting/instrumentation_orchestrion.go`,
+close a skipped one with its final status and reason in
+`closeSkippedBenchmark`, after its deferred calls. Check:
+`TestMiniSkipAfterFailureReportsFailure`, with tests, benchmarks and a
+sub-benchmark.
 
 ## Failures in quarantined child processes
 

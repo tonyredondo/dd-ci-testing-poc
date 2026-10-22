@@ -37,6 +37,20 @@ func TestSkipNowThenDeferredFailure(t *testing.T) {
 	defer t.Error("deferred failure")
 	t.SkipNow()
 }
+
+func BenchmarkSkipThenDeferredFailure(b *testing.B) {
+	defer b.Error("deferred failure")
+	b.Skip("reason")
+}
+
+func BenchmarkOnlySkip(b *testing.B) { b.Skip("reason") }
+
+func BenchmarkSkippingSub(b *testing.B) {
+	b.Run("sub", func(b *testing.B) {
+		defer b.Error("deferred failure")
+		b.SkipNow()
+	})
+}
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -55,5 +69,25 @@ func TestSkipNowThenDeferredFailure(t *testing.T) {
 	want := map[string]string{"TestFailThenSkip": "fail/fail", "TestFailThenSkipNow": "fail/fail", "TestOnlySkip": "skip/skip", "TestSkipThenDeferredFailure": "fail/fail", "TestSkipNowThenDeferredFailure": "fail/fail"}
 	if got.code != 1 || fmt.Sprint(statuses) != fmt.Sprint(want) {
 		t.Fatalf("exit %d, statuses %v; want 1, %v\n%s", got.code, statuses, want, got.stderr)
+	}
+
+	// Benchmarks too: their finalization closes them after deferred calls.
+	got = execute(t, dir, compileMini(t, dir, driver), []string{"-test.run=^$", "-test.bench=^Benchmark(SkipThenDeferredFailure|OnlySkip|SkippingSub)$", "-test.benchtime=1x"}, true, false)
+	statuses = map[string]string{}
+	for _, event := range got.wireEvents {
+		content, _ := event["content"].(map[string]any)
+		meta, _ := content["meta"].(map[string]any)
+		if event["type"] == "test" {
+			statuses[fmt.Sprint(meta["test.name"])] = fmt.Sprint(meta["test.status"])
+			if meta["test.status"] == "skip" && (meta["test.skip_reason"] != "reason" || meta["test.final_status"] != "skip") {
+				t.Errorf("%v: skip reason %v, final status %v", meta["test.name"], meta["test.skip_reason"], meta["test.final_status"])
+			}
+		}
+	}
+	want = map[string]string{"BenchmarkSkipThenDeferredFailure": "fail", "BenchmarkOnlySkip": "skip", "BenchmarkSkippingSub/sub": "fail"}
+	for name, status := range want {
+		if statuses[name] != status {
+			t.Fatalf("exit %d, benchmark statuses %v; want %v\n%s", got.code, statuses, want, got.stderr)
+		}
 	}
 }

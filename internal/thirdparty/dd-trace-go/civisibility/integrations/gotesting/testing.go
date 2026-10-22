@@ -1058,6 +1058,7 @@ func (ddm *M) executeInternalBenchmark(benchmarkInfo *testingBInfo) func(*testin
 
 		// Run the original benchmark function.
 		var iPfOfB *benchmarkPrivateFields
+		var benchmarkMeta *testExecutionMetadata // for the skip reason that the skip hooks record
 		var recoverFunc *func(r any)
 		instrumentedFunc := func(b *testing.B) {
 			// Stop the timer to perform initialization and replacements.
@@ -1099,6 +1100,7 @@ func (ddm *M) executeInternalBenchmark(benchmarkInfo *testingBInfo) func(*testin
 
 			// Sets the CI Visibility test
 			execMeta.test = test
+			benchmarkMeta = execMeta
 
 			// Bind the context, outside the measurement, then restart the timer
 			// and execute the original benchmark function.
@@ -1158,7 +1160,7 @@ func (ddm *M) executeInternalBenchmark(benchmarkInfo *testingBInfo) func(*testin
 			module.SetTag(ext.Error, true)
 			test.Close(integrations.ResultStatusFail, integrations.WithTestFinishTime(endTime))
 		} else if iPfOfB.B.Skipped() {
-			test.Close(integrations.ResultStatusSkip, integrations.WithTestFinishTime(endTime))
+			closeSkippedBenchmark(test, benchmarkMeta, endTime)
 		} else {
 			test.Close(integrations.ResultStatusPass, integrations.WithTestFinishTime(endTime))
 		}

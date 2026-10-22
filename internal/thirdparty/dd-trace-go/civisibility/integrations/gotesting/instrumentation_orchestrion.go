@@ -503,17 +503,10 @@ func instrumentCloseAndSkip(tb testing.TB, skipReason string) {
 	ciTestItem := getTestMetadata(tb)
 	if ciTestItem != nil && ciTestItem.test != nil && !tb.Failed() && ciTestItem.skipped.CompareAndSwap(0, 1) {
 		log.Debug("instrumentCloseAndSkip: skipping test [name: %q, reason: %q]", ciTestItem.test.Name(), skipReason)
-		// Retry wrappers and deferred fuzz events observe cleanup before closing.
-		// A test's finalization closes it after its deferred calls, which can
-		// still fail it; only a benchmark, without a test identity, closes here.
-		if ciTestItem.hasAdditionalFeatureWrapper || ciTestItem.fuzzEvents != nil || ciTestItem.identity != nil {
-			ciTestItem.skipReason = skipReason
-			return
-		}
-		// A benchmark's execution is its final one.
-		// Set test.final_status before closing.
-		ciTestItem.test.SetTag(constants.TestFinalStatus, constants.TestStatusSkip)
-		ciTestItem.test.Close(integrations.ResultStatusSkip, integrations.WithTestSkipReason(skipReason))
+		// The finalization of a test or benchmark, a retry wrapper or the
+		// deferred fuzz events close it, after the calls that it deferred,
+		// which can still fail it.
+		ciTestItem.skipReason = skipReason
 	}
 }
 
@@ -542,20 +535,9 @@ func instrumentSkipNow(tb testing.TB) {
 			ciTestItem.skipReason = *formatted
 		}
 		log.Debug("instrumentSkipNow: skipping test [name: %q, reason: %q]", ciTestItem.test.Name(), ciTestItem.skipReason)
-		// Retry wrappers and deferred fuzz events observe cleanup before closing.
-		// A test's finalization closes it after its deferred calls, which can
-		// still fail it; only a benchmark, without a test identity, closes here.
-		if ciTestItem.hasAdditionalFeatureWrapper || ciTestItem.fuzzEvents != nil || ciTestItem.identity != nil {
-			return
-		}
-		// A benchmark's execution is its final one.
-		// Set test.final_status before closing.
-		ciTestItem.test.SetTag(constants.TestFinalStatus, constants.TestStatusSkip)
-		if ciTestItem.skipReason != "" {
-			ciTestItem.test.Close(integrations.ResultStatusSkip, integrations.WithTestSkipReason(ciTestItem.skipReason))
-		} else {
-			ciTestItem.test.Close(integrations.ResultStatusSkip)
-		}
+		// The finalization of a test or benchmark, a retry wrapper or the
+		// deferred fuzz events close it, after the calls that it deferred,
+		// which can still fail it.
 	}
 }
 
@@ -630,6 +612,7 @@ func instrumentTestingBFunc(pb *testing.B, name string, f func(*testing.B)) (str
 
 		// Run original benchmark.
 		var iPfOfB *benchmarkPrivateFields
+		var benchmarkMeta *testExecutionMetadata // for the skip reason that the skip hooks record
 		var recoverFunc *func(r any)
 		instrumentedFunc := func(b *testing.B) {
 			// Stop the timer to do the initialization and replacements.
@@ -667,6 +650,7 @@ func instrumentTestingBFunc(pb *testing.B, name string, f func(*testing.B)) (str
 
 			// Set the CI visibility test.
 			execMeta.test = test
+			benchmarkMeta = execMeta
 
 			// Bind the context outside the measurement.
 			bindNativeTestContext(b, test)
@@ -734,7 +718,7 @@ func instrumentTestingBFunc(pb *testing.B, name string, f func(*testing.B)) (str
 			module.SetTag(ext.Error, true)
 			test.Close(integrations.ResultStatusFail, integrations.WithTestFinishTime(endTime))
 		} else if iPfOfB.B.Skipped() {
-			test.Close(integrations.ResultStatusSkip, integrations.WithTestFinishTime(endTime))
+			closeSkippedBenchmark(test, benchmarkMeta, endTime)
 		} else {
 			test.Close(integrations.ResultStatusPass, integrations.WithTestFinishTime(endTime))
 		}
@@ -895,4 +879,15 @@ func subtestModuleName(callbackModuleName string, parentExecMeta *testExecutionM
 		return callbackModuleName
 	}
 	return parentExecMeta.identity.ModuleName
+}
+
+// closeSkippedBenchmark closes a skipped benchmark after its deferred calls,
+// with the reason that the skip hooks recorded in meta.
+func closeSkippedBenchmark(test integrations.Test, meta *testExecutionMetadata, endTime time.Time) {
+	test.SetTag(constants.TestFinalStatus, constants.TestStatusSkip)
+	if meta != nil && meta.skipReason != "" {
+		test.Close(integrations.ResultStatusSkip, integrations.WithTestFinishTime(endTime), integrations.WithTestSkipReason(meta.skipReason))
+		return
+	}
+	test.Close(integrations.ResultStatusSkip, integrations.WithTestFinishTime(endTime))
 }
