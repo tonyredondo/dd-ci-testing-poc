@@ -77,7 +77,11 @@ batch instead of one per test.
 A checkpoint, deferred `Flush` or `Close` sends up to eight test-cycle payloads
 at once and finishes every request before it returns, so the next test starts
 with no CI delivery in flight. Payloads sent together can arrive in any order;
-each keeps its events in order.
+each keeps its events in order. Over TLS, to the Agentless intake or through an
+https proxy, they share one HTTP/2 connection per host, as the SDK client's
+requests do: a connection that each dialed would leave the dials that another
+request made unneeded finishing after the checkpoint, where TLS reads
+`time.Local`. Plain HTTP, as to a local Agent, keeps concurrent connections.
 
 Coverage counter snapshots bracket the initial attempt, including its user
 cleanups and descendants. The final snapshot runs in an early-registered
