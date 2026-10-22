@@ -138,7 +138,9 @@ The minimum supported version is v1.3.0, the first with `IgnoreAnyFunction`;
 v2 needs a separate review. Preparation checks the selected version and entry
 signature before a warm cache can skip compilation. An unsupported version or
 entry produces a warning and the build continues without the integration; its
-leak checks can then report CI workers.
+leak checks can then report CI workers. The entry also ignores the test's own
+goroutine while an Auto Test Retries or Early Flake Detection attempt runs in
+another; a goroutine that the test starts is still reported.
 
 For a replacement with a different module path, the minimum-version check uses
 `go.uber.org/goleak`'s effective original version from `go list`, because a
