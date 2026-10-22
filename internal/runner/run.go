@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -349,6 +350,11 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			if e = provideOlderModuleWorkspace(ctx, dir, &opts, &plan, replacements); e != nil {
 				return plan, e
 			}
+		}
+		// Mini is a main module of the workspace that ddto provides, so go's
+		// work pattern would select its packages too.
+		if plan.Workfile != "" && (slices.Contains(opts.packages, "work") || slices.Contains(opts.coverPatterns, "work")) {
+			return plan, &nativeGoError{"package_pattern=work", errors.New("the work package pattern would include ddto's runtime module")}
 		}
 	}
 	if plan.Workfile != "" && len(replacements) != 0 {

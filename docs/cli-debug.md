@@ -46,6 +46,9 @@ The log records:
   cannot reproduce how `go test` finds or starts it, `instrumentation bypass
   exec_program=unresolved`, `exec_program=unquotable` or `exec_helper=relative`
   follows the warning, and native `go test` runs.
+- The `work` package pattern, also in `-coverpkg`, with a workspace that ddto
+  provides: Mini is one of its main modules, so `instrumentation bypass
+  package_pattern=work` follows the warning, and native `go test` runs.
 - When go rejects the command or its environment while ddto prepares it, as
   with `-p=0`, an unknown flag in `GOFLAGS`, or a missing `-C` directory or
   `-modfile`, `instrumentation bypass go_rejected="<reason>"`, and native

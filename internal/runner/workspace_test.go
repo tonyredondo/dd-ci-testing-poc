@@ -3,6 +3,7 @@ package runner
 import (
 	"archive/zip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -299,4 +300,40 @@ func TestVendorWorkspaceKeepsNativeModuleRoot(t *testing.T) {
 		}
 	}
 	t.Fatalf("native module root %s missing from workspace: %s", strconv.Quote(root), out)
+}
+
+// Mini is a main module of a workspace that ddto provides, where go's work
+// pattern would also select its packages.
+func TestMiniWorkPatternRunsNatively(t *testing.T) {
+	root := t.TempDir()
+	client := filepath.Join(root, "client")
+	if err := os.Mkdir(client, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for file, data := range map[string]string{
+		"go.work":               "go 1.25.0\nuse ./client\n",
+		"client/go.mod":         "module example.com/client\ngo 1.21\n",
+		"client/client_test.go": "package client\n",
+	} {
+		if err := os.WriteFile(filepath.Join(root, file), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("GOWORK", filepath.Join(root, "go.work"))
+	t.Setenv("GOFLAGS", "")
+	for _, args := range [][]string{{"work"}, {"-coverpkg=work", "."}, {"."}} {
+		plan, err := PrepareRuntime(t.Context(), client, args, Mini)
+		if plan.Dir != "" {
+			plan.Release()
+			_ = os.RemoveAll(plan.Dir)
+		}
+		var native *nativeGoError
+		bypassed := errors.As(err, &native) && native.bypass == "package_pattern=work"
+		if want := args[0] != "."; bypassed != want {
+			t.Fatalf("%q: bypass=%t, want %t: %v", args, bypassed, want, err)
+		}
+		if !bypassed && err != nil {
+			t.Fatalf("%q: %v", args, err)
+		}
+	}
 }
