@@ -948,7 +948,14 @@ func GetBaseBranchSha(defaultBranch string) (string, error) {
 		// Step 2b - we have git.pull_request.base_branch
 		log.Debug("civisibility.git: using git.pull_request.base_branch from CI: %s", gitPrBaseBranch)
 		checkAndFetchBranch(gitPrBaseBranch, remoteName)
-		candidateBranches = []string{gitPrBaseBranch}
+		// The fetch updates the remote-tracking ref: a pull request's checkout
+		// usually has no local branch of that name. Without telemetry, so git
+		// metrics stay those of the SDK.
+		candidate := gitPrBaseBranch
+		if _, err := execGitString(telemetry.NotSpecifiedCommandsType, "show-ref", "--verify", "--quiet", "refs/remotes/"+remoteName+"/"+gitPrBaseBranch); err == nil {
+			candidate = remoteName + "/" + gitPrBaseBranch
+		}
+		candidateBranches = []string{candidate}
 	} else {
 		// Step 2a - we don't have git.pull_request.base_branch
 		// Fetch all possible base branches from remote

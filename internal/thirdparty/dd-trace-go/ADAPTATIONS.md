@@ -702,6 +702,13 @@ oracle on a second clone of the same remote must leave the same refs and base
 SHA) and `TestCheckAndFetchBranchFetchesPullRequestBase` run real git against
 a `file://` remote. `TestGitRecorderHelperProcess` records the commands.
 
+With `git.pull_request.base_branch`, the SDK passes the bare branch name to
+`git merge-base`, which finds only a local branch: a pull request's checkout,
+as GitHub Actions makes it, has the base only as `origin/<base>`, so the base
+SHA was not found and impacted-test detection found no modified files. Here
+the candidate is `<remote>/<base>` when that remote-tracking ref exists,
+checked without telemetry. Check: `TestGetBaseBranchShaUsesRemotePullRequestBase`.
+
 ## Pull-request head commit
 
 Upstream `fetchCommitData` in [`civisibility/utils/git.go`](civisibility/utils/git.go)
