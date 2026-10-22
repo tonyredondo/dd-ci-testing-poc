@@ -1417,7 +1417,13 @@ func runGo(ctx context.Context, dir string, args, envOverrides []string, signals
 			return 2
 		case s := <-signals:
 			debug.printf("forwarding signal to go test")
-			_ = cmd.Process.Signal(s)
+			if errors.Is(cmd.Process.Signal(s), os.ErrProcessDone) {
+				// go test had exited, as runGo waited for its output: the
+				// signal ends ddto, as one after runGo returns does.
+				<-done
+				debug.printf("signal %q arrived after go test ended", s.String())
+				return interruptedStatus(s)
+			}
 		case <-canceled:
 			debug.printf("go test context canceled; interrupting")
 			canceled = nil

@@ -130,3 +130,27 @@ func TestStatusAfterSignal(t *testing.T) {
 		t.Fatalf("after an interrupt: %d; want %d", got, want)
 	}
 }
+
+// A signal that arrives after go test exited, while runGo still waits for its
+// output, as from a process that it left running, ends ddto with the signal,
+// as one after runGo returns does.
+func TestRunGoSignalAfterGoTestExited(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "exited")
+	fakeGo(t, "(sleep 3) &\ntouch "+marker+"\nexit 0\n")
+	signals := make(chan os.Signal, 1)
+	go func() {
+		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+			if _, err := os.Stat(marker); err == nil {
+				// go test has exited, and runGo reaped it; its output
+				// stays open in sleep.
+				time.Sleep(time.Second)
+				signals <- syscall.SIGTERM
+				return
+			}
+		}
+	}()
+	var stdout bytes.Buffer
+	if got, want := runGo(t.Context(), t.TempDir(), []string{"test"}, nil, signals, nil, &stdout, io.Discard), interruptedStatus(syscall.SIGTERM); got != want {
+		t.Fatalf("exit %d, want %d", got, want)
+	}
+}
