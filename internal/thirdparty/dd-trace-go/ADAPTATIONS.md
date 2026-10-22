@@ -867,6 +867,15 @@ instrumented, as well as its wrapper: in a table such as
 event. Only the wrapper is marked here; the inner `b.Run` that the measuring
 level makes still finds it. Check: `TestMiniSubBenchmarksSharingACallback`.
 
+## Logs without a client
+
+`newLogsWriter` in `integrations/logs/logs_writer.go` built a writer around
+`net.NewClientForLogs()`, which is nil in agentless mode without an API key:
+with `DD_CIVISIBILITY_LOGS_ENABLED`, the first payload's send dereferenced nil
+and a passing test process ended with a panic. Without a client there is no
+writer, so logs are not sent, as no other event is. Check:
+`TestLogsWriterWithoutClient`.
+
 ## Long log lines
 
 `collectAndWriteLogs` in `gotesting/testing.go` reads a test's output with

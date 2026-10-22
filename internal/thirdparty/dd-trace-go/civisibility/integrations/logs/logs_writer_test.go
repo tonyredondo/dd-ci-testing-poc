@@ -290,3 +290,13 @@ func (m *MockClient) GetTestManagementTests() (*net.TestManagementTestsResponseD
 func (m *MockClient) SendLogs(logsPayload io.Reader) error {
 	return m.SendLogsFunc(logsPayload)
 }
+
+// Agentless mode without an API key has no client: there is no writer, whose
+// sends would dereference nil and fail a passing test process.
+func TestLogsWriterWithoutClient(t *testing.T) {
+	t.Setenv("DD_CIVISIBILITY_AGENTLESS_ENABLED", "true")
+	t.Setenv("DD_API_KEY", "")
+	if writer := newLogsWriter(); writer != nil {
+		t.Fatalf("writer without a client: %+v", writer)
+	}
+}

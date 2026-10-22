@@ -42,8 +42,15 @@ type logsWriter struct {
 // newLogsWriter creates a new instance of logsWriter.
 func newLogsWriter() *logsWriter {
 	log.Debug("logsWriter: creating logs writer instance")
+	// Without a client, as in agentless mode without an API key, which the
+	// client reports, there is no writer: sending would dereference nil.
+	client := net.NewClientForLogs()
+	if client == nil {
+		log.Debug("logsWriter: no logs client, logs are not sent")
+		return nil
+	}
 	writer := &logsWriter{
-		client:   net.NewClientForLogs(),
+		client:   client,
 		payload:  newLogsPayload(),
 		climit:   make(chan struct{}, concurrentConnectionLimit),
 		deferred: cidelivery.Enabled(),
