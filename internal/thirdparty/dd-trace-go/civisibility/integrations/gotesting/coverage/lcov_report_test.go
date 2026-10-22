@@ -224,6 +224,31 @@ github.com/acme/project/services/api/handler.go:1.1,2.1 1 1
 	}
 }
 
+// A directory of the module whose name has a dot, as api.v2, keeps its files:
+// only paths that the module does not resolve are filtered that way.
+func TestWriteLCOVReportFromProfileKeepsDottedModuleDirectories(t *testing.T) {
+	ResetForTesting()
+	civisibilityutils.ResetCITags()
+	t.Cleanup(func() {
+		ResetForTesting()
+		civisibilityutils.ResetCITags()
+	})
+
+	modulePath = "github.com/acme/project"
+	moduleDir = t.TempDir()
+	profilePath := writeLCOVTestProfile(t, `mode: count
+github.com/acme/project/api.v2/routes.go:3.1,4.1 1 1
+`)
+
+	var report bytes.Buffer
+	if err := WriteLCOVReportFromProfile(profilePath, &report); err != nil {
+		t.Fatalf("WriteLCOVReportFromProfile() error = %v", err)
+	}
+	if want := "SF:api.v2/routes.go\nDA:3,1\nLH:1\nLF:1\nend_of_record\n"; report.String() != want {
+		t.Fatalf("unexpected LCOV report\nwant:\n%s\ngot:\n%s", want, report.String())
+	}
+}
+
 func TestWriteLCOVReportFromProfileIncludesProfileWithoutExecutableStatements(t *testing.T) {
 	profilePath := writeLCOVTestProfile(t, `mode: count
 ignored.go:1.1,3.1 0 1

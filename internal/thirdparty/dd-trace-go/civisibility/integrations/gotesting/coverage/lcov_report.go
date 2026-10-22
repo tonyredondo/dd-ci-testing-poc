@@ -126,7 +126,9 @@ func lcovEffectiveEndLine(block *coverageBlock) int {
 // lcovSourceFilePath returns the repository-relative source path to emit in the
 // LCOV report, falling back through CI tags and the original profile path.
 func lcovSourceFilePath(profileFile string) string {
-	if fileName := lcovModuleSourceFilePath(profileFile); isLCOVRepositoryRelativePath(fileName) {
+	// A path resolved within the module is the repository's, even when its
+	// first directory has a dot, as api.v2.
+	if fileName := lcovModuleSourceFilePath(profileFile); isLCOVResolvedPath(fileName) {
 		return fileName
 	}
 	if resolved := cleanLCOVSourcePath(utils.ResolveSourceFilePathFromCITags(profileFile).RelativePath); isLCOVRepositoryRelativePath(resolved) {
@@ -188,13 +190,18 @@ func cleanLCOVSourcePath(fileName string) string {
 	return strings.TrimPrefix(fileName, "./")
 }
 
-// isLCOVRepositoryRelativePath rejects absolute, parent-directory, and likely
-// module-cache paths so uploaded reports only reference repository files.
-func isLCOVRepositoryRelativePath(fileName string) bool {
+// isLCOVResolvedPath rejects absolute and parent-directory paths.
+func isLCOVResolvedPath(fileName string) bool {
 	if fileName == "" || path.IsAbs(fileName) || strings.Contains(fileName, ":") {
 		return false
 	}
-	if fileName == ".." || strings.HasPrefix(fileName, "../") {
+	return fileName != ".." && !strings.HasPrefix(fileName, "../")
+}
+
+// isLCOVRepositoryRelativePath rejects absolute, parent-directory, and likely
+// module-cache paths so uploaded reports only reference repository files.
+func isLCOVRepositoryRelativePath(fileName string) bool {
+	if !isLCOVResolvedPath(fileName) {
 		return false
 	}
 	firstSegment, _, hasSlash := strings.Cut(fileName, "/")

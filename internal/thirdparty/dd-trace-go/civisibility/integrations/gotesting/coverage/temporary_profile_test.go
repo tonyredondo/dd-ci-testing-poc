@@ -9,6 +9,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -51,4 +52,24 @@ func TestSetTemporaryCoverProfile(t *testing.T) {
 		t.Fatalf("the profile starts empty: %v", err)
 	}
 	flags.Visit(func(f *flag.Flag) { t.Fatalf("flag.Visit reports %s", f.Name) })
+}
+
+// The directory of coverage captures stays where it was created when a test
+// changes the working directory, also with a relative TMPDIR.
+func TestCoverageTempDirectoryIsAbsolute(t *testing.T) {
+	base := t.TempDir()
+	t.Chdir(base)
+	t.Setenv("TMPDIR", "tmp")
+	t.Setenv("TMP", "tmp")
+	t.Setenv("TEMP", "tmp")
+	if err := os.Mkdir("tmp", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := mkdirCoverageTemp()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !filepath.IsAbs(dir) || !strings.HasPrefix(dir, filepath.Join(base, "tmp")) {
+		t.Fatalf("coverage directory %q", dir)
+	}
 }

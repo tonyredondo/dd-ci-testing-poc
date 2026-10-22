@@ -188,8 +188,14 @@ which fails without the change. The Testify parity tests drop the pinned SDK's r
 
 With `-test.list`, testing runs no test and writes no profile, so a file at
 `-test.coverprofile` is an earlier run's: the session reports no coverage then,
-instead of that file's percentage and LCOV. Check:
-`TestRuntimeCoverageSnapshotIgnoresProfileWhenListing`.
+instead of that file's percentage and LCOV, nor `testing.Coverage()`'s, which
+counts only package initialization (`finalizeITRCoverageBackfill` returns no
+publication). Checks: `TestRuntimeCoverageSnapshotIgnoresProfileWhenListing`,
+`TestNoSessionCoverageWhenListing`.
+
+The directory of per-test coverage captures is created by an absolute path
+(`mkdirCoverageTemp`): with a relative `TMPDIR`, a test's `os.Chdir` moved the
+captures and left the directory behind. Check: `TestCoverageTempDirectoryIsAbsolute`.
 
 ## Per-test profile subtraction
 
@@ -840,6 +846,9 @@ alone, so the files of a nested module, such as `services/api` with module
 `github.com/acme/project/services/api`, were reported as `handler.go`. Here the
 module directory relative to the CI workspace comes first, when the module
 lies inside it. Check: `TestWriteLCOVReportFromProfileUsesNestedModuleDirectory`.
+A path that the module resolves skips the filter for unresolved import paths,
+which dropped a directory whose name has a dot, such as `api.v2`. Check:
+`TestWriteLCOVReportFromProfileKeepsDottedModuleDirectories`.
 
 ## Benchmark context outside the measurement
 

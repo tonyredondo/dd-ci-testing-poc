@@ -232,7 +232,7 @@ func InitializeCoverage(m *testing.M, uploadEnabled bool) {
 	})
 
 	// create a temporary directory to store coverage files
-	temporaryDir, err = os.MkdirTemp("", "coverage")
+	temporaryDir, err = mkdirCoverageTemp()
 	if err != nil {
 		log.Debug("civisibility.cov: error creating temporary directory: %s", err.Error())
 	} else {
@@ -452,6 +452,10 @@ func setTemporaryCoverProfile(value flag.Value) (string, error) {
 	return path, nil
 }
 
+// ListingTests reports whether -test.list makes testing list names instead of
+// running tests: the session then has no coverage.
+func ListingTests() bool { return listingTests() }
+
 // listingTests reports whether -test.list makes testing list names instead of
 // running tests.
 func listingTests() bool {
@@ -466,11 +470,21 @@ func currentCoverProfilePath() string {
 	return ""
 }
 
+// mkdirCoverageTemp creates the directory of coverage captures by an absolute
+// path: a relative TMPDIR would follow a test's os.Chdir.
+func mkdirCoverageTemp() (string, error) {
+	parent, err := filepath.Abs(os.TempDir())
+	if err != nil {
+		return "", err
+	}
+	return os.MkdirTemp(parent, "coverage")
+}
+
 func ensureTemporaryDirLocked() error {
 	if temporaryDir != "" {
 		return nil
 	}
-	dir, err := os.MkdirTemp("", "coverage")
+	dir, err := mkdirCoverageTemp()
 	if err != nil {
 		return err
 	}
