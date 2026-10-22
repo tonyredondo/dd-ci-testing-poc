@@ -1032,8 +1032,9 @@ set the panic handler only after `b.Run` returned, and replaced the wrapper
 with the original function for the later runs: a panic in any run closed no
 event and lost the process's buffered ones. The handler is now defined before
 the benchmark runs, and the later runs use `recoveringBenchmarkFunc`
-(`gotesting/testingB.go`), which handles a panic and panics again. Check: the
-`benchmark` cases of `TestMiniCrashKeepsEvents`.
+(`gotesting/testingB.go`), which handles a panic and panics again. The
+handler marks the event as a benchmark's first, which `SetBenchmarkData` did
+only after the run. Check: the `benchmark` cases of `TestMiniCrashKeepsEvents`.
 
 ## Benchmarks that TestMain selects
 
@@ -2095,7 +2096,9 @@ the session from ddto's process. It initializes only the CI tags, in go test's
 directory, which `-C` can move from ddto's, from the Git worker's record of the
 checkout when there is one, and otherwise with git commands that have ten
 seconds in all, so a fetch that hangs does not keep ddto from exiting, with the
-test processes' runtime version, and the tracer, with the bootstrap's service rules
+test processes' runtime version and architecture (`CLISessionEnd.GOARCH`, which
+ddto's own can differ from, as under Rosetta), and the tracer, with the
+bootstrap's service rules
 (`ciVisibilityService`): no settings, Git upload, signal handler, logs or
 telemetry. The
 session starts with ddto, ends when go test exits, and has go test's exit code

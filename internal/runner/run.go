@@ -1099,7 +1099,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 	if gitWorker != nil {
 		gitState = gitWorker.state
 	}
-	session.finish(ctx, exitCode, plan.goVersion, coverage, gitState)
+	session.finish(ctx, exitCode, plan.goVersion, plan.tests.GOARCH, coverage, gitState)
 	// The worker can still wait for its upload, which a signal stops: that
 	// signal ends ddto too.
 	gitWorker.finish()

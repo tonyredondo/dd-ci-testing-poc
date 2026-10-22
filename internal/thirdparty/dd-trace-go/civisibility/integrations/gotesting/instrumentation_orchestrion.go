@@ -621,6 +621,8 @@ func instrumentTestingBFunc(pb *testing.B, name string, f func(*testing.B)) (str
 		// one, recover a panic with it before panicking again.
 		panicFunc := func(r any) {
 			if test != nil {
+				// Without results, the event is still a benchmark's.
+				test.SetBenchmarkData("duration", nil)
 				test.SetError(integrations.WithErrorInfo("panic", fmt.Sprint(r), utils.GetStacktrace(1)))
 				test.Close(integrations.ResultStatusFail)
 			}

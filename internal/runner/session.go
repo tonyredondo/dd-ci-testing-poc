@@ -110,7 +110,7 @@ func (s *testSession) handoff() string { return goenv.TestSessionHandoff + "=" +
 
 // finish sends the session once go test has exited with exitCode, and
 // removes its directory, or keeps it with --keep-ci-state.
-func (s *testSession) finish(ctx context.Context, exitCode int, goVersion string, coverage *float64, gitState string) {
+func (s *testSession) finish(ctx context.Context, exitCode int, goVersion, goarch string, coverage *float64, gitState string) {
 	if s == nil {
 		return
 	}
@@ -118,7 +118,7 @@ func (s *testSession) finish(ctx context.Context, exitCode int, goVersion string
 	finished := time.Now()
 	phase := debug.start("test session")
 	summary, err := integrations.FinishCLISession(integrations.CLISessionEnd{
-		Dir: s.dir, Session: s.session, Start: s.start, Finish: finished, ExitCode: exitCode, GoVersion: goVersion, Coverage: coverage, GitState: gitState,
+		Dir: s.dir, Session: s.session, Start: s.start, Finish: finished, ExitCode: exitCode, GoVersion: goVersion, GOARCH: goarch, Coverage: coverage, GitState: gitState,
 	})
 	phase.finish(err)
 	debug.printf("test session sent=%t processes=%d closed=%d crashed=%d recreated=%d exit_code=%d", summary.Sent, summary.Processes, summary.Closed, summary.Crashed, summary.Recreated, exitCode)

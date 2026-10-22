@@ -1060,6 +1060,8 @@ func (ddm *M) executeInternalBenchmark(benchmarkInfo *testingBInfo) func(*testin
 		// Defined before the benchmark runs: its first run, and each later
 		// one, recover a panic with it before panicking again.
 		panicFunc := func(r any) {
+			// Without results, the event is still a benchmark's.
+			test.SetBenchmarkData("duration", nil)
 			test.SetError(integrations.WithErrorInfo("panic", fmt.Sprint(r), utils.GetStacktrace(1)))
 			suite.SetTag(ext.Error, true)
 			module.SetTag(ext.Error, true)

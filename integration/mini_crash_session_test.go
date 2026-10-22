@@ -174,6 +174,14 @@ func FuzzSeeds(f *testing.F) {
 			if !strings.HasPrefix(got.testErrors["TestCrash"], tc.testError) || !strings.Contains(got.sessionError, tc.sessionError) {
 				t.Fatalf("TestCrash error %q, want %q; session error %q, want %q\n%s", got.testErrors["TestCrash"], tc.testError, got.sessionError, tc.sessionError, stderr)
 			}
+			// A benchmark that panicked is still a benchmark.
+			for _, event := range got.events {
+				content, _ := event["content"].(map[string]any)
+				meta, _ := content["meta"].(map[string]any)
+				if name := fmt.Sprint(meta["test.name"]); event["type"] == "test" && strings.HasPrefix(name, "Benchmark") && meta["test.type"] != "benchmark" {
+					t.Errorf("%s test.type=%v", name, meta["test.type"])
+				}
+			}
 			// The debug log explains how the process ended.
 			for _, line := range []string{"test session owned=true", "test session sent=true"} {
 				if !strings.Contains(out+stderr, line) {
