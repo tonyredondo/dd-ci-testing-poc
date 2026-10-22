@@ -93,7 +93,6 @@ func ParseCLIArgs(args []string) (CLIOptions, []string, error) {
 			args = args[1:]
 			continue
 		}
-		inPackages = false
 		name, value, hasValue := strings.Cut(strings.TrimPrefix(strings.TrimPrefix(arg, "-"), "-"), "=")
 		if strings.HasPrefix(arg, "--") && (name == "runtime" || name == "git-upload-timeout") {
 			width := 1
@@ -133,6 +132,8 @@ func ParseCLIArgs(args []string) (CLIOptions, []string, error) {
 			args = args[1:]
 			continue
 		}
+		// Only a flag that go test receives ends the package list.
+		inPackages = false
 		width := 1
 		_, spec, known := lookupFlag(name)
 		if !known || arg == "--" {

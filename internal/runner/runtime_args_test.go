@@ -83,6 +83,7 @@ func TestParseCLIArgsUploadTimeoutAndCIState(t *testing.T) {
 		{"test binary arguments", []string{".", "-v", "operand", "--runtime=container"}, []string{".", "-v", "operand", "--runtime=container"}, CLIOptions{Runtime: Mini, GitUploadTimeout: time.Minute}},
 		{"several packages", []string{"./a", "./b", "--runtime=sdk", "-v"}, []string{"./a", "./b", "-v"}, CLIOptions{Runtime: SDK, GitUploadTimeout: time.Minute}},
 		{"flag value after the packages", []string{".", "-run", "TestX", "--panic-hook"}, []string{".", "-run", "TestX"}, CLIOptions{Runtime: Mini, GitUploadTimeout: time.Minute, PanicHook: true}},
+		{"ddto options among the packages", []string{"./a", "--runtime=mini", "./b", "--panic-hook"}, []string{"./a", "./b"}, CLIOptions{Runtime: Mini, GitUploadTimeout: time.Minute, PanicHook: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			options, got, err := ParseCLIArgs(tc.args)
