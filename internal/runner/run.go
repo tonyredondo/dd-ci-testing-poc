@@ -580,7 +580,11 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	runtimeImports := graph.imported(selectedRuntime)
 	internalImports := 0
 	for _, p := range packages {
-		if p.ImportPath == "testing" || p.ImportPath == runtimePackage || len(p.TestGoFiles)+len(p.XTestGoFiles) == 0 {
+		// ddto lists testing itself; only the caller's patterns select its tests.
+		selectedTesting := p.ImportPath == "testing" && slices.ContainsFunc(opts.packages, func(pattern string) bool {
+			return matchPackagePattern(pattern, dir, &p)
+		})
+		if !selectedTesting && (p.ImportPath == "testing" || p.ImportPath == runtimePackage || len(p.TestGoFiles)+len(p.XTestGoFiles) == 0) {
 			continue
 		}
 		if p.Module == nil {

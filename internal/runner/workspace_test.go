@@ -355,6 +355,8 @@ func TestMiniStandardLibraryTestsRunNatively(t *testing.T) {
 		args []string
 	}{
 		{"off", []string{"errors"}},
+		// ddto lists testing for every run; selected, its tests run natively.
+		{"off", []string{"testing"}},
 		// A workspace that ddto provides makes Mini a main module, whose
 		// standard dependencies all then selects.
 		{"workspace", []string{"all"}},
