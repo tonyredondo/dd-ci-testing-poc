@@ -55,6 +55,10 @@ The log records:
 - Outside a Go module, where ddto cannot provide its runtime:
   `instrumentation bypass no_module` follows the warning, and native `go test`
   runs, which reports what it cannot run there.
+- A module whose vendor directory go selects but that does not vendor the
+  runtime, including a vendor directory without `modules.txt`:
+  `instrumentation bypass vendor_without_runtime` follows the warning, which
+  says how to vendor it, and native `go test` runs.
 - When go rejects the command or its environment while ddto prepares it, as
   with `-p=0`, an unknown flag in `GOFLAGS`, a missing `-C` directory or
   `-modfile`, or an `-overlay` file that go cannot read or parse,

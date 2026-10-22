@@ -119,7 +119,9 @@ func provideRuntime(ctx context.Context, dir string, opts options, selected Runt
 	// a workspace manifest is ignored outside workspace mode, as with go test.
 	data, _ := readModuleFile(source, replacements)
 	if goSelectsVendor(opts.mod, moduleDirective(data, "go"), filepath.Join(filepath.Dir(environment.GOMOD), "vendor"), false, replacements) {
-		return "", errors.New("the module vendors its dependencies: require the runtime with a tools file and run go mod vendor")
+		// As for a vendor directory without modules.txt, which go reads as
+		// empty: go test runs natively.
+		return "", &nativeGoError{"vendor_without_runtime", errors.New("the module vendors its dependencies: require the runtime with a tools file and run go mod vendor")}
 	}
 	modfile := filepath.Join(temp, "go.mod")
 	if err := copyModuleFile(source, modfile, replacements); err != nil {

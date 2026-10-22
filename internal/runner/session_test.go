@@ -98,6 +98,12 @@ func TestStartTestSessionRefusals(t *testing.T) {
 		t.Error("CI Visibility disabled: owned the session")
 	}
 	t.Setenv("DD_CIVISIBILITY_ENABLED", "true")
+	// A relative TMPDIR still gives the session an absolute directory, which
+	// test processes in other directories read.
+	t.Chdir(t.TempDir())
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, ".")
+	}
 	session, refusal := startTestSession(mini, options{}, Plan{}, t.TempDir(), timeZero, os.Stderr)
 	if session == nil {
 		t.Fatalf("not owned: %s", refusal)

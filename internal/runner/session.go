@@ -70,6 +70,11 @@ func startTestSession(cli CLIOptions, opts options, plan Plan, dir string, start
 	if err != nil {
 		return nil, err.Error()
 	}
+	// Test processes start in their packages' directories: a relative TMPDIR
+	// would name another directory there.
+	if absolute, err := filepath.Abs(sessionDir); err == nil {
+		sessionDir = absolute
+	}
 	s := &testSession{
 		dir:     sessionDir,
 		session: utils.CLISession{ID: identity.SpanID, Command: utils.TestCommand(os.Args), WorkingDirectory: dir},

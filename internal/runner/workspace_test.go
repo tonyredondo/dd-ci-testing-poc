@@ -340,6 +340,11 @@ func TestMiniWorkPatternRunsNatively(t *testing.T) {
 
 // Standard library tests, as go test fmt or all selects them, run natively.
 func TestMiniStandardLibraryTestsRunNatively(t *testing.T) {
+	out, err := exec.Command("go", "env", "GOROOT").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	goroot := strings.TrimSpace(string(out))
 	root := t.TempDir()
 	for file, data := range map[string]string{
 		"go.mod":         "module example.com/client\ngo 1.21\n",
@@ -357,6 +362,7 @@ func TestMiniStandardLibraryTestsRunNatively(t *testing.T) {
 		{"off", []string{"errors"}},
 		// ddto lists testing for every run; selected, its tests run natively.
 		{"off", []string{"testing"}},
+		{"off", []string{filepath.Join(goroot, "src", "testing")}},
 		// A workspace that ddto provides makes Mini a main module, whose
 		// standard dependencies all then selects.
 		{"workspace", []string{"all"}},
@@ -422,5 +428,54 @@ func TestMiniRelativeTemporaryDirectory(t *testing.T) {
 	}
 	if err != nil || !filepath.IsAbs(plan.Dir) {
 		t.Fatalf("plan directory %q: %v", plan.Dir, err)
+	}
+}
+
+// A vendor directory without modules.txt, which go reads as empty, and
+// another vendored module without the runtime run natively; an overlay with
+// two spellings of one path is go's error, which go test reports.
+func TestMiniVendorWithoutRuntimeAndDuplicateOverlay(t *testing.T) {
+	root := t.TempDir()
+	for file, data := range map[string]string{
+		"go.mod":         "module example.com/client\ngo 1.25.0\n",
+		"client.go":      "package client\n",
+		"client_test.go": "package client\n",
+		"vendor/.keep":   "",
+		"_a.go":          "package client\n",
+		"_b.go":          "package client\n",
+		"overlay.json":   `{"Replace":{"client.go":"_a.go","./client.go":"_b.go"}}`,
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, file)), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, file), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("GOWORK", "off")
+	t.Setenv("GOFLAGS", "")
+	prepare := func(args ...string) error {
+		plan, err := PrepareRuntime(t.Context(), root, args, Mini)
+		if plan.Dir != "" {
+			plan.Release()
+			_ = os.RemoveAll(plan.Dir)
+		}
+		return err
+	}
+	var native *nativeGoError
+	if err := prepare("-mod=vendor", "."); !errors.As(err, &native) || native.bypass != "vendor_without_runtime" {
+		t.Errorf("vendor without modules.txt: %v; want the vendor_without_runtime bypass", err)
+	}
+	// A client older than Go 1.25 gets a workspace whose overlay ddto writes,
+	// so go itself would not see the duplicate.
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/client\ngo 1.21\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(root, "vendor")); err != nil {
+		t.Fatal(err)
+	}
+	var rejected *goRejectedError
+	if err := prepare("-overlay=overlay.json", "."); !errors.As(err, &rejected) {
+		t.Errorf("duplicate overlay paths: %v; want go's rejection", err)
 	}
 }

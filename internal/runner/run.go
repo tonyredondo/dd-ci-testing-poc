@@ -253,7 +253,14 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			if to != "" {
 				to = overlayPath(dir, to)
 			}
-			replacements[filepath.Clean(overlayPath(dir, from))] = to
+			key := filepath.Clean(overlayPath(dir, from))
+			if _, duplicate := replacements[key]; duplicate {
+				// go rejects two spellings of one path; go test reports it.
+				err := &goRejectedError{fmt.Errorf("duplicate paths %s in overlay map", key)}
+				phase.finish(err)
+				return plan, err
+			}
+			replacements[key] = to
 		}
 		phase.finish(nil)
 		debug.printf("user overlay entries=%d", len(replacements))
@@ -594,7 +601,8 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	for _, p := range packages {
 		// ddto lists testing itself; only the caller's patterns select its tests.
 		selectedTesting := p.ImportPath == "testing" && slices.ContainsFunc(opts.packages, func(pattern string) bool {
-			return matchPackagePattern(pattern, dir, &p)
+			// A directory path, as $GOROOT/src/testing, names it too.
+			return matchPackagePattern(pattern, dir, &p) || filepath.IsAbs(pattern) && filepath.Clean(pattern) == p.Dir
 		})
 		if !selectedTesting && (p.ImportPath == "testing" || p.ImportPath == runtimePackage || len(p.TestGoFiles)+len(p.XTestGoFiles) == 0) {
 			continue
