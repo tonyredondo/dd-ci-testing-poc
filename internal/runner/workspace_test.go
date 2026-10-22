@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -407,8 +408,13 @@ func TestMiniOutsideAModuleRunsNatively(t *testing.T) {
 // A relative TMPDIR still gives the plan an absolute directory, which its
 // temporary go.work needs.
 func TestMiniRelativeTemporaryDirectory(t *testing.T) {
-	// The module sits below the temporary directory: on Windows, go ignores a
-	// go.mod in the system temp root itself.
+	if runtime.GOOS == "windows" {
+		// os.TempDir resolves a relative TMP from each process's directory
+		// there, so go's own commands, which run in the module, take the
+		// module as the system temp root and ignore its go.mod, under native
+		// go test too. Elsewhere it stays relative, which ddto resolves.
+		t.Skip("a relative TMP on Windows names each process's directory")
+	}
 	root := t.TempDir()
 	module := filepath.Join(root, "client")
 	if err := os.Mkdir(module, 0700); err != nil {
