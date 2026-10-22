@@ -822,6 +822,14 @@ remote URL can hold a job token, which `git ls-remote --get-url` prints.
 Checks: `TestCIClientDoesNotFollowRedirects`, `TestLogURL` and
 `TestGitDebugLinesHideRemoteCredentials`.
 
+## Sub-benchmarks sharing a callback
+
+`instrumentTestingBFunc` marked the original callback of a sub-benchmark as
+instrumented, as well as its wrapper: in a table such as
+`b.Run("a", work); b.Run("b", work)`, only the first sub-benchmark had an
+event. Only the wrapper is marked here; the inner `b.Run` that the measuring
+level makes still finds it. Check: `TestMiniSubBenchmarksSharingACallback`.
+
 ## Long log lines
 
 `collectAndWriteLogs` in `gotesting/testing.go` reads a test's output with

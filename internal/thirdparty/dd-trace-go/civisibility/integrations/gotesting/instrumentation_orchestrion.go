@@ -737,7 +737,8 @@ func instrumentTestingBFunc(pb *testing.B, name string, f func(*testing.B)) (str
 
 		checkModuleAndSuite(module, suite)
 	}
-	setCiVisibilityBenchmarkFunc(originalFunc)
+	// Only the wrapper is marked: the same callback may run again as another
+	// sub-benchmark, as in a table or with -count, and needs its own event.
 	setCiVisibilityBenchmarkFunc(runtime.FuncForPC(reflect.Indirect(reflect.ValueOf(instrumentedFunc)).Pointer()))
 	return subBenchmarkAutoName, instrumentedFunc
 }
