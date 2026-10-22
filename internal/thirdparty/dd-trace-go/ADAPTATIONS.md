@@ -841,6 +841,15 @@ alone, so the files of a nested module, such as `services/api` with module
 module directory relative to the CI workspace comes first, when the module
 lies inside it. Check: `TestWriteLCOVReportFromProfileUsesNestedModuleDirectory`.
 
+## Skips after a failure
+
+`instrumentCloseAndSkip` and `instrumentSkipNow` in
+`gotesting/instrumentation_orchestrion.go` closed a test as skipped when it
+called `t.Skip` or `t.SkipNow`, also after `t.Error`: testing reports such a
+test as failed. A test that has already failed is left to its normal
+finalization, which closes it as failed. Check:
+`TestMiniSkipAfterFailureReportsFailure`.
+
 ## Sub-benchmarks sharing a callback
 
 `instrumentTestingBFunc` marked the original callback of a sub-benchmark as

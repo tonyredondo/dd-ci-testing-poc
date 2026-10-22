@@ -501,7 +501,7 @@ func instrumentCloseAndSkip(tb testing.TB, skipReason string) {
 
 	// Get the CI Visibility span and check if we can mark it as skipped and close it
 	ciTestItem := getTestMetadata(tb)
-	if ciTestItem != nil && ciTestItem.test != nil && ciTestItem.skipped.CompareAndSwap(0, 1) {
+	if ciTestItem != nil && ciTestItem.test != nil && !tb.Failed() && ciTestItem.skipped.CompareAndSwap(0, 1) {
 		log.Debug("instrumentCloseAndSkip: skipping test [name: %q, reason: %q]", ciTestItem.test.Name(), skipReason)
 		// Retry wrappers and deferred fuzz events observe cleanup before closing.
 		if ciTestItem.hasAdditionalFeatureWrapper || ciTestItem.fuzzEvents != nil {
@@ -535,7 +535,7 @@ func instrumentSkipNow(tb testing.TB) {
 
 	// Get the CI Visibility span and check if we can mark it as skipped and close it
 	ciTestItem := getTestMetadata(tb)
-	if ciTestItem != nil && ciTestItem.test != nil && ciTestItem.skipped.CompareAndSwap(0, 1) {
+	if ciTestItem != nil && ciTestItem.test != nil && !tb.Failed() && ciTestItem.skipped.CompareAndSwap(0, 1) {
 		if formatted := ciTestItem.processRetrySkipReason.Load(); formatted != nil {
 			ciTestItem.skipReason = *formatted
 		}
