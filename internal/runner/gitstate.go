@@ -496,8 +496,10 @@ func (w *gitWorker) relaySignals(signals <-chan os.Signal) <-chan os.Signal {
 	relayed := make(chan os.Signal, cap(signals))
 	go func() {
 		for s := range signals {
-			w.stop("signal")
+			// Relayed first: once the stop ends finish's wait, RunRuntime
+			// looks for the signal.
 			relayed <- s
+			w.stop("signal")
 		}
 	}()
 	return relayed

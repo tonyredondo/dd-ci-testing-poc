@@ -280,6 +280,7 @@
         "TestMiniCLIStateGivesModuleToCoverage",
         "TestMiniGOROOTMirrorToolchainSwitch",
         "TestMiniGitWorkerStopsOnInterrupt",
+        "TestMiniSignalDuringWorkerWaitEndsDDTO",
         "TestMiniSignalsKeepGoTestBehavior",
         "TestToolWrapperWaitStopsOnSignal"
       ],
@@ -291,6 +292,7 @@
       "cli": [
         "TestMiniCLIStateGivesModuleToCoverage",
         "TestMiniGitWorkerStopsOnInterrupt",
+        "TestMiniSignalDuringWorkerWaitEndsDDTO",
         "TestMiniSignalsKeepGoTestBehavior",
         "TestToolWrapperWaitStopsOnSignal"
       ],

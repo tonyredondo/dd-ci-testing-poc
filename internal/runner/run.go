@@ -952,7 +952,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 	}
 	gitHubJobID := handGitHubJobID(runtime, debug)
 	gitWorker := startGitWorker(cli, opts, dir, debug, stderr)
-	defer gitWorker.finish()
+	defer func() { gitWorker.finish() }()
 	if gitWorker == nil && cli.KeepCIState {
 		fmt.Fprintln(stderr, version.BuildLogPrefix+" INFO: --keep-ci-state: this command starts no Git worker, so it has no CI state")
 	}
@@ -1095,6 +1095,10 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		gitState = gitWorker.state
 	}
 	session.finish(ctx, exitCode, plan.goVersion, coverage, gitState)
+	// The worker can still wait for its upload, which a signal stops: that
+	// signal ends ddto too.
+	gitWorker.finish()
+	gitWorker = nil
 	return statusAfterSignal(relayed, exitCode, debug)
 }
 
