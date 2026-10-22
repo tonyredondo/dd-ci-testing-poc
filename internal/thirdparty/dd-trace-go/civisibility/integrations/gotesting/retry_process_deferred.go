@@ -1270,7 +1270,8 @@ func (g *deferredProcessRetryGroup) packageFailed() bool {
 	if usesEfdRetrySemanticsSnapshot(&g.metadata) {
 		return !g.outcomes.anyPassed() && g.outcomes.anyFailed()
 	}
-	return g.latest.failed
+	// A last retry that skips passed nothing either.
+	return g.latest.failed || !g.outcomes.anyPassed() && g.outcomes.anyFailed()
 }
 
 func usesEfdRetrySemanticsSnapshot(snapshot *processRetryMetadataSnapshot) bool {

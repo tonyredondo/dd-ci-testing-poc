@@ -953,9 +953,9 @@ func applyAdditionalFeaturesToTestFunc(
 				// if the test is a flaky test retries test, we need to set the test status
 				if ptrMeta.isFlakyTestRetriesEnabled && !attemptToFixActive {
 					log.Debug("applyAdditionalFeaturesToTestFunc: Setting test status for Flaky Test Retries")
-					tCommonPrivates.SetFailed(lastPtrToLocalT.Failed())
+					tCommonPrivates.SetFailed(lastPtrToLocalT.Failed() || !outcomes.anyPassed() && outcomes.anyFailed()) // a last retry that skips passed nothing
 					tCommonPrivates.SetSkipped(lastPtrToLocalT.Skipped())
-					if lastPtrToLocalT.Failed() {
+					if t.Failed() {
 						tParentCommonPrivates := getTestParentPrivateFields(t)
 						if tParentCommonPrivates == nil {
 							panic("getting test parent private fields failed")

@@ -897,6 +897,16 @@ counted in the first, and with `-benchtime=1x` only, run (4 allocations and
 168 B for an empty benchmark). The binding now happens before the timer
 restarts. Check: `TestMiniSDKMirrorBenchmarkMeasuresNoBinding`.
 
+## Automatic retries that end in a skip
+
+With automatic test retries, testing gets the last attempt's result: for a
+test that failed and whose retry then skipped, that was a skip, and the
+process exited 0, while its event's final status was `fail`. No attempt
+passed, so the test now fails, in `gotesting/instrumentation.go`, edited in
+place to keep its stack lines, and for process retries in `packageFailed`
+(`gotesting/retry_process_deferred.go`). Check:
+`TestMiniRetryThatSkipsAfterFailureFails`.
+
 ## Skips after a failure
 
 `instrumentCloseAndSkip` and `instrumentSkipNow` in
