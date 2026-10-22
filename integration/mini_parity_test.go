@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/minitracer"
@@ -75,6 +76,11 @@ func ciWireEvents(events []map[string]any) []string {
 					if k == "error.stack" {
 						v = canonicalMiniStack(v.(string))
 					}
+					// Mini reports VERSION_ID where the pinned SDK reports
+					// unknown: see osVersionIDFallback.
+					if field == "meta" && k == "os.version" && v != nil && v == osVersionIDFallback() {
+						v = "unknown"
+					}
 					attrs[k] = v
 				}
 			}
@@ -94,6 +100,27 @@ func ciWireEvents(events []map[string]any) []string {
 	sort.Strings(out)
 	return out
 }
+
+// osVersionIDFallback returns the host's os-release VERSION_ID when it has no
+// VERSION, as on Alpine, or "". Mini reports it as os.version; the pinned SDK
+// reports "unknown" (ADAPTATIONS.md, OS metadata).
+var osVersionIDFallback = sync.OnceValue(func() string {
+	data, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return ""
+	}
+	versionID := ""
+	for line := range strings.SplitSeq(string(data), "\n") {
+		key, value, _ := strings.Cut(line, "=")
+		switch key {
+		case "VERSION":
+			return ""
+		case "VERSION_ID":
+			versionID = strings.Trim(value, "\"")
+		}
+	}
+	return versionID
+})
 
 // Duplicate APM representations can be omitted only when they agree with CI.
 func validateCIFieldDuplicates(t *testing.T, events []map[string]any) {
