@@ -141,7 +141,9 @@ func TestConcurrentSignalExitWaitsForPreCloseOwner(t *testing.T) {
 	require.Equal(t, civisibility.StateExited, civisibility.GetState())
 }
 
-func TestCIVisibilitySignalHandlerDoesNotExitAfterNormalShutdownStarts(t *testing.T) {
+// A signal that arrives once the normal shutdown started ends the process
+// after that shutdown, as it would end the process under go test.
+func TestCIVisibilitySignalHandlerExitsAfterNormalShutdownStarts(t *testing.T) {
 	replaceSignalNotifyForTesting(t, signal.Notify)
 	resetCIVisibilityBootstrapStateForTesting()
 	disableAdditionalFeaturesForBootstrapTest()
@@ -160,9 +162,12 @@ func TestCIVisibilitySignalHandlerDoesNotExitAfterNormalShutdownStarts(t *testin
 	assertNoSignalHandlerExitCode(t, exitCodes)
 	stopCIVisibilitySignalHandler()
 	require.Nil(t, currentCIVisibilitySignalHandlerForTesting())
+	require.Equal(t, os.Signal(syscall.SIGTERM), waitForSignalHandlerExitCode(t, exitCodes))
 }
 
-func TestCIVisibilitySignalHandlerDoesNotExitWhenNormalShutdownStartsDuringSignalShutdown(t *testing.T) {
+// A normal shutdown that starts during a signal's shutdown completes, and the
+// process then ends with the signal.
+func TestCIVisibilitySignalHandlerExitsWhenNormalShutdownStartsDuringSignalShutdown(t *testing.T) {
 	replaceSignalNotifyForTesting(t, signal.Notify)
 	resetCIVisibilityBootstrapStateForTesting()
 	disableAdditionalFeaturesForBootstrapTest()
@@ -195,6 +200,7 @@ func TestCIVisibilitySignalHandlerDoesNotExitWhenNormalShutdownStartsDuringSigna
 	stopCIVisibilitySignalHandler()
 	require.Nil(t, currentCIVisibilitySignalHandlerForTesting())
 	require.Equal(t, civisibility.StateExited, civisibility.GetState())
+	require.Equal(t, os.Signal(syscall.SIGTERM), waitForSignalHandlerExitCode(t, exitCodes))
 }
 
 // Without ddto's os/signal overlay, CI Visibility cannot tell a signal that

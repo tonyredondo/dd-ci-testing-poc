@@ -1842,6 +1842,12 @@ sends the signal to its own process again. With no channel left, the runtime
 ends the process as under go test
 ([`civisibility_signal_exit_unix.go`](civisibility/integrations/civisibility_signal_exit_unix.go)).
 Windows cannot send a console event to one process, so it keeps exit status 1.
+A signal that arrives once the normal shutdown has started, as during the final
+flush, or while a normal shutdown starts during the signal's own, is kept:
+the handler records it, and `stopCIVisibilitySignalHandler` sends it again when
+that shutdown ends, so the process does not end with the test binary's status
+instead. Checks: `TestCIVisibilitySignalHandlerExitsAfterNormalShutdownStarts`
+and `TestCIVisibilitySignalHandlerExitsWhenNormalShutdownStartsDuringSignalShutdown`.
 Mini registers no signal that the process ignores, such as SIGINT in a
 background job, because registering it would install a handler. A test that
 ignores a signal removes Mini's channel for it, as for any channel. When the
