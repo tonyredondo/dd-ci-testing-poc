@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "af98fbe7ffa9ca2accccfe11bbedabeba7c78b170ef4c7bc338e7fd249b967af",
+      "sha256": "4d1505101c1dd83fb96ce3721d9cc7409579f6349fecc49500672e643024ebd6",
       "role": "local"
     },
     {
@@ -1380,7 +1380,12 @@
     },
     {
       "path": "civisibility/utils/impactedtests/cli_state.go",
-      "sha256": "f8245ad6f6015f739700b6dd40be99aa4b7626a4264544305756e5f33a1bd4bd",
+      "sha256": "04ab371230c09d7d3a299df26931233c818c63a650e6e87568ca01c8da31779b",
+      "role": "local"
+    },
+    {
+      "path": "civisibility/utils/impactedtests/cli_state_wait_test.go",
+      "sha256": "0d52080d3340ea867e77776de3f921f97a2168bcc6152e767166155e44e87a97",
       "role": "local"
     },
     {

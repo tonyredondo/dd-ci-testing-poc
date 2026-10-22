@@ -1282,7 +1282,10 @@ initializes.
 - `NewImpactedTestAnalyzer` (`impactedtests`) builds the analyzer from
   `impacted.json` when the worker computed it for the process's current
   commit and pull-request base; otherwise it computes as before
-  (`computeAnalyzer`).
+  (`computeAnalyzer`). It waits for that file as long as ddto's
+  `--git-upload-timeout` lets the worker fetch the base commit, and at least 30
+  seconds (`impactedStateWait`): a shorter wait computed without that commit
+  and found no modified files. Check: `TestImpactedStateWaitFollowsTheUploadTimeout`.
 
 The worker writes the record before ddto starts go test. It searches the
 backend's commits, a read-only request, and requests what test processes
