@@ -358,10 +358,13 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			data, _ := readModuleFile(source, replacements)
 			_, manifestErr := os.Stat(filepath.Join(vendor, "modules.txt"))
 			_, runtimeErr := os.Stat(filepath.Join(vendor, filepath.FromSlash(miniModule), "testopt"))
-			selectsVendor := goSelectsVendor(opts.mod, moduleDirective(data, "go"), vendor, false, replacements)
-			if manifestErr != nil && selectsVendor {
-				// Go reads the missing modules.txt as empty, and an older
-				// module can import vendored packages without it.
+			goVersion := moduleDirective(data, "go")
+			selectsVendor := goSelectsVendor(opts.mod, goVersion, vendor, false, replacements)
+			if manifestErr != nil && selectsVendor && (declaresModules(ctx, dir, temp, data) || importsUnlistedVendorPackages(goVersion, vendor)) {
+				// Go reads the missing modules.txt as empty: it rejects a
+				// module's requirements and replacements as inconsistent
+				// vendoring, and an older module can import vendored packages
+				// without it. ddto's workspace would do neither.
 				return plan, &nativeGoError{"vendor_without_runtime", errors.New("the module vendors its dependencies: require the runtime with a tools file and run go mod vendor")}
 			}
 			if manifestErr == nil && os.IsNotExist(runtimeErr) && selectsVendor {

@@ -327,6 +327,56 @@ func goSelectsVendor(mod, goVersion, dir string, workspace bool, replacements ma
 	return manifestIsForWorkspace(manifest) == workspace
 }
 
+// declaresModules reports whether data, a go.mod, requires or replaces a
+// module as go's parser reads it, in any spelling, or whether go cannot read
+// it, which go test reports too.
+func declaresModules(ctx context.Context, dir, temp string, data []byte) bool {
+	modfile := filepath.Join(temp, "vendor-check.mod")
+	if err := os.WriteFile(modfile, data, 0600); err != nil {
+		return true
+	}
+	out, err := goTool(ctx, dir, nil, "mod", "edit", "-json", "-modfile="+modfile)
+	var parsed struct{ Require, Replace []json.RawMessage }
+	if err != nil || json.Unmarshal([]byte(out), &parsed) != nil {
+		return true
+	}
+	return len(parsed.Require)+len(parsed.Replace) != 0
+}
+
+// importsUnlistedVendorPackages reports whether go can import a package from
+// vendor, a directory without modules.txt, for a module whose go directive is
+// goVersion: before 1.23, or without a directive, go imports a vendored
+// package that modules.txt does not list (cmd/go's
+// ExplicitModulesTxtImportVersion), and vendor holds one when it holds a Go
+// file. A linked directory, which go reads packages through, and an entry
+// that cannot be read count too.
+func importsUnlistedVendorPackages(goVersion, vendor string) bool {
+	if goVersion != "" && compareGoVersion(goVersion, "1.23") >= 0 {
+		return false
+	}
+	root, err := filepath.EvalSymlinks(vendor)
+	if err != nil {
+		return true
+	}
+	found := false
+	_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		switch {
+		case err != nil:
+			found = true
+		case !entry.IsDir() && strings.HasSuffix(entry.Name(), ".go"):
+			found = true
+		case entry.Type()&fs.ModeSymlink != 0:
+			info, err := os.Stat(path)
+			found = err != nil || info.IsDir()
+		}
+		if found {
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found
+}
+
 // manifestIsForWorkspace reads the first line's annotations as cmd/go does.
 func manifestIsForWorkspace(manifest []byte) bool {
 	line, _, _ := strings.Cut(string(manifest), "\n")

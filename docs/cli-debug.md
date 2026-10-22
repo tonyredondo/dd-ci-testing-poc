@@ -67,7 +67,9 @@ The log records:
   another module root or none: `instrumentation bypass overlay_deletes_go_mod`
   follows the warning, and native `go test` runs.
 - A module whose vendor directory go selects but that does not vendor the
-  runtime, including a vendor directory without `modules.txt`:
+  runtime, including a vendor directory without `modules.txt` when `go.mod`
+  requires or replaces modules, which go rejects then, or when it holds Go
+  files, which a module before Go 1.23 can import:
   `instrumentation bypass vendor_without_runtime` follows the warning, which
   says how to vendor it, and native `go test` runs.
 - When go rejects the command or its environment while ddto prepares it, as
