@@ -244,6 +244,9 @@ When the workspace does not select Mini, a `use` module's own replacement of
 Mini is read with `go mod edit -json`. Only module files that mention Mini's
 path, or contain a backslash that could escape it, need that command; those
 commands run concurrently, and their results apply in workspace order.
+Go's `work` package pattern selects the packages of every main module, Mini's
+included, so with a workspace that `ddto` provides, `work` as a package or
+`-coverpkg` pattern makes `ddto` warn and run native `go test`.
 
 `ddto` uses a vendor directory only where Go would: with `-mod=vendor`, or by
 default when the `go` directive is at least 1.14 and `modules.txt` was written
@@ -400,6 +403,11 @@ Mini reports 5–10. Regression tests check original source lines directly.
 Cleanup-only coverage and duplicate Testify method identity also have direct
 Mini regression tests. The [comparison contract](ci-parity.md#comparison-contract)
 records these deliberate differences and its normalization rules.
+
+Each tested package gets a generated `zz_dd_ci_visibility_test.go` through the
+overlay, which imports the runtime. Embed patterns resolve through the overlay
+too, so a pattern that matches that file, such as `//go:embed *` in a tested
+package, embeds it as well.
 
 Per-test coverage, in count or atomic mode, reads the coverage counters in
 memory through a hook that `ddto` adds to `testing`. Each test's covered lines
