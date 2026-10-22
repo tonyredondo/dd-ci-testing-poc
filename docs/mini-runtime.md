@@ -597,6 +597,12 @@ Context mode has the gaps that .NET's `ExecutionContext` also has:
 - Tests retried in a child process report no per-test coverage.
 - Code that blocks before the test and resumes during it marks its file
   again at its next site, which follows every call and channel operation.
+  When that operation is the function's last, as in `return <-ch`, the next
+  site is in the caller's file, and the function's own file is left out, as
+  with Go's counters, which count a block when it starts.
+- A test that only reads a package-level variable runs no site of the
+  variable's file, which reports to it only when it has no function. Go's
+  counters leave such a file out too.
   The runtime can still suspend code briefly between two sites, to preempt
   it or to assist the garbage collector, as it can inside any statement: a
   suspension that spans a test's start can leave out the rest of that code.
