@@ -78,8 +78,22 @@ func DefaultCLIOptions() CLIOptions {
 func ParseCLIArgs(args []string) (CLIOptions, []string, error) {
 	options := DefaultCLIOptions()
 	goArgs := make([]string, 0, len(args))
+	// As in go test, an argument that is neither a flag nor a flag's value,
+	// after the package list and a flag, starts the test binary's arguments.
+	sawPackages, inPackages := false, false
 	for len(args) > 0 {
 		arg := args[0]
+		if !strings.HasPrefix(arg, "-") || arg == "-" {
+			if sawPackages && !inPackages {
+				goArgs = append(goArgs, args...)
+				break
+			}
+			sawPackages, inPackages = true, true
+			goArgs = append(goArgs, arg)
+			args = args[1:]
+			continue
+		}
+		inPackages = false
 		name, value, hasValue := strings.Cut(strings.TrimPrefix(strings.TrimPrefix(arg, "-"), "-"), "=")
 		if strings.HasPrefix(arg, "--") && (name == "runtime" || name == "git-upload-timeout") {
 			width := 1
@@ -120,17 +134,15 @@ func ParseCLIArgs(args []string) (CLIOptions, []string, error) {
 			continue
 		}
 		width := 1
-		if strings.HasPrefix(arg, "-") && arg != "-" {
-			_, spec, known := lookupFlag(name)
-			if !known || arg == "--" {
-				// The CLI does not own custom flags or their values. Callers
-				// can also use -args/-- to pass a test flag with ddto's name.
-				goArgs = append(goArgs, args...)
-				break
-			}
-			if spec.kind == valueFlag && !hasValue && len(args) > 1 {
-				width = 2
-			}
+		_, spec, known := lookupFlag(name)
+		if !known || arg == "--" {
+			// The CLI does not own custom flags or their values. Callers can
+			// also use -args/-- to pass a test flag with ddto's name.
+			goArgs = append(goArgs, args...)
+			break
+		}
+		if spec.kind == valueFlag && !hasValue && len(args) > 1 {
+			width = 2
 		}
 		goArgs = append(goArgs, args[:width]...)
 		args = args[width:]
