@@ -159,7 +159,13 @@ param(
                     }
                 }
             }
-            Publish (Join-Path (Join-Path $temp 'bin') "ddto$exe")
+            # The project's settings, such as GOAMD64, can build for another
+            # CPU: keep the installed ddto unless the new one runs here.
+            $built = Join-Path (Join-Path $temp 'bin') "ddto$exe"
+            $runs = $false
+            try { & $built --version *> $null; $runs = $LASTEXITCODE -eq 0 } catch { }
+            if (-not $runs) { throw "ddto install: the ddto that go install built does not run on this host" }
+            Publish $built
             $installed = "go install @$Version"
         }
         $reported = & $target --version

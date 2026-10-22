@@ -97,6 +97,11 @@ func release(out string, platforms []string, tag string) error {
 		return err
 	}
 	defer os.RemoveAll(temp)
+	// A relative TMPDIR would name another directory for go commands that run
+	// elsewhere, as the wrapper's build does.
+	if temp, err = filepath.Abs(temp); err != nil {
+		return err
+	}
 	overlay := map[string]string{}
 	overrides := map[string][]byte{}
 	prefix := version.BuildLogPrefix
@@ -143,8 +148,9 @@ func release(out string, platforms []string, tag string) error {
 }
 
 // semver accepts vMAJOR.MINOR.PATCH with an optional prerelease, as Go module
-// versions do; build metadata is not a valid module version.
-var semver = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$`)
+// versions do; build metadata is not a valid module version. A numeric
+// prerelease identifier has no leading zero, as SemVer requires and Go checks.
+var semver = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?$`)
 
 var numberDeclaration = regexp.MustCompile(`(?m)^const Number = "[^"]*"`)
 

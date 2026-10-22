@@ -307,7 +307,8 @@ refuses other branches. It:
    branch and its pull request.
 
 `scripts/release` rejects a version that is not `vMAJOR.MINOR.PATCH` with an
-optional prerelease, and a release above `v1`: the module path has no `/vN`
+optional prerelease, a prerelease with a numeric identifier that starts with
+zero, such as `-rc.01`, which SemVer and Go refuse, and a release above `v1`: the module path has no `/vN`
 suffix, so `go install` could not resolve it. It also rejects a Go
 pseudo-version, such as `v0.0.0-20261022063454-376fffe35f8e`, from which `go
 install` would take another commit than the tag's. The workflow stops before

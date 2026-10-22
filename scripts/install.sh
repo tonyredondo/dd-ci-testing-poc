@@ -88,6 +88,8 @@ if [ "$os" = windows ] && command -v cygpath > /dev/null; then
 fi
 temp=$(mktemp -d)
 trap 'rm -rf "$temp"' EXIT
+# A relative TMPDIR gives a relative name, which go install refuses for GOBIN.
+temp=$(cd "$temp" && pwd)
 
 publish() { # file
   # Beside the target, in a file that mktemp creates, then renamed over it: a
@@ -156,6 +158,12 @@ if [ -z "$installed" ]; then
     native_bin=$(cygpath -w "$temp/bin")
   fi
   GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) GOBIN=$native_bin go install "github.com/$repo/cmd/ddto@$version"
+  # The project's settings, such as GOAMD64, can build for another CPU: keep
+  # the installed ddto unless the new one runs here.
+  if ! "$temp/bin/ddto$exe" --version > /dev/null 2>&1; then
+    say "the ddto that go install built does not run on this host"
+    exit 1
+  fi
   publish "$temp/bin/ddto$exe"
   installed="go install @$version"
 fi

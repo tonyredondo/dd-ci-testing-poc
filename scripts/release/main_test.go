@@ -168,7 +168,10 @@ func TestStampVersion(t *testing.T) {
 	// A published release must be a version that go install resolves for
 	// this module path.
 	for tag, ok := range map[string]bool{"v0.1.0": true, "v1.4.2-rc.1": true, "v2.0.0": false, "v10.0.0": false, "1.0.0": false,
-		"v0.0.0-20261022063454-376fffe35f8e": false, "v0.2.2-0.20261022063454-376fffe35f8e": false, "v0.3.0-rc.0.20261022063454-376fffe35f8e": false} {
+		"v0.0.0-20261022063454-376fffe35f8e": false, "v0.2.2-0.20261022063454-376fffe35f8e": false, "v0.3.0-rc.0.20261022063454-376fffe35f8e": false,
+		// SemVer, which Go checks, allows no leading zero in a numeric
+		// prerelease identifier.
+		"v0.2.2-rc.01": false, "v1.2.3-01": false, "v1.2.3-0": true, "v1.2.3-0a": true, "v1.2.3-rc.10": true} {
 		if err := publishable(tag); (err == nil) != ok {
 			t.Errorf("publishable(%q) = %v", tag, err)
 		}

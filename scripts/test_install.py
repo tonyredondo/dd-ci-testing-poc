@@ -56,26 +56,28 @@ class InstallTests(unittest.TestCase):
         digest = checksum or hashlib.sha256(data.encode()).hexdigest()
         (self.assets / "SHA256SUMS").write_text(f"{digest}  {self.asset}\n{'0' * 64}  ddto-other-arch\n")
 
-    def install(self, *args, path=None, github_path=None, **extra):
+    def install(self, *args, path=None, github_path=None, cwd=None, **extra):
         env = {key: value for key, value in os.environ.items() if not key.startswith(("DDTO_", "GITHUB_"))}
         env.update(DDTO_DOWNLOAD_URL=self.url, DDTO_INSTALL_DIR=str(self.dir), PATH=path or os.environ["PATH"])
         env.update(extra)
         if github_path:
             env["GITHUB_PATH"] = str(github_path)
-        return subprocess.run(self.command(*args), env=env, capture_output=True, text=True, timeout=120)
+        return subprocess.run(self.command(*args), env=env, capture_output=True, text=True, timeout=120, cwd=cwd)
 
     def command(self, *args):
         return ["bash", str(SCRIPTS / "install.sh"), *args]
 
-    def fake_go(self):
+    def fake_go(self, built=FAKE_DDTO):
         """Returns a PATH whose go records its arguments and installs a fake ddto in GOBIN."""
         tools = self.root / "tools"
         tools.mkdir()
         go = tools / "go"
-        (tools / "ddto").write_text(FAKE_DDTO)
+        (tools / "ddto").write_text(built)
         # go env GOHOSTOS and GOHOSTARCH answer for the host; install records
         # its arguments and the platform it builds for.
+        # Like go install, it refuses a relative GOBIN.
         go.write_text(f'#!/bin/sh\nif [ "$1" = env ]; then case $2 in GOHOSTOS) echo {OS};; GOHOSTARCH) echo {ARCH};; esac; exit 0; fi\n'
+                      'case "$GOBIN" in /*|?:*) ;; *) echo "GOBIN must be an absolute path" >&2; exit 1;; esac\n'
                       f'echo "$@" > "{self.root}/go-args"\necho "$GOOS/$GOARCH" > "{self.root}/go-platform"\n'
                       f'cp "{tools}/ddto" "$GOBIN/ddto"\nchmod +x "$GOBIN/ddto"\n')
         go.chmod(0o755)
@@ -159,6 +161,19 @@ class InstallTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.dir / "ddto").read_text(), fake_ddto("v1.0.0"))
         self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["ddto"])
+
+    def test_builds_with_a_relative_temporary_directory(self):
+        result = self.install("--version", "v1.2.3", path=self.fake_go(), cwd=self.root, TMPDIR=".")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.dir / "ddto").read_text(), FAKE_DDTO)
+
+    def test_keeps_the_installed_version_when_the_build_does_not_run(self):
+        # As a GOAMD64 that the host's CPU lacks would build.
+        self.preinstall(fake_ddto("v1.0.0"))
+        result = self.install("--version", "v1.2.3", path=self.fake_go("#!/bin/sh\nexit 1\n"))
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("does not run on this host", result.stderr)
+        self.assertEqual((self.dir / "ddto").read_text(), fake_ddto("v1.0.0"))
 
     def test_hides_the_download_url_credentials(self):
         url = self.url.replace("http://", "http://reader:secret@") + "/missing?token=sensitive"
