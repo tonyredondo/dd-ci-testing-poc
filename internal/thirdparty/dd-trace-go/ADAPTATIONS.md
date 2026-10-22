@@ -930,7 +930,12 @@ testing prints only a failed test's buffered output, so a test that still
 failed after its automatic retries printed its `--- FAIL` line without its
 messages. `reportRetryAttemptToOriginal` moves a failed attempt's output to
 the original test, which testing reports, once per failed attempt. The call
-is edited in place to keep its stack lines. Process retries run after testing
+is edited in place to keep its stack lines. An attempt that panics skips that
+end: `snapshotPanickedRetryAttemptResult`, which replaces its snapshot call in
+place, moves its output the same way and also counts the time that its body
+ran, which dynamic automatic test retries read to choose a budget and which
+stayed zero. Checks: `TestMiniRetriedPanicKeepsItsOutputAndDuration` and
+`TestRetryAttemptPanicKeepsItsDuration`. Process retries run after testing
 has reported the package, and the README describes their summary. Check:
 `TestMiniRetriedFailureKeepsItsOutput`.
 

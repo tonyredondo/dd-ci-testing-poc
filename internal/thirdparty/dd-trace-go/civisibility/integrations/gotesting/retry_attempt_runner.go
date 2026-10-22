@@ -285,7 +285,7 @@ func finalizeFreshRetryAttempt(attempt *retryAttemptRoot, resultCh chan<- retryA
 		}
 		result.cleanupObservation = retryAttemptCleanupObservation(attempt.cleanupObservation.Load())
 		result.parallelLeaseHeld = attempt.parallelLeaseTransfer.Load() && *fieldPtr[bool](base, layout.common.isParallel)
-		snapshotRetryAttemptResult(attempt, base, layout, &result)
+		snapshotPanickedRetryAttemptResult(attempt, base, layout, &result)
 		attempt.freezeGenerationFailure()
 		publishRetryAttemptResult(attempt, resultCh, result)
 		published = true
@@ -731,6 +731,35 @@ func snapshotRetryAttemptResult(attempt *retryAttemptRoot, base unsafe.Pointer, 
 	if result.failureCheckpointPhase == retryAttemptNotFailed && result.failed {
 		result.failureCheckpointPhase = retryAttemptFailurePostCheckpoint
 	}
+}
+
+// snapshotPanickedRetryAttemptResult snapshots an attempt that ended in a
+// panic, which skips the normal end: its active time counts, as testing counts
+// a panicking test's, and, without -v, its output goes to the original test,
+// which testing reports with the panic.
+func snapshotPanickedRetryAttemptResult(attempt *retryAttemptRoot, base unsafe.Pointer, layout *testingInternalsLayout, result *retryAttemptResult) {
+	addRetryAttemptElapsed(base, layout)
+	var output []byte
+	if pointerWord(base, layout.common.chatty) == nil && attempt != nil && attempt.original != nil {
+		mu := fieldPtr[sync.RWMutex](base, layout.common.mu)
+		mu.RLock()
+		output = append([]byte(nil), *fieldPtr[[]byte](base, layout.common.output)...)
+		mu.RUnlock()
+	}
+	snapshotRetryAttemptResult(attempt, base, layout, result)
+	if len(output) == 0 {
+		return
+	}
+	originalBase := commonBaseForTest(attempt.original, layout)
+	if originalBase == nil {
+		return
+	}
+	originalMu := fieldPtr[sync.RWMutex](originalBase, layout.common.mu)
+	originalMu.Lock()
+	originalOutput := fieldPtr[[]byte](originalBase, layout.common.output)
+	*originalOutput = append(*originalOutput, output...)
+	originalMu.Unlock()
+	runtime.KeepAlive(attempt.original)
 }
 
 func (r *retryAttemptRoot) testSignal() <-chan bool {
