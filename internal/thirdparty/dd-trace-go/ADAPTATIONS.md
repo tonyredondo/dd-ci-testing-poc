@@ -890,8 +890,10 @@ ITR's coverage backfill (`coveragePathCandidates` in
 looks a profile file up in the backend's coverage by several paths and takes
 the first one found. The path after the module path came before the module
 directory's path in the repository, so a nested module's `handler.go` took the
-coverage of a `handler.go` at the repository root when both existed. The
-module directory's path comes first here. Check:
+coverage of a `handler.go` at the repository root when both existed, or when
+only the root one had coverage. A file of the module now has the one path that
+the module's directory in the CI workspace gives (`moduleRepositoryFile`); the
+other paths remain for other files and without that directory. Check:
 `TestBackfillPrefersNestedModuleRepositoryPath`.
 
 ## Benchmark context outside the measurement
@@ -983,7 +985,10 @@ such as `github.com/acme/project/pkg/example_test.go`. Per-test coverage
 (`NewTestCoverage` in `gotesting/coverage/test_coverage.go`), process-retry
 coverage and experimental file coverage made it relative to the CI workspace
 only, which kept that name for the test's own row. `coverageSourceFile`
-resolves it as test events' source files are, to `pkg/example_test.go`.
+resolves it through the module's directory, as `moduleRepositoryFile` does for
+backfill: `github.com/acme/project/api` in `services/api` gives
+`services/api/example_test.go`. Other files resolve as test events' source
+files are, to `pkg/example_test.go`.
 Check: `TestTestCoverageNamesTrimmedTestFileInRepository`.
 
 ## Known-test pages

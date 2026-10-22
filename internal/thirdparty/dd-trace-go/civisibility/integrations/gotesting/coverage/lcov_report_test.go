@@ -314,6 +314,10 @@ func TestBackfillPrefersNestedModuleRepositoryPath(t *testing.T) {
 	if !ok || name != "services/api/handler.go" || bitmap != nested {
 		t.Fatalf("backend coverage of %q, %t; want services/api/handler.go", name, ok)
 	}
+	// Without the nested file's entry, the root file's does not stand in.
+	if name, _, ok := backfillBitmapForProfileFile("example.com/api/handler.go", map[string]*filebitmap.FileBitmap{"handler.go": root}); ok {
+		t.Fatalf("backend coverage of %q for services/api/handler.go", name)
+	}
 }
 
 // With -trimpath, the test's own file is named by its import path; its
@@ -338,6 +342,12 @@ func TestTestCoverageNamesTrimmedTestFileInRepository(t *testing.T) {
 			t.Errorf("%s: test file %q; want %q", path, got, want)
 		}
 	}
+	// A nested module's directory need not match its path.
+	modulePath, moduleDir = "github.com/acme/project/api", filepath.Join(workspace, "services", "api")
+	if got := NewTestCoverage(1, 2, 3, 4, "github.com/acme/project/api/example_test.go").(*testCoverage).testFile; got != "services/api/example_test.go" {
+		t.Errorf("relocated module's test file %q", got)
+	}
+	modulePath, moduleDir = "", ""
 	// Experimental file coverage names the test's file once, also trimmed.
 	files := fileCoverageFiles("pkg/example_test.go", []string{"github.com/acme/project/pkg/example_test.go", "github.com/acme/project/pkg/lib.go"})
 	if len(files) != 2 || files[0].name != "pkg/example_test.go" || files[1].name != "pkg/lib.go" {

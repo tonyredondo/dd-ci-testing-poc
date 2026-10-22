@@ -176,6 +176,28 @@ func lcovModuleRepositoryPrefix() string {
 	return moduleRepositoryRelativePrefix(modulePath)
 }
 
+// moduleRepositoryFile returns the path in the repository of file, a source
+// path that starts with the current module's path, from the module's
+// directory in the CI workspace. A nested module's directory need not match
+// its path: github.com/acme/project/api can live in services/api. Without that
+// directory, or for another module's file, ok is false.
+func moduleRepositoryFile(file string) (string, bool) {
+	resolveModuleInfo()
+	workspace := utils.GetCITagsReadOnly()[constants.CIWorkspacePath]
+	if workspace == "" || moduleDir == "" || modulePath == "" {
+		return "", false
+	}
+	rel, err := filepath.Rel(workspace, moduleDir)
+	if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	suffix, ok := strings.CutPrefix(filepath.ToSlash(file), strings.TrimSuffix(modulePath, "/")+"/")
+	if !ok {
+		return "", false
+	}
+	return cleanLCOVSourcePath(path.Join(filepath.ToSlash(rel), suffix)), true
+}
+
 // cleanLCOVSourcePath normalizes path separators and removes empty or current
 // directory path values before they are written to the LCOV report.
 func cleanLCOVSourcePath(fileName string) string {

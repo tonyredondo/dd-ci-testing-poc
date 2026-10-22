@@ -282,6 +282,12 @@ func backfillBitmapForProfileFile(profileFile string, backendCoverage map[string
 
 func coveragePathCandidates(profileFile string) []string {
 	resolveModuleInfo()
+	// A file of the module has one path in the repository: when the module's
+	// directory gives it, a missing backend entry must not match another
+	// file, such as handler.go at the root for services/api/handler.go.
+	if file, ok := moduleRepositoryFile(profileFile); ok {
+		return []string{file}
+	}
 	candidates := make([]string, 0, 4)
 	addCandidate := func(value string) {
 		value = strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))

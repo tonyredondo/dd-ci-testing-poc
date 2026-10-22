@@ -679,6 +679,9 @@ func coverageSourceFile(path string) string {
 	if filepath.IsAbs(path) {
 		return utils.GetRelativePathFromCITagsSourceRoot(path)
 	}
+	if file, ok := moduleRepositoryFile(path); ok {
+		return file
+	}
 	return utils.ResolveSourceFilePathFromCITags(path).RelativePath
 }
 
