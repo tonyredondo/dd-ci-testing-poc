@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "b779ab8409f779b6c83a9e0b2d4a14370563e75aea848d5ef99eb9300eb92e97",
+      "sha256": "8b9f49b17142263e3aca1b1deb42943a5ef56419bd0e942a95f30b0dc3d34077",
       "role": "local"
     },
     {
@@ -461,10 +461,15 @@
     },
     {
       "path": "civisibility/integrations/gotesting/efd_faulty_session.go",
-      "sha256": "9bee0d0049444685e26808ed6d3309a9b45be07467c1643e93a5d3cbe5cf9c2c",
+      "sha256": "2ee9a4ea750e6ca454fab9601a683f71f265e99f72fd51b7d24e0ad1dccbe1c4",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/efd_faulty_session.go",
       "source_sha256": "af068b6e0aca63c45504733bba83e6373d69239dcc8364bfb25df1645367bd6b"
+    },
+    {
+      "path": "civisibility/integrations/gotesting/efd_faulty_session_terminal_test.go",
+      "sha256": "5700d83327a15b94f1e6c01719c926ee0c47ad89fb62508a76eb934bfa7b325a",
+      "role": "local"
     },
     {
       "path": "civisibility/integrations/gotesting/error_capture_test.go",

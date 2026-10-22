@@ -901,6 +901,17 @@ and Go removed the files that its tests wrote. A registered flag's separate
 value is skipped here, as `processRetryTimeoutFromArgs` does. Check:
 `TestProcessRetryArtifactPolicyAfterSeparateValues`.
 
+## Early Flake Detection terminal state being published
+
+`publishTerminal` in `gotesting/efd_faulty_session.go` creates the session's
+terminal-state file, then writes `faulty` or `unavailable` into it. Another
+process that read the empty file in between took it as an unknown state:
+Early Flake Detection became unavailable for its new tests for the rest of its
+run, and its session could lose `test.early_flake.abort_reason=faulty`. An empty file
+now reads as not yet published; the claim then takes the lock and counts, as
+without the file. Check: `TestEFDFaultySessionTerminalBeingPublished`, in the
+local `gotesting/efd_faulty_session_terminal_test.go`.
+
 ## Sub-benchmarks sharing a callback
 
 `instrumentTestingBFunc` marked the original callback of a sub-benchmark as
