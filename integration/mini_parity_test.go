@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -238,6 +239,31 @@ func withPortedEmptySession(events []map[string]any) []map[string]any {
 		meta["test.status"], meta["test.skip_reason"], meta["test.session.empty_reason"] = "skip", "No tests were executed", "zero_tests"
 		content = maps.Clone(content)
 		content["meta"] = meta
+		out[i] = maps.Clone(event)
+		out[i]["content"] = content
+	}
+	return out
+}
+
+// withPortedListCoverage drops the session coverage that the pinned SDK
+// reports with -test.list, where testing ran no test: ddto reports none
+// (ADAPTATIONS.md, Coverage line printed once).
+func withPortedListCoverage(args []string, events []map[string]any) []map[string]any {
+	if !slices.ContainsFunc(args, func(arg string) bool { return strings.HasPrefix(arg, "-test.list") }) {
+		return events
+	}
+	out := make([]map[string]any, len(events))
+	for i, event := range events {
+		out[i] = event
+		content, _ := event["content"].(map[string]any)
+		metrics, _ := content["metrics"].(map[string]any)
+		if event["type"] != "test_session_end" || metrics == nil {
+			continue
+		}
+		metrics = maps.Clone(metrics)
+		delete(metrics, "test.code_coverage.lines_pct")
+		content = maps.Clone(content)
+		content["metrics"] = metrics
 		out[i] = maps.Clone(event)
 		out[i]["content"] = content
 	}

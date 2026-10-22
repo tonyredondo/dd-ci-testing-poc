@@ -71,6 +71,7 @@ func TestMiniFixtureRuntimeImportLineEndings(t *testing.T) {
 		}
 	}
 }
+
 // compileMini compiles the fixture with Mini alone, for checks that need no
 // SDK, which Go 1.25 cannot build.
 func compileMini(t *testing.T, dir, driver string) string {
