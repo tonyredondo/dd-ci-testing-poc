@@ -158,13 +158,13 @@ class ShardTests(unittest.TestCase):
             ci_shards.collect_manifests(source, self.groups, "revision", "tree", without_tip)
         for path in source.glob("mini-ubuntu-latest-tip-normal/*/manifest.json"):
             path.unlink()
-        self.assertEqual(51, len(ci_shards.collect_manifests(source, self.groups, "revision", "tree", without_tip)))
+        self.assertEqual(56, len(ci_shards.collect_manifests(source, self.groups, "revision", "tree", without_tip)))
         with self.assertRaisesRegex(ValueError, "missing shards"):
             ci_shards.collect_manifests(source, self.groups, "revision", "tree")
 
     def test_collect_rejects_missing_duplicate_failed_and_different_inputs(self):
         source = self.manifests()
-        self.assertEqual(54, len(ci_shards.collect_manifests(source, self.groups, "revision", "tree")))
+        self.assertEqual(59, len(ci_shards.collect_manifests(source, self.groups, "revision", "tree")))
         path = next(source.glob("*/*/manifest.json"))
         original = json.loads(path.read_text())
         for key, value in (("revision", "other"), ("tree", "other"), ("status", "failed"),

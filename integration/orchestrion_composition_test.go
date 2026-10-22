@@ -14,9 +14,14 @@ import (
 
 // orchestrionBuild runs a build that Orchestrion weaves, which also compiles
 // dd-trace-go's integrations: on a Windows runner a cold one can take more
-// than runCommand's three minutes.
+// than runCommand's three minutes. Those builds change with Orchestrion's and
+// dd-trace-go's versions, not with ddto, so CI can keep them in a Go cache of
+// their own, DDTO_TEST_ORCHESTRION_GOCACHE.
 func orchestrionBuild(t *testing.T, dir string, env []string, name string, args ...string) (string, string, int) {
 	t.Helper()
+	if cache := os.Getenv("DDTO_TEST_ORCHESTRION_GOCACHE"); cache != "" {
+		env = append(env[:len(env):len(env)], "GOCACHE="+cache)
+	}
 	out, stderr, code, _, err := runCommandWithin(10*time.Minute, dir, env, name, args...)
 	if err != nil {
 		t.Fatal(err)
