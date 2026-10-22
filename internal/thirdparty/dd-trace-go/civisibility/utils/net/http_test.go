@@ -26,6 +26,7 @@ import (
 
 	assert "github.com/tonyredondo/dd-ci-testing-poc/internal/testassert"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/testassert/require"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 )
 
 const DefaultMultipartMemorySize = 10 << 20 // 10MB
@@ -1542,5 +1543,27 @@ func TestRequestErrorHidesURLCredentials(t *testing.T) {
 		if err == nil || strings.Contains(err.Error(), "password") || strings.Contains(err.Error(), "sensitive") {
 			t.Fatalf("%s with files=%d: %v", config.Method, len(config.Files), err)
 		}
+	}
+}
+
+// Debug lines show a request body's size, not its contents: a logs payload
+// holds the tests' output.
+func TestRequestDebugLinesHideTheBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	recorder := new(log.RecordLogger)
+	defer log.UseLogger(recorder)()
+	level := log.GetLevel()
+	log.SetLevel(log.LevelDebug)
+	defer log.SetLevel(level)
+	_, err := NewRequestHandler().SendRequest(RequestConfig{Method: "POST", URL: server.URL, Body: []map[string]string{{"message": "PRIVATE_MARKER"}}, Format: FormatJSON})
+	if err != nil {
+		t.Fatal(err)
+	}
+	logs := strings.Join(recorder.Logs(), "\n")
+	if !strings.Contains(logs, "new request with body") || strings.Contains(logs, "PRIVATE_MARKER") {
+		t.Fatalf("debug lines:\n%s", logs)
 	}
 }

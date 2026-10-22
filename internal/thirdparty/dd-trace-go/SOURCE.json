@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "f107f2b51879bc3dee927d6c8d5d2dc20f15d01f2ae15938d0e5c223e6fb75b2",
+      "sha256": "a3701a88e8d09e9523f074128a6582e721f1449d0435eb075014f3240fab02fa",
       "role": "local"
     },
     {
@@ -919,14 +919,14 @@
     },
     {
       "path": "civisibility/integrations/logs/logs_writer.go",
-      "sha256": "776e9fc89504bdda27657c5e4275ecc1361a3e5dc2ce7cd491217ebe894dbcc2",
+      "sha256": "2f687d9c93f1ce91ca9a21f41736f3305443c4aa4b7617e9a8cc32ed6031b100",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/logs/logs_writer.go",
       "source_sha256": "19d9142417ff5af2daed0d9142a998c2472a24178e8193cf010fe9bd75bd57d0"
     },
     {
       "path": "civisibility/integrations/logs/logs_writer_test.go",
-      "sha256": "29cf41fd61fd74a8c8a691a08df39c1818ebf003e3e2079d26b7a391875a03ba",
+      "sha256": "6d45d87a7b86ba5f58238833871464b26fc117043360f10b053282c80ef9951a",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/logs/logs_writer_test.go",
       "source_sha256": "8ef92f56f4ca7061e2998821be6191179a212ee0169ca3dd8aaf7ebbbf77d48d"
@@ -1482,7 +1482,7 @@
     },
     {
       "path": "civisibility/utils/net/http.go",
-      "sha256": "ae769756fccab128863e4992165971138249e7cac401480814bbcbf766b49da8",
+      "sha256": "5e9e2b91c5605e9d28eaf8fa961384b378206416e83f57d97033e9dc6a0004b9",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/net/http.go",
       "source_sha256": "6a0ad6c1e3935019ce88e4d6931a091c562c3e9f96cc2e21474b716ac8cf8d09"
@@ -1509,7 +1509,7 @@
     },
     {
       "path": "civisibility/utils/net/http_test.go",
-      "sha256": "804e7c7a3ac64e47ca4c30a7c5583737ea9f37888ab0ee2ff9b351c76b39b5fd",
+      "sha256": "81bc713b7d37a084917ea5fa7d666c27220d37263df83e7c02d9ff2711a0b778",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/net/http_test.go",
       "source_sha256": "4c280d018a3d9acef0c767aa30d15dd424cb2c49b3f95a044eb5013bda7985cd"

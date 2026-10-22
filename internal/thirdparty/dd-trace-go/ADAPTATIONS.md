@@ -850,6 +850,9 @@ Debug lines show URLs through `logURL`, without user information or query, and
 Git's debug lines in [`civisibility/utils/git.go`](civisibility/utils/git.go)
 pass its arguments and output through `filterSensitiveInfo`: a CI clone's
 remote URL can hold a job token, which `git ls-remote --get-url` prints.
+The debug line of a request with a body shows its size, not its contents,
+which the SDK printed up to 4 KB of: a logs payload holds the tests' output.
+Check: `TestRequestDebugLinesHideTheBody`.
 A request's error, an `*url.Error` that keeps the URL's user and query, goes
 through `logError`, and `AgentURLFromEnv`'s warnings in
 [`agent.go`](agent.go) leave out the URL of `DD_TRACE_AGENT_URL`. A URL that
@@ -964,7 +967,9 @@ the size only after adding an entry, so a line of a few megabytes, larger
 still once JSON escapes it, could take a payload past 5 MB. `add` now encodes
 the entry first, through `logsPayload.pushEncoded`, and starts the next
 payload when the entry would not fit. Check:
-`TestLogsWriterSendsLargeEntryInTheNextRequest`.
+`TestLogsWriterSendsLargeEntryInTheNextRequest`. An entry over 5 MB by itself,
+which the intake would reject even alone, is not sent; a debug line says so.
+Check: `TestLogsWriterDropsAnEntryOverTheLimit`.
 
 ## Logs without a client
 

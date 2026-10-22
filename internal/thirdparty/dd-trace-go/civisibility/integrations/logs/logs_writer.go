@@ -77,6 +77,11 @@ func (w *logsWriter) add(entry *logEntry) bool {
 		return false
 	}
 	serialization := time.Since(startTime)
+	if 2+len(encoded) > agentlessPayloadMaxLimit {
+		// Even alone, as [entry], the intake would reject it.
+		log.Debug("logsWriter: a log entry of %d bytes exceeds the intake's limit of %d bytes; it is not sent", len(encoded), agentlessPayloadMaxLimit)
+		return false
+	}
 
 	w.mu.Lock()
 	if w.stopped {
