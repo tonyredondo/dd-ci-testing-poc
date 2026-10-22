@@ -418,6 +418,11 @@ Text profiles stay in some cases:
   as `-coverpkg=testing`;
 - Mini finds blocks whose text-profile result is ambiguous.
 
+With text profiles, as in the SDK, each capture prints its own `coverage:`
+line to the test binary's output, and `go test`'s package summary shows the
+first one, taken before the first test, instead of the final percentage. The
+`-coverprofile` that `go test` writes is unchanged.
+
 The [adaptation record](../internal/thirdparty/dd-trace-go/ADAPTATIONS.md#per-test-coverage-counters-in-memory)
 lists every case.
 
