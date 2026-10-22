@@ -962,6 +962,16 @@ place to keep its stack lines, and for process retries in `packageFailed`
 (`gotesting/retry_process_deferred.go`). Check:
 `TestMiniRetryThatSkipsAfterFailureFails`.
 
+## Races in retry child processes
+
+With process retries, a race that a retry child detected stops the retries,
+but under Early Flake Detection an earlier execution that passed made the
+group pass: this process's race detector never saw the child's race, so go
+test exited 0. `applyCompletedAttempt` now records it as the group's terminal
+failure, which fails the package and the final status, unless the test is
+quarantined or disabled. Check: `TestRaceOnRetry` in
+`TestMiniRaceInstrumentsClientOnly`.
+
 ## Skips after a failure
 
 `instrumentCloseAndSkip` and `instrumentSkipNow` in
@@ -2146,8 +2156,8 @@ so the events that the process sent earlier keep their containers, and the
 test that the crash output's crashed goroutine names: the
 first frame of a top-level test function or a function literal in one, or else
 the test function that created the goroutine, in a suite left open
-(`crashedTest`). Methods of testify suites, `TestMain`, helpers and dynamic
-subtest names name no test. The session's error names the crash: a panic's
+(`crashedTest`); a `Benchmark` function's event is a benchmark's. Methods of
+testify suites, `TestMain`, helpers and dynamic subtest names name no test. The session's error names the crash: a panic's
 first line, or, for a fatal error, whose message the runtime prints before it
 copies its output to the crash output, its first frame outside the runtime,
 unless `--panic-hook` copied the message too. A

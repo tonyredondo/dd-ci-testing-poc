@@ -443,6 +443,10 @@ func recreateCLIProcess(session *tslvTestSession, p *cliProcess, fallback time.T
 				continue
 			}
 			test := s.suite.CreateTest(testName, WithTestStartTime(finish))
+			if strings.HasPrefix(testName, "Benchmark") {
+				// go test runs a Benchmark function as a benchmark.
+				test.SetBenchmarkData("duration", nil)
+			}
 			test.SetError(WithErrorInfo(errType, message, stack))
 			test.SetTag(constants.TestFinalStatus, constants.TestStatusFail)
 			test.Close(ResultStatusFail, WithTestFinishTime(finish))

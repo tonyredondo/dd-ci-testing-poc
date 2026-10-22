@@ -32,6 +32,33 @@ func TestClientDataRace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "race_test.go"), []byte(source), 0600); err != nil {
 		t.Fatal(err)
 	}
+	// The first execution passes; its retries race.
+	retry := `package fixture_test
+
+import (
+	"os"
+	"testing"
+)
+
+func TestRaceOnRetry(t *testing.T) {
+	marker := os.Getenv("POC_RETRY_COUNTER") + ".race"
+	if _, err := os.Stat(marker); err != nil {
+		_ = os.WriteFile(marker, nil, 0o600)
+		return
+	}
+	shared := 0
+	done := make(chan struct{})
+	go func() {
+		shared++
+		close(done)
+	}()
+	shared++
+	<-done
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "race_retry_test.go"), []byte(retry), 0600); err != nil {
+		t.Fatal(err)
+	}
 	bin := filepath.Join(t.TempDir(), executableName("race.test"))
 	out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false"), driver, "test", "--runtime=mini", "-race", "-c", "-o", bin, ".")
 	if code != 0 {
@@ -40,6 +67,11 @@ func TestClientDataRace(t *testing.T) {
 	got := execute(t, dir, bin, []string{"-test.run=^TestClientDataRace$"}, true, false)
 	if got.code == 0 || !strings.Contains(got.out+got.stderr, "WARNING: DATA RACE") || !strings.Contains(got.out, "race detected during execution of test") {
 		t.Fatalf("client race not reported: %d %s %s", got.code, got.out, got.stderr)
+	}
+	// A race that an Early Flake Detection retry in a child process detects
+	// fails the package although the first execution passed.
+	if got := executeProfile(t, dir, bin, []string{"-test.run=^TestRaceOnRetry$"}, true, false, "efd"); got.code == 0 {
+		t.Fatalf("a race in a retry child passed: %s %s", got.out, got.stderr)
 	}
 
 	root, err := filepath.Abs("..")

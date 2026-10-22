@@ -108,6 +108,9 @@ func BenchmarkCrash(b *testing.B) {
 		if b.N > 1 {
 			panic("benchmark failed later")
 		}
+	case "benchmark goroutine":
+		go func() { panic("benchmark worker failed") }()
+		time.Sleep(time.Minute)
 	case "sub":
 		b.Run("sub", func(b *testing.B) {
 			if b.N > 1 {
@@ -159,6 +162,8 @@ func FuzzSeeds(f *testing.F) {
 		// sends the process's events before the process ends.
 		{"benchmark panic deferred", "benchmark", []string{"-run=^TestFirst$", "-bench=^BenchmarkCrash$", "-benchtime=1x"}, []string{"DD_CIVISIBILITY_DEFERRED_DELIVERY=true"}, []string{"BenchmarkCrash fail", "TestFirst pass"}, "", "panic: benchmark failed", 1},
 		{"benchmark panic in a later run", "later", []string{"-run=^TestFirst$", "-bench=^BenchmarkCrash$", "-benchtime=100x"}, nil, []string{"BenchmarkCrash fail", "TestFirst pass"}, "", "panic: benchmark failed later", 1},
+		// A crash that ddto names in the crash output recreates a benchmark.
+		{"benchmark crash", "benchmark goroutine", []string{"-run=^$", "-bench=^BenchmarkCrash$", "-benchtime=1x"}, nil, []string{"BenchmarkCrash fail"}, "", "panic: benchmark worker failed", 1},
 		{"sub-benchmark panic in a later run", "sub", []string{"-run=^TestFirst$", "-bench=^BenchmarkCrash$", "-benchtime=100x"}, nil, []string{"BenchmarkCrash/sub fail", "TestFirst pass"}, "", "panic: sub-benchmark failed later", 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
