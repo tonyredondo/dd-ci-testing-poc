@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -638,7 +639,7 @@ func linkVendor(source, target string, manifest []byte, tree []vendorEntry) erro
 // the original's permissions and time, which validation compares: a vendored
 // package may run a script beside its sources.
 func shareVendorFile(original, path string, file fs.FileInfo) error {
-	if os.Link(original, path) == nil {
+	if linksVendorFile(file.Mode()) && os.Link(original, path) == nil {
 		return nil
 	}
 	input, err := os.Open(original)
@@ -655,6 +656,14 @@ func shareVendorFile(original, path string, file fs.FileInfo) error {
 		return err
 	}
 	return os.Chtimes(path, time.Time{}, file.ModTime())
+}
+
+// linksVendorFile reports whether a vendored file with mode may be a hard
+// link. On Windows, removing a read-only hard link clears the read-only
+// attribute of the caller's file, which the link shares, so such a file is
+// copied there, as GOROOT mirrors are.
+func linksVendorFile(mode fs.FileMode) bool {
+	return runtime.GOOS != "windows" || mode.Perm()&0o200 != 0
 }
 
 // validVendorWorkspace reports whether root holds exactly what linkVendor and
@@ -833,7 +842,7 @@ func snapshotVendor(source, target string, manifest []byte, replacements map[str
 				return err
 			}
 		}
-		if err := os.Link(backing, logical); err == nil {
+		if info, err := os.Stat(backing); err == nil && linksVendorFile(info.Mode()) && os.Link(backing, logical) == nil {
 			return nil
 		}
 		input, err := os.Open(backing)

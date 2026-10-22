@@ -279,8 +279,10 @@ directories keep vendored packages visible to wildcard patterns such as
 `example.com/helper/...`; Go ignores linked directories there. Links inside the
 client's vendor tree stay links. Like Go, `ddto` follows a `vendor` directory
 that is itself a link. Where hard links fail, as when the user cache is on
-another filesystem, files are copied with their times. Linking updates the
-client file's change time, so Git may check its contents once. Alternate
+another filesystem, files are copied with their times. On Windows, read-only
+files are copied too: removing a read-only hard link there clears the
+attribute of the file that it shares. Linking updates the client file's
+change time, so Git may check its contents once. Alternate
 modfiles keep working in any spelling, including `GOFLAGS`.
 
 The workspace lives in the user cache, under `ddto/vendor-workspaces`, at a
