@@ -1135,8 +1135,11 @@ will, and the read cache hands the responses to them.
   and its Agent's Unix socket, instead of their parent process. They keep a
   response that one credential or Agent received from another client; the
   cache never stores the key, and the base URL names a socket only lossily,
-  `/` and `_` alike (`UnixDataSocketURL`). CI scopes,
-  which both already share, stay. The entries must outlast a build
+  `/` and `_` alike (`UnixDataSocketURL`). CI scopes, which both already
+  share, keep their kind and lifetime but also mix in the same two digests:
+  they outlive one invocation, and another `ddto` run in the same job with
+  another API key, as for another organization, must not reuse its responses.
+  So does a local scope outside ddto. The entries must outlast a build
   of minutes, so the scope's TTL is an hour, and they live in the scope's own
   directory, `cli/<hash>` of the state directory alone, in the shared one
   (`readCacheSubdirectory`,
