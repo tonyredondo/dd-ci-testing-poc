@@ -92,6 +92,9 @@ func release(out string, platforms []string, tag string) error {
 	if err != nil {
 		return err
 	}
+	if err := absoluteTemporaryDirectories(); err != nil {
+		return err
+	}
 	temp, err := os.MkdirTemp("", "ddto-release-")
 	if err != nil {
 		return err
@@ -143,6 +146,23 @@ func release(out string, platforms []string, tag string) error {
 			return err
 		}
 		fmt.Println(path)
+	}
+	return nil
+}
+
+// absoluteTemporaryDirectories makes a relative TMPDIR, TMP or TEMP absolute,
+// for this process and the go commands that it starts in other directories.
+func absoluteTemporaryDirectories() error {
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		if dir := os.Getenv(name); dir != "" && !filepath.IsAbs(dir) {
+			absolute, err := filepath.Abs(dir)
+			if err != nil {
+				return err
+			}
+			if err := os.Setenv(name, absolute); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

@@ -190,3 +190,20 @@ func archiveFiles(t *testing.T, data []byte) map[string]bool {
 	}
 	return files
 }
+
+// A relative TMPDIR, which go commands started in other directories would
+// resolve there, becomes absolute.
+func TestAbsoluteTemporaryDirectories(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, "tmp")
+	}
+	if err := absoluteTemporaryDirectories(); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		if dir := os.Getenv(name); !filepath.IsAbs(dir) || filepath.Base(dir) != "tmp" {
+			t.Errorf("%s=%q", name, dir)
+		}
+	}
+}
