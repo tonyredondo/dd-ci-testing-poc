@@ -89,6 +89,15 @@ class InstallTests(unittest.TestCase):
         self.assertTrue(os.access(installed, os.X_OK))
         self.assertIn("(release latest)", result.stderr)
 
+    def test_installs_with_a_backslash_in_the_temporary_directory(self):
+        # sha256sum and shasum prefix the digest of such a file with a backslash.
+        temporary = self.root / "tmp\\dir"
+        temporary.mkdir()
+        self.release()
+        result = self.install(TMPDIR=str(temporary))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.dir / "ddto").read_text(), FAKE_DDTO)
+
     def test_rejects_a_checksum_mismatch_without_falling_back(self):
         self.release(checksum="f" * 64)
         result = self.install(path=self.fake_go())

@@ -42,12 +42,14 @@ fetch() { # url file
 }
 
 sha256() { # file
+  # From standard input: sha256sum and shasum prefix the digest with a
+  # backslash for a file name that has one.
   if command -v sha256sum > /dev/null; then
-    sha256sum "$1" | cut -d ' ' -f 1
+    sha256sum < "$1" | cut -d ' ' -f 1
   elif command -v shasum > /dev/null; then
-    shasum -a 256 "$1" | cut -d ' ' -f 1
+    shasum -a 256 < "$1" | cut -d ' ' -f 1
   elif command -v openssl > /dev/null; then
-    openssl dgst -sha256 "$1" | sed 's/.* //'
+    openssl dgst -sha256 < "$1" | sed 's/.* //'
   else
     return 1
   fi
