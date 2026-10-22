@@ -161,7 +161,13 @@ func (c *client) GetKnownTests() (*KnownTestsResponseData, error) {
 				if responseObject.Data.Attributes.PageInfo == nil || !responseObject.Data.Attributes.PageInfo.HasNext {
 					break
 				}
-				body.Data.Attributes.PageInfo.PageState = responseObject.Data.Attributes.PageInfo.Cursor
+				// A next page needs a new cursor: the same one would request
+				// the same page forever.
+				cursor := responseObject.Data.Attributes.PageInfo.Cursor
+				if cursor == "" || cursor == body.Data.Attributes.PageInfo.PageState {
+					return readCacheLiveResult[*KnownTestsResponseData]{}, fmt.Errorf("known tests response: a next page without a new cursor")
+				}
+				body.Data.Attributes.PageInfo.PageState = cursor
 			}
 
 			telemetry.KnownTestsResponseTests(float64(knownTestsResponseTestCount(&accumulated)))

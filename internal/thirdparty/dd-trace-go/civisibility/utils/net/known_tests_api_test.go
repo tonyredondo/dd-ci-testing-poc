@@ -136,6 +136,39 @@ func TestKnownTestsApiRequest(t *testing.T) {
 	assert.Equal(t, []string{"Test4", "Test5", "Test6"}, knownTests.Tests["MyModule2"]["MySuite2"])
 }
 
+// A next page whose cursor does not move ends the request with an error,
+// instead of requesting the same page forever.
+func TestKnownTestsApiRequestRejectsAStuckCursor(t *testing.T) {
+	for _, cursor := range []string{"", "same"} {
+		requests := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requests++
+			if requests > 3 {
+				http.Error(w, "too many requests", http.StatusTeapot)
+				return
+			}
+			var request knownTestsRequest
+			body, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(body, &request)
+			var resp knownTestsResponse
+			resp.Data.ID = request.Data.ID
+			resp.Data.Type = settingsRequestType
+			resp.Data.Attributes.Tests = KnownTestsResponseDataModules{"Module": {"Suite": []string{"Test"}}}
+			resp.Data.Attributes.PageInfo = &knownTestsResponsePageInfo{Cursor: cursor, HasNext: true}
+			w.Header().Set(HeaderContentType, ContentTypeJSON)
+			_ = json.NewEncoder(w).Encode(resp)
+		}))
+		origEnv := saveEnv()
+		setCiVisibilityEnv(os.Getenv("PATH"), server.URL)
+		_, err := NewClient().GetKnownTests()
+		restoreEnv(origEnv)
+		server.Close()
+		if err == nil || requests > 2 {
+			t.Fatalf("cursor %q: %d requests, %v", cursor, requests, err)
+		}
+	}
+}
+
 func TestKnownTestsApiRequestFailToUnmarshal(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "failed to read body", http.StatusBadRequest)

@@ -944,6 +944,14 @@ instrumented, as well as its wrapper: in a table such as
 event. Only the wrapper is marked here; the inner `b.Run` that the measuring
 level makes still finds it. Check: `TestMiniSubBenchmarksSharingACallback`.
 
+## Known-test pages
+
+`GetKnownTests` in `utils/net/known_tests_api.go` requests the next page while
+the response says `has_next`, with the response's cursor. A cursor that was
+empty, or the one just sent, requested the same page forever and kept
+appending its tests. Such a response now ends the request with an error, as
+other invalid responses do. Check: `TestKnownTestsApiRequestRejectsAStuckCursor`.
+
 ## Logs intake limits
 
 `integrations/logs/logs_writer.go` sent a payload once it passed 25 MB, from a
