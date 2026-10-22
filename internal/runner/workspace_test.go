@@ -407,12 +407,18 @@ func TestMiniOutsideAModuleRunsNatively(t *testing.T) {
 // A relative TMPDIR still gives the plan an absolute directory, which its
 // temporary go.work needs.
 func TestMiniRelativeTemporaryDirectory(t *testing.T) {
+	// The module sits below the temporary directory: on Windows, go ignores a
+	// go.mod in the system temp root itself.
 	root := t.TempDir()
+	module := filepath.Join(root, "client")
+	if err := os.Mkdir(module, 0700); err != nil {
+		t.Fatal(err)
+	}
 	for file, data := range map[string]string{
 		"go.mod":         "module example.com/client\ngo 1.21\n",
 		"client_test.go": "package client\n",
 	} {
-		if err := os.WriteFile(filepath.Join(root, file), []byte(data), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(module, file), []byte(data), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -422,7 +428,7 @@ func TestMiniRelativeTemporaryDirectory(t *testing.T) {
 	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
 		t.Setenv(name, ".")
 	}
-	plan, err := PrepareRuntime(t.Context(), root, []string{"."}, Mini)
+	plan, err := PrepareRuntime(t.Context(), module, []string{"."}, Mini)
 	if plan.Dir != "" {
 		plan.Release()
 		_ = os.RemoveAll(plan.Dir)

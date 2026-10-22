@@ -105,6 +105,11 @@ func TestProfileRewriteKeepsLinkAndMode(t *testing.T) {
 	if err := os.Chmod(target, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// Windows reports a writable file as 0666.
+	before, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
 	link := filepath.Join(dir, "coverage.out")
 	if err := os.Symlink(target, link); err != nil {
 		t.Skip("no symbolic links:", err)
@@ -118,7 +123,7 @@ func TestProfileRewriteKeepsLinkAndMode(t *testing.T) {
 	}
 	data, err := os.ReadFile(target)
 	info, statErr := os.Stat(target)
-	if err != nil || statErr != nil || string(data) != "mode: count\n" || info.Mode().Perm() != 0o644 {
+	if err != nil || statErr != nil || string(data) != "mode: count\n" || info.Mode().Perm() != before.Mode().Perm() {
 		t.Fatalf("target %q, mode %v: %v %v", data, info.Mode(), err, statErr)
 	}
 }
