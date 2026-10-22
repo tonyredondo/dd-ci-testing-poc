@@ -854,6 +854,11 @@ remote URL can hold a job token, which `git ls-remote --get-url` prints.
 The debug line of a request with a body shows its size, not its contents,
 which the SDK printed up to 4 KB of: a logs payload holds the tests' output.
 Check: `TestRequestDebugLinesHideTheBody`.
+The test command's and the session name's debug lines in
+[`civisibility/utils/environmentTags.go`](civisibility/utils/environmentTags.go)
+say where the values come from, not the values, which hold the test's
+arguments and so any token passed as one. Check:
+`TestDebugLinesLeaveOutTheTestCommand`.
 A request's error, an `*url.Error` that keeps the URL's user and query, goes
 through `logError`, and `AgentURLFromEnv`'s warnings in
 [`agent.go`](agent.go) leave out the URL of `DD_TRACE_AGENT_URL`. A URL that

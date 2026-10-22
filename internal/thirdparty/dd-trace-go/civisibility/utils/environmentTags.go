@@ -268,21 +268,27 @@ func createCITagsMap() map[string]string {
 	// Get command line test command. A process in ddto's test session
 	// reports ddto's: the session's events and fingerprints match its own.
 	cmd := testCommand(os.Args)
-	if session, _ := HandedCLISession(); session != nil {
+	session, _ := HandedCLISession()
+	if session != nil {
 		cmd = session.Command
 	}
 	localTags[constants.TestCommand] = cmd
-	log.Debug("civisibility: test command: %s", cmd)
+	// The command, and a session name made from it, hold the test's arguments,
+	// which can carry a token: debug lines say only where they come from.
+	log.Debug("civisibility: test command from ddto's session: %t", session != nil)
 
 	// Populate the test session name
+	sessionNameSource := "the test command"
 	if testSessionName, ok := env.Lookup(constants.CIVisibilityTestSessionNameEnvironmentVariable); ok {
 		localTags[constants.TestSessionName] = testSessionName
+		sessionNameSource = constants.CIVisibilityTestSessionNameEnvironmentVariable
 	} else if jobName, ok := localTags[constants.CIJobName]; ok {
 		localTags[constants.TestSessionName] = fmt.Sprintf("%s-%s", jobName, cmd)
+		sessionNameSource = "the CI job name and the test command"
 	} else {
 		localTags[constants.TestSessionName] = cmd
 	}
-	log.Debug("civisibility: test session name: %s", localTags[constants.TestSessionName])
+	log.Debug("civisibility: test session name from %s", sessionNameSource)
 
 	// Check if the user provided the test service
 	if ddService := env.Get("DD_SERVICE"); ddService != "" {
