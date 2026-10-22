@@ -533,6 +533,33 @@ func TestModuleWorkspaceInputWithoutGoDirectiveKeepsGo116Defaults(t *testing.T) 
 	}
 }
 
+// The module's toolchain line, which go.work overrides, reaches the
+// workspace, so go keeps selecting that toolchain.
+func TestModuleWorkspaceInputKeepsTheToolchain(t *testing.T) {
+	t.Setenv("GOTOOLCHAIN", "local")
+	for module, want := range map[string]string{
+		"module example.com/tc\ngo 1.21\ntoolchain go1.99.0\n": "toolchain go1.99.0\n",
+		"module example.com/tc\ngo 1.21\ntoolchain go1.22.1\n": "",
+		"module example.com/tc\ngo 1.21\n":                     "",
+	} {
+		root := t.TempDir()
+		if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte(module), 0600); err != nil {
+			t.Fatal(err)
+		}
+		input, err := moduleWorkspaceInput(t.Context(), root, root, t.TempDir(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(string(data), "toolchain "); got != (want != "") || want != "" && !strings.Contains(string(data), want) {
+			t.Errorf("%q: workspace %q", module, data)
+		}
+	}
+}
+
 func TestUseModuleWorkspaceFlagsRemovesEveryModfileSpelling(t *testing.T) {
 	t.Setenv("GOFLAGS", "-modfile=env.mod -tags=fixture")
 	opts := options{buildFlags: []string{"-modfile", "alt.mod", "--modfile=other.mod", "-race"}}

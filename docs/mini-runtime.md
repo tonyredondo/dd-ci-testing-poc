@@ -78,7 +78,7 @@ selects. A client keeps its own language version: one declaring Go 1.21 keeps
 that version's loop-variable semantics and timer defaults, and a module without
 a `go` directive keeps Go 1.16 semantics and GODEBUG defaults, as under native
 Go. For a client language older than Go 1.25, Mini becomes a separate main
-module in a temporary workspace. The client's module files stay unchanged,
+module in a temporary workspace, which keeps the client's `toolchain` line. The client's module files stay unchanged,
 apart from the updates that its own `-mod=mod` imports would require under
 native Go.
 

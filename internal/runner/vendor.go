@@ -88,7 +88,13 @@ func moduleWorkspaceInput(ctx context.Context, dir, root, temp string, replaceme
 	if compareGoVersion(workspaceGo, "1.25.0") < 0 {
 		workspaceGo = "1.25.0"
 	}
-	data := []byte("go " + workspaceGo + "\nuse " + strconv.Quote(root) + "\n")
+	data := []byte("go " + workspaceGo + "\n")
+	// go reads the toolchain line of go.work, not go.mod's: the module's, as
+	// toolchain go1.27.0 for a go 1.21 module, still selects that toolchain.
+	if toolchain := moduleDirective([]byte(out), "toolchain"); strings.HasPrefix(toolchain, "go") && compareGoVersion(strings.TrimPrefix(toolchain, "go"), workspaceGo) > 0 {
+		data = append(data, "toolchain "+toolchain+"\n"...)
+	}
+	data = append(data, "use "+strconv.Quote(root)+"\n"...)
 	hasDefault := false
 	for _, setting := range settingsDebug {
 		hasDefault = hasDefault || setting.Key == "default"
