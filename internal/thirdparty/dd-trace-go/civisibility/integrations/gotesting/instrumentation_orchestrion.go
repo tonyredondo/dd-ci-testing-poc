@@ -664,12 +664,12 @@ func instrumentTestingBFunc(pb *testing.B, name string, f func(*testing.B)) (str
 			// Set the CI visibility test.
 			execMeta.test = test
 
-			// Enable the timer again.
+			// Bind the context outside the measurement.
+			bindNativeTestContext(b, test)
+
+			// Enable the timer again and execute the original func.
 			b.ResetTimer()
 			b.StartTimer()
-
-			// Execute original func
-			bindNativeTestContext(b, test)
 			f(b)
 		}
 

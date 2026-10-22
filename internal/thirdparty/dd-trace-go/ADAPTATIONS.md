@@ -841,6 +841,15 @@ alone, so the files of a nested module, such as `services/api` with module
 module directory relative to the CI workspace comes first, when the module
 lies inside it. Check: `TestWriteLCOVReportFromProfileUsesNestedModuleDirectory`.
 
+## Benchmark context outside the measurement
+
+The benchmark wrappers in `gotesting/testing.go` and
+`gotesting/instrumentation_orchestrion.go` bound Mini's context to the
+benchmark after `b.StartTimer()`: with the SDK mirror active, its allocations
+counted in the first, and with `-benchtime=1x` only, run (4 allocations and
+168 B for an empty benchmark). The binding now happens before the timer
+restarts. Check: `TestMiniSDKMirrorBenchmarkMeasuresNoBinding`.
+
 ## Skips after a failure
 
 `instrumentCloseAndSkip` and `instrumentSkipNow` in

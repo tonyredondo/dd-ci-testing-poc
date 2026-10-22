@@ -1100,10 +1100,11 @@ func (ddm *M) executeInternalBenchmark(benchmarkInfo *testingBInfo) func(*testin
 			// Sets the CI Visibility test
 			execMeta.test = test
 
-			// Restart the timer and execute the original benchmark function.
+			// Bind the context, outside the measurement, then restart the timer
+			// and execute the original benchmark function.
+			bindNativeTestContext(b, test)
 			b.ResetTimer()
 			b.StartTimer()
-			bindNativeTestContext(b, test)
 			benchmarkInfo.originalFunc(b)
 		}
 
