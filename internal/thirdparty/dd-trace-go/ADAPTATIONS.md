@@ -930,6 +930,15 @@ pattern still cannot read, as for a path with a quote, ends the previous
 file instead of giving it the next file's hunks. Checks:
 `TestGetGitDiffNormalizesHeaders`, `TestParseGitDiffOutputUnreadableHeader`.
 
+## Settings that require Git
+
+When the settings require Git, the SDK waits a minute for the repository
+upload before requesting them again. With ddto's Git worker, which uploads
+for the whole invocation, the wait is `--git-upload-timeout` when that is
+longer (`requireGitUploadWait` in `integrations/civisibility_features.go`):
+with `--git-upload-timeout=2m`, an upload of 90 seconds left the tests without
+the settings that it enables. Check: `TestRequireGitUploadWait`.
+
 ## Git safe.directory for linked checkouts
 
 Upstream `execGit` in [`civisibility/utils/git.go`](civisibility/utils/git.go)
