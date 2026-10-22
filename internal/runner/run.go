@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -192,15 +193,17 @@ func overlayPath(dir, path string) string {
 	return filepath.Join(dir, path)
 }
 
-// workingDirectory applies go test's -C, relative to the caller's directory.
+// workingDirectory applies go test's -C, relative to the caller's directory;
+// on Windows, a directory rooted without a volume, as \repo, is on the
+// caller's volume, as os.Chdir takes it.
 func workingDirectory(dir string, opts options) string {
-	if opts.chdir == "" || filepath.IsAbs(opts.chdir) {
-		if opts.chdir != "" {
-			return filepath.Clean(opts.chdir)
-		}
+	if opts.chdir == "" {
 		return dir
 	}
-	return filepath.Join(dir, opts.chdir)
+	if filepath.IsAbs(opts.chdir) {
+		return filepath.Clean(opts.chdir)
+	}
+	return overlayPath(dir, opts.chdir)
 }
 
 // explicitFiles mirrors go test's file mode: an argument ending in .go selects
@@ -601,8 +604,10 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	for _, p := range packages {
 		// ddto lists testing itself; only the caller's patterns select its tests.
 		selectedTesting := p.ImportPath == "testing" && slices.ContainsFunc(opts.packages, func(pattern string) bool {
-			// A directory path, as $GOROOT/src/testing, names it too.
-			return matchPackagePattern(pattern, dir, &p) || filepath.IsAbs(pattern) && filepath.Clean(pattern) == p.Dir
+			// A directory path, as $GOROOT/src/testing, names it too, and go
+			// cleans an import path, as testing/, first.
+			return matchPackagePattern(pattern, dir, &p) || path.Clean(pattern) == "testing" ||
+				filepath.IsAbs(pattern) && filepath.Clean(pattern) == p.Dir
 		})
 		if !selectedTesting && (p.ImportPath == "testing" || p.ImportPath == runtimePackage || len(p.TestGoFiles)+len(p.XTestGoFiles) == 0) {
 			continue

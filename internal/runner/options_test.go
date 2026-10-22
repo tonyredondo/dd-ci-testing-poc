@@ -331,5 +331,12 @@ func TestOverlayPathResolvesAsGo(t *testing.T) {
 		if got, want := overlayPath(dir, `\client\value.go`), filepath.VolumeName(dir)+`\client\value.go`; got != want {
 			t.Errorf("volume-relative path: %s; want %s", got, want)
 		}
+		// -C resolves the same way.
+		if got, want := workingDirectory(dir, options{chdir: `\repo`}), filepath.VolumeName(dir)+`\repo`; got != want {
+			t.Errorf("volume-relative -C: %s; want %s", got, want)
+		}
+	}
+	if got := workingDirectory(dir, options{chdir: "sub"}); got != filepath.Join(dir, "sub") {
+		t.Errorf("relative -C: %s", got)
 	}
 }
