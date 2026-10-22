@@ -137,6 +137,19 @@ class InstallTests(unittest.TestCase):
         self.assertEqual((self.dir / "ddto").read_text(), FAKE_DDTO)
         self.assertEqual(self.paths, ["/SHA256SUMS", "/" + self.asset])
 
+    def test_keeps_the_installed_version_when_the_copy_fails(self):
+        self.release()
+        self.preinstall(fake_ddto("v1.0.0"))
+        # A cp that fails partway, as on a full disk.
+        tools = self.root / "tools"
+        tools.mkdir()
+        (tools / "cp").write_text('#!/bin/sh\nprintf partial > "$2"\nexit 1\n')
+        (tools / "cp").chmod(0o755)
+        result = self.install(path=f"{tools}{os.pathsep}{os.environ['PATH']}")
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.dir / "ddto").read_text(), fake_ddto("v1.0.0"))
+        self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["ddto"])
+
     def test_adds_the_directory_to_github_path(self):
         self.release()
         github_path = self.root / "github_path"
@@ -156,6 +169,9 @@ class PowerShellInstallTests(InstallTests):
         names = {"--version": "-Version", "--dir": "-Dir"}
         return ["pwsh", "-NoProfile", "-NonInteractive", "-File", str(SCRIPTS / "install.ps1"),
                 *(names.get(arg, arg) for arg in args)]
+
+    def test_keeps_the_installed_version_when_the_copy_fails(self):
+        self.skipTest("Copy-Item does not run cp; install.ps1 moves its copy over the target the same way")
 
 
 if __name__ == "__main__":

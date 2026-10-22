@@ -112,8 +112,16 @@ param(
             } elseif ((Sha256 (Join-Path $temp $asset)) -ne $want) {
                 throw "ddto install: $asset does not match SHA256SUMS"
             } else {
-                Copy-Item -LiteralPath (Join-Path $temp $asset) -Destination $target -Force
-                if ($os -ne 'windows') { & chmod 0755 $target }
+                # Beside the target, then moved over it: a copy that fails,
+                # as on a full disk, keeps the installed ddto.
+                $partial = "$target.tmp.$PID"
+                try {
+                    Copy-Item -LiteralPath (Join-Path $temp $asset) -Destination $partial -Force
+                    if ($os -ne 'windows') { & chmod 0755 $partial }
+                    Move-Item -LiteralPath $partial -Destination $target -Force
+                } finally {
+                    Remove-Item -LiteralPath $partial -Force -ErrorAction SilentlyContinue
+                }
                 $installed = "release $Version"
             }
         } else {

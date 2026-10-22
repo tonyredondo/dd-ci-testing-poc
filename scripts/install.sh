@@ -116,8 +116,13 @@ elif [ -n "$os" ] && [ -n "$arch" ]; then
       say "$asset does not match SHA256SUMS"
       exit 1
     fi
-    cp "$temp/$asset" "$target"
-    chmod 0755 "$target"
+    # Beside the target, then renamed over it: a copy that fails, as on a full
+    # disk, keeps the installed ddto.
+    if ! { cp "$temp/$asset" "$target.tmp.$$" && chmod 0755 "$target.tmp.$$" && mv -f "$target.tmp.$$" "$target"; }; then
+      rm -f "$target.tmp.$$"
+      say "cannot write $target"
+      exit 1
+    fi
     installed="release $version"
   fi
 else
