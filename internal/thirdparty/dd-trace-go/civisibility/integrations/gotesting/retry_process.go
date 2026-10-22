@@ -3431,7 +3431,10 @@ func (o *processRetryChildObservation) buildResult(status processRetryStatus) pr
 		panicData = o.result.cleanupPanicData
 		panicStack = o.result.cleanupPanicStack
 	}
-	failed := o.result.failed || o.result.raceDetected || panicData != nil
+	// testing reports a race in a subtest for the subtest only; the child runs
+	// one test, so any race that its detector found is that test's.
+	raceDetected := o.result.raceDetected || o.subtree == nil && retryAttemptRaceErrors() > 0
+	failed := o.result.failed || raceDetected || panicData != nil
 	rootParallel := false
 	if o.group != nil {
 		o.group.mu.Lock()
@@ -3453,7 +3456,7 @@ func (o *processRetryChildObservation) buildResult(status processRetryStatus) pr
 		Failed:            failed,
 		Skipped:           o.result.skipped,
 		Panic:             panicData != nil,
-		RaceDetected:      o.result.raceDetected,
+		RaceDetected:      raceDetected,
 		RootParallel:      rootParallel,
 	}
 	if result.Failed {

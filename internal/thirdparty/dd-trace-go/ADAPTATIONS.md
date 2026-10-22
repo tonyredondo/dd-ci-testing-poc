@@ -969,7 +969,10 @@ but under Early Flake Detection an earlier execution that passed made the
 group pass: this process's race detector never saw the child's race, so go
 test exited 0. `applyCompletedAttempt` now records it as the group's terminal
 failure, which fails the package and the final status, unless the test is
-quarantined or disabled. Check: `TestRaceOnRetry` in
+quarantined or disabled. A child reports any race that its detector found
+(`buildResult` in `gotesting/retry_process.go`): testing reports a race in a
+subtest for the subtest only, and the child runs one test. Checks:
+`TestRaceOnRetry` and `TestRaceInSubtestOnRetry` in
 `TestMiniRaceInstrumentsClientOnly`.
 
 ## Skips after a failure

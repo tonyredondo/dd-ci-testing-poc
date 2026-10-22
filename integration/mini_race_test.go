@@ -55,6 +55,25 @@ func TestRaceOnRetry(t *testing.T) {
 	shared++
 	<-done
 }
+
+// As TestRaceOnRetry, in a subtest, which testing reports the race for.
+func TestRaceInSubtestOnRetry(t *testing.T) {
+	marker := os.Getenv("POC_RETRY_COUNTER") + ".subtest-race"
+	if _, err := os.Stat(marker); err != nil {
+		_ = os.WriteFile(marker, nil, 0o600)
+		return
+	}
+	t.Run("racy", func(t *testing.T) {
+		shared := 0
+		done := make(chan struct{})
+		go func() {
+			shared++
+			close(done)
+		}()
+		shared++
+		<-done
+	})
+}
 `
 	if err := os.WriteFile(filepath.Join(dir, "race_retry_test.go"), []byte(retry), 0600); err != nil {
 		t.Fatal(err)
@@ -70,8 +89,10 @@ func TestRaceOnRetry(t *testing.T) {
 	}
 	// A race that an Early Flake Detection retry in a child process detects
 	// fails the package although the first execution passed.
-	if got := executeProfile(t, dir, bin, []string{"-test.run=^TestRaceOnRetry$"}, true, false, "efd"); got.code == 0 {
-		t.Fatalf("a race in a retry child passed: %s %s", got.out, got.stderr)
+	for _, name := range []string{"TestRaceOnRetry", "TestRaceInSubtestOnRetry"} {
+		if got := executeProfile(t, dir, bin, []string{"-test.run=^" + name + "$"}, true, false, "efd"); got.code == 0 {
+			t.Fatalf("%s: a race in a retry child passed: %s %s", name, got.out, got.stderr)
+		}
 	}
 
 	root, err := filepath.Abs("..")
