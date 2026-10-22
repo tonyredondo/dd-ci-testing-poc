@@ -114,7 +114,7 @@ param(
             } else {
                 # Beside the target, then moved over it: a copy that fails,
                 # as on a full disk, keeps the installed ddto.
-                $partial = "$target.tmp.$PID"
+                $partial = "$target.tmp.$([guid]::NewGuid().ToString('N'))"
                 try {
                     Copy-Item -LiteralPath (Join-Path $temp $asset) -Destination $partial -Force
                     if ($os -ne 'windows') { & chmod 0755 $partial }
@@ -164,13 +164,15 @@ param(
     $listed = if ($os -eq 'windows') { $entries -contains $Dir } else { $entries -ccontains $Dir }
     if (-not $listed) {
         $env:PATH = "$Dir$separator$env:PATH"
-        if ($env:GITHUB_PATH) {
-            # GitHub reads environment files as UTF-8; Windows PowerShell 5.1
-            # would otherwise write the system's code page.
-            Add-Content -LiteralPath $env:GITHUB_PATH -Value $Dir -Encoding UTF8
-            Say "added $Dir to PATH for this session and the next steps"
-        } else {
-            Say "added $Dir to PATH for this session; add it to your profile to keep it"
-        }
+    }
+    # A step's own PATH does not reach the next steps: GitHub Actions adds what
+    # GITHUB_PATH lists, even when this step's PATH already has the directory.
+    if ($env:GITHUB_PATH) {
+        # GitHub reads environment files as UTF-8; Windows PowerShell 5.1
+        # would otherwise write the system's code page.
+        Add-Content -LiteralPath $env:GITHUB_PATH -Value $Dir -Encoding UTF8
+        Say "added $Dir to PATH for this session and the next steps"
+    } elseif (-not $listed) {
+        Say "added $Dir to PATH for this session; add it to your profile to keep it"
     }
 } $Version $Dir

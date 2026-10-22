@@ -116,10 +116,14 @@ elif [ -n "$os" ] && [ -n "$arch" ]; then
       say "$asset does not match SHA256SUMS"
       exit 1
     fi
-    # Beside the target, then renamed over it: a copy that fails, as on a full
-    # disk, keeps the installed ddto.
-    if ! { cp "$temp/$asset" "$target.tmp.$$" && chmod 0755 "$target.tmp.$$" && mv -f "$target.tmp.$$" "$target"; }; then
-      rm -f "$target.tmp.$$"
+    # Beside the target, in a file that mktemp creates, then renamed over it: a
+    # copy that fails, as on a full disk, keeps the installed ddto.
+    if ! partial=$(mktemp "$target.tmp.XXXXXX"); then
+      say "cannot write in $dir"
+      exit 1
+    fi
+    if ! { cp "$temp/$asset" "$partial" && chmod 0755 "$partial" && mv -f "$partial" "$target"; }; then
+      rm -f "$partial"
       say "cannot write $target"
       exit 1
     fi
@@ -140,14 +144,14 @@ if [ -z "$installed" ]; then
 fi
 "$target" --help > /dev/null 2>&1
 say "$("$target" --version) in $target ($installed)"
-case ":$PATH:" in
-  *":$dir:"*) ;;
-  *)
-    if [ -n "${GITHUB_PATH:-}" ]; then
-      echo "$native_dir" >> "$GITHUB_PATH"
-      say "added $dir to PATH for the next steps"
-    else
-      say "add $dir to PATH"
-    fi
-    ;;
-esac
+# A step's own PATH does not reach the next steps: GitHub Actions adds what
+# GITHUB_PATH lists, even when this step's PATH already has the directory.
+if [ -n "${GITHUB_PATH:-}" ]; then
+  echo "$native_dir" >> "$GITHUB_PATH"
+  say "added $dir to PATH for the next steps"
+else
+  case ":$PATH:" in
+    *":$dir:"*) ;;
+    *) say "add $dir to PATH" ;;
+  esac
+fi

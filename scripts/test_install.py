@@ -158,6 +158,15 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(github_path.read_text().split(), [str(self.dir.resolve())])
 
+    def test_adds_the_directory_to_github_path_when_this_step_has_it(self):
+        # A step that exported the directory itself: the next steps need GITHUB_PATH.
+        self.release()
+        github_path = self.root / "github_path"
+        github_path.write_text("")
+        result = self.install(github_path=github_path, path=f"{self.dir}{os.pathsep}{os.environ['PATH']}")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(github_path.read_text().split(), [str(self.dir.resolve())])
+
 
 
 # GitHub's runners have pwsh, so CI runs these; elsewhere they need it on PATH.
