@@ -918,6 +918,16 @@ that subtest finished. The failure is now recorded for any receiver; only a
 `*testing.T` still gets the parent-first propagation, which `Fail` does
 itself for the hook. Check: `TestProcessRetryChildFailureThroughCommon`.
 
+## Package flags in retry children
+
+A process-retry child gets its own values of testing's flags, such as the run
+pattern and the count. The table of those flags in `gotesting/retry_process.go`
+also held their names without the `test.` prefix, which the test binary does
+not define: a package's own flag named `-run` or `-timeout`, which `-args`
+passes, was taken for testing's and left out of the child, or became its run
+pattern. Only `test.`-prefixed names are testing's here. Check:
+`TestProcessRetryKeepsPackageFlagsWithoutTestPrefix`.
+
 ## Artifact options of retry children
 
 `processRetryArtifactPolicyFromArgs` in `gotesting/retry_process.go` reads the

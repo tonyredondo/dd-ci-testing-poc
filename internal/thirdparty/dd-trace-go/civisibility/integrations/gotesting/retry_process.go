@@ -434,23 +434,19 @@ const (
 	processRetryFlagValue
 )
 
+// processRetryStripFlags are testing's flags that a retry child gets its own
+// values of. The test binary defines them with the test. prefix only, as go
+// test passes them: a name without it, as -args can pass -run, is the
+// package's own flag, which children keep.
 var processRetryStripFlags = map[string]processRetryFlagArity{
 	"-test.run":              processRetryFlagValue,
-	"-run":                   processRetryFlagValue,
 	"-test.count":            processRetryFlagValue,
-	"-count":                 processRetryFlagValue,
 	"-test.bench":            processRetryFlagValue,
-	"-bench":                 processRetryFlagValue,
 	"-test.list":             processRetryFlagValue,
-	"-list":                  processRetryFlagValue,
 	"-test.fuzz":             processRetryFlagValue,
-	"-fuzz":                  processRetryFlagValue,
 	"-test.skip":             processRetryFlagValue,
-	"-skip":                  processRetryFlagValue,
 	"-test.cpu":              processRetryFlagValue,
-	"-cpu":                   processRetryFlagValue,
 	"-test.timeout":          processRetryFlagValue,
-	"-timeout":               processRetryFlagValue,
 	"-test.testlogfile":      processRetryFlagValue,
 	"-test.gocoverdir":       processRetryFlagValue,
 	"-test.coverprofile":     processRetryFlagValue,
@@ -2729,7 +2725,7 @@ func processRetryTimeoutFromArgs(originalArgs []string) (time.Duration, bool) {
 				i++
 			}
 		}
-		if name != "-test.timeout" && name != "-timeout" {
+		if name != "-test.timeout" {
 			if stripped {
 				continue
 			}
@@ -2771,7 +2767,7 @@ func processRetryFilterArgs(originalArgs []string, buildArgs bool) (preserved []
 			boundary = append(boundary, originalArgs[i:]...)
 			return preserved, boundary, runSelector, skipSelector, true, ""
 		}
-		if name == "-test.shuffle" || name == "-shuffle" {
+		if name == "-test.shuffle" {
 			token := name + "=off"
 			if !hasValue {
 				if i+1 < len(originalArgs) {
@@ -2791,9 +2787,9 @@ func processRetryFilterArgs(originalArgs []string, buildArgs bool) (preserved []
 				}
 			}
 			switch name {
-			case "-test.run", "-run":
+			case "-test.run":
 				runSelector = value
-			case "-test.skip", "-skip":
+			case "-test.skip":
 				skipSelector = value
 			}
 			continue

@@ -8,8 +8,10 @@ package gotesting
 import (
 	"context"
 	"errors"
+	"flag"
 	"os"
 	"os/exec"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -218,5 +220,18 @@ func TestProcessRetryArtifactPolicyAfterSeparateValues(t *testing.T) {
 		if outputDir != tc.outputDir || enabled != tc.enabled {
 			t.Errorf("%q: %q, %t; want %q, %t", tc.args, outputDir, enabled, tc.outputDir, tc.enabled)
 		}
+	}
+}
+
+// A package's own flag with the name of a testing flag but without the test.
+// prefix, as -args can pass it, stays the package's in a retry child.
+func TestProcessRetryKeepsPackageFlagsWithoutTestPrefix(t *testing.T) {
+	if flag.Lookup("skip") == nil {
+		flag.String("skip", "", "a package's own flag, for this test")
+	}
+	args := []string{"-test.run=^TestA$", "-skip=payload", "-skip", "other"}
+	preserved, _, run, skip, ok, reason := processRetryFilterArgs(args, true)
+	if !ok || run != "^TestA$" || skip != "" || !slices.Equal(preserved, args[1:]) {
+		t.Fatalf("preserved %q, run %q, skip %q, ok %t (%s)", preserved, run, skip, ok, reason)
 	}
 }
