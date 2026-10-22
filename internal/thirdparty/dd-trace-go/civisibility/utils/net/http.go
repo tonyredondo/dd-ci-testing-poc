@@ -407,7 +407,7 @@ func (rh *RequestHandler) internalSendRequest(config *RequestConfig, attempt int
 
 	resp, err := rh.Client.Do(req)
 	if err != nil {
-		log.Debug("ciVisibilityHttpClient: error = %s", err.Error())
+		log.Debug("ciVisibilityHttpClient: error = %s", logError(err))
 		// Retry if there's an error
 		rh.backoff(config, attempt)
 		return false, nil, nil
@@ -658,6 +658,18 @@ func createMultipartFormData(files []FormFile, compressed bool) ([]byte, string,
 	}
 
 	return buf.Bytes(), writer.FormDataContentType(), nil
+}
+
+// logError returns err's text for a debug line, with the URL that an
+// *url.Error, as http.Client.Do returns, carries shown as logURL shows it.
+func logError(err error) string {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		copied := *urlErr
+		copied.URL = logURL(copied.URL)
+		return copied.Error()
+	}
+	return err.Error()
 }
 
 // logURL returns rawURL for a debug line, without the user information or

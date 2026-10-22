@@ -824,8 +824,11 @@ Debug lines show URLs through `logURL`, without user information or query, and
 Git's debug lines in [`civisibility/utils/git.go`](civisibility/utils/git.go)
 pass its arguments and output through `filterSensitiveInfo`: a CI clone's
 remote URL can hold a job token, which `git ls-remote --get-url` prints.
-Checks: `TestCIClientDoesNotFollowRedirects`, `TestLogURL` and
-`TestGitDebugLinesHideRemoteCredentials`.
+A request's error, an `*url.Error` that keeps the URL's user and query, goes
+through `logError`, and `AgentURLFromEnv`'s warnings in
+[`agent.go`](agent.go) leave out the URL of `DD_TRACE_AGENT_URL`.
+Checks: `TestCIClientDoesNotFollowRedirects`, `TestLogURL`, `TestLogError`
+and `TestGitDebugLinesHideRemoteCredentials`.
 
 ## LCOV paths of nested modules
 

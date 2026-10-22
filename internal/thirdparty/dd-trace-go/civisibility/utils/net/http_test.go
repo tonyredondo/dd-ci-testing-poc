@@ -9,12 +9,15 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
 	stdnet "net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -1512,5 +1515,16 @@ func TestLogURL(t *testing.T) {
 		if got := logURL(raw); got != want {
 			t.Errorf("logURL(%q) = %q, want %q", raw, got, want)
 		}
+	}
+}
+
+// An HTTP error's URL keeps no user information or query in debug lines.
+func TestLogError(t *testing.T) {
+	err := &url.Error{Op: "Post", URL: "http://token@127.0.0.1:1/api?key=secret", Err: errors.New("connection refused")}
+	if got := logError(fmt.Errorf("send: %w", err)); strings.Contains(got, "token") || strings.Contains(got, "secret") || !strings.Contains(got, "127.0.0.1:1/api") {
+		t.Fatalf("logError = %q", got)
+	}
+	if got := logError(errors.New("plain")); got != "plain" {
+		t.Fatalf("logError = %q", got)
 	}
 }
