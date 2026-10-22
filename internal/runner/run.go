@@ -179,6 +179,19 @@ func PrepareRuntime(ctx context.Context, dir string, args []string, runtime Runt
 	return prepare(ctx, dir, opts, runtime, nil)
 }
 
+// overlayPath resolves a path of -overlay against dir as cmd/go's fsys.abs
+// does: on Windows, a path rooted without a volume, as \src\a.go, takes dir's
+// volume instead of joining dir.
+func overlayPath(dir, path string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	if volume := filepath.VolumeName(dir); volume != "" && (path[0] == '\\' || path[0] == '/') {
+		return filepath.Join(volume, path)
+	}
+	return filepath.Join(dir, path)
+}
+
 // workingDirectory applies go test's -C, relative to the caller's directory.
 func workingDirectory(dir string, opts options) string {
 	if opts.chdir == "" || filepath.IsAbs(opts.chdir) {
@@ -222,10 +235,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	}
 	replacements := map[string]string{}
 	if opts.overlay != "" {
-		path := opts.overlay
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(dir, path)
-		}
+		path := overlayPath(dir, opts.overlay)
 		// go reads the same file: for one it cannot read or parse, go test
 		// reports the error itself, with its own exit status.
 		phase := debug.start("read user overlay")
@@ -240,13 +250,10 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			return plan, &goRejectedError{e}
 		}
 		for from, to := range overlay.Replace {
-			if !filepath.IsAbs(from) {
-				from = filepath.Join(dir, from)
+			if to != "" {
+				to = overlayPath(dir, to)
 			}
-			if to != "" && !filepath.IsAbs(to) {
-				to = filepath.Join(dir, to)
-			}
-			replacements[filepath.Clean(from)] = to
+			replacements[filepath.Clean(overlayPath(dir, from))] = to
 		}
 		phase.finish(nil)
 		debug.printf("user overlay entries=%d", len(replacements))
