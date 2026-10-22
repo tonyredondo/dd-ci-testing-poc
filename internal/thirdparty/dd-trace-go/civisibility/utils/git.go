@@ -187,11 +187,13 @@ func execGit(commandType telemetry.CommandType, args ...string) (val []byte, err
 	}
 	if log.DebugEnabled() {
 		defer func() {
+			// A remote URL, in the arguments or the output, can hold a token.
 			durationInMs := time.Since(startTime).Milliseconds()
+			command, output := filterSensitiveInfo(strings.Join(args, " ")), filterSensitiveInfo(string(val))
 			if err != nil {
-				log.Debug("civisibility.git.command [%s][%s][%dms]: git %s\n%s", commandType, err.Error(), durationInMs, strings.Join(args, " "), string(val))
+				log.Debug("civisibility.git.command [%s][%s][%dms]: git %s\n%s", commandType, err.Error(), durationInMs, command, output)
 			} else {
-				log.Debug("civisibility.git.command [%s][%dms]: git %s\n%s", commandType, durationInMs, strings.Join(args, " "), string(val))
+				log.Debug("civisibility.git.command [%s][%dms]: git %s\n%s", commandType, durationInMs, command, output)
 			}
 		}()
 	}

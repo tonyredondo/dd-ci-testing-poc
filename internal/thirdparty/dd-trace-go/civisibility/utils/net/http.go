@@ -185,6 +185,9 @@ func createNewHTTPClient() *http.Client {
 	return &http.Client{
 		Timeout:   45 * time.Second,
 		Transport: &ciTransport{plain: newTransport(), secure: secure},
+		// A redirect to another host would carry the dd-api-key header,
+		// which Go keeps; the events' transport refuses redirects too.
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 }
 
@@ -330,7 +333,7 @@ func (rh *RequestHandler) internalSendRequest(config *RequestConfig, attempt int
 				fileNames = append(fileNames, f.FieldName)
 			}
 			log.Debug("ciVisibilityHttpClient: new request with files [method: %s, url: %s, attempt: %d, maxRetries: %d] %s",
-				config.Method, config.URL, attempt, config.MaxRetries, fileNames)
+				config.Method, logURL(config.URL), attempt, config.MaxRetries, fileNames)
 		}
 		req, err = http.NewRequestWithContext(rh.context(), config.Method, config.URL, bytes.NewBuffer(body))
 		if err != nil {
@@ -366,7 +369,7 @@ func (rh *RequestHandler) internalSendRequest(config *RequestConfig, attempt int
 				}
 			}
 			log.Debug("ciVisibilityHttpClient: new request with body [method: %s, url: %s, attempt: %d, maxRetries: %d, compressed: %t, format: %s] %d bytes: %s",
-				config.Method, config.URL, attempt, config.MaxRetries, config.Compressed, config.Format, len(serializedBody), strBody)
+				config.Method, logURL(config.URL), attempt, config.MaxRetries, config.Compressed, config.Format, len(serializedBody), strBody)
 		}
 
 		req, err = http.NewRequestWithContext(rh.context(), config.Method, config.URL, bytes.NewBuffer(serializedBody))
@@ -391,7 +394,7 @@ func (rh *RequestHandler) internalSendRequest(config *RequestConfig, attempt int
 		}
 
 		log.Debug("ciVisibilityHttpClient: new request [method: %s, url: %s, attempt: %d, maxRetries: %d]",
-			config.Method, config.URL, attempt, config.MaxRetries)
+			config.Method, logURL(config.URL), attempt, config.MaxRetries)
 	}
 
 	// Set that is possible to handle gzip responses
@@ -490,14 +493,14 @@ func (rh *RequestHandler) internalSendRequest(config *RequestConfig, attempt int
 	// false so they are unaffected.
 	if config.ExpectJSONResponse && responseFormat == "unknown" && statusCode >= 200 && statusCode < 300 {
 		log.Debug("ciVisibilityHttpClient: expected JSON response but got format %q [method: %s, url: %s, status_code: %d]; retrying",
-			responseFormat, config.Method, config.URL, statusCode)
+			responseFormat, config.Method, logURL(config.URL), statusCode)
 		rh.backoff(config, attempt)
 		return false, nil, nil
 	}
 
 	if log.DebugEnabled() {
 		log.Debug("ciVisibilityHttpClient: response received [method: %s, url: %s, status_code: %d, format: %s] %d bytes",
-			config.Method, config.URL, resp.StatusCode, responseFormat, len(responseBody))
+			config.Method, logURL(config.URL), resp.StatusCode, responseFormat, len(responseBody))
 	}
 
 	// Determine if we can unmarshal based on status code (2xx)
@@ -655,4 +658,15 @@ func createMultipartFormData(files []FormFile, compressed bool) ([]byte, string,
 	}
 
 	return buf.Bytes(), writer.FormDataContentType(), nil
+}
+
+// logURL returns rawURL for a debug line, without the user information or
+// query that a configured URL can carry.
+func logURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "(invalid URL)"
+	}
+	u.User, u.RawQuery, u.Fragment = nil, "", ""
+	return u.String()
 }

@@ -875,3 +875,30 @@ func useLocalGitFixture(t *testing.T) {
 	}
 	resetGitCommandCachesForTesting(t)
 }
+
+// Git's debug lines show its arguments and output without the credentials
+// that a remote URL can hold, as in a CI clone with a job token.
+func TestGitDebugLinesHideRemoteCredentials(t *testing.T) {
+	useLocalGitFixture(t)
+	if !isGitFound() {
+		t.Skip("Git not available")
+	}
+	dir := t.TempDir()
+	for _, args := range [][]string{{"init", "-q", dir}, {"-C", dir, "remote", "add", "origin", "https://gitlab-ci-token:sentinel-secret@example.com/group/repo.git"}} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	t.Chdir(dir)
+	logs := new(log.RecordLogger)
+	defer log.UseLogger(logs)()
+	defer log.SetLevel(log.GetLevel())
+	log.SetLevel(log.LevelDebug)
+	if out, err := execGitString(telemetry.NotSpecifiedCommandsType, "ls-remote", "--get-url", "https://user:sentinel-secret@example.com/other.git"); err != nil || !strings.Contains(out, "sentinel-secret") {
+		t.Fatalf("git ls-remote --get-url: %q, %v", out, err)
+	}
+	all := strings.Join(logs.Logs(), "\n")
+	if strings.Contains(all, "sentinel-secret") || !strings.Contains(all, "example.com/other.git") {
+		t.Fatalf("debug lines:\n%s", all)
+	}
+}

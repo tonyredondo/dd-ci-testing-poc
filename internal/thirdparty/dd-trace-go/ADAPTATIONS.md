@@ -799,6 +799,18 @@ change the CI tags:
 
 Check: `TestProviderTagsFromUnusualValues`, which fails without each change.
 
+## Credentials in requests and debug lines
+
+The CI HTTP client in [`civisibility/utils/net/http.go`](civisibility/utils/net/http.go)
+refuses redirects, as `internal/citransport` does for events: Go keeps a
+custom header such as `dd-api-key` when it follows a redirect to another host.
+Debug lines show URLs through `logURL`, without user information or query, and
+Git's debug lines in [`civisibility/utils/git.go`](civisibility/utils/git.go)
+pass its arguments and output through `filterSensitiveInfo`: a CI clone's
+remote URL can hold a job token, which `git ls-remote --get-url` prints.
+Checks: `TestCIClientDoesNotFollowRedirects`, `TestLogURL` and
+`TestGitDebugLinesHideRemoteCredentials`.
+
 ## Git safe.directory for linked checkouts
 
 Upstream `execGit` in [`civisibility/utils/git.go`](civisibility/utils/git.go)

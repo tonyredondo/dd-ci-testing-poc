@@ -1500,3 +1500,17 @@ func readMultipartBodyParts(t *testing.T, contentType string, body []byte) map[s
 	}
 	return parts
 }
+
+// Debug lines show a configured URL without its user information or query.
+func TestLogURL(t *testing.T) {
+	for raw, want := range map[string]string{
+		"https://citestcycle-intake.datadoghq.com/api/v2/citestcycle": "https://citestcycle-intake.datadoghq.com/api/v2/citestcycle",
+		"https://user:secret@proxy.example.com/api?token=secret#x":    "https://proxy.example.com/api",
+		"http://[::1]:8126/evp_proxy/v4/api/v2/libraries":             "http://[::1]:8126/evp_proxy/v4/api/v2/libraries",
+		"://bad": "(invalid URL)",
+	} {
+		if got := logURL(raw); got != want {
+			t.Errorf("logURL(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
