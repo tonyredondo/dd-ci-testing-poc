@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "a801ac07162018a14dd68b707aeb9101a1df5e339e6006c6d95783c2375cb024",
+      "sha256": "1b15c3a0163c0527f735809adfd0bb21fe006865ef41ed5c0201da877eb92904",
       "role": "local"
     },
     {
@@ -1062,14 +1062,14 @@
     },
     {
       "path": "civisibility/utils/ci_providers.go",
-      "sha256": "f0649dee5aac2ae8987a02d83afd1d09b167920490a1823e2d56fc7d6169a20e",
+      "sha256": "a6e8e939a7d0f302249712ec55674368dc04bdf03d4a1bd767f42391fe1a201b",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/ci_providers.go",
       "source_sha256": "f87619eac80f09a6a4e90b12392009fa24f8eb50e00d5971d64bea99c99f68b9"
     },
     {
       "path": "civisibility/utils/ci_providers_test.go",
-      "sha256": "641cfbfcc2dad2a78e0a9a7780b65eb970bc275a0d5a2d95a2ead3c5f6004bdb",
+      "sha256": "5a8c68908cf094a03edd864923b9c89c0e5bd9764f52367722386455e26ff69d",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/ci_providers_test.go",
       "source_sha256": "39195586239cc50133355bce01a908ccb75bc1618c282487cf7d1454e6c8c6db"

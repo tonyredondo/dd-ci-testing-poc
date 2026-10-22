@@ -460,8 +460,8 @@ func extractGithubActions() map[string]string {
 	tag := ""
 	branch := ""
 	// GITHUB_HEAD_REF names a pull request's branch, whatever its name holds;
-	// only GITHUB_REF names a tag.
-	if env.Get("GITHUB_HEAD_REF") == "" && strings.Contains(branchOrTag, "tags/") {
+	// only GITHUB_REF names a tag, as refs/tags/<name>.
+	if env.Get("GITHUB_HEAD_REF") == "" && strings.HasPrefix(branchOrTag, "refs/tags/") {
 		tag = branchOrTag
 	} else {
 		branch = branchOrTag

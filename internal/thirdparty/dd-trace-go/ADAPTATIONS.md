@@ -821,7 +821,8 @@ change the CI tags:
 
 - GitHub Actions' `GITHUB_HEAD_REF` names a pull request's branch: a name
   that holds `tags/`, such as `feature/tags/filter`, was reported as a tag and
-  lost its branch. Only `GITHUB_REF` names a tag here.
+  lost its branch. Only `GITHUB_REF` names a tag here, with its `refs/tags/`
+  prefix, so a push to such a branch keeps it too.
 
 Check: `TestProviderTagsFromUnusualValues`, which fails without each change.
 
