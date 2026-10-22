@@ -102,7 +102,7 @@ func moduleWorkspaceInput(ctx context.Context, dir, root, temp string, replaceme
 	return source, nil
 }
 
-func provideMiniVendorWorkspace(ctx context.Context, dir, root, temp, moduleCache string, replacements map[string]string) (string, *os.File, error) {
+func provideMiniVendorWorkspace(ctx context.Context, dir, root, temp, moduleCache string, noCache bool, replacements map[string]string) (string, *os.File, error) {
 	source, err := moduleWorkspaceInput(ctx, dir, root, temp, replacements)
 	if err != nil {
 		return "", nil, err
@@ -111,13 +111,16 @@ func provideMiniVendorWorkspace(ctx context.Context, dir, root, temp, moduleCach
 	if err != nil {
 		return "", nil, err
 	}
-	return vendorWorkspace(ctx, work, vendorManifest{dir: filepath.Join(root, "vendor"), base: root, module: true}, replacements)
+	return vendorWorkspace(ctx, work, vendorManifest{dir: filepath.Join(root, "vendor"), base: root, module: true, noCache: noCache}, replacements)
 }
 
 // vendorManifest is a vendor directory that Go selects natively, and how its
 // modules.txt must change for a temporary workspace elsewhere.
 type vendorManifest struct {
 	dir string // The caller's vendor directory.
+	// noCache keeps the workspace in the run's directory, as when ddto's user
+	// cache lies within the module; see vendorCacheRefused.
+	noCache bool
 	// base is the directory that the manifest's relative replacements were
 	// written against: the module root, or the caller's go.work directory.
 	base string
@@ -458,6 +461,9 @@ func vendorWorkspace(ctx context.Context, work string, vendor vendorManifest, re
 // race reuses the identical winner. Unexpected contents are never modified.
 func stableVendorWorkspace(ctx context.Context, work string, vendor vendorManifest, original []byte, tree []vendorEntry) (string, *os.File, error) {
 	source := vendor.dir
+	if vendor.noCache {
+		return "", nil, errors.New("no vendor workspace cache")
+	}
 	cache, err := userCacheDir()
 	if err != nil {
 		return "", nil, err
@@ -629,7 +635,8 @@ func linkVendor(source, target string, manifest []byte, tree []vendorEntry) erro
 
 // shareVendorFile hard-links path to the caller's file, which edits in place
 // keep current. Where that fails, as across filesystems, path is a copy with
-// the original's time, which validation compares.
+// the original's permissions and time, which validation compares: a vendored
+// package may run a script beside its sources.
 func shareVendorFile(original, path string, file fs.FileInfo) error {
 	if os.Link(original, path) == nil {
 		return nil
@@ -639,7 +646,7 @@ func shareVendorFile(original, path string, file fs.FileInfo) error {
 		return err
 	}
 	defer input.Close()
-	output, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	output, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, file.Mode().Perm())
 	if err != nil {
 		return err
 	}
@@ -694,7 +701,7 @@ func (e vendorEntry) storedAt(path string, entry fs.DirEntry, original string) b
 		return false
 	}
 	info, err := entry.Info()
-	return err == nil && (os.SameFile(info, e.file) || info.Size() == e.file.Size() && info.ModTime().Equal(e.file.ModTime()))
+	return err == nil && (os.SameFile(info, e.file) || info.Size() == e.file.Size() && info.ModTime().Equal(e.file.ModTime()) && info.Mode().Perm() == e.file.Mode().Perm())
 }
 
 // pruneVendorWorkspaces removes workspaces unused for the retention period,
@@ -834,7 +841,11 @@ func snapshotVendor(source, target string, manifest []byte, replacements map[str
 			return err
 		}
 		defer input.Close()
-		output, err := os.OpenFile(logical, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		mode := fs.FileMode(0600)
+		if info, err := input.Stat(); err == nil {
+			mode = info.Mode().Perm()
+		}
+		output, err := os.OpenFile(logical, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 		if err != nil {
 			return err
 		}
@@ -845,4 +856,15 @@ func snapshotVendor(source, target string, manifest []byte, replacements map[str
 		}
 		return closeErr
 	})
+}
+
+// vendorCacheRefused reports whether ddto's cache of vendor workspaces would
+// lie within the module, the toolchain or GOMODCACHE, which must stay
+// unchanged, as with XDG_CACHE_HOME inside the checkout.
+func vendorCacheRefused(env *goEnvironment, dir string, debug *cliDebug) bool {
+	_, err := ddtoCacheDir(env, dir, "vendor-workspaces")
+	if err != nil && debug != nil {
+		debug.printf("vendor workspace cache refused error=%q", err.Error())
+	}
+	return err != nil
 }

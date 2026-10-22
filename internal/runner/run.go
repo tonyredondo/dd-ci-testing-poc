@@ -307,7 +307,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 				if err != nil {
 					return plan, err
 				}
-				selected := vendorManifest{dir: vendor, base: filepath.Dir(work), workReplaced: replaced}
+				selected := vendorManifest{dir: vendor, base: filepath.Dir(work), workReplaced: replaced, noCache: vendorCacheRefused(opts.environment, dir, debug)}
 				if plan.Workfile, plan.workspaceLock, e = vendorWorkspace(ctx, plan.Workfile, selected, replacements); e != nil {
 					return plan, e
 				}
@@ -335,7 +335,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 				if e = useModuleWorkspaceFlags(&opts, &plan); e != nil {
 					return plan, e
 				}
-				plan.Workfile, plan.workspaceLock, e = provideMiniVendorWorkspace(ctx, dir, root, temp, opts.environment.GOMODCACHE, replacements)
+				plan.Workfile, plan.workspaceLock, e = provideMiniVendorWorkspace(ctx, dir, root, temp, opts.environment.GOMODCACHE, vendorCacheRefused(opts.environment, dir, debug), replacements)
 				if e != nil {
 					return plan, e
 				}
