@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "94f89a570b7c89283dd18883628785de07db2a305de9c0bf5432b3590517b597",
+      "sha256": "daf9cbca6d5ab15ffaf9e3b1f28ecdf58ef2ee4d4fad8716fbb2962e87247aa6",
       "role": "local"
     },
     {
@@ -1282,7 +1282,7 @@
     },
     {
       "path": "civisibility/utils/git.go",
-      "sha256": "daad503bcf21900e051a833d925626fa93b7c919d90cd5c34a8aba00c0a6691d",
+      "sha256": "8f3cb1309605671301bfd1ffeee7fe1054f2eee3022499d46c184dde45af63cf",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/git.go",
       "source_sha256": "f146aed5bbd7a350309021e1546a931128db8a46bf637dee0b4407bcd78c08ab"
@@ -1324,7 +1324,7 @@
     },
     {
       "path": "civisibility/utils/git_test.go",
-      "sha256": "fa947cb2282cb67608621a0af00bd2e6e3e8b7dc23e6f39e6f4353dadaa14d73",
+      "sha256": "1d504666014b94a7004ea6c894fe94534808fef29aa34eae06a21d46a4770da5",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/git_test.go",
       "source_sha256": "a36fb9a5c074542d6104cb78850c8ac1b03d516a8177e2c61e9e61e2229efd6b"
@@ -1375,7 +1375,7 @@
     },
     {
       "path": "civisibility/utils/impactedtests/impacted_tests.go",
-      "sha256": "71fa7a630877ee68323cc5fa74fd22b3c850fb094c5132003728b9da8ca22f05",
+      "sha256": "1095d7e1243fa50075d7ecc11f22b3f8da6c9599c11b2f4826e6e91237941673",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/impactedtests/impacted_tests.go",
       "source_sha256": "10849ea3b0337b8651d31808c053a1d6e1cdb3f2c0832a33e8a57e1dd5bd52d0"
@@ -1389,7 +1389,7 @@
     },
     {
       "path": "civisibility/utils/impactedtests/impacted_tests_test.go",
-      "sha256": "e339e006ca44595d8fba4967435b7dfe5f9f9b069e6b2f35efc7707b0ee96957",
+      "sha256": "355d32133d79e4995808b1ce6c3623854c4081bab9164767f0fb77d2f960bbb3",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/impactedtests/impacted_tests_test.go",
       "source_sha256": "f6440547663e6bda9eb17b602da09d3e31305ee14b2b25f751adef00a18d0dcb"

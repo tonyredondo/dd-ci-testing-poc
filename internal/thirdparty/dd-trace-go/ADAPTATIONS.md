@@ -818,6 +818,19 @@ remote URL can hold a job token, which `git ls-remote --get-url` prints.
 Checks: `TestCIClientDoesNotFollowRedirects`, `TestLogURL` and
 `TestGitDebugLinesHideRemoteCredentials`.
 
+## Impacted-test diff
+
+`GetGitDiff` in [`civisibility/utils/git.go`](civisibility/utils/git.go)
+runs `git -c core.quotePath=false diff --no-color --no-ext-diff --no-textconv
+--src-prefix=a/ --dst-prefix=b/ …`: the parser in
+[`utils/impactedtests`](civisibility/utils/impactedtests/impacted_tests.go)
+reads `diff --git a/<path> b/<path>` headers, and the SDK's plain `git diff`
+let `diff.noprefix`, `diff.mnemonicPrefix`, `color.diff=always` or the
+default quoting of non-ASCII paths hide modified files. A header that the
+pattern still cannot read, as for a path with a quote, ends the previous
+file instead of giving it the next file's hunks. Checks:
+`TestGetGitDiffNormalizesHeaders`, `TestParseGitDiffOutputUnreadableHeader`.
+
 ## Git safe.directory for linked checkouts
 
 Upstream `execGit` in [`civisibility/utils/git.go`](civisibility/utils/git.go)

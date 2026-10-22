@@ -902,3 +902,46 @@ func TestGitDebugLinesHideRemoteCredentials(t *testing.T) {
 		t.Fatalf("debug lines:\n%s", all)
 	}
 }
+
+// The diff that impacted-test detection parses has the a/ and b/ prefixes and
+// unquoted paths, whatever the repository's diff and quoting settings.
+func TestGetGitDiffNormalizesHeaders(t *testing.T) {
+	useLocalGitFixture(t)
+	if !isGitFound() {
+		t.Skip("Git not available")
+	}
+	git := func(args ...string) string {
+		out, err := exec.Command("git", append([]string{"-c", "user.name=CI Fixture", "-c", "user.email=ci-fixture@example.invalid", "-c", "commit.gpgsign=false"}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	base := git("rev-parse", "HEAD")
+	if err := os.MkdirAll("ñ", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{filepath.Join("ñ", "README.md"), "plain.go"} {
+		if err := os.WriteFile(name, []byte("line\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	git("add", ".")
+	git("commit", "-q", "-m", "files")
+	head := git("rev-parse", "HEAD")
+	for _, setting := range [][]string{{"diff.noprefix", "true"}, {"diff.mnemonicPrefix", "true"}, {"color.diff", "always"}} {
+		git("config", setting[0], setting[1])
+	}
+	out, err := GetGitDiff(base, head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, header := range []string{"diff --git a/ñ/README.md b/ñ/README.md", "diff --git a/plain.go b/plain.go"} {
+		if !strings.Contains(out, header) {
+			t.Errorf("no %q in\n%s", header, out)
+		}
+	}
+	if strings.Contains(out, "\x1b[") {
+		t.Errorf("colored diff:\n%q", out)
+	}
+}
