@@ -337,3 +337,44 @@ func TestMiniWorkPatternRunsNatively(t *testing.T) {
 		}
 	}
 }
+
+// Standard library tests, as go test fmt or all selects them, run natively.
+func TestMiniStandardLibraryTestsRunNatively(t *testing.T) {
+	root := t.TempDir()
+	for file, data := range map[string]string{
+		"go.mod":         "module example.com/client\ngo 1.21\n",
+		"client_test.go": "package client\n",
+	} {
+		if err := os.WriteFile(filepath.Join(root, file), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("GOFLAGS", "")
+	for _, tc := range []struct {
+		work string
+		args []string
+	}{
+		{"off", []string{"errors"}},
+		// A workspace that ddto provides makes Mini a main module, whose
+		// standard dependencies all then selects.
+		{"workspace", []string{"all"}},
+	} {
+		gowork := "off"
+		if tc.work == "workspace" {
+			gowork = filepath.Join(root, "go.work")
+			if err := os.WriteFile(gowork, []byte("go 1.25.0\nuse .\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		t.Setenv("GOWORK", gowork)
+		plan, err := PrepareRuntime(t.Context(), root, tc.args, Mini)
+		if plan.Dir != "" {
+			plan.Release()
+			_ = os.RemoveAll(plan.Dir)
+		}
+		var native *nativeGoError
+		if !errors.As(err, &native) || native.bypass != "stdlib_tests" {
+			t.Fatalf("%s %q: %v; want the stdlib_tests bypass", tc.work, tc.args, err)
+		}
+	}
+}

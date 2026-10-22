@@ -49,6 +49,9 @@ The log records:
 - The `work` package pattern, also in `-coverpkg`, with a workspace that ddto
   provides: Mini is one of its main modules, so `instrumentation bypass
   package_pattern=work` follows the warning, and native `go test` runs.
+- Standard library tests, as `go test fmt`, `std` or `all` select them:
+  `instrumentation bypass stdlib_tests` follows the warning, and native
+  `go test` runs.
 - When go rejects the command or its environment while ddto prepares it, as
   with `-p=0`, an unknown flag in `GOFLAGS`, a missing `-C` directory or
   `-modfile`, or an `-overlay` file that go cannot read or parse,

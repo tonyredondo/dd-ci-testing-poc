@@ -584,7 +584,9 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			continue
 		}
 		if p.Module == nil {
-			return plan, fmt.Errorf("stdlib tests are outside this POC: %s", p.ImportPath)
+			// Such as with go test fmt, std or all, whose expansion includes the
+			// runtime's own standard dependencies with a ddto workspace.
+			return plan, &nativeGoError{"stdlib_tests", fmt.Errorf("ddto does not instrument standard library tests: %s", p.ImportPath)}
 		}
 		testPackage := p.Name + "_test"
 		if len(p.XTestGoFiles) == 0 && !runtimeImports[p.ImportPath] {
