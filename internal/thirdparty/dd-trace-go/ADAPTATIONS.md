@@ -818,6 +818,14 @@ remote URL can hold a job token, which `git ls-remote --get-url` prints.
 Checks: `TestCIClientDoesNotFollowRedirects`, `TestLogURL` and
 `TestGitDebugLinesHideRemoteCredentials`.
 
+## Commit messages
+
+`getLocalGitData` and `readCommitData` in
+[`civisibility/utils/git.go`](civisibility/utils/git.go) split `git log`'s
+fields at `","` into at most eight parts: the message comes last and may hold
+that separator, which `strings.Split` cut it at, as for `Update ["a","b"]`.
+Check: `TestCommitMessageWithFieldSeparator`.
+
 ## Impacted-test diff
 
 `GetGitDiff` in [`civisibility/utils/git.go`](civisibility/utils/git.go)

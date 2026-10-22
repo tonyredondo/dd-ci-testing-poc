@@ -354,7 +354,8 @@ func getLocalGitData() (localGitData, error) {
 	}
 
 	// Split the output into individual components
-	outArray := strings.Split(out, "\",\"")
+	// The message, last, may hold the separator itself.
+	outArray := strings.SplitN(out, "\",\"", 8)
 	if len(outArray) < 8 {
 		return gitData, errors.New("git log failed")
 	}
@@ -453,7 +454,8 @@ func readCommitData(commitSha string, allowFetch bool) (localCommitData, error) 
 	}
 
 	// Split the output into individual components
-	outArray := strings.Split(out, "\",\"")
+	// The message, last, may hold the separator itself.
+	outArray := strings.SplitN(out, "\",\"", 8)
 	if len(outArray) < 8 {
 		return commitData, errors.New("git log failed")
 	}

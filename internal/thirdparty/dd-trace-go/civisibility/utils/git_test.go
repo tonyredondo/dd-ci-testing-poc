@@ -945,3 +945,23 @@ func TestGetGitDiffNormalizesHeaders(t *testing.T) {
 		t.Errorf("colored diff:\n%q", out)
 	}
 }
+
+// A commit message may hold the separator of the commit fields.
+func TestCommitMessageWithFieldSeparator(t *testing.T) {
+	useLocalGitFixture(t)
+	if !isGitFound() {
+		t.Skip("Git not available")
+	}
+	message := `Update ["a","b"]`
+	if out, err := exec.Command("git", "-c", "user.name=CI Fixture", "-c", "user.email=ci-fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", message).CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v %s", err, out)
+	}
+	data, err := getLocalGitData()
+	if err != nil || data.CommitMessage != message {
+		t.Fatalf("local commit message %q, %v", data.CommitMessage, err)
+	}
+	commit, err := readCommitData(data.CommitSha, false)
+	if err != nil || commit.CommitMessage != message {
+		t.Fatalf("commit data message %q, %v", commit.CommitMessage, err)
+	}
+}
