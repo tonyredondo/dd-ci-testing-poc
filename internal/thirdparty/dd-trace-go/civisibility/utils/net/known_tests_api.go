@@ -110,6 +110,7 @@ func (c *client) GetKnownTests() (*KnownTestsResponseData, error) {
 				Tests: make(KnownTestsResponseDataModules),
 			}
 			cacheable := true
+			sentCursors := map[string]bool{"": true}
 
 			for {
 				request := c.getPostRequestConfig(knownTestsURLPath, body)
@@ -161,12 +162,13 @@ func (c *client) GetKnownTests() (*KnownTestsResponseData, error) {
 				if responseObject.Data.Attributes.PageInfo == nil || !responseObject.Data.Attributes.PageInfo.HasNext {
 					break
 				}
-				// A next page needs a new cursor: the same one would request
-				// the same page forever.
+				// A next page needs a cursor not sent yet: an earlier one would
+				// request the same pages forever.
 				cursor := responseObject.Data.Attributes.PageInfo.Cursor
-				if cursor == "" || cursor == body.Data.Attributes.PageInfo.PageState {
+				if sentCursors[cursor] {
 					return readCacheLiveResult[*KnownTestsResponseData]{}, fmt.Errorf("known tests response: a next page without a new cursor")
 				}
+				sentCursors[cursor] = true
 				body.Data.Attributes.PageInfo.PageState = cursor
 			}
 

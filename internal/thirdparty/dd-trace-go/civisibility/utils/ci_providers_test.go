@@ -395,6 +395,8 @@ func TestProviderTagsFromUnusualValues(t *testing.T) {
 		{"github push event", map[string]string{"GITHUB_SHA": "abc", "GITHUB_HEAD_REF": "", "GITHUB_REF": "refs/heads/main", "GITHUB_EVENT_PATH": pushEventPath}, constants.GitBranch, "main", constants.PrNumber},
 		{"buildkite without a pull request", map[string]string{"BUILDKITE": "true", "BUILDKITE_BRANCH": "main", "BUILDKITE_PULL_REQUEST": "false"}, constants.GitBranch, "main", constants.PrNumber},
 		{"buildkite pull request", map[string]string{"BUILDKITE": "true", "BUILDKITE_BRANCH": "main", "BUILDKITE_PULL_REQUEST": "12"}, constants.PrNumber, "12", ""},
+		{"travis without a pull request", map[string]string{"TRAVIS": "true", "TRAVIS_BRANCH": "main", "TRAVIS_PULL_REQUEST": "false"}, constants.GitBranch, "main", constants.PrNumber},
+		{"travis pull request", map[string]string{"TRAVIS": "true", "TRAVIS_PULL_REQUEST_BRANCH": "feature", "TRAVIS_PULL_REQUEST": "7"}, constants.PrNumber, "7", ""},
 		// A CodeBuild-hosted runner of another CI sets CODEBUILD_INITIATOR.
 		{"github on codebuild", map[string]string{"GITHUB_SHA": "abc", "CODEBUILD_INITIATOR": "GitHub-Hookshot/123"}, constants.CIProviderName, "github", ""},
 		{"jenkins branch with a dot", map[string]string{"JENKINS_URL": "http://jenkins", "GIT_BRANCH": "origin/release-1.2", "JOB_NAME": "job/release-1x2"}, constants.CIPipelineName, "job/release-1x2", ""},

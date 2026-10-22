@@ -836,8 +836,9 @@ change the CI tags:
   prefix, so a push to such a branch keeps it too.
 
 - Outside a pull request, `pr.number` was `0` on GitHub Actions, whose push
-  event JSON has no number, and `false` on Buildkite, which sets
-  `BUILDKITE_PULL_REQUEST=false`. Neither is reported now.
+  event JSON has no number, and `false` on Buildkite and Travis CI, which set
+  `BUILDKITE_PULL_REQUEST=false` and `TRAVIS_PULL_REQUEST=false`. None is
+  reported now.
 
 Check: `TestProviderTagsFromUnusualValues`, which fails without each change.
 
@@ -984,8 +985,8 @@ Check: `TestTestCoverageNamesTrimmedTestFileInRepository`.
 
 `GetKnownTests` in `utils/net/known_tests_api.go` requests the next page while
 the response says `has_next`, with the response's cursor. A cursor that was
-empty, or the one just sent, requested the same page forever and kept
-appending its tests. Such a response now ends the request with an error, as
+empty, or one already sent, as in a cycle `A`, `B`, `A`, requested the same
+pages forever and kept appending their tests. Such a response now ends the request with an error, as
 other invalid responses do. Check: `TestKnownTestsApiRequestRejectsAStuckCursor`.
 
 ## Logs intake limits

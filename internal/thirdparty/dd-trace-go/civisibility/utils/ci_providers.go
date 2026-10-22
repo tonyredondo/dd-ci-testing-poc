@@ -721,7 +721,10 @@ func extractTravis() map[string]string {
 
 	tags[constants.GitPrBaseBranch] = env.Get("TRAVIS_BRANCH")
 	tags[constants.GitHeadCommit] = env.Get("TRAVIS_PULL_REQUEST_SHA")
-	tags[constants.PrNumber] = env.Get("TRAVIS_PULL_REQUEST")
+	// Travis sets false outside a pull request.
+	if number := env.Get("TRAVIS_PULL_REQUEST"); number != "false" {
+		tags[constants.PrNumber] = number
+	}
 
 	return tags
 }

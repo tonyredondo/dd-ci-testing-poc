@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "86c37b7a6533609de0cb2aba34eb5ed5e1ef67c0f76a75ad1ad5db6fc5428902",
+      "sha256": "e00d6c3614698a485aaeb452ac34b862c3951914a0afedc802cae19c66cf4112",
       "role": "local"
     },
     {
@@ -1067,14 +1067,14 @@
     },
     {
       "path": "civisibility/utils/ci_providers.go",
-      "sha256": "8338c9a7b802bcf3468ae0a6b8f14a001c0ab78a2eed9282c0396d633fc77e88",
+      "sha256": "3c43ee470f72dc7e97c0c2a9cf5c662a7a73238145e37c85d3d3e0aa91a169f5",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/ci_providers.go",
       "source_sha256": "f87619eac80f09a6a4e90b12392009fa24f8eb50e00d5971d64bea99c99f68b9"
     },
     {
       "path": "civisibility/utils/ci_providers_test.go",
-      "sha256": "c7ef595e94ffa4a410099af81ba3889ab376caf284c489a5703dfc7447384fc2",
+      "sha256": "65afcde13f0b2da89292ba274dfbb0c54ca0ca0a5fc0fb8511e38e21ba1ea4fb",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/ci_providers_test.go",
       "source_sha256": "39195586239cc50133355bce01a908ccb75bc1618c282487cf7d1454e6c8c6db"
@@ -1516,14 +1516,14 @@
     },
     {
       "path": "civisibility/utils/net/known_tests_api.go",
-      "sha256": "3a8442e3fc1045a7c2e07bb9e66e392fcd2bb8d57090f7d1a17078801e49c187",
+      "sha256": "c332378385b0b1a42af3086b1e05f3fd49f48b17a00191ffecd16c7e27228d8e",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/net/known_tests_api.go",
       "source_sha256": "1654a9979d9674b981571b02457748fde5c909132ae470707c2cd03e710ffc4e"
     },
     {
       "path": "civisibility/utils/net/known_tests_api_test.go",
-      "sha256": "45a0f3fccb405e6b7073023caa5a7623b9c25ceaccaf81339b169c5c6735dce4",
+      "sha256": "b4918a23275b0fbdac104640ead7ecac6f5282cc9b3f55236f0473e20bfd311b",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/net/known_tests_api_test.go",
       "source_sha256": "a3a13c0b9835a87a3300965e02573d353af61f04950c26ef00637d320d793101"

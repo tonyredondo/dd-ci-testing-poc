@@ -139,11 +139,11 @@ func TestKnownTestsApiRequest(t *testing.T) {
 // A next page whose cursor does not move ends the request with an error,
 // instead of requesting the same page forever.
 func TestKnownTestsApiRequestRejectsAStuckCursor(t *testing.T) {
-	for _, cursor := range []string{"", "same"} {
+	for _, cursors := range [][]string{{""}, {"same"}, {"A", "B"}} {
 		requests := 0
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requests++
-			if requests > 3 {
+			if requests > 5 {
 				http.Error(w, "too many requests", http.StatusTeapot)
 				return
 			}
@@ -154,7 +154,7 @@ func TestKnownTestsApiRequestRejectsAStuckCursor(t *testing.T) {
 			resp.Data.ID = request.Data.ID
 			resp.Data.Type = settingsRequestType
 			resp.Data.Attributes.Tests = KnownTestsResponseDataModules{"Module": {"Suite": []string{"Test"}}}
-			resp.Data.Attributes.PageInfo = &knownTestsResponsePageInfo{Cursor: cursor, HasNext: true}
+			resp.Data.Attributes.PageInfo = &knownTestsResponsePageInfo{Cursor: cursors[(requests-1)%len(cursors)], HasNext: true}
 			w.Header().Set(HeaderContentType, ContentTypeJSON)
 			_ = json.NewEncoder(w).Encode(resp)
 		}))
@@ -163,8 +163,8 @@ func TestKnownTestsApiRequestRejectsAStuckCursor(t *testing.T) {
 		_, err := NewClient().GetKnownTests()
 		restoreEnv(origEnv)
 		server.Close()
-		if err == nil || requests > 2 {
-			t.Fatalf("cursor %q: %d requests, %v", cursor, requests, err)
+		if err == nil || requests > len(cursors)+1 {
+			t.Fatalf("cursors %q: %d requests, %v", cursors, requests, err)
 		}
 	}
 }
