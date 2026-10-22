@@ -330,7 +330,15 @@ func stopCIVisibilitySignalHandler() {
 	}
 	ciVisibilitySignalHandlerMu.Unlock()
 	// A signal that would have ended the process during the shutdown ends it
-	// now, as under go test, instead of the test binary's exit status.
+	// now, as under go test, instead of the test binary's exit status. One
+	// still queued when the handler stopped counts too.
+	if handler.pending.Load() == nil {
+		select {
+		case sig := <-handler.signals:
+			handler.pending.Store(&sig)
+		default:
+		}
+	}
 	if sig := handler.pending.Swap(nil); sig != nil {
 		ciVisibilitySignalExitFunc(*sig)
 	}

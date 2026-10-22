@@ -314,3 +314,26 @@ func assertNoSignalHandlerExitCode(t *testing.T, exitCodes <-chan os.Signal) {
 	default:
 	}
 }
+
+// A signal still queued when the handler stops, which its goroutine did not
+// take before the stop, ends the process after the shutdown too.
+func TestCIVisibilitySignalHandlerExitsWithAQueuedSignal(t *testing.T) {
+	replaceSignalNotifyForTesting(t, signal.Notify)
+	exitCodes := replaceSignalExitForTesting(t)
+	handler := &ciVisibilitySignalHandler{
+		signals:  make(chan os.Signal, 1),
+		observed: make(chan int, 1),
+		stop:     make(chan struct{}),
+		done:     make(chan struct{}),
+	}
+	// The goroutine took the stop first and exited.
+	close(handler.done)
+	handler.signals <- syscall.SIGTERM
+	ciVisibilitySignalHandlerMu.Lock()
+	activeCIVisibilitySignalHandler = handler
+	ciVisibilitySignalHandlerMu.Unlock()
+
+	stopCIVisibilitySignalHandler()
+	require.Nil(t, currentCIVisibilitySignalHandlerForTesting())
+	require.Equal(t, os.Signal(syscall.SIGTERM), waitForSignalHandlerExitCode(t, exitCodes))
+}

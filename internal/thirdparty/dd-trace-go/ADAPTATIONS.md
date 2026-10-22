@@ -1862,8 +1862,11 @@ A signal that arrives once the normal shutdown has started, as during the final
 flush, or while a normal shutdown starts during the signal's own, is kept:
 the handler records it, and `stopCIVisibilitySignalHandler` sends it again when
 that shutdown ends, so the process does not end with the test binary's status
-instead. Checks: `TestCIVisibilitySignalHandlerExitsAfterNormalShutdownStarts`
-and `TestCIVisibilitySignalHandlerExitsWhenNormalShutdownStartsDuringSignalShutdown`.
+instead. A signal still queued for the handler when it stops, which its
+goroutine did not take before the stop, counts too. Checks:
+`TestCIVisibilitySignalHandlerExitsAfterNormalShutdownStarts`,
+`TestCIVisibilitySignalHandlerExitsWhenNormalShutdownStartsDuringSignalShutdown`
+and `TestCIVisibilitySignalHandlerExitsWithAQueuedSignal`.
 Mini registers no signal that the process ignores, such as SIGINT in a
 background job, because registering it would install a handler. A test that
 ignores a signal removes Mini's channel for it, as for any channel. When the
