@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	goversion "go/version"
 	"io"
 	"os"
 	"os/exec"
@@ -277,6 +278,14 @@ const GoShimExecMode = "go-shim-exec"
 // (cmd/go/internal/tool/signal.go).
 var goToolSignals = []os.Signal{syscall.SIGHUP, os.Interrupt, syscall.SIGQUIT, syscall.SIGTERM}
 
+// goToolForwardsEverySignal reports whether go tool of goVersion forwards
+// every signal to a tool, as before Go 1.27, instead of goToolSignals.
+func goToolForwardsEverySignal(goVersion string) bool {
+	// Development distributions report "devel go1.N-<revision> ...".
+	fields := strings.Fields(strings.TrimPrefix(goVersion, "devel "))
+	return len(fields) != 0 && goversion.IsValid(fields[0]) && goversion.Compare(fields[0], "go1.27") < 0
+}
+
 // moduleTool is a module's tool that go tool would run: ddto runs it as go
 // tool does, with the go shim first on its PATH.
 type moduleTool struct {
@@ -284,6 +293,8 @@ type moduleTool struct {
 	args       []string
 	// gorootBin, the selected toolchain's bin, goes after the shim.
 	gorootBin string
+	// everySignal: that toolchain's go tool forwards every signal.
+	everySignal bool
 	// switchGOROOT is GOROOT for the tool after a toolchain switch, as
 	// go's execGoToolchain sets it; unsetGOROOT removes it instead.
 	switchGOROOT string
@@ -314,7 +325,11 @@ func (t *moduleTool) run() int {
 	err := cmd.Start()
 	if err == nil {
 		signals := make(chan os.Signal, 100)
-		signal.Notify(signals, goToolSignals...)
+		if t.everySignal {
+			signal.Notify(signals)
+		} else {
+			signal.Notify(signals, goToolSignals...)
+		}
 		// The loop does not log: a blocked debug write would hold back the
 		// next signal. The debug log lists the signals once the tool ends.
 		done := make(chan struct{})
@@ -445,7 +460,7 @@ func goShimGoCommand(self, toolchain string, command []string) ([]string, *modul
 		if info, err := os.Stat(path); err != nil || info.IsDir() {
 			return nil, nil, fmt.Errorf("go tool -n %s printed %q, not one program", rest[0], path)
 		}
-		tool := &moduleTool{name: rest[0], path: path, args: rest[1:], gorootBin: filepath.Join(env.GOROOT, "bin"), diagnostics: diagnostics.Bytes()}
+		tool := &moduleTool{name: rest[0], path: path, args: rest[1:], gorootBin: filepath.Join(env.GOROOT, "bin"), everySignal: goToolForwardsEverySignal(env.GOVERSION), diagnostics: diagnostics.Bytes()}
 		if switchedToolchain(toolchain, env.GOROOT) {
 			// execGoToolchain sets GOROOT for a downloaded toolchain and
 			// removes it for one found on PATH.
@@ -482,13 +497,13 @@ func switchedToolchain(toolchain, selected string) bool {
 // goShimEnv is what go computes for a go run or go tool command with the go
 // shim, with the settings that go env -w stores.
 type goShimEnv struct {
-	GOROOT, GOFLAGS, GOOS, GOARCH, GOHOSTOS, GOHOSTARCH string
+	GOROOT, GOFLAGS, GOOS, GOARCH, GOHOSTOS, GOHOSTARCH, GOVERSION string
 }
 
 // readGoShimEnv reads goShimEnv from go env; tests replace it.
 var readGoShimEnv = func(toolchain string, chdir []string) (goShimEnv, error) {
 	var env goShimEnv
-	out, err := exec.Command(toolchain, append(append([]string(nil), chdir...), "env", "-json", "GOROOT", "GOFLAGS", "GOOS", "GOARCH", "GOHOSTOS", "GOHOSTARCH")...).Output()
+	out, err := exec.Command(toolchain, append(append([]string(nil), chdir...), "env", "-json", "GOROOT", "GOFLAGS", "GOOS", "GOARCH", "GOHOSTOS", "GOHOSTARCH", "GOVERSION")...).Output()
 	if err != nil {
 		return env, fmt.Errorf("go env: %w", err)
 	}

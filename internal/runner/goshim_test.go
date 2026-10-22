@@ -290,6 +290,12 @@ func TestModuleToolRun(t *testing.T) {
 	if !slices.Contains(goToolSignals, os.Signal(syscall.SIGTERM)) || !slices.Contains(goToolSignals, os.Signal(syscall.SIGHUP)) {
 		t.Fatalf("go tool forwards SIGTERM and SIGHUP: %v", goToolSignals)
 	}
+	// Before Go 1.27, go tool forwarded every signal.
+	for version, every := range map[string]bool{"go1.25.14": true, "go1.26.8 X:boringcrypto": true, "go1.27.0-X:nodwarf5": false, "go1.27rc1": false, "devel go1.28-abcdef Thu Oct 1 2026": false, "": false} {
+		if got := goToolForwardsEverySignal(version); got != every {
+			t.Errorf("%q: every signal %t, want %t", version, got, every)
+		}
+	}
 
 	// A toolchain switch sets GOROOT for the tool to a downloaded toolchain,
 	// and removes it for one on PATH, as go's execGoToolchain does.
