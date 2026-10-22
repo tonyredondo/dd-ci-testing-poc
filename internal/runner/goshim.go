@@ -278,9 +278,10 @@ const GoShimExecMode = "go-shim-exec"
 // (cmd/go/internal/tool/signal.go).
 var goToolSignals = []os.Signal{syscall.SIGHUP, os.Interrupt, syscall.SIGQUIT, syscall.SIGTERM}
 
-// goToolForwardsEverySignal reports whether go tool of goVersion forwards
-// every signal to a tool, as before Go 1.27, instead of goToolSignals.
-func goToolForwardsEverySignal(goVersion string) bool {
+// goToolBefore127 reports whether go tool of goVersion predates Go 1.27: it
+// forwards every signal to a tool instead of goToolSignals, and exits with 0
+// after a signal ended the tool (go.dev/issue/79540).
+func goToolBefore127(goVersion string) bool {
 	// Development distributions report "devel go1.N-<revision> ...".
 	fields := strings.Fields(strings.TrimPrefix(goVersion, "devel "))
 	return len(fields) != 0 && goversion.IsValid(fields[0]) && goversion.Compare(fields[0], "go1.27") < 0
@@ -293,8 +294,8 @@ type moduleTool struct {
 	args       []string
 	// gorootBin, the selected toolchain's bin, goes after the shim.
 	gorootBin string
-	// everySignal: that toolchain's go tool forwards every signal.
-	everySignal bool
+	// before127: that toolchain's go tool predates Go 1.27 (goToolBefore127).
+	before127 bool
 	// switchGOROOT is GOROOT for the tool after a toolchain switch, as
 	// go's execGoToolchain sets it; unsetGOROOT removes it instead.
 	switchGOROOT string
@@ -325,7 +326,7 @@ func (t *moduleTool) run() int {
 	err := cmd.Start()
 	if err == nil {
 		signals := make(chan os.Signal, 100)
-		if t.everySignal {
+		if t.before127 {
 			signal.Notify(signals)
 		} else {
 			signal.Notify(signals, goToolSignals...)
@@ -354,8 +355,12 @@ func (t *moduleTool) run() int {
 			fmt.Fprintf(os.Stderr, "go tool %s: %s\n", t.name, err)
 		}
 		code = 1
-		if ok && exit.ExitCode() != -1 {
+		switch {
+		case ok && exit.ExitCode() != -1:
 			code = exit.ExitCode()
+		case ok && t.before127:
+			// A signal ended the tool, and the exit status stayed 0.
+			code = 0
 		}
 	}
 	debug.logModuleToolEnd(err, code, started, forwarded)
@@ -460,7 +465,7 @@ func goShimGoCommand(self, toolchain string, command []string) ([]string, *modul
 		if info, err := os.Stat(path); err != nil || info.IsDir() {
 			return nil, nil, fmt.Errorf("go tool -n %s printed %q, not one program", rest[0], path)
 		}
-		tool := &moduleTool{name: rest[0], path: path, args: rest[1:], gorootBin: filepath.Join(env.GOROOT, "bin"), everySignal: goToolForwardsEverySignal(env.GOVERSION), diagnostics: diagnostics.Bytes()}
+		tool := &moduleTool{name: rest[0], path: path, args: rest[1:], gorootBin: filepath.Join(env.GOROOT, "bin"), before127: goToolBefore127(env.GOVERSION), diagnostics: diagnostics.Bytes()}
 		if switchedToolchain(toolchain, env.GOROOT) {
 			// execGoToolchain sets GOROOT for a downloaded toolchain and
 			// removes it for one found on PATH.

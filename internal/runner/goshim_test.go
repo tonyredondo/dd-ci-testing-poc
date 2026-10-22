@@ -290,10 +290,23 @@ func TestModuleToolRun(t *testing.T) {
 	if !slices.Contains(goToolSignals, os.Signal(syscall.SIGTERM)) || !slices.Contains(goToolSignals, os.Signal(syscall.SIGHUP)) {
 		t.Fatalf("go tool forwards SIGTERM and SIGHUP: %v", goToolSignals)
 	}
+	// A tool that a signal ended: go tool before Go 1.27 exited with 0.
+	if runtime.GOOS != "windows" {
+		killed := filepath.Join(t.TempDir(), "killed")
+		if err := os.WriteFile(killed, []byte("#!/bin/sh\nkill -KILL $$\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		for before, want := range map[bool]int{true: 0, false: 1} {
+			tool := &moduleTool{name: "killed", path: killed, before127: before}
+			if code := tool.run(); code != want {
+				t.Errorf("before Go 1.27 %t: a killed tool's exit %d, want %d", before, code, want)
+			}
+		}
+	}
 	// Before Go 1.27, go tool forwarded every signal.
-	for version, every := range map[string]bool{"go1.25.14": true, "go1.26.8 X:boringcrypto": true, "go1.27.0-X:nodwarf5": false, "go1.27rc1": false, "devel go1.28-abcdef Thu Oct 1 2026": false, "": false} {
-		if got := goToolForwardsEverySignal(version); got != every {
-			t.Errorf("%q: every signal %t, want %t", version, got, every)
+	for version, before := range map[string]bool{"go1.25.14": true, "go1.26.8 X:boringcrypto": true, "go1.27.0-X:nodwarf5": false, "go1.27rc1": false, "devel go1.28-abcdef Thu Oct 1 2026": false, "": false} {
+		if got := goToolBefore127(version); got != before {
+			t.Errorf("%q: before Go 1.27 %t, want %t", version, got, before)
 		}
 	}
 
