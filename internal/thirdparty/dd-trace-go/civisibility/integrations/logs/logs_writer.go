@@ -6,7 +6,9 @@
 package logs
 
 import (
+	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/cidelivery"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/net"
@@ -66,16 +68,32 @@ func newLogsWriter() *logsWriter {
 }
 
 func (w *logsWriter) add(entry *logEntry) bool {
-	var payloadToFlush *logsPayload
+	var full, payloadToFlush *logsPayload
+
+	startTime := time.Now()
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		log.Error("logsWriter: Error encoding JSON: %s", err.Error())
+		return false
+	}
+	serialization := time.Since(startTime)
 
 	w.mu.Lock()
 	if w.stopped {
 		w.mu.Unlock()
 		return false
 	}
-	if err := w.payload.push(entry); err != nil {
+	// An entry that would take the payload past the intake's limit starts the
+	// next one: a rejected request loses every entry in it.
+	if w.payload.size()+1+len(encoded) > agentlessPayloadMaxLimit {
+		full = w.rotateAndReserveLocked()
+	}
+	if err := w.payload.pushEncoded(encoded, serialization); err != nil {
 		log.Error("logsWriter: Error encoding JSON: %s", err.Error())
 		w.mu.Unlock()
+		if full != nil {
+			w.startUpload(full)
+		}
 		return false
 	}
 	if w.payload.size() > agentlessPayloadSizeLimit || w.payload.itemCount() >= agentlessPayloadMaxEntries {
@@ -83,6 +101,9 @@ func (w *logsWriter) add(entry *logEntry) bool {
 	}
 	w.mu.Unlock()
 
+	if full != nil {
+		w.startUpload(full)
+	}
 	if payloadToFlush != nil {
 		w.startUpload(payloadToFlush)
 	}

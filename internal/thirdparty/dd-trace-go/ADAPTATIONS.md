@@ -947,7 +947,12 @@ level makes still finds it. Check: `TestMiniSubBenchmarksSharingACallback`.
 intake rejects a request over 5 MB uncompressed or with more than 1000
 entries, so a test process that logged that much lost the whole batch after
 its retries. The limit is 5 MB here, a payload is sent from 2.5 MB, and at
-1000 entries. Check: `TestLogsWriterRespectsIntakeLimits`.
+1000 entries. Check: `TestLogsWriterRespectsIntakeLimits`. The writer checked
+the size only after adding an entry, so a line of a few megabytes, larger
+still once JSON escapes it, could take a payload past 5 MB. `add` now encodes
+the entry first, through `logsPayload.pushEncoded`, and starts the next
+payload when the entry would not fit. Check:
+`TestLogsWriterSendsLargeEntryInTheNextRequest`.
 
 ## Logs without a client
 

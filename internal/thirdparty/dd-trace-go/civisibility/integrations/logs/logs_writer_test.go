@@ -336,3 +336,29 @@ func TestLogsWriterRespectsIntakeLimits(t *testing.T) {
 	}
 	assert.Equal(t, expected, recorder.messages())
 }
+
+// An entry that would take the payload past the intake's limit, as an escaped
+// line of a few megabytes can, goes to the next request instead.
+func TestLogsWriterSendsLargeEntryInTheNextRequest(t *testing.T) {
+	writer := newLogsWriter()
+	recorder := newLogSendRecorder(nil)
+	writer.client = &MockClient{SendLogsFunc: recorder.send}
+	// json.Marshal writes each & as &, six bytes.
+	messages := []string{strings.Repeat("a", 2*1024*1024), strings.Repeat("&", 600*1024)}
+	for _, message := range messages {
+		if !writer.add(&logEntry{Message: message}) {
+			t.Fatal("entry not added")
+		}
+	}
+	writer.stop()
+	requests := recorder.requests()
+	if len(requests) != 2 {
+		t.Fatalf("%d requests; want one per entry", len(requests))
+	}
+	for _, request := range requests {
+		if request[0] != 1 || request[1] > 5*1024*1024 {
+			t.Errorf("request with %d entries and %d bytes", request[0], request[1])
+		}
+	}
+	assert.Equal(t, map[string]int{messages[0]: 1, messages[1]: 1}, recorder.messages())
+}
