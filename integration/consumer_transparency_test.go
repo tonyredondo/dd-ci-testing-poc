@@ -148,6 +148,23 @@ func check(t *testing.T,path,version string,symbol any) {
 					t.Fatal("client module files changed")
 				}
 			}
+			// The workspace that keeps the module's language must not accept a
+			// checksum that only the module cache has.
+			var kept []string
+			for _, line := range strings.Split(string(beforeSum), "\n") {
+				if !strings.HasPrefix(line, tc.path+" "+tc.version+" ") {
+					kept = append(kept, line)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(dir, "go.sum"), []byte(strings.Join(kept, "\n")), 0600); err != nil {
+				t.Fatal(err)
+			}
+			for _, prefix := range []string{"go", driver} {
+				out, stderr, code := command(t, dir, env, prefix, "test", "-count=1", ".")
+				if code != 1 || !strings.Contains(out+stderr, "missing go.sum entry") {
+					t.Fatalf("%s exit=%d\n%s%s", prefix, code, out, stderr)
+				}
+			}
 		})
 	}
 }

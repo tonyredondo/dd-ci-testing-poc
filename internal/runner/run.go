@@ -543,6 +543,14 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	if e != nil {
 		return plan, e
 	}
+	if plan.moduleWorkspace && !vendorProvided && opts.mod != "mod" {
+		// Both queries have loaded each package that go test builds. Workspace
+		// mode records checksums missing from the module's go.sum in go.work.sum,
+		// where module mode rejects the build: go test reports it.
+		if info, e := os.Stat(plan.Workfile + ".sum"); e == nil && info.Size() != 0 {
+			return plan, &goRejectedError{errors.New("go.sum lacks checksums that the build needs")}
+		}
+	}
 	// Orchestrion may introduce SDK imports during compilation. Other builds
 	// need the gate only when the already resolved client graph contains it.
 	plan.sdkCI = plan.mini && (plan.orchestrion || sdkCI)

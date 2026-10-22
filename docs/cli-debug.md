@@ -64,7 +64,8 @@ The log records:
   says how to vendor it, and native `go test` runs.
 - When go rejects the command or its environment while ddto prepares it, as
   with `-p=0`, an unknown flag in `GOFLAGS`, a missing `-C` directory or
-  `-modfile`, or an `-overlay` file that go cannot read or parse,
+  `-modfile`, an `-overlay` file that go cannot read or parse, or a `go.sum`
+  without a checksum that the build needs,
   `instrumentation bypass go_rejected="<reason>"`, and native
   `go test` runs and reports the error with its own exit status. ddto adds a
   warning only if that `go test` passes, which means the failure was ddto's.
