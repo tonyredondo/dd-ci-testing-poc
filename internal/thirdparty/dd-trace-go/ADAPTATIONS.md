@@ -819,6 +819,10 @@ change the CI tags:
   the job name: a branch such as `feature/(cleanup` panicked in
   `regexp.MustCompile`, and `.` matched any character.
 
+- GitHub Actions' `GITHUB_HEAD_REF` names a pull request's branch: a name
+  that holds `tags/`, such as `feature/tags/filter`, was reported as a tag and
+  lost its branch. Only `GITHUB_REF` names a tag here.
+
 Check: `TestProviderTagsFromUnusualValues`, which fails without each change.
 
 ## Credentials in requests and debug lines

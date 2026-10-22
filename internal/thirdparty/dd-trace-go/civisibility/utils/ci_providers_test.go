@@ -383,6 +383,9 @@ func TestProviderTagsFromUnusualValues(t *testing.T) {
 		{"gitlab empty email", map[string]string{"GITLAB_CI": "true", "CI_COMMIT_AUTHOR": "Audit <>"}, constants.GitCommitAuthorName, "Audit", constants.GitCommitAuthorEmail},
 		{"gitlab author", map[string]string{"GITLAB_CI": "true", "CI_COMMIT_AUTHOR": "Jane Doe <jane@example.com>"}, constants.GitCommitAuthorEmail, "jane@example.com", ""},
 		{"jenkins branch with a parenthesis", map[string]string{"JENKINS_URL": "http://jenkins", "GIT_BRANCH": "origin/feature/(cleanup", "JOB_NAME": "job/feature/(cleanup"}, constants.CIPipelineName, "job", ""},
+		// A pull request's branch may hold tags/ in its name.
+		{"github branch with tags/", map[string]string{"GITHUB_SHA": "abc", "GITHUB_HEAD_REF": "feature/tags/filter", "GITHUB_REF": "refs/pull/1/merge"}, constants.GitBranch, "feature/tags/filter", constants.GitTag},
+		{"github tag", map[string]string{"GITHUB_SHA": "abc", "GITHUB_REF": "refs/tags/v1.2.3"}, constants.GitTag, "v1.2.3", ""},
 		// A CodeBuild-hosted runner of another CI sets CODEBUILD_INITIATOR.
 		{"github on codebuild", map[string]string{"GITHUB_SHA": "abc", "CODEBUILD_INITIATOR": "GitHub-Hookshot/123"}, constants.CIProviderName, "github", ""},
 		{"jenkins branch with a dot", map[string]string{"JENKINS_URL": "http://jenkins", "GIT_BRANCH": "origin/release-1.2", "JOB_NAME": "job/release-1x2"}, constants.CIPipelineName, "job/release-1x2", ""},
