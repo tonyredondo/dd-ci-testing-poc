@@ -25,6 +25,8 @@ func work(b *testing.B) {
 func BenchmarkTable(b *testing.B) {
 	b.Run("a", work)
 	b.Run("b", work)
+	b.Run("b", work)
+	b.Run("input size=1", work)
 }
 `), 0o600); err != nil {
 		t.Fatal(err)
@@ -39,7 +41,8 @@ func BenchmarkTable(b *testing.B) {
 		}
 	}
 	slices.Sort(tests)
-	if want := []string{"BenchmarkTable", "BenchmarkTable/a", "BenchmarkTable/b"}; got.code != 0 || !slices.Equal(tests, want) {
+	// The names that testing gives them: a repeated name gets #01, a space _.
+	if want := []string{"BenchmarkTable", "BenchmarkTable/a", "BenchmarkTable/b", "BenchmarkTable/b#01", "BenchmarkTable/input_size=1"}; got.code != 0 || !slices.Equal(tests, want) {
 		t.Fatalf("exit %d, tests %v; want %v\n%s", got.code, tests, want, got.stderr)
 	}
 }

@@ -602,8 +602,14 @@ func instrumentTestingBFunc(pb *testing.B, name string, f func(*testing.B)) (str
 		startTime := time.Now()
 		module := session.GetOrCreateModule(moduleName, integrations.WithTestModuleStartTime(startTime))
 		suite := module.GetOrCreateSuite(suiteName, integrations.WithTestSuiteStartTime(startTime))
-		test := suite.CreateTest(fmt.Sprintf("%s/%s", pb.Name(), name), integrations.WithTestStartTime(startTime))
-		test.SetTestFunc(originalFunc)
+		// The event takes the name that testing gives the sub-benchmark, as
+		// case#01 for a repeated name or input_size=1 for "input size=1",
+		// which only the sub-benchmark's own B has.
+		var test integrations.Test
+		createTest := func(testName string) {
+			test = suite.CreateTest(testName, integrations.WithTestStartTime(startTime))
+			test.SetTestFunc(originalFunc)
+		}
 
 		// Restore the original name without the sub-benchmark auto name.
 		if bpf.name != nil {
@@ -633,6 +639,7 @@ func instrumentTestingBFunc(pb *testing.B, name string, f func(*testing.B)) (str
 			if iPfOfB == nil {
 				panic("error getting private fields of the benchmark")
 			}
+			createTest(b.Name())
 
 			// Replace this function with the original one (executed only once - the first iteration[b.run1]).
 			if iPfOfB.benchFunc == nil {
@@ -668,6 +675,7 @@ func instrumentTestingBFunc(pb *testing.B, name string, f func(*testing.B)) (str
 		if iPfOfB == nil {
 			// testing did not run the sub-benchmark, as for a duplicate name
 			// that a pattern no longer selects.
+			createTest(fmt.Sprintf("%s/%s", pb.Name(), name))
 			test.Close(integrations.ResultStatusSkip, integrations.WithTestFinishTime(endTime))
 			checkModuleAndSuite(module, suite)
 			return

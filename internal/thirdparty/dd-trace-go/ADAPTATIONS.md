@@ -1005,7 +1005,11 @@ local `gotesting/efd_faulty_session_terminal_test.go`.
 instrumented, as well as its wrapper: in a table such as
 `b.Run("a", work); b.Run("b", work)`, only the first sub-benchmark had an
 event. Only the wrapper is marked here; the inner `b.Run` that the measuring
-level makes still finds it. Check: `TestMiniSubBenchmarksSharingACallback`.
+level makes still finds it. The event was also named from the name passed to
+`b.Run`, before testing makes it unique and rewrites it: a repeated `b` and
+`"input size=1"` gave `b` twice and a name with a space, where testing prints
+`b#01` and `input_size=1`. The event is now created in the sub-benchmark, with
+its own `b.Name()`. Check: `TestMiniSubBenchmarksSharingACallback`.
 
 ## Coverage rows of trimmed test files
 
