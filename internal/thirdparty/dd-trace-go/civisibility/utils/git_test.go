@@ -950,6 +950,78 @@ func TestGetGitDiffNormalizesHeaders(t *testing.T) {
 	}
 }
 
+// Git before 2.28, as Ubuntu 20.04's 2.25, has neither diff.relative nor
+// --no-relative, which it rejects: the diff must still be read there.
+func TestGetGitDiffBeforeGit228(t *testing.T) {
+	useLocalGitFixture(t)
+	if !isGitFound() {
+		t.Skip("Git not available")
+	}
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	git := func(args ...string) string {
+		out, err := exec.Command(realGit, append([]string{"-c", "user.name=CI Fixture", "-c", "user.email=ci-fixture@example.invalid", "-c", "commit.gpgsign=false"}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	base := git("rev-parse", "HEAD")
+	if err := os.WriteFile("plain.go", []byte("line\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git("add", ".")
+	git("commit", "-q", "-m", "file")
+	head := git("rev-parse", "HEAD")
+	testBinary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gitExecutable = testBinary
+	gitExecutableArgs = []string{"-test.run=^TestGitBefore228HelperProcess$", "--"}
+	t.Setenv("DD_TEST_GIT_BEFORE_228", realGit)
+	out, err := GetGitDiff(base, head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "diff --git a/plain.go b/plain.go") {
+		t.Errorf("no plain.go header in\n%s", out)
+	}
+}
+
+// TestGitBefore228HelperProcess is git for TestGetGitDiffBeforeGit228: the
+// real git, but one that rejects --no-relative, as Git before 2.28 does.
+func TestGitBefore228HelperProcess(t *testing.T) {
+	realGit := os.Getenv("DD_TEST_GIT_BEFORE_228")
+	if realGit == "" {
+		return
+	}
+	args := os.Args
+	for len(args) > 0 && args[0] != "--" {
+		args = args[1:]
+	}
+	if len(args) > 0 {
+		args = args[1:]
+	}
+	for _, arg := range args {
+		if arg == "--no-relative" {
+			_, _ = os.Stderr.WriteString("error: unknown option `no-relative'\n")
+			os.Exit(129)
+		}
+	}
+	cmd := exec.Command(realGit, args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		if exit, ok := err.(*exec.ExitError); ok {
+			os.Exit(exit.ExitCode())
+		}
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
 // A commit message may hold the separator of the commit fields.
 func TestCommitMessageWithFieldSeparator(t *testing.T) {
 	useLocalGitFixture(t)

@@ -659,9 +659,9 @@ func GetGitDiff(baseCommit, headCommit string) (string, error) {
 
 	log.Debug("civisibility.git: getting the diff between %s and %s", baseCommit, headCommit)
 	// The parser reads "diff --git a/<path> b/<path>" headers: fix the prefixes
-	// and leave paths unquoted, colors, external diff drivers and textconv
-	// out, whatever the repository's settings.
-	out, err := execGitString(telemetry.DiffCommandType, "-c", "core.quotePath=false", "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "-U0", "--word-diff=porcelain", baseCommit, headCommit)
+	// and leave paths unquoted, colors, external diff drivers, textconv and
+	// diff.relative out, whatever the settings; Git before 2.28 lacks --no-relative.
+	out, err := execGitString(telemetry.DiffCommandType, "-c", "core.quotePath=false", "-c", "diff.relative=false", "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/", "-U0", "--word-diff=porcelain", baseCommit, headCommit)
 	if err != nil {
 		return "", fmt.Errorf("civisibility.git: error getting the diff from %s to %s: %s | %s", baseCommit, headCommit, err, out)
 	}
