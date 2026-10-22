@@ -1074,6 +1074,16 @@ testing writes through, became a regular file, and the profile's mode became
 the temporary file's 0600. It now writes beside the link's target and keeps the
 profile's mode. Check: `TestProfileRewriteKeepsLinkAndMode`.
 
+## Nil subtest callbacks
+
+`instrumentTestingTFuncWithSourceOptions` in
+`gotesting/instrumentation_orchestrion.go`, which the `T.Run` hook calls before
+testing decides whether to run the subtest, read the callback's function
+first: `t.Run("excluded", nil)` panicked, where testing skips the subtest that
+`-skip` excludes without calling it. A nil callback is returned unchanged, on
+the kill-switch line, which keeps the file's stack lines. Check:
+`TestMiniSkipAfterFailureReportsFailure`.
+
 ## Partial lines of t.Output
 
 `collectAndWriteLogs` in `gotesting/testing.go` ends a partial line that a test

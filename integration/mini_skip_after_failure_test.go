@@ -38,6 +38,9 @@ func TestSkipNowThenDeferredFailure(t *testing.T) {
 	t.SkipNow()
 }
 
+// A subtest that -skip excludes is never called, nil included.
+func TestNilSkippedSubtest(t *testing.T) { t.Run("excluded", nil) }
+
 func BenchmarkSkipThenDeferredFailure(b *testing.B) {
 	defer b.Error("deferred failure")
 	b.Skip("reason")
@@ -54,7 +57,11 @@ func BenchmarkSkippingSub(b *testing.B) {
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	got := execute(t, dir, compileMini(t, dir, driver), []string{"-test.run=^Test(FailThenSkip|FailThenSkipNow|OnlySkip|SkipThenDeferredFailure|SkipNowThenDeferredFailure)$"}, true, false)
+	bin := compileMini(t, dir, driver)
+	if nilSubtest := execute(t, dir, bin, []string{"-test.run=^TestNilSkippedSubtest$", "-test.skip=^TestNilSkippedSubtest$/^excluded$"}, true, false); nilSubtest.code != 0 {
+		t.Fatalf("a nil subtest that -skip excludes: exit %d\n%s", nilSubtest.code, nilSubtest.stderr)
+	}
+	got := execute(t, dir, bin, []string{"-test.run=^Test(FailThenSkip|FailThenSkipNow|OnlySkip|SkipThenDeferredFailure|SkipNowThenDeferredFailure)$"}, true, false)
 	statuses := map[string]string{}
 	for _, event := range got.wireEvents {
 		content, _ := event["content"].(map[string]any)

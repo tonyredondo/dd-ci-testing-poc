@@ -181,12 +181,12 @@ func instrumentTestingTFuncWithSourceOptions(
 		return f
 	}
 	defer release()
-	if isProcessRetryChild() {
+	if isProcessRetryChild() && f != nil {
 		return instrumentProcessRetryChildSubtest(f)
 	}
 
-	// Check if CI Visibility was disabled using the kill switch before instrumenting
-	if !isCiVisibilityEnabled() || !testing.Testing() {
+	// Without CI Visibility, or for a nil callback, which testing may skip, f stays
+	if !isCiVisibilityEnabled() || !testing.Testing() || f == nil {
 		return f
 	}
 
