@@ -947,6 +947,16 @@ instrumented, as well as its wrapper: in a table such as
 event. Only the wrapper is marked here; the inner `b.Run` that the measuring
 level makes still finds it. Check: `TestMiniSubBenchmarksSharingACallback`.
 
+## Coverage rows of trimmed test files
+
+With `-trimpath`, the runtime names a test's source file by its import path,
+such as `github.com/acme/project/pkg/example_test.go`. Per-test coverage
+(`NewTestCoverage` in `gotesting/coverage/test_coverage.go`), process-retry
+coverage and experimental file coverage made it relative to the CI workspace
+only, which kept that name for the test's own row. `coverageSourceFile`
+resolves it as test events' source files are, to `pkg/example_test.go`.
+Check: `TestTestCoverageNamesTrimmedTestFileInRepository`.
+
 ## Known-test pages
 
 `GetKnownTests` in `utils/net/known_tests_api.go` requests the next page while

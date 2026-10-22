@@ -315,3 +315,32 @@ func TestBackfillPrefersNestedModuleRepositoryPath(t *testing.T) {
 		t.Fatalf("backend coverage of %q, %t; want services/api/handler.go", name, ok)
 	}
 }
+
+// With -trimpath, the test's own file is named by its import path; its
+// coverage row takes its path in the repository.
+func TestTestCoverageNamesTrimmedTestFileInRepository(t *testing.T) {
+	ResetForTesting()
+	civisibilityutils.ResetCITags()
+	t.Cleanup(func() {
+		ResetForTesting()
+		civisibilityutils.ResetCITags()
+	})
+	workspace := t.TempDir()
+	civisibilityutils.AddCITagsMap(map[string]string{
+		constants.CIWorkspacePath:  workspace,
+		constants.GitRepositoryURL: "https://github.com/acme/project.git",
+	})
+	for path, want := range map[string]string{
+		"github.com/acme/project/pkg/example_test.go":  "pkg/example_test.go",
+		filepath.Join(workspace, "pkg", "abs_test.go"): "pkg/abs_test.go",
+	} {
+		if got := NewTestCoverage(1, 2, 3, 4, path).(*testCoverage).testFile; got != want {
+			t.Errorf("%s: test file %q; want %q", path, got, want)
+		}
+	}
+	// Experimental file coverage names the test's file once, also trimmed.
+	files := fileCoverageFiles("pkg/example_test.go", []string{"github.com/acme/project/pkg/example_test.go", "github.com/acme/project/pkg/lib.go"})
+	if len(files) != 2 || files[0].name != "pkg/example_test.go" || files[1].name != "pkg/lib.go" {
+		t.Errorf("file coverage rows %+v", files)
+	}
+}

@@ -664,14 +664,22 @@ func ResetForTesting() {
 
 // NewTestCoverage creates a new test coverage.
 func NewTestCoverage(sessionID, moduleID, suiteID, testID uint64, testFile string) TestCoverage {
-	testFile = utils.GetRelativePathFromCITagsSourceRoot(testFile)
 	return &testCoverage{
 		sessionID: sessionID,
 		moduleID:  moduleID,
 		suiteID:   suiteID,
 		testID:    testID,
-		testFile:  testFile,
+		testFile:  coverageSourceFile(testFile),
 	}
+}
+
+// coverageSourceFile returns the path in the repository of a source file,
+// which the runtime names by its import path with -trimpath.
+func coverageSourceFile(path string) string {
+	if filepath.IsAbs(path) {
+		return utils.GetRelativePathFromCITagsSourceRoot(path)
+	}
+	return utils.ResolveSourceFilePathFromCITags(path).RelativePath
 }
 
 // CollectCoverageBeforeTestExecution collects coverage before test execution.

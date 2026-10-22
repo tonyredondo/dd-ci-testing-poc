@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/telemetry"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 )
@@ -92,7 +91,7 @@ func (c *ProcessTestCoverage) resume() bool {
 		return false
 	}
 	collector := &testCoverage{
-		testFile:             utils.GetRelativePathFromCITagsSourceRoot(c.testFile),
+		testFile:             coverageSourceFile(c.testFile),
 		preCoverageFilename:  filepath.Join(temporaryDir, "pre.out"),
 		postCoverageFilename: filepath.Join(temporaryDir, "post.out"),
 	}
