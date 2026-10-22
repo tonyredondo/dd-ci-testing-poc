@@ -318,11 +318,13 @@
       [
         "cli",
         "provision",
-        "transparency",
-        "testify",
-        "fuzz",
         "parity",
         "sdk"
+      ],
+      [
+        "transparency",
+        "testify",
+        "fuzz"
       ],
       [
         "orchestrion",
