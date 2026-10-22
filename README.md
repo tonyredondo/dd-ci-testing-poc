@@ -203,6 +203,7 @@ Put `ddto` in front of the gotestsum command that you already run:
 ```sh
 ddto gotestsum --format testname --junitfile junit.xml -- -race ./...
 ddto go tool gotestsum -- ./...                      # a tool of the module
+ddto go tool -modfile=tools.mod gotestsum -- ./...   # or of a tools modfile
 ddto go run gotest.tools/gotestsum@v1.13.0 -- ./...
 ```
 

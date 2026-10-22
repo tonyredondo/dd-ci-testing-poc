@@ -130,6 +130,11 @@ func TestGoShimCommand(t *testing.T) {
 		{args: []string{"go", "tool", "gotestsum", "--format", "testname"}, reason: "gotestsum"},
 		{args: []string{"go", "tool", "gotest.tools/gotestsum"}, reason: "gotestsum"},
 		{args: []string{"go", "-C", "project", "tool", "gotestsum"}, reason: "gotestsum"},
+		// go tool's own flags precede the tool.
+		{args: []string{"go", "tool", "-modfile=tools.mod", "gotestsum"}, reason: "gotestsum"},
+		{args: []string{"go", "tool", "-modfile", "tools.mod", "-modcacherw", "gotestsum"}, reason: "gotestsum"},
+		{args: []string{"go", "tool", "-C", "tools", "-overlay", "o.json", "gotestsum"}, reason: "gotestsum"},
+		{args: []string{"go", "tool", "-modfile", "gotestsum"}},
 		{args: []string{"go", "run", "gotest.tools/gotestsum@v1.13.0", "--", "./..."}, reason: "gotestsum"},
 		{args: []string{"go", "run", "-mod=mod", "gotest.tools/gotestsum"}, reason: "gotestsum"},
 		{args: []string{"go", "run", "-tags", "smoke", "gotest.tools/gotestsum@v1.13.0"}, reason: "gotestsum"},
@@ -206,9 +211,9 @@ func TestGoShimGoCommand(t *testing.T) {
 		}
 	}
 	for name, command := range map[string][]string{
-		"the caller's -exec": {"go", "run", "-exec=wasmtime", "./cmd"},
-		"-exec after a flag": {"go", "run", "-tags", "x", "-exec", "wasmtime", "./cmd"},
-		"go tool flags":      {"go", "tool", "-n", "gotestsum"},
+		"the caller's -exec":      {"go", "run", "-exec=wasmtime", "./cmd"},
+		"-exec after a flag":      {"go", "run", "-tags", "x", "-exec", "wasmtime", "./cmd"},
+		"an unknown go tool flag": {"go", "tool", "-x", "gotestsum"},
 	} {
 		if _, _, err := goShimGoCommand(self, "/go/bin/go", command); err == nil {
 			t.Errorf("%s: no error", name)
@@ -228,13 +233,40 @@ func TestGoShimGoCommand(t *testing.T) {
 	// program; one that fails leaves the error to go tool itself.
 	t.Setenv(fakeToolEnv, "1")
 	// With -n in GOFLAGS, go tool only prints the tool's command.
-	env.GOFLAGS = "-n"
-	if native, tool, err := goShimGoCommand(self, os.Args[0], []string{"go", "tool", "gotestsum"}); err != nil || tool != nil || !slices.Equal(native, []string{os.Args[0], "tool", "gotestsum"}) {
-		t.Errorf("GOFLAGS=-n: %q, %v, %v", native, tool, err)
+	// The command line's go tool flags come after GOFLAGS, and the last -n
+	// wins, as go parses booleans.
+	for _, tc := range []struct {
+		goflags string
+		flags   []string
+		prints  bool
+	}{
+		{"-n", nil, true},
+		{"-n=1", nil, true},
+		{"", []string{"-n"}, true},
+		{"-n", []string{"-modfile=tools.mod"}, true},
+		{"-n=0", nil, false},
+		{"-n=False", nil, false},
+		{"-n -n=false", nil, false},
+		{"-n", []string{"-n=false"}, false},
+		{"", nil, false},
+	} {
+		env.GOFLAGS = tc.goflags
+		command := append(append([]string{"go", "tool"}, tc.flags...), "gotestsum")
+		native, tool, err := goShimGoCommand(self, os.Args[0], command)
+		if tc.prints && (err != nil || tool != nil || !slices.Equal(native, append([]string{os.Args[0]}, command[1:]...))) {
+			t.Errorf("GOFLAGS=%q %q: %q, %v, %v; want go tool itself", tc.goflags, command, native, tool, err)
+		}
+		if !tc.prints && (err == nil || !strings.Contains(err.Error(), "not one program")) {
+			t.Errorf("GOFLAGS=%q %q: %v; want the probe's output, which is not one program", tc.goflags, command, err)
+		}
 	}
 	env.GOFLAGS = ""
-	if _, _, err := goShimGoCommand(self, os.Args[0], []string{"go", "tool", "gotestsum"}); err == nil {
-		t.Error("go tool -n printed more than one program")
+	// The probe keeps go tool's flags, which select how go builds the tool.
+	if _, _, err := goShimGoCommand(self, os.Args[0], []string{"go", "tool", "-modfile", "tools.mod", "gotestsum", "--format", "testname"}); err == nil || !strings.Contains(err.Error(), `tool\n-modfile\ntools.mod\n-n\ngotestsum`) {
+		t.Errorf("go tool -modfile: %v; want a probe of go tool -modfile tools.mod -n gotestsum", err)
+	}
+	if _, _, err := goShimGoCommand(self, os.Args[0], []string{"go", "tool", "-C", "tools", "gotestsum"}); err == nil || !strings.Contains(err.Error(), "another directory") {
+		t.Errorf("go tool -C: %v; want a module tool in another directory refused", err)
 	}
 	t.Setenv(fakeToolExitEnv, "1")
 	if native, tool, err := goShimGoCommand(self, os.Args[0], []string{"go", "tool", "nope"}); err != nil || tool != nil || !slices.Equal(native, []string{os.Args[0], "tool", "nope"}) || goShimGoMode != "tool_not_built" {
@@ -325,6 +357,11 @@ func TestPathWith(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin")
 	if got, err := pathWith([]string{"/shim", "/go/bin"}); err != nil || got != "/shim"+sep+"/go/bin"+sep+"/usr/bin" {
 		t.Fatalf("pathWith = %q, %v", got, err)
+	}
+	// An empty PATH gains no empty entry, which would be the current directory.
+	t.Setenv("PATH", "")
+	if got, err := pathWith([]string{"/shim"}); err != nil || got != "/shim" {
+		t.Fatalf("pathWith with an empty PATH = %q, %v", got, err)
 	}
 }
 

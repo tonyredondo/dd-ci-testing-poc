@@ -125,6 +125,7 @@ func runsGotestsum(args []string) bool {
 	_, sub, rest := goSubcommand(args[1:])
 	switch sub {
 	case "tool":
+		_, rest = goToolArgs(rest)
 		return len(rest) > 0 && (rest[0] == "gotestsum" || rest[0] == "gotest.tools/gotestsum")
 	case "run":
 		if i := runPackage(rest); i < len(rest) {
@@ -160,6 +161,27 @@ func leadingChdir(args []string) (chdir, rest []string) {
 		return args[:2], args[2:]
 	}
 	return nil, args
+}
+
+// goToolArgs splits go tool's own flags, which precede the tool, off its
+// arguments: -n and the -C, -modfile, -overlay and -modcacherw build flags
+// (cmd/go/internal/tool). Another flag starts rest, and go reports it.
+func goToolArgs(args []string) (flags, rest []string) {
+	for i := 0; i < len(args); i++ {
+		if !strings.HasPrefix(args[i], "-") {
+			return args[:i], args[i:]
+		}
+		switch name, _, hasValue := strings.Cut(strings.TrimLeft(args[i], "-"), "="); name {
+		case "n", "modcacherw":
+		case "C", "modfile", "overlay":
+			if !hasValue {
+				i++
+			}
+		default:
+			return args[:i], args[i:]
+		}
+	}
+	return args, nil
 }
 
 // runPackage returns the index of go run's package in its arguments: the
@@ -388,6 +410,7 @@ func goShimGoCommand(self, toolchain string, command []string) ([]string, *modul
 		goShimGoMode = "run_exec"
 		return append(run, rest...), nil, nil
 	case "tool":
+		flags, rest := goToolArgs(rest)
 		if len(rest) == 0 || strings.HasPrefix(rest[0], "-") {
 			return nil, nil, errors.New("go tool takes flags before the tool")
 		}
@@ -395,12 +418,14 @@ func goShimGoCommand(self, toolchain string, command []string) ([]string, *modul
 		if err != nil {
 			return nil, nil, err
 		}
-		if printsOnly(env.GOFLAGS) {
+		if printsOnly(env.GOFLAGS, flags) {
 			// With -n, go tool prints the tool's command instead of running it.
 			return native, nil, nil
 		}
+		// go tool's flags select how go resolves and builds the tool, so the
+		// probe keeps them; -C stays first.
 		var diagnostics bytes.Buffer
-		probe := exec.Command(toolchain, append(append(append([]string(nil), chdir...), "tool", "-n"), rest[0])...)
+		probe := exec.Command(toolchain, append(append(append(append([]string(nil), chdir...), "tool"), flags...), "-n", rest[0])...)
 		probe.Stderr = &diagnostics
 		out, err := probe.Output()
 		path := strings.TrimSpace(string(out))
@@ -413,7 +438,7 @@ func goShimGoCommand(self, toolchain string, command []string) ([]string, *modul
 			goShimGoMode = "toolchain_tool"
 			return native, nil, nil
 		}
-		if len(chdir) != 0 {
+		if toolChdir, _ := leadingChdir(flags); len(chdir)+len(toolChdir) != 0 {
 			return nil, nil, errors.New("go -C runs a module tool in another directory")
 		}
 		// With a cross-compilation executor, go tool -n prints it first.
@@ -489,18 +514,23 @@ func goRunExecutor(env goShimEnv, args []string) error {
 	return nil
 }
 
-// printsOnly reports whether GOFLAGS sets go tool's -n.
-func printsOnly(goflags string) bool {
-	flags, err := splitFlags(goflags)
+// printsOnly reports whether go tool's -n is set, by GOFLAGS and then by the
+// command line's go tool flags. As in go, the last value wins.
+func printsOnly(goflags string, flags []string) bool {
+	all, err := splitFlags(goflags)
 	if err != nil {
-		return false
+		all = nil
 	}
-	for _, flag := range flags {
-		if name, value, _ := strings.Cut(strings.TrimLeft(flag, "-"), "="); strings.HasPrefix(flag, "-") && name == "n" && value != "false" {
-			return true
+	prints := false
+	for _, flag := range append(all, flags...) {
+		if name, value, hasValue := strings.Cut(strings.TrimLeft(flag, "-"), "="); strings.HasPrefix(flag, "-") && name == "n" {
+			prints = true
+			if hasValue {
+				prints, _ = strconv.ParseBool(value)
+			}
 		}
 	}
-	return false
+	return prints
 }
 
 // isToolchainTool reports whether path is in the toolchain's pkg/tool
@@ -556,7 +586,11 @@ func pathWith(entries []string) (string, error) {
 		}
 		first = append(first, entry)
 	}
-	return strings.Join(append(first, os.Getenv("PATH")), string(os.PathListSeparator)), nil
+	// An empty entry would add the current directory.
+	if path := os.Getenv("PATH"); path != "" {
+		first = append(first, path)
+	}
+	return strings.Join(first, string(os.PathListSeparator)), nil
 }
 
 // goShimRoot is the directory of every go shim, in ddto's user cache.
