@@ -6,6 +6,7 @@
 package utils
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -213,7 +214,21 @@ func execGit(commandType telemetry.CommandType, args ...string) (val []byte, err
 	}
 
 	cmdArgs := append(append([]string(nil), gitExecutableArgs...), args...)
-	return newGitCommand(cmdArgs).CombinedOutput()
+	return gitOutput(newGitCommand(cmdArgs))
+}
+
+// gitOutput runs cmd and returns git's standard output. Git warns on stderr,
+// as for a deprecated setting, also when it succeeds; with the SDK's
+// CombinedOutput the warning became part of a SHA or a path. After an error
+// the output still includes stderr, which error reports show.
+func gitOutput(cmd *exec.Cmd) ([]byte, error) {
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return append(out, stderr.Bytes()...), err
+	}
+	return out, nil
 }
 
 // execGitString executes a Git command with the given arguments and returns the output as a string.
@@ -278,7 +293,7 @@ func execGitStringWithInput(commandType telemetry.CommandType, input string, arg
 	cmdArgs := append(append([]string(nil), gitExecutableArgs...), args...)
 	cmd := newGitCommand(cmdArgs)
 	cmd.Stdin = strings.NewReader(input)
-	out, err := cmd.CombinedOutput()
+	out, err := gitOutput(cmd)
 	strOut := strings.TrimSpace(strings.Trim(string(out), "\n"))
 	return strOut, err
 }

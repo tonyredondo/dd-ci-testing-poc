@@ -118,6 +118,9 @@ func BenchmarkCrash(b *testing.B) {
 }
 
 func FuzzSeeds(f *testing.F) {
+	if os.Getenv("FIXTURE_CRASH") == "fuzz exit" {
+		os.Exit(7)
+	}
 	f.Add(1)
 	f.Add(2)
 	f.Fuzz(func(t *testing.T, n int) {
@@ -150,6 +153,8 @@ func FuzzSeeds(f *testing.F) {
 		// the crash output.
 		{"fatal error with panic hook", "map", []string{"--panic-hook"}, nil, []string{"TestCrash fail"}, "crash: fatal error: concurrent map writes", "fatal error: concurrent map writes", 1},
 		{"killed", "kill", nil, nil, nil, "", "the test process ended before it closed CI Visibility", 1},
+		// A fuzz target that os.Exit ended while it ran is not passed.
+		{"fuzz target exit", "fuzz exit", nil, nil, []string{"TestCrash pass", "TestFirst pass"}, "", "", 1},
 		// A benchmark's panic, in its first run or a later one, closes it and
 		// sends the process's events before the process ends.
 		{"benchmark panic deferred", "benchmark", []string{"-run=^TestFirst$", "-bench=^BenchmarkCrash$", "-benchtime=1x"}, []string{"DD_CIVISIBILITY_DEFERRED_DELIVERY=true"}, []string{"BenchmarkCrash fail", "TestFirst pass"}, "", "panic: benchmark failed", 1},

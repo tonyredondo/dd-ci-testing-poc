@@ -93,3 +93,25 @@ func startedIn(t *testing.T, dir string) {
 	testPackageDirectory = dir
 	t.Cleanup(func() { testPackageDirectory = previous })
 }
+
+// Only the module path's prefix names the module directory: module app's
+// app/app.go is <dir>/app.go, and another module's file keeps its name.
+func TestModuleFilePath(t *testing.T) {
+	savedPath, savedDir := modulePath, moduleDir
+	t.Cleanup(func() { modulePath, moduleDir = savedPath, savedDir })
+	modulePath, moduleDir = "app", "/work/repo"
+	for file, want := range map[string]string{
+		"app/app.go":            "/work/repo/app.go",
+		"app/api/app/app.go":    "/work/repo/api/app/app.go",
+		"example.com/app/x.go":  "example.com/app/x.go",
+		"application/server.go": "application/server.go",
+	} {
+		if got := moduleFilePath(file); got != want {
+			t.Errorf("%s: %s, want %s", file, got, want)
+		}
+	}
+	modulePath = ""
+	if got := moduleFilePath("app/app.go"); got != "app/app.go" {
+		t.Errorf("without a module path: %s", got)
+	}
+}

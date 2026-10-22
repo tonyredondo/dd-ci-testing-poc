@@ -6,6 +6,7 @@
 package utils
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -971,6 +972,33 @@ func TestCommitMessageWithFieldSeparator(t *testing.T) {
 
 // With log.showSignature, Git adds a signature's verification to log and show
 // output: the commit fields and SHAs stay clean.
+// Git's warnings on stderr, as for a deprecated setting, stay out of the
+// data that it prints on stdout.
+func TestGitReadsIgnoreWarnings(t *testing.T) {
+	useLocalGitFixture(t)
+	if !isGitFound() {
+		t.Skip("Git not available")
+	}
+	if out, err := exec.Command("git", "config", "core.fsyncObjectFiles", "true").CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	var stderr bytes.Buffer
+	check := exec.Command("git", "rev-parse", "HEAD")
+	check.Stderr = &stderr
+	if err := check.Run(); err != nil || stderr.Len() == 0 {
+		t.Skip("this Git does not warn about core.fsyncObjectFiles")
+	}
+	data, err := getLocalGitData()
+	if err != nil || len(data.CommitSha) != 40 || strings.ContainsAny(data.CommitSha, " :\n") || data.CommitMessage != "fixture" {
+		t.Fatalf("local commit %q %q, %v", data.CommitSha, data.CommitMessage, err)
+	}
+	for _, sha := range GetLastLocalGitCommitShas() {
+		if len(sha) != 40 || strings.ContainsAny(sha, " :") {
+			t.Fatalf("commit SHA %q", sha)
+		}
+	}
+}
+
 func TestGitReadsIgnoreShowSignature(t *testing.T) {
 	useLocalGitFixture(t)
 	if !isGitFound() {

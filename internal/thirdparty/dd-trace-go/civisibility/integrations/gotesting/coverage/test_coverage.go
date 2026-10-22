@@ -1211,7 +1211,17 @@ func (c *coveredLines) files(testFile string) []coveredFile {
 // by converting a module path to a module directory.
 func getRelativePathFromCITagsSourceRootForCoverage(filePath string) string {
 	resolveModuleInfo()
-	return utils.GetRelativePathFromCITagsSourceRoot(strings.ReplaceAll(filePath, modulePath, moduleDir))
+	return utils.GetRelativePathFromCITagsSourceRoot(moduleFilePath(filePath))
+}
+
+// moduleFilePath names a file of the module path in the module directory. The
+// SDK replaced every occurrence of the module path: module app's app/app.go
+// became <dir>/<dir>.go.
+func moduleFilePath(filePath string) string {
+	if rest, ok := strings.CutPrefix(filePath, modulePath+"/"); ok && modulePath != "" {
+		return moduleDir + "/" + rest
+	}
+	return filePath
 }
 
 // getCoverageStatementsInfo parses the coverage profile data and returns the total statements and covered statements

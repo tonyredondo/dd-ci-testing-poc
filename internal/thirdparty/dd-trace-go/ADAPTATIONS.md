@@ -878,6 +878,14 @@ Checks: `TestCIClientDoesNotFollowRedirects`, `TestLogURL`, `TestLogError`,
 `TestRequestErrorHidesURLCredentials`,
 `TestWriterRequestErrorHidesURLCredentials` and
 `TestGitDebugLinesHideRemoteCredentials`.
+The URLs of `DD_TEST_OPTIMIZATION_ENV_DATA_FILE`'s file, which
+`applyEnvironmentalDataIfRequired` (`utils/file_environmental_data.go`) adds
+after `normalizeTags`, lose their credentials too (`filterSensitiveInfo`).
+Check: `TestApplyEnvironmentalDataHidesURLCredentials`.
+`UDSClient` ([`uds.go`](uds.go)) takes no proxy: it dials the Agent's socket
+for every request, where an HTTPS or SOCKS proxy from the environment made the
+client negotiate with the Agent. Check: `TestUDSClientUsesNoProxy`, in the
+local `uds_local_test.go`.
 
 ## LCOV paths of nested modules
 
@@ -1044,6 +1052,22 @@ with `flag.Set("test.bench", …)` ran them without events. `benchmarkArgs`
 (`gotesting/testingB.go`) adds `test.bench` when the flag has a value. Check:
 the `benchmain` package of `TestMiniSubBenchmarksSharingACallback`.
 
+## Module paths in coverage file names
+
+`getRelativePathFromCITagsSourceRootForCoverage`
+(`gotesting/coverage/test_coverage.go`) replaced every occurrence of the module
+path with the module directory: module `app`'s `app/app.go` became
+`<dir>/<dir>.go`. `moduleFilePath` replaces only the leading module path.
+Check: `TestModuleFilePath`.
+
+## Testing values without metadata
+
+`getTestMetadata` and `deleteTestMetadata` (`gotesting/instrumentation.go`)
+called `reflect.Value.UnsafePointer` on any `testing.TB`, which panics for one
+that is no pointer, as a struct that embeds a test, passed to
+`testopt.Context`. `testPointer` gives such a value no metadata, so the
+native context comes back. Check: `TestTestMetadataOfAValueTB`.
+
 ## Coverage rows of trimmed test files
 
 With `-trimpath`, the runtime names a test's source file by its import path,
@@ -1177,6 +1201,12 @@ The commit reads, `git log` and `git show` with a format, pass
 verification with them, which the SDK took as the commit's SHA, fields or the
 list of commits that it searches the backend for. Check:
 `TestGitReadsIgnoreShowSignature`.
+
+Git's data comes from its standard output only (`gitOutput`): the SDK's
+`CombinedOutput` also took Git's warnings, which Git prints on stderr when it
+succeeds, as for the deprecated `core.fsyncObjectFiles`, into the SHA and the
+paths. After an error, the output still includes stderr for the reports.
+Check: `TestGitReadsIgnoreWarnings`.
 
 ## Settings that require Git
 
@@ -2748,6 +2778,11 @@ differential fixtures now use the SDK base. `testingF.go`, `testingExample.go` a
 `fuzz_events.go` retain the native lifecycle and original test assertions.
 `instrumentation.go`, `instrumentation_orchestrion.go` and `testing.go` merge
 that delta while preserving this port's coverage-aware shutdown.
+
+At a forced exit, as `os.Exit` in a fuzz target, a root that still ran, with
+no failure, is left out (`fuzzTestEvent.finish`), as a running test is,
+instead of being passed. Check: the `fuzz target exit` case of
+`TestMiniCrashKeepsEvents`.
 
 The SDK installs a CI-only flush handler before publishing its tracer. Mini
 owns its queue and flush contract, so that APM worker implementation is not
