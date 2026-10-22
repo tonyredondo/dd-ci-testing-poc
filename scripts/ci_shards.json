@@ -79,6 +79,7 @@
       "TestMiniTemporaryWorkspaceKeepsBuildToolEnvironment",
       "TestMiniTemporaryWorkspaceRestoresGoEnvironment",
       "TestMiniTestCacheFollowsCallerEnvironment",
+      "TestMiniUsesSavedGoSettings",
       "TestMiniTestifyDuplicateIdentity",
       "TestMiniTestingCompatibility",
       "TestMiniVendorSelectionMatchesGo",
@@ -235,6 +236,7 @@
       "TestMiniTemporaryWorkspaceKeepsBuildToolEnvironment",
       "TestMiniTemporaryWorkspaceRestoresGoEnvironment",
       "TestMiniTestCacheFollowsCallerEnvironment",
+      "TestMiniUsesSavedGoSettings",
       "TestMiniVendorSelectionMatchesGo",
       "TestMiniVendorTreeMatchesGo",
       "TestMiniVendorWorkspaceLinksAndReusesBuildCache"

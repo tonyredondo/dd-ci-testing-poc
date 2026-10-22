@@ -160,6 +160,43 @@ func goDebugDefault(version string) string {
 	return "go" + strings.Join(parts[:2], ".")
 }
 
+// callerGoFlags returns the GOFLAGS that the caller's go commands use: the
+// environment's, or, when the environment leaves GOFLAGS empty, the value
+// that go env -w saved, which go then applies (cmd/go/internal/cfg).
+func callerGoFlags() string {
+	if flags := os.Getenv("GOFLAGS"); flags != "" {
+		return flags
+	}
+	return savedGoSetting("GOFLAGS")
+}
+
+// savedGoSetting returns name's last value in the file that go env -w writes,
+// found as cmd/go's cfg.EnvFile finds it, or "".
+func savedGoSetting(name string) string {
+	file := os.Getenv("GOENV")
+	if file == "off" {
+		return ""
+	}
+	if file == "" {
+		dir, err := os.UserConfigDir()
+		if err != nil || dir == "" {
+			return ""
+		}
+		file = filepath.Join(dir, "go", "env")
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return ""
+	}
+	value := ""
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if key, v, ok := strings.Cut(line, "="); ok && key == name {
+			value = v
+		}
+	}
+	return value
+}
+
 type goEnvironment struct {
 	GOMOD, GOWORK, GOMODCACHE, GOVERSION string
 	GOROOT                               string

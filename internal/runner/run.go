@@ -167,7 +167,7 @@ func Prepare(ctx context.Context, dir string, args []string) (Plan, error) {
 // A missing runtime is provided through a temporary modfile. Preparation is
 // silent; RunRuntime streams provisioning diagnostics to its stderr writer.
 func PrepareRuntime(ctx context.Context, dir string, args []string, runtime Runtime) (Plan, error) {
-	opts, err := parseOptions(args, os.Getenv("GOFLAGS"))
+	opts, err := parseOptions(args, callerGoFlags())
 	if err != nil {
 		return Plan{}, err
 	}
@@ -292,7 +292,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	plan.tests.GOARCH, plan.tests.RunsEveryTest = opts.environment.GOARCH, opts.runsEveryTest
 	debug.printf("toolchain=%q", opts.environment.GOVERSION)
 	if runtime == Mini {
-		if work := workspaceFile(dir); work != "" {
+		if work := workspaceFile(opts.environment); work != "" {
 			plan.Workfile, e = provideMiniWorkspace(ctx, dir, work, temp, opts.environment.GOMODCACHE, replacements)
 			if e != nil {
 				return plan, e
@@ -875,7 +875,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	opts, err := parseOptions(args, os.Getenv("GOFLAGS"))
+	opts, err := parseOptions(args, callerGoFlags())
 	if err != nil {
 		return runGoAfterError(ctx, cwd, args, err, signals, stdin, stdout, stderr)
 	}
