@@ -443,7 +443,7 @@ func selectedWorkspaceMini(ctx context.Context, dir, work, temp string, replacem
 	args = append(args, miniModule)
 	cmd := goCommand(ctx, dir, args...)
 	cmd.WaitDelay = 5 * time.Second
-	cmd.Env = append(cmd.Environ(), "GOWORK="+work, "GOFLAGS=")
+	cmd.Env = append(cmd.Environ(), "GOWORK="+work, goFlagsEnv(""))
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -497,7 +497,7 @@ func workspaceReplacementRoot(ctx context.Context, dir, base, path, version stri
 	defer os.RemoveAll(scratch)
 	cmd := goCommand(ctx, scratch, "mod", "download", "-json", path+"@"+version)
 	cmd.WaitDelay = 5 * time.Second
-	cmd.Env = append(cmd.Environ(), "GOWORK=off", "GOFLAGS=")
+	cmd.Env = append(cmd.Environ(), "GOWORK=off", goFlagsEnv(""))
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	phase := debugFromContext(ctx).start("go mod download")

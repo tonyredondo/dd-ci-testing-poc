@@ -291,7 +291,7 @@ func goTool(ctx context.Context, dir string, progress io.Writer, args ...string)
 	}
 	defer func() { phase.finish(err) }()
 	cmd := goCommand(ctx, dir, args...)
-	cmd.Env = append(cmd.Environ(), "GOFLAGS=")
+	cmd.Env = append(cmd.Environ(), goFlagsEnv(""))
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if progress != nil {

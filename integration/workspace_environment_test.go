@@ -582,8 +582,8 @@ func main() {
 func TestMiniUsesSavedGoSettings(t *testing.T) {
 	driver := sharedDriver(t, "..")
 	root := t.TempDir()
-	overlay, tags, work := filepath.Join(root, "overlay"), filepath.Join(root, "tags"), filepath.Join(root, "work", "client")
-	for _, dir := range []string{overlay, tags, work, filepath.Join(root, "work", "other")} {
+	overlay, tags, work, modfile := filepath.Join(root, "overlay"), filepath.Join(root, "tags"), filepath.Join(root, "work", "client"), filepath.Join(root, "modfile")
+	for _, dir := range []string{overlay, tags, work, filepath.Join(root, "work", "other"), modfile} {
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			t.Fatal(err)
 		}
@@ -615,10 +615,18 @@ func TestMiniUsesSavedGoSettings(t *testing.T) {
 		"go.mod":       "module example.com/savedwork\ngo 1.25\n",
 		"work_test.go": "package savedwork\nimport \"testing\"\nfunc TestWork(t *testing.T){}\n",
 	})
+	// ddto's temporary workspace rejects -modfile, which its own go commands
+	// must not take from the saved GOFLAGS.
+	writeBuildFixture(t, modfile, map[string]string{
+		"go.mod":          "module example.com/savedmodfile\ngo 1.21\n",
+		"alt.mod":         "module example.com/savedmodfile\ngo 1.21\n",
+		"modfile_test.go": "package savedmodfile\nimport \"testing\"\nfunc TestModfile(t *testing.T){}\n",
+	})
 	for _, tc := range []struct {
 		name, dir, saved string
 	}{
 		{"overlay", overlay, "GOFLAGS=-buildvcs=false -overlay=" + overlayFile},
+		{"modfile in a temporary workspace", modfile, "GOFLAGS=-buildvcs=false -modfile=" + filepath.Join(modfile, "alt.mod")},
 		{"tags in a temporary workspace", tags, "GOFLAGS=-buildvcs=false -tags=smoke"},
 		{"GOWORK=off", work, "GOFLAGS=-buildvcs=false\nGOWORK=off"},
 	} {

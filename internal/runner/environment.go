@@ -160,6 +160,16 @@ func goDebugDefault(version string) string {
 	return "go" + strings.Join(parts[:2], ".")
 }
 
+// goFlagsEnv returns the GOFLAGS entry that gives a go command flags and
+// nothing else. An empty value would not do: go then applies the GOFLAGS that
+// go env -w saved, so no flags is a space.
+func goFlagsEnv(flags string) string {
+	if flags == "" {
+		flags = " "
+	}
+	return "GOFLAGS=" + flags
+}
+
 // callerGoFlags returns the GOFLAGS that the caller's go commands use: the
 // environment's, or, when the environment leaves GOFLAGS empty, the value
 // that go env -w saved, which go then applies (cmd/go/internal/cfg).
@@ -233,7 +243,7 @@ func testRuntimeVersion(ctx context.Context, dir, goVersion, goExperiment string
 	}
 	phase := debug.start("test runtime version")
 	cmd := goCommand(ctx, dir, "tool", "compile", "-V")
-	cmd.Env = append(cmd.Environ(), "GOFLAGS=", "GOEXPERIMENT="+goExperiment)
+	cmd.Env = append(cmd.Environ(), goFlagsEnv(""), "GOEXPERIMENT="+goExperiment)
 	out, err := cmd.Output()
 	phase.finish(err)
 	if err != nil {

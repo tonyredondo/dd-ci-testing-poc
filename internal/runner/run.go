@@ -373,7 +373,7 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		if opts.workfile != "" {
 			cmd.Env = append(cmd.Environ(), "GOWORK="+opts.workfile)
 			if plan.moduleWorkspace {
-				cmd.Env = append(cmd.Env, "GOFLAGS="+plan.workspaceGoFlags)
+				cmd.Env = append(cmd.Env, goFlagsEnv(plan.workspaceGoFlags))
 			}
 		}
 		packages, err = readPackages(ctx, cmd, "resolve packages")
@@ -1005,7 +1005,7 @@ func RunRuntime(ctx context.Context, args []string, cli CLIOptions, stdin io.Rea
 		// The temporary workspace belongs to the build, including chained tools.
 		env = append(env, "GOWORK="+plan.Workfile)
 		if plan.moduleWorkspace {
-			env = append(env, "GOFLAGS="+plan.workspaceGoFlags)
+			env = append(env, goFlagsEnv(plan.workspaceGoFlags))
 		}
 	}
 	// A launcher would see the handed value before the test binary removes
