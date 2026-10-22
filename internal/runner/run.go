@@ -301,6 +301,10 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	if !supportsGoToolchain(opts.environment.GOVERSION) {
 		return plan, fmt.Errorf("ddto requires Go 1.25 or newer; selected toolchain is %q", opts.environment.GOVERSION)
 	}
+	if to, ok := replacements[filepath.Clean(opts.environment.GOMOD)]; ok && to == "" && opts.environment.GOMOD != "" {
+		// go finds another module root through the overlay, or none.
+		return plan, &nativeGoError{"overlay_deletes_go_mod", errors.New("the overlay deletes the module's go.mod")}
+	}
 	if needsGOROOTMirror(opts.environment) {
 		// Go rejects overlays beneath GOMODCACHE, where GOTOOLCHAIN keeps
 		// downloaded toolchains: run go from a mirror of that GOROOT.
@@ -354,7 +358,13 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			data, _ := readModuleFile(source, replacements)
 			_, manifestErr := os.Stat(filepath.Join(vendor, "modules.txt"))
 			_, runtimeErr := os.Stat(filepath.Join(vendor, filepath.FromSlash(miniModule), "testopt"))
-			if manifestErr == nil && os.IsNotExist(runtimeErr) && goSelectsVendor(opts.mod, moduleDirective(data, "go"), vendor, false, replacements) {
+			selectsVendor := goSelectsVendor(opts.mod, moduleDirective(data, "go"), vendor, false, replacements)
+			if manifestErr != nil && selectsVendor {
+				// Go reads the missing modules.txt as empty, and an older
+				// module can import vendored packages without it.
+				return plan, &nativeGoError{"vendor_without_runtime", errors.New("the module vendors its dependencies: require the runtime with a tools file and run go mod vendor")}
+			}
+			if manifestErr == nil && os.IsNotExist(runtimeErr) && selectsVendor {
 				if opts.modfile != "" {
 					if e = overlaySelectedModfile(source, root, temp, data, &plan, replacements); e != nil {
 						return plan, e

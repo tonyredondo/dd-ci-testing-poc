@@ -491,6 +491,21 @@ func TestMiniVendorWithoutRuntimeAndDuplicateOverlay(t *testing.T) {
 	if err := prepare("-mod=vendor", "."); !errors.As(err, &native) || native.bypass != "vendor_without_runtime" {
 		t.Errorf("vendor without modules.txt: %v; want the vendor_without_runtime bypass", err)
 	}
+	// An older client too, which can import vendored packages without
+	// modules.txt: ddto's workspace would not find them.
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/client\ngo 1.21\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepare("-mod=vendor", "."); !errors.As(err, &native) || native.bypass != "vendor_without_runtime" {
+		t.Errorf("an older module's vendor without modules.txt: %v; want the vendor_without_runtime bypass", err)
+	}
+	// An overlay that deletes go.mod gives go another module root, or none.
+	if err := os.WriteFile(filepath.Join(root, "delete.json"), []byte(`{"Replace":{"go.mod":""}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepare("-overlay=delete.json", "."); !errors.As(err, &native) || native.bypass != "overlay_deletes_go_mod" {
+		t.Errorf("an overlay that deletes go.mod: %v; want the overlay_deletes_go_mod bypass", err)
+	}
 	// A client older than Go 1.25 gets a workspace whose overlay ddto writes,
 	// so go itself would not see the duplicate.
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/client\ngo 1.21\n"), 0600); err != nil {

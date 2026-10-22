@@ -63,6 +63,9 @@ The log records:
 - A workspace whose runtime ddto cannot resolve or provide, as offline with a
   vendored one: `instrumentation bypass workspace_runtime_unavailable` follows
   the warning, and native `go test` runs, which can still build it.
+- An `-overlay` that deletes the module's `go.mod`, after which go finds
+  another module root or none: `instrumentation bypass overlay_deletes_go_mod`
+  follows the warning, and native `go test` runs.
 - A module whose vendor directory go selects but that does not vendor the
   runtime, including a vendor directory without `modules.txt`:
   `instrumentation bypass vendor_without_runtime` follows the warning, which
