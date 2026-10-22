@@ -356,8 +356,9 @@ func runtimeCoverageSnapshotLocked() (*runtimeCoverageSnapshot, error) {
 	}
 
 	if coverProfile := currentCoverProfilePath(); coverProfile != "" {
-		// ddto's temporary profile starts empty.
-		if info, err := os.Stat(coverProfile); err == nil && (coverProfile != temporaryCoverProfile || info.Size() > 0) {
+		// ddto's temporary profile starts empty, and with -test.list testing
+		// writes none: a file there is an earlier run's.
+		if info, err := os.Stat(coverProfile); err == nil && !listingTests() && (coverProfile != temporaryCoverProfile || info.Size() > 0) {
 			runtimeSnapshot = &runtimeCoverageSnapshot{path: coverProfile, temporary: coverProfile == temporaryCoverProfile}
 			if log.DebugEnabled() {
 				log.Debug("civisibility.cov: session coverage from the profile that testing wrote: %s", coverProfile)
@@ -449,6 +450,13 @@ func setTemporaryCoverProfile(value flag.Value) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// listingTests reports whether -test.list makes testing list names instead of
+// running tests.
+func listingTests() bool {
+	list := flag.Lookup("test.list")
+	return list != nil && list.Value.String() != ""
 }
 
 func currentCoverProfilePath() string {

@@ -122,3 +122,26 @@ func assertRuntimeCoverageProfile(t *testing.T, path string) {
 		t.Fatalf("coverage profile %q is empty or has an unexpected mode", path)
 	}
 }
+
+// With -test.list, testing runs no test and writes no profile: a file at
+// -test.coverprofile is an earlier run's, not this one's coverage.
+func TestRuntimeCoverageSnapshotIgnoresProfileWhenListing(t *testing.T) {
+	ResetForTesting()
+	t.Cleanup(ResetForTesting)
+	mode, tearDown = "count", func(string, string) (string, error) { return "", nil }
+	profile := filepath.Join(t.TempDir(), "previous.out")
+	if err := os.WriteFile(profile, []byte("mode: count\nexample.com/a/a.go:1.1,2.1 1 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for name, value := range map[string]string{"test.coverprofile": profile, "test.list": "."} {
+		f := flag.Lookup(name)
+		old := f.Value.String()
+		if err := f.Value.Set(value); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = f.Value.Set(old) })
+	}
+	if snapshot, err := RuntimeCoverageSnapshot(); err == nil {
+		t.Fatalf("snapshot of an earlier run's profile: %v", snapshot.path)
+	}
+}

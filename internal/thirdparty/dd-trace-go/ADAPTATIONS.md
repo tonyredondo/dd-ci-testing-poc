@@ -186,6 +186,11 @@ leaves printing. Check: `TestMiniPrintsCoverageLineOnce`, with flags that a
 which fails without the change. The Testify parity tests drop the pinned SDK's repeated line
 (`withoutRepeatedCoverageLine`).
 
+With `-test.list`, testing runs no test and writes no profile, so a file at
+`-test.coverprofile` is an earlier run's: the session reports no coverage then,
+instead of that file's percentage and LCOV. Check:
+`TestRuntimeCoverageSnapshotIgnoresProfileWhenListing`.
+
 ## Per-test profile subtraction
 
 `readCoverProfile` and `coveredFilesBetween` in
