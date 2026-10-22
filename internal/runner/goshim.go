@@ -391,6 +391,14 @@ func goShimGoCommand(self, toolchain string, command []string) ([]string, *modul
 		if len(rest) == 0 || strings.HasPrefix(rest[0], "-") {
 			return nil, nil, errors.New("go tool takes flags before the tool")
 		}
+		env, err := readGoShimEnv(toolchain, chdir)
+		if err != nil {
+			return nil, nil, err
+		}
+		if printsOnly(env.GOFLAGS) {
+			// With -n, go tool prints the tool's command instead of running it.
+			return native, nil, nil
+		}
 		var diagnostics bytes.Buffer
 		probe := exec.Command(toolchain, append(append(append([]string(nil), chdir...), "tool", "-n"), rest[0])...)
 		probe.Stderr = &diagnostics
@@ -411,10 +419,6 @@ func goShimGoCommand(self, toolchain string, command []string) ([]string, *modul
 		// With a cross-compilation executor, go tool -n prints it first.
 		if info, err := os.Stat(path); err != nil || info.IsDir() {
 			return nil, nil, fmt.Errorf("go tool -n %s printed %q, not one program", rest[0], path)
-		}
-		env, err := readGoShimEnv(toolchain, nil)
-		if err != nil {
-			return nil, nil, err
 		}
 		tool := &moduleTool{name: rest[0], path: path, args: rest[1:], gorootBin: filepath.Join(env.GOROOT, "bin"), diagnostics: diagnostics.Bytes()}
 		if switchedToolchain(toolchain, env.GOROOT) {
@@ -483,6 +487,20 @@ func goRunExecutor(env goShimEnv, args []string) error {
 		return errors.New("go run cross-compiles, so its program would start through another executor")
 	}
 	return nil
+}
+
+// printsOnly reports whether GOFLAGS sets go tool's -n.
+func printsOnly(goflags string) bool {
+	flags, err := splitFlags(goflags)
+	if err != nil {
+		return false
+	}
+	for _, flag := range flags {
+		if name, value, _ := strings.Cut(strings.TrimLeft(flag, "-"), "="); strings.HasPrefix(flag, "-") && name == "n" && value != "false" {
+			return true
+		}
+	}
+	return false
 }
 
 // isToolchainTool reports whether path is in the toolchain's pkg/tool

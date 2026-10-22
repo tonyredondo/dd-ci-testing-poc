@@ -227,6 +227,12 @@ func TestGoShimGoCommand(t *testing.T) {
 	// The fake go prints its arguments for go tool -n, which are not one
 	// program; one that fails leaves the error to go tool itself.
 	t.Setenv(fakeToolEnv, "1")
+	// With -n in GOFLAGS, go tool only prints the tool's command.
+	env.GOFLAGS = "-n"
+	if native, tool, err := goShimGoCommand(self, os.Args[0], []string{"go", "tool", "gotestsum"}); err != nil || tool != nil || !slices.Equal(native, []string{os.Args[0], "tool", "gotestsum"}) {
+		t.Errorf("GOFLAGS=-n: %q, %v, %v", native, tool, err)
+	}
+	env.GOFLAGS = ""
 	if _, _, err := goShimGoCommand(self, os.Args[0], []string{"go", "tool", "gotestsum"}); err == nil {
 		t.Error("go tool -n printed more than one program")
 	}
