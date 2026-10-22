@@ -29,8 +29,7 @@ func BenchmarkTable(b *testing.B) {
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	bins := compileMiniPair(t, dir, driver)
-	got := execute(t, dir, bins[1], []string{"-test.run=^$", "-test.bench=^BenchmarkTable$", "-test.benchtime=1x"}, true, false)
+	got := execute(t, dir, compileMini(t, dir, driver), []string{"-test.run=^$", "-test.bench=^BenchmarkTable$", "-test.benchtime=1x"}, true, false)
 	var tests []string
 	for _, event := range got.wireEvents {
 		content, _ := event["content"].(map[string]any)

@@ -71,6 +71,17 @@ func TestMiniFixtureRuntimeImportLineEndings(t *testing.T) {
 		}
 	}
 }
+// compileMini compiles the fixture with Mini alone, for checks that need no
+// SDK, which Go 1.25 cannot build.
+func compileMini(t *testing.T, dir, driver string) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), executableName("fixture.test"))
+	if out, stderr, code := command(t, dir, testEnv("DD_CIVISIBILITY_ENABLED=false"), driver, "test", "--runtime=mini", "-c", "-o", bin, "."); code != 0 {
+		t.Fatalf("compile mini: %s\n%s", out, stderr)
+	}
+	return bin
+}
+
 func compileMiniPair(t *testing.T, dir, driver string, flags ...string) []string {
 	t.Helper()
 	return compileMiniPairWithTempDir(t, dir, driver, t.TempDir, flags...)

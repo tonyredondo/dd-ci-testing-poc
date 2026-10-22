@@ -29,8 +29,7 @@ func TestOnlySkip(t *testing.T) { t.Skip("reason") }
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	bins := compileMiniPair(t, dir, driver)
-	got := execute(t, dir, bins[1], []string{"-test.run=^Test(FailThenSkip|FailThenSkipNow|OnlySkip)$"}, true, false)
+	got := execute(t, dir, compileMini(t, dir, driver), []string{"-test.run=^Test(FailThenSkip|FailThenSkipNow|OnlySkip)$"}, true, false)
 	statuses := map[string]string{}
 	for _, event := range got.wireEvents {
 		content, _ := event["content"].(map[string]any)

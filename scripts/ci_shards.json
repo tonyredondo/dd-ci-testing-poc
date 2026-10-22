@@ -121,7 +121,6 @@
       "TestMiniTestMainWithoutExitKeepsRetryStatus",
       "TestMiniSubBenchmarksSharingACallback",
       "TestMiniSkipAfterFailureReportsFailure",
-      "TestMiniSDKMirrorBenchmarkMeasuresNoBinding",
       "TestMiniEmptyTestSession",
       "TestMiniPrintsCoverageLineOnce",
       "TestMiniPerTestCoverageInMemory",
@@ -183,6 +182,7 @@
     ],
     "sdk": [
       "TestMiniLegacySDKShim",
+      "TestMiniSDKMirrorBenchmarkMeasuresNoBinding",
       "TestMiniSDKMirrorContextMatrix",
       "TestMiniSDKSpanMirror",
       "TestMiniUnsupportedSDKMirrorRetainsTestReporting"
@@ -227,7 +227,6 @@
       "TestMiniTestMainWithoutExitKeepsRetryStatus",
       "TestMiniSubBenchmarksSharingACallback",
       "TestMiniSkipAfterFailureReportsFailure",
-      "TestMiniSDKMirrorBenchmarkMeasuresNoBinding",
       "TestMiniEmptyTestSession",
       "TestMiniPrintsCoverageLineOnce",
       "TestMiniPerTestCoverageInMemory",
@@ -258,6 +257,7 @@
   "tip_additional": {
     "native": [
       "TestMiniLegacySDKShim",
+      "TestMiniSDKMirrorBenchmarkMeasuresNoBinding",
       "TestMiniSDKMirrorContextMatrix",
       "TestMiniSDKSpanMirror",
       "TestMiniUnsupportedSDKMirrorRetainsTestReporting"
