@@ -102,6 +102,8 @@ type options struct {
 	coverage             bool
 	coverPatterns        []string
 	race                 bool
+	// workFlagPattern records a per-package build flag for the work pattern.
+	workFlagPattern bool
 	// panicHook is ddto's --panic-hook, which go test does not see.
 	panicHook bool
 	// fileCoverage and fileCoverageContext are ddto's
@@ -354,6 +356,12 @@ func (o *options) apply(name, value string) error {
 		// go test reports an invalid value itself.
 		if enabled, err := strconv.ParseBool(value); err == nil {
 			o.race = enabled
+		}
+	case "asmflags", "gccgoflags", "gcflags", "ldflags":
+		// Like cmd/go, a value that starts with a flag has no pattern.
+		value = strings.TrimSpace(value)
+		if pattern, _, ok := strings.Cut(value, "="); ok && !strings.HasPrefix(value, "-") && strings.TrimSpace(pattern) == "work" {
+			o.workFlagPattern = true
 		}
 	case "o":
 		o.output = value

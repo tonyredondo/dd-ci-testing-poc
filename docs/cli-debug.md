@@ -46,9 +46,10 @@ The log records:
   cannot reproduce how `go test` finds or starts it, `instrumentation bypass
   exec_program=unresolved`, `exec_program=unquotable` or `exec_helper=relative`
   follows the warning, and native `go test` runs.
-- The `work` package pattern, also in `-coverpkg`, with a workspace that ddto
-  provides: Mini is one of its main modules, so `instrumentation bypass
-  package_pattern=work` follows the warning, and native `go test` runs.
+- The `work` package pattern, also in `-coverpkg` or a per-package flag such
+  as `-gcflags=work=…`, with a workspace that ddto provides: Mini is one of its
+  main modules, so `instrumentation bypass package_pattern=work` follows the
+  warning, and native `go test` runs.
 - Standard library tests, as `go test fmt`, `std` or `all` select them:
   `instrumentation bypass stdlib_tests` follows the warning, and native
   `go test` runs.

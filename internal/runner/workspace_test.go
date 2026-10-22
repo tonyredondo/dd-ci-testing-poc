@@ -321,8 +321,20 @@ func TestMiniWorkPatternRunsNatively(t *testing.T) {
 		}
 	}
 	t.Setenv("GOWORK", filepath.Join(root, "go.work"))
-	t.Setenv("GOFLAGS", "")
-	for _, args := range [][]string{{"work"}, {"-coverpkg=work", "."}, {"."}} {
+	for _, tc := range []struct {
+		goflags string
+		args    []string
+		bypass  bool
+	}{
+		{"", []string{"work"}, true},
+		{"", []string{"-coverpkg=work", "."}, true},
+		{"", []string{"-gcflags= work =-lang=go1.21", "."}, true},
+		{"-ldflags=work=-s", []string{"."}, true},
+		{"", []string{"-gcflags=-d=work=1", "."}, false},
+		{"", []string{"."}, false},
+	} {
+		t.Setenv("GOFLAGS", tc.goflags)
+		args := tc.args
 		plan, err := PrepareRuntime(t.Context(), client, args, Mini)
 		if plan.Dir != "" {
 			plan.Release()
@@ -330,8 +342,8 @@ func TestMiniWorkPatternRunsNatively(t *testing.T) {
 		}
 		var native *nativeGoError
 		bypassed := errors.As(err, &native) && native.bypass == "package_pattern=work"
-		if want := args[0] != "."; bypassed != want {
-			t.Fatalf("%q: bypass=%t, want %t: %v", args, bypassed, want, err)
+		if bypassed != tc.bypass {
+			t.Fatalf("%q %q: bypass=%t, want %t: %v", tc.goflags, args, bypassed, tc.bypass, err)
 		}
 		if !bypassed && err != nil {
 			t.Fatalf("%q: %v", args, err)
