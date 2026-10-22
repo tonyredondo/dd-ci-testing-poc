@@ -307,7 +307,7 @@ Coverage still requires Go coverage flags.
 | `DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS` | Backend EFD counts | Five comma-separated retry counts from 1 to 20, one per duration bucket, for example `3,2,1,1,1`. Without it, the first four counts follow the backend's EFD slow test retries; the defaults are 10, 5, 3, 2 and 1. |
 | `DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED` | Backend setting | Override early flake detection; the backend must still enable known-test data. |
 | `DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_MAX_RETRIES` | `-1` | Nonnegative values cap EFD retries without increasing backend counts; negative values retain those counts. |
-| `DD_CIVISIBILITY_RETRY_EXECUTION_MODE` | `in_process` | `in_process` reuses the binary's process; `process` launches isolated retry children. |
+| `DD_CIVISIBILITY_RETRY_EXECUTION_MODE` | `in_process` | `in_process` reuses the binary's process; `process` launches isolated retry children. Those run after testing has reported the package, so without `-v` a test that still fails after them shows only the retry summary, not its output; its CI events keep the error. |
 | `DD_CIVISIBILITY_RETRY_PROCESS_TIMEOUT` | No additional limit | Positive Go duration, such as `30s`, that bounds a retry child. Native test deadlines still apply. |
 | `DD_CIVISIBILITY_RETRY_PROCESS_MAX_CONCURRENCY` | `1` | Positive maximum number of concurrent process-retry children. |
 | `DD_TEST_MANAGEMENT_ENABLED` | `true` | Allow backend test-management policies; `false` disables them. |

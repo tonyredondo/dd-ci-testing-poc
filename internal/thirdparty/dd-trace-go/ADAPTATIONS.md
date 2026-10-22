@@ -905,6 +905,19 @@ counted in the first, and with `-benchtime=1x` only, run (4 allocations and
 168 B for an empty benchmark). The binding now happens before the timer
 restarts. Check: `TestMiniSDKMirrorBenchmarkMeasuresNoBinding`.
 
+## Output of failed retry attempts
+
+A fresh retry attempt in `gotesting/retry_attempt_runner.go` reports to a
+synthetic parent, as a subtest reports to its test, and that parent is never
+reported. With `-v`, each attempt streams its lines as it runs. Without it,
+testing prints only a failed test's buffered output, so a test that still
+failed after its automatic retries printed its `--- FAIL` line without its
+messages. `reportRetryAttemptToOriginal` moves a failed attempt's output to
+the original test, which testing reports, once per failed attempt. The call
+is edited in place to keep its stack lines. Process retries run after testing
+has reported the package, and the README describes their summary. Check:
+`TestMiniRetriedFailureKeepsItsOutput`.
+
 ## Automatic retries that end in a skip
 
 With automatic test retries, testing gets the last attempt's result: for a
