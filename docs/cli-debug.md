@@ -52,6 +52,9 @@ The log records:
 - Standard library tests, as `go test fmt`, `std` or `all` select them:
   `instrumentation bypass stdlib_tests` follows the warning, and native
   `go test` runs.
+- Outside a Go module, where ddto cannot provide its runtime:
+  `instrumentation bypass no_module` follows the warning, and native `go test`
+  runs, which reports what it cannot run there.
 - When go rejects the command or its environment while ddto prepares it, as
   with `-p=0`, an unknown flag in `GOFLAGS`, a missing `-C` directory or
   `-modfile`, or an `-overlay` file that go cannot read or parse,

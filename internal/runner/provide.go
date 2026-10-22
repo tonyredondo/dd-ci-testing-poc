@@ -105,7 +105,9 @@ func provideRuntime(ctx context.Context, dir string, opts options, selected Runt
 	if source == "" {
 		source = environment.GOMOD
 		if source == "" || source == os.DevNull {
-			return "", errors.New("run ddto inside a Go module")
+			// go test runs outside a module, as for go test errors, and
+			// reports what it cannot run there.
+			return "", &nativeGoError{"no_module", errors.New("ddto provides its runtime only inside a Go module")}
 		}
 	} else if !filepath.IsAbs(source) {
 		source = filepath.Join(dir, source)

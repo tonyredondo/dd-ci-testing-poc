@@ -380,3 +380,47 @@ func TestMiniStandardLibraryTestsRunNatively(t *testing.T) {
 		}
 	}
 }
+
+// Outside a module, go test runs natively, as for go test errors.
+func TestMiniOutsideAModuleRunsNatively(t *testing.T) {
+	t.Setenv("GOWORK", "off")
+	t.Setenv("GOFLAGS", "")
+	t.Setenv("GO111MODULE", "")
+	plan, err := PrepareRuntime(t.Context(), t.TempDir(), []string{"errors"}, Mini)
+	if plan.Dir != "" {
+		plan.Release()
+		_ = os.RemoveAll(plan.Dir)
+	}
+	var native *nativeGoError
+	if !errors.As(err, &native) || native.bypass != "no_module" {
+		t.Fatalf("%v; want the no_module bypass", err)
+	}
+}
+
+// A relative TMPDIR still gives the plan an absolute directory, which its
+// temporary go.work needs.
+func TestMiniRelativeTemporaryDirectory(t *testing.T) {
+	root := t.TempDir()
+	for file, data := range map[string]string{
+		"go.mod":         "module example.com/client\ngo 1.21\n",
+		"client_test.go": "package client\n",
+	} {
+		if err := os.WriteFile(filepath.Join(root, file), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(root)
+	t.Setenv("GOWORK", "off")
+	t.Setenv("GOFLAGS", "")
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, ".")
+	}
+	plan, err := PrepareRuntime(t.Context(), root, []string{"."}, Mini)
+	if plan.Dir != "" {
+		plan.Release()
+		_ = os.RemoveAll(plan.Dir)
+	}
+	if err != nil || !filepath.IsAbs(plan.Dir) {
+		t.Fatalf("plan directory %q: %v", plan.Dir, err)
+	}
+}

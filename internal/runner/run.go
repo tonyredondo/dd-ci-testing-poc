@@ -269,6 +269,11 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 	if e != nil {
 		return plan, e
 	}
+	// A relative TMPDIR gives a relative directory, which a go.work there and
+	// go's other working directories could not name.
+	if absolute, err := filepath.Abs(temp); err == nil {
+		temp = absolute
+	}
 	plan.Dir = temp
 	plan.mini = runtime == Mini
 	plan.orchestrion = isOrchestrionToolexec(opts.toolexec)
