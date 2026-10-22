@@ -80,7 +80,11 @@ a `go` directive keeps Go 1.16 semantics and GODEBUG defaults, as under native
 Go. For a client language older than Go 1.25, Mini becomes a separate main
 module in a temporary workspace, which keeps the client's `toolchain` line. The client's module files stay unchanged,
 apart from the updates that its own `-mod=mod` imports would require under
-native Go.
+native Go. A checksum missing from `go.sum` still fails, as under native
+`go test`. An untidy `go.mod` that lists a lower version than a dependency
+requires does not: native `go test` reports `updates to go.mod needed`, which
+`go mod tidy` fixes, while the workspace selects the required version.
+Detecting it would take a second package load in module mode on every run.
 
 The temporary `go.work`, and the `GOFLAGS` adapted for it, apply only to the
 `go test` command that `ddto` starts, including the build tools it runs or
