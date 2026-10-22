@@ -100,6 +100,23 @@ func TestCrash(t *testing.T) {
 	}
 }
 
+func BenchmarkCrash(b *testing.B) {
+	switch os.Getenv("FIXTURE_CRASH") {
+	case "benchmark":
+		panic("benchmark failed")
+	case "later":
+		if b.N > 1 {
+			panic("benchmark failed later")
+		}
+	case "sub":
+		b.Run("sub", func(b *testing.B) {
+			if b.N > 1 {
+				panic("sub-benchmark failed later")
+			}
+		})
+	}
+}
+
 func FuzzSeeds(f *testing.F) {
 	f.Add(1)
 	f.Add(2)
@@ -133,6 +150,11 @@ func FuzzSeeds(f *testing.F) {
 		// the crash output.
 		{"fatal error with panic hook", "map", []string{"--panic-hook"}, nil, []string{"TestCrash fail"}, "crash: fatal error: concurrent map writes", "fatal error: concurrent map writes", 1},
 		{"killed", "kill", nil, nil, nil, "", "the test process ended before it closed CI Visibility", 1},
+		// A benchmark's panic, in its first run or a later one, closes it and
+		// sends the process's events before the process ends.
+		{"benchmark panic deferred", "benchmark", []string{"-run=^TestFirst$", "-bench=^BenchmarkCrash$", "-benchtime=1x"}, []string{"DD_CIVISIBILITY_DEFERRED_DELIVERY=true"}, []string{"BenchmarkCrash fail", "TestFirst pass"}, "", "panic: benchmark failed", 1},
+		{"benchmark panic in a later run", "later", []string{"-run=^TestFirst$", "-bench=^BenchmarkCrash$", "-benchtime=100x"}, nil, []string{"BenchmarkCrash fail", "TestFirst pass"}, "", "panic: benchmark failed later", 1},
+		{"sub-benchmark panic in a later run", "sub", []string{"-run=^TestFirst$", "-bench=^BenchmarkCrash$", "-benchtime=100x"}, nil, []string{"BenchmarkCrash/sub fail", "TestFirst pass"}, "", "panic: sub-benchmark failed later", 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			receiver := &capture{}

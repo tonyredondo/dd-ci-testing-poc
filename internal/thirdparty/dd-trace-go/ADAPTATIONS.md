@@ -837,6 +837,10 @@ change the CI tags:
   that holds `tags/`, such as `feature/tags/filter`, was reported as a tag and
   lost its branch. Only `GITHUB_REF` names a tag here, with its `refs/tags/`
   prefix, so a push to such a branch keeps it too.
+  Azure Pipelines, Jenkins and Codefresh had the same check: their ref names
+  a tag only as `tags/<name>` once a `refs/heads/`, `refs/` or `origin/` prefix
+  is removed, as the shared fixtures' `refs/heads/tags/0.1.0` and
+  `origin/tags/0.1.0` still do.
 
 - Outside a pull request, `pr.number` was `0` on GitHub Actions, whose push
   event JSON has no number, and `false` on Buildkite and Travis CI, which set
@@ -850,8 +854,9 @@ Check: `TestProviderTagsFromUnusualValues`, which fails without each change.
 The CI HTTP client in [`civisibility/utils/net/http.go`](civisibility/utils/net/http.go)
 refuses redirects, as `internal/citransport` does for events: Go keeps a
 custom header such as `dd-api-key` when it follows a redirect to another host.
-Debug lines show URLs through `logURL`, without user information or query, and
-Git's debug lines in [`civisibility/utils/git.go`](civisibility/utils/git.go)
+Debug lines show URLs through `logURL`, without user information or query,
+also the coverage report upload's in `coverage_report.go` (check:
+`TestCoverageReportLogsNoCredentials`), and Git's debug lines in [`civisibility/utils/git.go`](civisibility/utils/git.go)
 pass its arguments and output through `filterSensitiveInfo`: a CI clone's
 remote URL can hold a job token, which `git ls-remote --get-url` prints.
 The debug line of a request with a body shows its size, not its contents,
@@ -1018,6 +1023,17 @@ level makes still finds it. The event was also named from the name passed to
 `"input size=1"` gave `b` twice and a name with a space, where testing prints
 `b#01` and `input_size=1`. The event is now created in the sub-benchmark, with
 its own `b.Name()`. Check: `TestMiniSubBenchmarksSharingACallback`.
+
+## Benchmark panics
+
+The benchmark wrappers (`executeInternalBenchmark` in `gotesting/testing.go`
+and `instrumentTestingBFunc` in `gotesting/instrumentation_orchestrion.go`)
+set the panic handler only after `b.Run` returned, and replaced the wrapper
+with the original function for the later runs: a panic in any run closed no
+event and lost the process's buffered ones. The handler is now defined before
+the benchmark runs, and the later runs use `recoveringBenchmarkFunc`
+(`gotesting/testingB.go`), which handles a panic and panics again. Check: the
+`benchmark` cases of `TestMiniCrashKeepsEvents`.
 
 ## Coverage rows of trimmed test files
 
@@ -1290,7 +1306,9 @@ initializes.
   processes fetch it as before. The worker's own CI tags skip that fetch
   (`environmentTags.go`), and `FetchCLIHeadCommit` fetches the commit once a
   test process uses the state, before the upload and the impacted-tests diff,
-  which needs it.
+  which needs it. Both the worker's tags and those of the session that ddto
+  sends after `go test`, which uses the same record, read the head commit
+  without fetching it: the session gets the commit that the worker fetched.
 - `createCITagsMap` (`environmentTags.go`) takes `getLocalGitData`'s and,
   for the same head commit, `fetchCommitData`'s results from the record; the
   CI provider's tags keep their precedence.

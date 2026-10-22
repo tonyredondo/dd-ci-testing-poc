@@ -244,6 +244,20 @@ func hasCiVisibilityBenchmarkFunc(fn *runtime.Func) bool {
 	return false
 }
 
+// recoveringBenchmarkFunc runs f, the function of a benchmark's later runs,
+// and handles its panic with handlePanic before panicking again.
+func recoveringBenchmarkFunc(f func(*testing.B), handlePanic func(any)) func(*testing.B) {
+	return func(b *testing.B) {
+		defer func() {
+			if r := recover(); r != nil {
+				handlePanic(r)
+				panic(r)
+			}
+		}()
+		f(b)
+	}
+}
+
 // setCiVisibilityBenchmarkFunc tracks a *runtime.Func as instrumented benchmark.
 func setCiVisibilityBenchmarkFunc(fn *runtime.Func) {
 	civisibilityBenchmarksFuncsMutex.Lock()

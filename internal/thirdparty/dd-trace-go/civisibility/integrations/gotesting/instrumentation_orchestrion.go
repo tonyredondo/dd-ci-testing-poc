@@ -616,10 +616,24 @@ func instrumentTestingBFunc(pb *testing.B, name string, f func(*testing.B)) (str
 			*bpf.name = subBenchmarkAutoNameRegex.ReplaceAllString(*bpf.name, "")
 		}
 
+		// Define a function to handle panic during benchmark finalization.
+		// Defined before the benchmark runs: its first run, and each later
+		// one, recover a panic with it before panicking again.
+		panicFunc := func(r any) {
+			if test != nil {
+				test.SetError(integrations.WithErrorInfo("panic", fmt.Sprint(r), utils.GetStacktrace(1)))
+				test.Close(integrations.ResultStatusFail)
+			}
+			suite.SetTag(ext.Error, true)
+			module.SetTag(ext.Error, true)
+			checkModuleAndSuite(module, suite)
+			integrations.ExitCiVisibility()
+		}
+		recoverFunc := &panicFunc
+
 		// Run original benchmark.
 		var iPfOfB *benchmarkPrivateFields
 		var benchmarkMeta *testExecutionMetadata // for the skip reason that the skip hooks record
-		var recoverFunc *func(r any)
 		instrumentedFunc := func(b *testing.B) {
 			// Stop the timer to do the initialization and replacements.
 			b.StopTimer()
@@ -645,7 +659,7 @@ func instrumentTestingBFunc(pb *testing.B, name string, f func(*testing.B)) (str
 			if iPfOfB.benchFunc == nil {
 				panic("error getting the benchmark function")
 			}
-			*iPfOfB.benchFunc = f
+			*iPfOfB.benchFunc = recoveringBenchmarkFunc(f, panicFunc)
 
 			// Get the metadata regarding the execution (in case is already created from the additional features)
 			execMeta := getTestMetadata(b)
@@ -707,17 +721,6 @@ func instrumentTestingBFunc(pb *testing.B, name string, f func(*testing.B)) (str
 			}
 			test.SetBenchmarkData("extra", mapConverted)
 		}
-
-		// Define a function to handle panic during benchmark finalization.
-		panicFunc := func(r any) {
-			test.SetError(integrations.WithErrorInfo("panic", fmt.Sprint(r), utils.GetStacktrace(1)))
-			suite.SetTag(ext.Error, true)
-			module.SetTag(ext.Error, true)
-			test.Close(integrations.ResultStatusFail)
-			checkModuleAndSuite(module, suite)
-			integrations.ExitCiVisibility()
-		}
-		recoverFunc = &panicFunc
 
 		// Normal finalization: determine the benchmark result based on its state.
 		if iPfOfB.B.Failed() {

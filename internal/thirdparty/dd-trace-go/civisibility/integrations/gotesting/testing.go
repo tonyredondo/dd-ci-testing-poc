@@ -1056,10 +1056,22 @@ func (ddm *M) executeInternalBenchmark(benchmarkInfo *testingBInfo) func(*testin
 			test.SetTag(constants.TestIsNew, "true")
 		}
 
+		// Define a function to handle panic during benchmark finalization.
+		// Defined before the benchmark runs: its first run, and each later
+		// one, recover a panic with it before panicking again.
+		panicFunc := func(r any) {
+			test.SetError(integrations.WithErrorInfo("panic", fmt.Sprint(r), utils.GetStacktrace(1)))
+			suite.SetTag(ext.Error, true)
+			module.SetTag(ext.Error, true)
+			test.Close(integrations.ResultStatusFail)
+			checkModuleAndSuite(module, suite)
+			integrations.ExitCiVisibility()
+		}
+		recoverFunc := &panicFunc
+
 		// Run the original benchmark function.
 		var iPfOfB *benchmarkPrivateFields
 		var benchmarkMeta *testExecutionMetadata // for the skip reason that the skip hooks record
-		var recoverFunc *func(r any)
 		instrumentedFunc := func(b *testing.B) {
 			// Stop the timer to perform initialization and replacements.
 			b.StopTimer()
@@ -1088,7 +1100,7 @@ func (ddm *M) executeInternalBenchmark(benchmarkInfo *testingBInfo) func(*testin
 			if iPfOfB.benchFunc == nil {
 				panic("failed to get the original benchmark function")
 			}
-			*iPfOfB.benchFunc = benchmarkInfo.originalFunc
+			*iPfOfB.benchFunc = recoveringBenchmarkFunc(benchmarkInfo.originalFunc, panicFunc)
 
 			// Get the metadata regarding the execution (in case is already created from the additional features)
 			execMeta := getTestMetadata(b)
@@ -1141,17 +1153,6 @@ func (ddm *M) executeInternalBenchmark(benchmarkInfo *testingBInfo) func(*testin
 			}
 			test.SetBenchmarkData("extra", mapConverted)
 		}
-
-		// Define a function to handle panic during benchmark finalization.
-		panicFunc := func(r any) {
-			test.SetError(integrations.WithErrorInfo("panic", fmt.Sprint(r), utils.GetStacktrace(1)))
-			suite.SetTag(ext.Error, true)
-			module.SetTag(ext.Error, true)
-			test.Close(integrations.ResultStatusFail)
-			checkModuleAndSuite(module, suite)
-			integrations.ExitCiVisibility()
-		}
-		recoverFunc = &panicFunc
 
 		// Normal finalization: determine the benchmark result based on its state.
 		if iPfOfB.B.Failed() {

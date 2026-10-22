@@ -391,6 +391,10 @@ func TestProviderTagsFromUnusualValues(t *testing.T) {
 		{"github branch with tags/", map[string]string{"GITHUB_SHA": "abc", "GITHUB_HEAD_REF": "feature/tags/filter", "GITHUB_REF": "refs/pull/1/merge"}, constants.GitBranch, "feature/tags/filter", constants.GitTag},
 		{"github push to a branch with tags/", map[string]string{"GITHUB_SHA": "abc", "GITHUB_HEAD_REF": "", "GITHUB_REF": "refs/heads/feature/tags/filter"}, constants.GitBranch, "feature/tags/filter", constants.GitTag},
 		{"github tag", map[string]string{"GITHUB_SHA": "abc", "GITHUB_HEAD_REF": "", "GITHUB_REF": "refs/tags/v1.2.3"}, constants.GitTag, "v1.2.3", constants.GitBranch},
+		{"azure branch with tags/", map[string]string{"TF_BUILD": "True", "BUILD_SOURCEBRANCH": "refs/heads/feature/tags/filter"}, constants.GitBranch, "feature/tags/filter", ""},
+		{"azure tag", map[string]string{"TF_BUILD": "True", "BUILD_SOURCEBRANCH": "refs/tags/v1.2.3"}, constants.GitTag, "v1.2.3", ""},
+		{"jenkins branch with tags/", map[string]string{"JENKINS_URL": "http://jenkins", "GIT_BRANCH": "origin/feature/tags/filter"}, constants.GitBranch, "feature/tags/filter", constants.GitTag},
+		{"codefresh branch with tags/", map[string]string{"CF_BUILD_ID": "1", "CF_BRANCH": "feature/tags/filter"}, constants.GitBranch, "feature/tags/filter", constants.GitTag},
 		// Outside a pull request: a push event's JSON, and Buildkite's false.
 		{"github push event", map[string]string{"GITHUB_SHA": "abc", "GITHUB_HEAD_REF": "", "GITHUB_REF": "refs/heads/main", "GITHUB_EVENT_PATH": pushEventPath}, constants.GitBranch, "main", constants.PrNumber},
 		{"buildkite without a pull request", map[string]string{"BUILDKITE": "true", "BUILDKITE_BRANCH": "main", "BUILDKITE_PULL_REQUEST": "false"}, constants.GitBranch, "main", constants.PrNumber},

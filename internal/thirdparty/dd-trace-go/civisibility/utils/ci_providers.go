@@ -218,6 +218,16 @@ func normalizeRef(name string) string {
 	return name
 }
 
+// isTagRef reports whether a provider's ref names a tag: tags/<name> once its
+// refs/heads/, refs/ or origin/ prefix is removed. A branch can hold tags/
+// later in its name, as feature/tags/filter.
+func isTagRef(name string) bool {
+	for _, prefix := range []string{"refs/heads/", "refs/", "origin/"} {
+		name = strings.TrimPrefix(name, prefix)
+	}
+	return strings.HasPrefix(name, "tags/")
+}
+
 // firstEnv returns the value of the first non-empty environment variable from the provided list.
 func firstEnv(keys ...string) string {
 	for _, key := range keys {
@@ -271,7 +281,7 @@ func extractAzurePipelines() map[string]string {
 	branchOrTag := firstEnv("SYSTEM_PULLREQUEST_SOURCEBRANCH", "BUILD_SOURCEBRANCH", "BUILD_SOURCEBRANCHNAME")
 	branch := ""
 	tag := ""
-	if strings.Contains(branchOrTag, "tags/") {
+	if isTagRef(branchOrTag) {
 		tag = branchOrTag
 	} else {
 		branch = branchOrTag
@@ -615,7 +625,7 @@ func extractJenkins() map[string]string {
 	empty := []byte("")
 	name, hasName := env.Lookup("JOB_NAME")
 
-	if strings.Contains(branchOrTag, "tags/") {
+	if isTagRef(branchOrTag) {
 		tags[constants.GitTag] = branchOrTag
 	} else {
 		tags[constants.GitBranch] = branchOrTag
@@ -683,7 +693,7 @@ func extractCodefresh() map[string]string {
 	}
 
 	cfBranch := env.Get("CF_BRANCH")
-	isTag := strings.Contains(cfBranch, "tags/")
+	isTag := isTagRef(cfBranch)
 	var refKey string
 	if isTag {
 		refKey = constants.GitTag

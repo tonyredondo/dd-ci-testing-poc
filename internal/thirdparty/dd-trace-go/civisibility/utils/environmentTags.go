@@ -6,6 +6,7 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -358,11 +359,18 @@ func createCITagsMap() map[string]string {
 				headCommitData, handed, err = cliRecord.headCommitData(headCommitSha)
 			}
 			// ddto's Git worker fetches a missing head commit only once a
-			// test process uses its state (FetchCLIHeadCommit).
-			if !handed && !cliGitStateOwned {
+			// test process uses its state (FetchCLIHeadCommit): it, and the
+			// session that ddto sends after go test, read it without fetching.
+			switch {
+			case handed:
+			case cliGitStateOwned:
+				headCommitData, err = localCommitDataFunc(headCommitSha)
+			default:
 				headCommitData, err = fetchCommitDataFunc(headCommitSha)
 			}
-			if err != nil {
+			if errors.Is(err, errCommitNotFetched) {
+				log.Debug("civisibility: head commit %s not fetched yet", headCommitSha)
+			} else if err != nil {
 				log.Warn("civisibility: failed to fetch head commit data for %s: %s", headCommitSha, err.Error())
 			} else if headCommitSha == headCommitData.CommitSha {
 				localTags[constants.GitHeadAuthorDate] = headCommitData.AuthorDate.String()
