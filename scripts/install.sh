@@ -87,7 +87,9 @@ if [ "$os" = windows ] && command -v cygpath > /dev/null; then
   native_dir=$(cygpath -w "$dir")
 fi
 temp=$(mktemp -d)
-trap 'rm -rf "$temp"' EXIT
+# Also the partial copy beside the target, after a signal during publish.
+partial=
+trap 'rm -rf "$temp" ${partial:+"$partial"}' EXIT
 # A relative TMPDIR gives a relative name, which go install refuses for GOBIN.
 temp=$(cd "$temp" && pwd)
 

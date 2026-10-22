@@ -162,6 +162,19 @@ class InstallTests(unittest.TestCase):
         self.assertEqual((self.dir / "ddto").read_text(), fake_ddto("v1.0.0"))
         self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["ddto"])
 
+    def test_removes_its_copy_when_terminated(self):
+        self.release()
+        self.preinstall(fake_ddto("v1.0.0"))
+        # The runner cancels the job while the copy beside the target runs.
+        tools = self.root / "tools"
+        tools.mkdir()
+        (tools / "cp").write_text('#!/bin/sh\nprintf partial > "$2"\nkill -TERM "$PPID"\n')
+        (tools / "cp").chmod(0o755)
+        result = self.install(path=f"{tools}{os.pathsep}{os.environ['PATH']}")
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.dir / "ddto").read_text(), fake_ddto("v1.0.0"))
+        self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["ddto"])
+
     def test_builds_with_a_relative_temporary_directory(self):
         result = self.install("--version", "v1.2.3", path=self.fake_go(), cwd=self.root, TMPDIR=".")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -231,6 +244,9 @@ class PowerShellInstallTests(InstallTests):
 
     def test_keeps_the_installed_version_when_the_built_copy_fails(self):
         self.skipTest("Copy-Item does not run cp; install.ps1 publishes go install's build the same way")
+
+    def test_removes_its_copy_when_terminated(self):
+        self.skipTest("Copy-Item does not run cp; install.ps1 removes its copy in a finally block")
 
 
 if __name__ == "__main__":
