@@ -627,6 +627,11 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 			// runtime's own standard dependencies with a ddto workspace.
 			return plan, &nativeGoError{"stdlib_tests", fmt.Errorf("ddto does not instrument standard library tests: %s", p.ImportPath)}
 		}
+		if cache := opts.environment.GOMODCACHE; cache != "" && filePathHasPrefix(p.Dir, cache) {
+			// A downloaded dependency's tests: go rejects any overlay entry
+			// beneath GOMODCACHE.
+			return plan, &nativeGoError{"module_cache_tests", fmt.Errorf("ddto does not instrument the tests of a package in the module cache: %s", p.ImportPath)}
+		}
 		testPackage := p.Name + "_test"
 		if len(p.XTestGoFiles) == 0 && !runtimeImports[p.ImportPath] {
 			testPackage = p.Name

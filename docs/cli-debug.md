@@ -53,6 +53,10 @@ The log records:
 - Standard library tests, as `go test fmt`, `std` or `all` select them:
   `instrumentation bypass stdlib_tests` follows the warning, and native
   `go test` runs.
+- The tests of a package in the module cache, as `go test` of a downloaded
+  dependency's package selects them: go rejects overlay entries there, so
+  `instrumentation bypass module_cache_tests` follows the warning, and native
+  `go test` runs.
 - Outside a Go module, where ddto cannot provide its runtime:
   `instrumentation bypass no_module` follows the warning, and native `go test`
   runs, which reports what it cannot run there.
