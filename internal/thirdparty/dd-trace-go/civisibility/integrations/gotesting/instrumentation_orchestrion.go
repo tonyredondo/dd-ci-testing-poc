@@ -572,6 +572,11 @@ func instrumentTestingBFunc(pb *testing.B, name string, f func(*testing.B)) (str
 	if !isCiVisibilityEnabled() {
 		return name, f
 	}
+	// testing selects the renamed measuring level below, not name: a -bench or
+	// -skip pattern for sub-benchmark names would drop or keep the wrong one.
+	if subBenchmarkPatterns() {
+		return name, f
+	}
 
 	log.Debug("instrumentTestingBFunc: instrumenting benchmark function [name: %q]", name)
 
@@ -672,6 +677,13 @@ func instrumentTestingBFunc(pb *testing.B, name string, f func(*testing.B)) (str
 		b.Run(name, instrumentedFunc)
 
 		endTime := time.Now()
+		if iPfOfB == nil {
+			// testing did not run the sub-benchmark, as for a duplicate name
+			// that a pattern no longer selects.
+			test.Close(integrations.ResultStatusSkip, integrations.WithTestFinishTime(endTime))
+			checkModuleAndSuite(module, suite)
+			return
+		}
 		results := iPfOfB.result
 
 		// Set benchmark data for CI visibility.

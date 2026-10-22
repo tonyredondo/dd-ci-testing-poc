@@ -822,6 +822,22 @@ remote URL can hold a job token, which `git ls-remote --get-url` prints.
 Checks: `TestCIClientDoesNotFollowRedirects`, `TestLogURL` and
 `TestGitDebugLinesHideRemoteCredentials`.
 
+## Sub-benchmark patterns
+
+The SDK's `B.Run` hook (`instrumentTestingBFunc` in
+`gotesting/instrumentation_orchestrion.go`) renames each sub-benchmark to a
+measuring level, `[DD:TestVisibility]`, which runs the real one inside it.
+testing matches `-bench` and `-skip` against that level's name: with
+`-bench='^BenchmarkWork$/^child$'` the child never ran, and with
+`-skip='^BenchmarkWork$/^child$'` the measuring level ran without its child
+and the hook dereferenced the missing result. Here a `-bench` or `-skip` value
+with `/`, which selects sub-benchmarks by name (`subBenchmarkPatterns`, in
+`testing_session_close.go` so that no import moves the file's lines), leaves
+sub-benchmarks uninstrumented, as without CI Visibility, and a sub-benchmark
+that testing did not run closes as skipped. The added lines come after every
+line that error stacks show. Check: the `benchmarks` case of
+`TestMiniTestingCompatibility`.
+
 ## Commit messages
 
 `getLocalGitData` and `readCommitData` in

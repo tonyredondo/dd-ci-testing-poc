@@ -334,6 +334,17 @@ func TestMiniTestingCompatibility(t *testing.T) {
 		if got.code != 0 || len(got.events) == 0 {
 			t.Fatal("benchmark not instrumented")
 		}
+		// Patterns for sub-benchmark names select them as without ddto. The
+		// pinned SDK renames the level that they match, so it ran no child
+		// for the first and panicked for the second.
+		for _, selection := range [][]string{{"-test.bench=^BenchmarkWork$/^child$"}, {"-test.bench=BenchmarkWork", "-test.skip=^BenchmarkWork$/^child$"}} {
+			args := append([]string{"-test.run=^$", "-test.benchtime=1x"}, selection...)
+			native := execute(t, dir, bins[1], args, false, false)
+			got := execute(t, dir, bins[1], args, true, false)
+			if got.code != native.code || strings.Contains(got.stderr, "panic") || strings.Contains(native.out, "BenchmarkWork/child") != strings.Contains(got.out, "BenchmarkWork/child") {
+				t.Fatalf("%v: exit %d (native %d)\n%s\n%s", selection, got.code, native.code, got.out, got.stderr)
+			}
+		}
 	})
 	t.Run("process-retry", func(t *testing.T) {
 		args := []string{"-test.run=^TestRetry$", "-mode=retry"}
