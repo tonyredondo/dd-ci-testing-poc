@@ -58,7 +58,8 @@ class InstallTests(unittest.TestCase):
 
     def install(self, *args, path=None, github_path=None, **extra):
         env = {key: value for key, value in os.environ.items() if not key.startswith(("DDTO_", "GITHUB_"))}
-        env.update(DDTO_DOWNLOAD_URL=self.url, DDTO_INSTALL_DIR=str(self.dir), PATH=path or os.environ["PATH"], **extra)
+        env.update(DDTO_DOWNLOAD_URL=self.url, DDTO_INSTALL_DIR=str(self.dir), PATH=path or os.environ["PATH"])
+        env.update(extra)
         if github_path:
             env["GITHUB_PATH"] = str(github_path)
         return subprocess.run(self.command(*args), env=env, capture_output=True, text=True, timeout=120)
@@ -159,6 +160,28 @@ class InstallTests(unittest.TestCase):
         self.assertEqual((self.dir / "ddto").read_text(), fake_ddto("v1.0.0"))
         self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["ddto"])
 
+    def test_hides_the_download_url_credentials(self):
+        url = self.url.replace("http://", "http://reader:secret@") + "/missing?token=sensitive"
+        result = self.install(path=self.fake_go(), DDTO_DOWNLOAD_URL=url)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"no SHA256SUMS at {self.url}/missing", result.stderr)
+        self.assertNotIn("secret", result.stderr)
+        self.assertNotIn("sensitive", result.stderr)
+
+    def test_keeps_the_installed_version_when_the_built_copy_fails(self):
+        # Without a release executable, go install builds elsewhere and the
+        # copy beside the target fails, as on a full disk there.
+        self.preinstall(fake_ddto("v1.0.0"))
+        path = self.fake_go()
+        tools = self.root / "tools"
+        (tools / "cp").write_text('#!/bin/sh\ncase "$2" in *.tmp.*) printf partial > "$2"; exit 1;; esac\nexec /bin/cp "$@"\n')
+        (tools / "cp").chmod(0o755)
+        result = self.install(path=path)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.root / "go-args").exists())
+        self.assertEqual((self.dir / "ddto").read_text(), fake_ddto("v1.0.0"))
+        self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["ddto"])
+
     def test_adds_the_directory_to_github_path(self):
         self.release()
         github_path = self.root / "github_path"
@@ -190,6 +213,9 @@ class PowerShellInstallTests(InstallTests):
 
     def test_keeps_the_installed_version_when_the_copy_fails(self):
         self.skipTest("Copy-Item does not run cp; install.ps1 moves its copy over the target the same way")
+
+    def test_keeps_the_installed_version_when_the_built_copy_fails(self):
+        self.skipTest("Copy-Item does not run cp; install.ps1 publishes go install's build the same way")
 
 
 if __name__ == "__main__":

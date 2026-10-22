@@ -74,6 +74,9 @@ else
   base=https://github.com/$repo/releases/download/$version
 fi
 base=${DDTO_DOWNLOAD_URL:-$base}
+# Messages show the URL without the user information or query that a
+# mirror's URL can carry.
+shown=$(printf '%s\n' "$base" | sed -e 's|^\([A-Za-z][A-Za-z0-9+.-]*://\)[^/@]*@|\1|' -e 's|[?#].*||')
 
 mkdir -p "$dir"
 dir=$(cd "$dir" && pwd)
@@ -85,6 +88,20 @@ if [ "$os" = windows ] && command -v cygpath > /dev/null; then
 fi
 temp=$(mktemp -d)
 trap 'rm -rf "$temp"' EXIT
+
+publish() { # file
+  # Beside the target, in a file that mktemp creates, then renamed over it: a
+  # copy that fails, as on a full disk, keeps the installed ddto.
+  if ! partial=$(mktemp "$target.tmp.XXXXXX"); then
+    say "cannot write in $dir"
+    exit 1
+  fi
+  if ! { cp "$1" "$partial" && chmod 0755 "$partial" && mv -f "$partial" "$target"; }; then
+    rm -f "$partial"
+    say "cannot write $target"
+    exit 1
+  fi
+}
 target=$dir/ddto$exe
 current=
 if [ -x "$target" ]; then
@@ -99,16 +116,16 @@ elif [ -n "$os" ] && [ -n "$arch" ]; then
   asset=ddto-$os-$arch$exe
   want=
   if ! fetch "$base/SHA256SUMS" "$temp/SHA256SUMS"; then
-    say "no SHA256SUMS at $base"
+    say "no SHA256SUMS at $shown"
   else
     want=$(awk -v name="$asset" '$2 == name || $2 == "*" name { print $1 }' "$temp/SHA256SUMS")
   fi
   if [ -z "$want" ]; then
-    say "no release executable $asset at $base"
+    say "no release executable $asset at $shown"
   elif [ -n "$current" ] && [ "$(sha256 "$target" || true)" = "$want" ]; then
     installed="already installed"
   elif ! fetch "$base/$asset" "$temp/$asset"; then
-    say "no release executable $asset at $base"
+    say "no release executable $asset at $shown"
   else
     if ! got=$(sha256 "$temp/$asset"); then
       say "sha256sum, shasum or openssl is required to check $asset"
@@ -118,17 +135,7 @@ elif [ -n "$os" ] && [ -n "$arch" ]; then
       say "$asset does not match SHA256SUMS"
       exit 1
     fi
-    # Beside the target, in a file that mktemp creates, then renamed over it: a
-    # copy that fails, as on a full disk, keeps the installed ddto.
-    if ! partial=$(mktemp "$target.tmp.XXXXXX"); then
-      say "cannot write in $dir"
-      exit 1
-    fi
-    if ! { cp "$temp/$asset" "$partial" && chmod 0755 "$partial" && mv -f "$partial" "$target"; }; then
-      rm -f "$partial"
-      say "cannot write $target"
-      exit 1
-    fi
+    publish "$temp/$asset"
     installed="release $version"
   fi
 else
@@ -140,8 +147,16 @@ if [ -z "$installed" ]; then
     exit 1
   fi
   say "building ddto with go install"
-  # For the host, whatever GOOS and GOARCH the project selects.
-  GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) GOBIN=$native_dir go install "github.com/$repo/cmd/ddto@$version"
+  # For the host, whatever GOOS and GOARCH the project selects. go install
+  # replaces its destination in place, so it builds in the temporary
+  # directory and publish moves the result over the target.
+  mkdir "$temp/bin"
+  native_bin=$temp/bin
+  if [ "$os" = windows ] && command -v cygpath > /dev/null; then
+    native_bin=$(cygpath -w "$temp/bin")
+  fi
+  GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) GOBIN=$native_bin go install "github.com/$repo/cmd/ddto@$version"
+  publish "$temp/bin/ddto$exe"
   installed="go install @$version"
 fi
 "$target" --help > /dev/null 2>&1

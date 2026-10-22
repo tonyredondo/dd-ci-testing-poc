@@ -45,6 +45,19 @@ param(
 
     function Sha256([string]$File) { (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLowerInvariant() }
 
+    function Publish([string]$File) {
+        # Beside the target, then moved over it: a copy that fails, as on a
+        # full disk, keeps the installed ddto.
+        $partial = "$target.tmp.$([guid]::NewGuid().ToString('N'))"
+        try {
+            Copy-Item -LiteralPath $File -Destination $partial -Force
+            if ($os -ne 'windows') { & chmod 0755 $partial }
+            Move-Item -LiteralPath $partial -Destination $target -Force
+        } finally {
+            Remove-Item -LiteralPath $partial -Force -ErrorAction SilentlyContinue
+        }
+    }
+
     if ($PSVersionTable.PSEdition -eq 'Desktop') {
         # Windows PowerShell 5.1 can default to protocols that GitHub refuses.
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
@@ -75,6 +88,9 @@ param(
         "https://github.com/$repo/releases/download/$Version"
     }
     if ($env:DDTO_DOWNLOAD_URL) { $base = $env:DDTO_DOWNLOAD_URL }
+    # Messages show the URL without the user information or query that a
+    # mirror's URL can carry.
+    $shown = $base -replace '^([A-Za-z][A-Za-z0-9+.-]*://)[^/@]*@', '$1' -replace '[?#].*$', ''
 
     $Dir = (New-Item -ItemType Directory -Force -Path $Dir).FullName
     $target = Join-Path $Dir "ddto$exe"
@@ -96,7 +112,7 @@ param(
             $asset = "ddto-$os-$arch$exe"
             $want = ''
             if (-not (Fetch "$base/SHA256SUMS" (Join-Path $temp 'SHA256SUMS'))) {
-                Say "no SHA256SUMS at $base"
+                Say "no SHA256SUMS at $shown"
             } else {
                 foreach ($line in Get-Content -LiteralPath (Join-Path $temp 'SHA256SUMS')) {
                     $fields = $line -split '\s+'
@@ -104,24 +120,15 @@ param(
                 }
             }
             if (-not $want) {
-                Say "no release executable $asset at $base"
+                Say "no release executable $asset at $shown"
             } elseif ($current -and (Sha256 $target) -eq $want) {
                 $installed = 'already installed'
             } elseif (-not (Fetch "$base/$asset" (Join-Path $temp $asset))) {
-                Say "no release executable $asset at $base"
+                Say "no release executable $asset at $shown"
             } elseif ((Sha256 (Join-Path $temp $asset)) -ne $want) {
                 throw "ddto install: $asset does not match SHA256SUMS"
             } else {
-                # Beside the target, then moved over it: a copy that fails,
-                # as on a full disk, keeps the installed ddto.
-                $partial = "$target.tmp.$([guid]::NewGuid().ToString('N'))"
-                try {
-                    Copy-Item -LiteralPath (Join-Path $temp $asset) -Destination $partial -Force
-                    if ($os -ne 'windows') { & chmod 0755 $partial }
-                    Move-Item -LiteralPath $partial -Destination $target -Force
-                } finally {
-                    Remove-Item -LiteralPath $partial -Force -ErrorAction SilentlyContinue
-                }
+                Publish (Join-Path $temp $asset)
                 $installed = "release $Version"
             }
         } else {
@@ -133,12 +140,14 @@ param(
             }
             Say 'building ddto with go install'
             # For the host, whatever GOOS and GOARCH the project selects; the
-            # caller's session keeps its own values.
+            # caller's session keeps its own values. go install replaces its
+            # destination in place, so it builds in the temporary directory
+            # and Publish moves the result over the target.
             $saved = @{ GOOS = $env:GOOS; GOARCH = $env:GOARCH; GOBIN = $env:GOBIN }
             try {
                 $env:GOOS = (& go env GOHOSTOS).Trim()
                 $env:GOARCH = (& go env GOHOSTARCH).Trim()
-                $env:GOBIN = $Dir
+                $env:GOBIN = (New-Item -ItemType Directory -Path (Join-Path $temp 'bin')).FullName
                 & go install "github.com/$repo/cmd/ddto@$Version"
                 if ($LASTEXITCODE -ne 0) { throw "ddto install: go install failed" }
             } finally {
@@ -150,6 +159,7 @@ param(
                     }
                 }
             }
+            Publish (Join-Path (Join-Path $temp 'bin') "ddto$exe")
             $installed = "go install @$Version"
         }
         $reported = & $target --version
