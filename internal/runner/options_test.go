@@ -53,7 +53,8 @@ func TestSpecialFlags(t *testing.T) {
 			t.Fatalf("%v: %q, %v", args, opts.chdir, err)
 		}
 	}
-	for _, args := range [][]string{{"-v", "-C", "sub"}, {"-tags"}, {"-cover=maybe"}} {
+	// An empty -C, as from an unset variable, is go's error: chdir "".
+	for _, args := range [][]string{{"-v", "-C", "sub"}, {"-tags"}, {"-cover=maybe"}, {"-C", "", "."}, {"-C=", "."}, {"--C=", "."}} {
 		if _, err := parseOptions(args, ""); err == nil {
 			t.Fatalf("%v accepted", args)
 		}

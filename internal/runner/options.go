@@ -167,7 +167,13 @@ func parseOptions(args []string, goflags string) (options, error) {
 		}
 		o.noteTestFlag(canonical, " in GOFLAGS")
 	}
-	o.chdir, args = chdirFlag(args)
+	var chdirSet bool
+	o.chdir, chdirSet, args = chdirFlag(args)
+	if chdirSet && o.chdir == "" {
+		// go changes to it and fails, where ddto would test the current
+		// directory: go test reports it.
+		return o, errors.New("-C with an empty directory")
+	}
 	var packages []string
 	inPackages, afterFlagWithoutValue := false, false
 	for len(args) > 0 {
@@ -309,20 +315,21 @@ func (o *options) noteTestArgument(arg string) {
 }
 
 // chdirFlag handles -C exactly where cmd/go accepts it: first after "test".
-func chdirFlag(args []string) (string, []string) {
+// It reports whether the flag was given, also with an empty directory.
+func chdirFlag(args []string) (string, bool, []string) {
 	if len(args) == 0 {
-		return "", args
+		return "", false, args
 	}
 	switch a := args[0]; {
 	case a == "-C" || a == "--C":
 		if len(args) > 1 {
-			return args[1], args[2:]
+			return args[1], true, args[2:]
 		}
 	case strings.HasPrefix(a, "-C=") || strings.HasPrefix(a, "--C="):
 		_, dir, _ := strings.Cut(a, "=")
-		return dir, args[1:]
+		return dir, true, args[1:]
 	}
-	return "", args
+	return "", false, args
 }
 
 func (o *options) apply(name, value string) error {
