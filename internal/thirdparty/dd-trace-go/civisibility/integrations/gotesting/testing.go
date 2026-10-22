@@ -1418,14 +1418,15 @@ func instrumentChattyPrinter(t *testing.T) {
 
 // collectAndWriteLogs collects logs from the chatty printer and the test output, and writes them to the test.
 func collectAndWriteLogs(t *testing.T, test integrations.Test, attemptOutput []byte) {
-	// Ensure any buffered partial line (Go 1.25+) is flushed before extracting the test output.
-	// This is a no-op on Go versions that don't have the output writer partial buffer.
-	flushOutputWriterPartial(t)
-
 	if !logs.IsEnabled() {
 		// If the logs integration is not enabled, we don't need to collect or write logs.
 		return
 	}
+
+	// Ensure any buffered partial line (Go 1.25+) is flushed before extracting the test output.
+	// This is a no-op on Go versions that don't have the output writer partial buffer.
+	// Only for logs: the flush ends a line that the test's cleanups can continue.
+	flushOutputWriterPartial(t)
 
 	if chatty != nil && chatty.w != nil && *chatty.w != nil {
 		if writer, ok := (*chatty.w).(*customWriter); ok {

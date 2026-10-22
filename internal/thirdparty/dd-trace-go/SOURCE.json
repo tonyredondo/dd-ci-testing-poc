@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "41934686ad3bc85a17caec46c722f32896268d309f1fbb4bb6ad85322ed1a55d",
+      "sha256": "86c37b7a6533609de0cb2aba34eb5ed5e1ef67c0f76a75ad1ad5db6fc5428902",
       "role": "local"
     },
     {
@@ -801,7 +801,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/testing.go",
-      "sha256": "c90d8aeaf3bd463fbcf6a5956227401742066bedce463f410d84c998584c8b96",
+      "sha256": "b81f4eed4d39c31345d2ac872888abcbb3551a22dc94349afb018a278f80cde6",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/testing.go",
       "source_sha256": "73324a56f1b1c581df8620a4f67a51743b198b2470d43f9b645425fff6a63646"

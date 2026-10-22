@@ -1013,6 +1013,15 @@ and a passing test process ended with a panic. Without a client there is no
 writer, so logs are not sent, as no other event is. Check:
 `TestLogsWriterWithoutClient`.
 
+## Partial lines of t.Output
+
+`collectAndWriteLogs` in `gotesting/testing.go` ends a partial line that a test
+wrote to `t.Output()`, so that the logs integration reads it. It did so also
+with logs disabled, before the test's cleanups, which can continue the line:
+`hello ` from the test and `world` from a cleanup printed two lines instead of
+go test's one. The line is ended only when logs are collected. Check:
+`TestMiniKeepsPartialOutputLines`.
+
 ## Long log lines
 
 `collectAndWriteLogs` in `gotesting/testing.go` reads a test's output with
