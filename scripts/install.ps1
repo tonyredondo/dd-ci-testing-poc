@@ -51,7 +51,11 @@ param(
         $partial = "$target.tmp.$([guid]::NewGuid().ToString('N'))"
         try {
             Copy-Item -LiteralPath $File -Destination $partial -Force
-            if ($os -ne 'windows') { & chmod 0755 $partial }
+            if ($os -ne 'windows') {
+                # A native command's failure does not stop the script.
+                & chmod 0755 $partial
+                if ($LASTEXITCODE -ne 0) { throw "ddto install: cannot write $target" }
+            }
             Move-Item -LiteralPath $partial -Destination $target -Force
         } finally {
             Remove-Item -LiteralPath $partial -Force -ErrorAction SilentlyContinue

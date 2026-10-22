@@ -162,6 +162,18 @@ class InstallTests(unittest.TestCase):
         self.assertEqual((self.dir / "ddto").read_text(), fake_ddto("v1.0.0"))
         self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["ddto"])
 
+    def test_keeps_the_installed_version_when_chmod_fails(self):
+        self.release()
+        self.preinstall(fake_ddto("v1.0.0"))
+        tools = self.root / "tools"
+        tools.mkdir()
+        (tools / "chmod").write_text("#!/bin/sh\nexit 1\n")
+        (tools / "chmod").chmod(0o755)
+        result = self.install(path=f"{tools}{os.pathsep}{os.environ['PATH']}")
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.dir / "ddto").read_text(), fake_ddto("v1.0.0"))
+        self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["ddto"])
+
     def test_removes_its_copy_when_terminated(self):
         self.release()
         self.preinstall(fake_ddto("v1.0.0"))
