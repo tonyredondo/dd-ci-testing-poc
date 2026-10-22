@@ -198,6 +198,9 @@ A `-test.coverprofile` that is not a regular file, such as `/dev/stdout` after
 waited forever, after testing had written the profile. The session then takes
 `testing.Coverage()`'s percentage. Check:
 `TestRuntimeCoverageSnapshotIgnoresIrregularProfile`.
+Isolated process coverage is not merged into such a profile either: the merge
+read it empty and failed the run with exit status 1, for passing tests.
+Check: `TestFinalizeProcessCoverageProfilesSkipsAProfileThatIsNotAFile`.
 
 The directories of per-test and process-retry coverage captures are created by
 an absolute path (`mkdirCoverageTemp`): with a relative `TMPDIR`, a test's

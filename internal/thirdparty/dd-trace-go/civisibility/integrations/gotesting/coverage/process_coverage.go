@@ -318,6 +318,15 @@ func FinalizeProcessCoverageProfiles() (bool, error) {
 	if processAggregateCoverage == nil {
 		return false, nil
 	}
+	// testing wrote the profile to a device or a pipe, such as /dev/null:
+	// there is no file to merge into, as with go test's own output.
+	if path := currentCoverProfilePath(); path != "" {
+		if info, err := os.Stat(path); err == nil && !info.Mode().IsRegular() {
+			log.Debug("civisibility.cov: isolated coverage not merged into %s, which is not a regular file", path)
+			processAggregateCoverage = nil
+			return false, nil
+		}
+	}
 	parentSnapshot, err := RuntimeCoverageSnapshot()
 	if err != nil {
 		return false, err

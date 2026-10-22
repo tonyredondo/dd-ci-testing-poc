@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "92eed594ee50432760320b4bc7fda31d5ae9f2ec2681d7e77531758da8e71796",
+      "sha256": "8a2acd2c06894f0b3ab366be40ea1d1afd777efb27ed5e96a229de70a9c4f17f",
       "role": "local"
     },
     {
@@ -368,14 +368,14 @@
     },
     {
       "path": "civisibility/integrations/gotesting/coverage/process_coverage.go",
-      "sha256": "7c3fa8a3ac6e9767a6de2cfe9f980f41408a8a1517609f9198ab8b685b950555",
+      "sha256": "683104ec83890a94b1ac0bb8e28be0bb3984ba4411d06e2c1e53801253759a69",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/coverage/process_coverage.go",
       "source_sha256": "35b168ef76df6ca58fe1d8144a1dde3bb2aed50b4bbbb58c8bb2dca96612e28b"
     },
     {
       "path": "civisibility/integrations/gotesting/coverage/process_coverage_test.go",
-      "sha256": "5e984c1206074b55852e9fc45eaaea37f3abd040a8919471ae06a5d9234b980c",
+      "sha256": "243bf564795f0edecd3a5d37e5a4b00d57233d94f2d74e545166d49476d7646a",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/coverage/process_coverage_test.go",
       "source_sha256": "b15c366e141a0063219a29dd8d8be393ae821b3367c8c787bc04249ff4739294"

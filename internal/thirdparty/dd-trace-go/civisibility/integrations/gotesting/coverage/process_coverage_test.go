@@ -8,6 +8,7 @@ package coverage
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -315,4 +316,25 @@ func TestProcessTestCoverageTemporaryDirectoryIsAbsolute(t *testing.T) {
 	if !filepath.IsAbs(collector.temporaryDir) || !filepath.IsAbs(collector.coverage.preCoverageFilename) {
 		t.Fatalf("collector directory %q, profile %q", collector.temporaryDir, collector.coverage.preCoverageFilename)
 	}
+}
+
+// With -test.coverprofile on a device or a pipe, such as /dev/null, isolated
+// coverage has no file to merge into: the run does not fail for it.
+func TestFinalizeProcessCoverageProfilesSkipsAProfileThatIsNotAFile(t *testing.T) {
+	ResetForTesting()
+	t.Cleanup(ResetForTesting)
+	dir := t.TempDir()
+	childPath := filepath.Join(dir, "child.out")
+	require.NoError(t, os.WriteFile(childPath, []byte("mode: count\npkg/file.go:1.1,1.2 1 3\n"), 0o600))
+	mode = "count"
+	tearDown = func(_, _ string) (string, error) { return "", nil }
+	require.NoError(t, MergeProcessCoverageProfile(childPath))
+	f := flag.Lookup("test.coverprofile")
+	old := f.Value.String()
+	require.NoError(t, f.Value.Set(t.TempDir()))
+	t.Cleanup(func() { _ = f.Value.Set(old) })
+
+	merged, err := FinalizeProcessCoverageProfiles()
+	require.NoError(t, err)
+	require.False(t, merged)
 }
