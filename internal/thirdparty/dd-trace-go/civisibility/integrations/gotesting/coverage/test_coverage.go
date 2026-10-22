@@ -232,7 +232,7 @@ func InitializeCoverage(m *testing.M, uploadEnabled bool) {
 	})
 
 	// create a temporary directory to store coverage files
-	temporaryDir, err = mkdirCoverageTemp()
+	temporaryDir, err = mkdirCoverageTemp("coverage")
 	if err != nil {
 		log.Debug("civisibility.cov: error creating temporary directory: %s", err.Error())
 	} else {
@@ -357,8 +357,9 @@ func runtimeCoverageSnapshotLocked() (*runtimeCoverageSnapshot, error) {
 
 	if coverProfile := currentCoverProfilePath(); coverProfile != "" {
 		// ddto's temporary profile starts empty, and with -test.list testing
-		// writes none: a file there is an earlier run's.
-		if info, err := os.Stat(coverProfile); err == nil && !listingTests() && (coverProfile != temporaryCoverProfile || info.Size() > 0) {
+		// writes none: a file there is an earlier run's. Reading anything
+		// but a regular file, such as /dev/stdout, can wait forever.
+		if info, err := os.Stat(coverProfile); err == nil && info.Mode().IsRegular() && !listingTests() && (coverProfile != temporaryCoverProfile || info.Size() > 0) {
 			runtimeSnapshot = &runtimeCoverageSnapshot{path: coverProfile, temporary: coverProfile == temporaryCoverProfile}
 			if log.DebugEnabled() {
 				log.Debug("civisibility.cov: session coverage from the profile that testing wrote: %s", coverProfile)
@@ -470,21 +471,25 @@ func currentCoverProfilePath() string {
 	return ""
 }
 
-// mkdirCoverageTemp creates the directory of coverage captures by an absolute
+// errNoCoverageDirectory is a text-profile capture without the temporary
+// directory that initialization failed to create.
+var errNoCoverageDirectory = errors.New("no temporary coverage directory")
+
+// mkdirCoverageTemp creates a directory of coverage captures by an absolute
 // path: a relative TMPDIR would follow a test's os.Chdir.
-func mkdirCoverageTemp() (string, error) {
+func mkdirCoverageTemp(pattern string) (string, error) {
 	parent, err := filepath.Abs(os.TempDir())
 	if err != nil {
 		return "", err
 	}
-	return os.MkdirTemp(parent, "coverage")
+	return os.MkdirTemp(parent, pattern)
 }
 
 func ensureTemporaryDirLocked() error {
 	if temporaryDir != "" {
 		return nil
 	}
-	dir, err := mkdirCoverageTemp()
+	dir, err := mkdirCoverageTemp("coverage")
 	if err != nil {
 		return err
 	}
@@ -694,6 +699,10 @@ func (t *testCoverage) collectCoverageBeforeTestExecution() error {
 		return err
 	}
 	if t.preCoverageFilename == "" {
+		if temporaryDir == "" {
+			// A relative name would write the profile into the test's directory.
+			return errNoCoverageDirectory
+		}
 		t.preCoverageFilename = filepath.Join(temporaryDir, fmt.Sprintf("%d-%d-%d-pre.out", t.moduleID, t.suiteID, t.testID))
 	}
 	_, err = tearDown(t.preCoverageFilename, "")
@@ -761,6 +770,11 @@ func (t *testCoverage) collectCoverageAfterTestExecution() error {
 		return err
 	}
 	if t.postCoverageFilename == "" {
+		if temporaryDir == "" {
+			log.Debug("civisibility.cov: error getting coverage file: %s", errNoCoverageDirectory.Error())
+			telemetry.CodeCoverageErrors()
+			return errNoCoverageDirectory
+		}
 		t.postCoverageFilename = filepath.Join(temporaryDir, fmt.Sprintf("%d-%d-%d-post.out", t.moduleID, t.suiteID, t.testID))
 	}
 	_, err := tearDown(t.postCoverageFilename, "")

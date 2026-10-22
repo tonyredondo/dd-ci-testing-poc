@@ -301,20 +301,23 @@ func coveragePathCandidates(profileFile string) []string {
 	addCandidate(profileFile)
 	resolved := utils.ResolveSourceFilePathFromCITags(profileFile)
 	addCandidate(resolved.RelativePath)
-	if modulePath != "" {
-		if suffix, ok := strings.CutPrefix(strings.ReplaceAll(profileFile, "\\", "/"), strings.TrimSuffix(modulePath, "/")+"/"); ok {
-			addCandidate(suffix)
-			if moduleRepoPrefix := moduleRepositoryRelativePrefix(modulePath); moduleRepoPrefix != "" {
-				addCandidate(moduleRepoPrefix + "/" + suffix)
-			}
-		}
-	}
+	// The module's directory gives a nested module's files their path in the
+	// repository; the path after the module path alone can name another file,
+	// such as handler.go at the repository root for services/api/handler.go.
 	if modulePath != "" && moduleDir != "" {
 		if suffix, ok := strings.CutPrefix(strings.ReplaceAll(profileFile, "\\", "/"), strings.TrimSuffix(modulePath, "/")); ok {
 			moduleFile := filepath.Join(moduleDir, filepath.FromSlash(strings.TrimPrefix(suffix, "/")))
 			addCandidate(moduleFile)
 			resolvedModuleFile := utils.ResolveSourceFilePathFromCITags(moduleFile)
 			addCandidate(resolvedModuleFile.RelativePath)
+		}
+	}
+	if modulePath != "" {
+		if suffix, ok := strings.CutPrefix(strings.ReplaceAll(profileFile, "\\", "/"), strings.TrimSuffix(modulePath, "/")+"/"); ok {
+			addCandidate(suffix)
+			if moduleRepoPrefix := moduleRepositoryRelativePrefix(modulePath); moduleRepoPrefix != "" {
+				addCandidate(moduleRepoPrefix + "/" + suffix)
+			}
 		}
 	}
 	if moduleDir != "" {

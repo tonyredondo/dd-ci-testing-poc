@@ -193,9 +193,20 @@ counts only package initialization (`finalizeITRCoverageBackfill` returns no
 publication). Checks: `TestRuntimeCoverageSnapshotIgnoresProfileWhenListing`,
 `TestNoSessionCoverageWhenListing`.
 
-The directory of per-test coverage captures is created by an absolute path
-(`mkdirCoverageTemp`): with a relative `TMPDIR`, a test's `os.Chdir` moved the
-captures and left the directory behind. Check: `TestCoverageTempDirectoryIsAbsolute`.
+A `-test.coverprofile` that is not a regular file, such as `/dev/stdout` after
+`-args`, is not read back either: reading a pipe that the process holds open
+waited forever, after testing had written the profile. The session then takes
+`testing.Coverage()`'s percentage. Check:
+`TestRuntimeCoverageSnapshotIgnoresIrregularProfile`.
+
+The directories of per-test and process-retry coverage captures are created by
+an absolute path (`mkdirCoverageTemp`): with a relative `TMPDIR`, a test's
+`os.Chdir` moved the captures and left the directory behind. Checks:
+`TestCoverageTempDirectoryIsAbsolute`,
+`TestProcessTestCoverageTemporaryDirectoryIsAbsolute`. When initialization could
+not create the per-test directory, text-profile captures wrote relative files
+into the test's directory; they now report the error and write nothing. Check:
+`TestTextProfileCaptureWithoutTemporaryDirectory`.
 
 ## Per-test profile subtraction
 
@@ -860,6 +871,15 @@ lies inside it. Check: `TestWriteLCOVReportFromProfileUsesNestedModuleDirectory`
 A path that the module resolves skips the filter for unresolved import paths,
 which dropped a directory whose name has a dot, such as `api.v2`. Check:
 `TestWriteLCOVReportFromProfileKeepsDottedModuleDirectories`.
+
+ITR's coverage backfill (`coveragePathCandidates` in
+[`gotesting/coverage/profile_backfill.go`](civisibility/integrations/gotesting/coverage/profile_backfill.go))
+looks a profile file up in the backend's coverage by several paths and takes
+the first one found. The path after the module path came before the module
+directory's path in the repository, so a nested module's `handler.go` took the
+coverage of a `handler.go` at the repository root when both existed. The
+module directory's path comes first here. Check:
+`TestBackfillPrefersNestedModuleRepositoryPath`.
 
 ## Benchmark context outside the measurement
 

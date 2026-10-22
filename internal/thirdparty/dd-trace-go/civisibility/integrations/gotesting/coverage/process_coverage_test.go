@@ -292,3 +292,27 @@ func TestSubmitProcessTestCoverageUsesParentEventIdentifiers(t *testing.T) {
 	require.Equal(t, uint64(22), got[0].SuiteID)
 	require.Equal(t, uint64(33), got[0].SpanID)
 }
+
+// A process collector's directory is absolute, also with a relative TMPDIR,
+// so a test's os.Chdir does not move its profiles or its removal.
+func TestProcessTestCoverageTemporaryDirectoryIsAbsolute(t *testing.T) {
+	oldMode, oldTearDown := mode, tearDown
+	t.Cleanup(func() { mode, tearDown = oldMode, oldTearDown })
+	mode = "count"
+	tearDown = func(path, _ string) (string, error) {
+		return path, os.WriteFile(path, []byte("mode: count\npkg/source.go:1.1,1.2 1 0\n"), 0o600)
+	}
+	t.Chdir(t.TempDir())
+	if err := os.Mkdir("tmp", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, "tmp")
+	}
+	collector := BeginProcessTestCoverage("pkg/test_file.go")
+	require.NotNil(t, collector)
+	defer collector.Finish()
+	if !filepath.IsAbs(collector.temporaryDir) || !filepath.IsAbs(collector.coverage.preCoverageFilename) {
+		t.Fatalf("collector directory %q, profile %q", collector.temporaryDir, collector.coverage.preCoverageFilename)
+	}
+}

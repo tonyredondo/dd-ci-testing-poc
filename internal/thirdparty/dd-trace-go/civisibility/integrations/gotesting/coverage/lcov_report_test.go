@@ -14,6 +14,7 @@ import (
 
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	civisibilityutils "github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils/filebitmap"
 )
 
 func TestWriteLCOVReportFromProfile(t *testing.T) {
@@ -289,4 +290,28 @@ func writeLCOVTestProfile(t *testing.T, content string) string {
 		t.Fatalf("write coverage profile: %v", err)
 	}
 	return profilePath
+}
+
+// A nested module's file takes the backend coverage of its own path in the
+// repository, not of a file at the root with the same module-relative path.
+func TestBackfillPrefersNestedModuleRepositoryPath(t *testing.T) {
+	ResetForTesting()
+	civisibilityutils.ResetCITags()
+	t.Cleanup(func() {
+		ResetForTesting()
+		civisibilityutils.ResetCITags()
+	})
+
+	workspace := t.TempDir()
+	civisibilityutils.AddCITagsMap(map[string]string{constants.CIWorkspacePath: workspace})
+	modulePath = "example.com/api"
+	moduleDir = filepath.Join(workspace, "services", "api")
+	root, nested := filebitmap.FromActiveRange(3, 3), filebitmap.FromActiveRange(9, 9)
+	name, bitmap, ok := backfillBitmapForProfileFile("example.com/api/handler.go", map[string]*filebitmap.FileBitmap{
+		"handler.go":              root,
+		"services/api/handler.go": nested,
+	})
+	if !ok || name != "services/api/handler.go" || bitmap != nested {
+		t.Fatalf("backend coverage of %q, %t; want services/api/handler.go", name, ok)
+	}
 }

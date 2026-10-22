@@ -84,7 +84,8 @@ func (c *ProcessTestCoverage) resume() bool {
 	}
 	processCoverageMu.Lock()
 	defer processCoverageMu.Unlock()
-	temporaryDir, err := os.MkdirTemp("", "dd-process-coverage-*")
+	// An absolute directory, as for per-test profiles: a test can chdir.
+	temporaryDir, err := mkdirCoverageTemp("dd-process-coverage-*")
 	if err != nil {
 		log.Debug("civisibility.cov: error creating process coverage directory: %s", err.Error())
 		telemetry.CodeCoverageErrors()

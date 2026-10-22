@@ -65,7 +65,7 @@ func TestCoverageTempDirectoryIsAbsolute(t *testing.T) {
 	if err := os.Mkdir("tmp", 0o700); err != nil {
 		t.Fatal(err)
 	}
-	dir, err := mkdirCoverageTemp()
+	dir, err := mkdirCoverageTemp("coverage")
 	if err != nil {
 		t.Fatal(err)
 	}
