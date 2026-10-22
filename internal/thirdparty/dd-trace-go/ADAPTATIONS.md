@@ -905,6 +905,19 @@ counted in the first, and with `-benchtime=1x` only, run (4 allocations and
 168 B for an empty benchmark). The binding now happens before the timer
 restarts. Check: `TestMiniSDKMirrorBenchmarkMeasuresNoBinding`.
 
+## Exit status of a TestMain without os.Exit
+
+Go's generated main returns `m.exitCode` after a `TestMain` that does not call
+`os.Exit`. Process retries run after `M.Run`, so the code that they produce
+must reach that field too. ddto's `M.Run` hook (`internal/instrument`) stores
+it there; the manual `(*M).Run` in `gotesting/testing.go`, behind
+`testopt.RunM`, returned it without storing it, so `testopt.RunM(m)` alone
+exited 0 for a test that still failed after its retries.
+`setTestingMExitCode` stores it through a checked reflection lookup; the
+`defer` replaces a comment line to keep stack lines. Checks:
+`TestMiniTestMainWithoutExitKeepsRetryStatus` and
+`TestMiniManualRunMWithoutExitKeepsRetryStatus`.
+
 ## Output of failed retry attempts
 
 A fresh retry attempt in `gotesting/retry_attempt_runner.go` reports to a

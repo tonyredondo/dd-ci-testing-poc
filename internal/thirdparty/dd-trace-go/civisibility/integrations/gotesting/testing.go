@@ -577,11 +577,11 @@ func (ddm *M) Run() (exitCode int) {
 		// native invocation two competing owners.
 		return m.Run()
 	}
+	defer func() { setTestingMExitCode(m, exitCode) }() // for a TestMain without os.Exit
 	if isProcessRetryChild() {
 		return runProcessRetryChild(m)
 	}
 
-	// Instrument testing.M
 	proceed, exitFn := instrumentTestingMWithOptions(m, processRetryDeferredWrapperOptions())
 	if !proceed {
 		return exitFn(processRetryFailureExitCode)
@@ -1472,4 +1472,14 @@ func collectAndWriteLogs(t *testing.T, test integrations.Test, attemptOutput []b
 func directTestFunc(testInfo *testingTInfo, instrumented, test func(*testing.T)) func(*testing.T) {
 	testInfo.directTestFunc = reflect.ValueOf(test).Pointer() == reflect.ValueOf(instrumented).Pointer()
 	return test
+}
+
+// setTestingMExitCode stores code in testing.M's exitCode, which M.Run sets
+// and Go's generated main returns after a TestMain that does not call
+// os.Exit, as testopt.RunM(m) alone: it then holds the result after retries.
+func setTestingMExitCode(m *testing.M, code int) {
+	field := reflect.ValueOf(m).Elem().FieldByName("exitCode")
+	if field.IsValid() && field.Kind() == reflect.Int && field.CanAddr() {
+		*(*int)(unsafe.Pointer(field.UnsafeAddr())) = code
+	}
 }
