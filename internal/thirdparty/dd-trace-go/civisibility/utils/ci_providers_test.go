@@ -369,3 +369,45 @@ func TestGithubActionsJobIDFromDiagnostics(t *testing.T) {
 		}
 	})
 }
+
+// GitLab's CI_COMMIT_AUTHOR may be missing or have an empty email, and a
+// Jenkins branch may hold regular expression syntax: neither stops the CI tags.
+func TestProviderTagsFromUnusualValues(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		env       map[string]string
+		key, want string
+		absent    string
+	}{
+		{"gitlab without author", map[string]string{"GITLAB_CI": "true"}, constants.CIProviderName, "gitlab", constants.GitCommitAuthorName},
+		{"gitlab empty email", map[string]string{"GITLAB_CI": "true", "CI_COMMIT_AUTHOR": "Audit <>"}, constants.GitCommitAuthorName, "Audit", constants.GitCommitAuthorEmail},
+		{"gitlab author", map[string]string{"GITLAB_CI": "true", "CI_COMMIT_AUTHOR": "Jane Doe <jane@example.com>"}, constants.GitCommitAuthorEmail, "jane@example.com", ""},
+		{"jenkins branch with a parenthesis", map[string]string{"JENKINS_URL": "http://jenkins", "GIT_BRANCH": "origin/feature/(cleanup", "JOB_NAME": "job/feature/(cleanup"}, constants.CIPipelineName, "job", ""},
+		// A CodeBuild-hosted runner of another CI sets CODEBUILD_INITIATOR.
+		{"github on codebuild", map[string]string{"GITHUB_SHA": "abc", "CODEBUILD_INITIATOR": "GitHub-Hookshot/123"}, constants.CIProviderName, "github", ""},
+		{"jenkins branch with a dot", map[string]string{"JENKINS_URL": "http://jenkins", "GIT_BRANCH": "origin/release-1.2", "JOB_NAME": "job/release-1x2"}, constants.CIPipelineName, "job/release-1x2", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for key := range providers {
+				t.Setenv(key, "")
+				os.Unsetenv(key)
+			}
+			for key, value := range tc.env {
+				t.Setenv(key, value)
+			}
+			// The providers map has no order: every lookup must agree.
+			tags := getProviderTags()
+			for range 20 {
+				if again := getProviderTags(); again[tc.key] != tags[tc.key] {
+					t.Fatalf("%s = %q, then %q", tc.key, tags[tc.key], again[tc.key])
+				}
+			}
+			if got := tags[tc.key]; got != tc.want {
+				t.Errorf("%s = %q, want %q (tags %v)", tc.key, got, tc.want, tags)
+			}
+			if _, ok := tags[tc.absent]; tc.absent != "" && ok {
+				t.Errorf("%s = %q, want none", tc.absent, tags[tc.absent])
+			}
+		})
+	}
+}

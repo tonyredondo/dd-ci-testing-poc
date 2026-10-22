@@ -778,6 +778,27 @@ might have cached. Telemetry still uses `hostname.Get()` only when
 Checks: `TestInitializeUsesOSHostnameWithoutProbes` initializes logs in a fresh
 process, requires the OS hostname and finds no hostname-discovery goroutine.
 
+## CI provider tags
+
+`getProviderTags` in [`civisibility/utils/ci_providers.go`](civisibility/utils/ci_providers.go)
+differs from the pinned SDK in three places, each of which could stop or
+change the CI tags:
+
+- The SDK ranges over the `providers` map and keeps the last provider whose
+  variable is set, so with two variables each process could pick another one.
+  CodeBuild's extractor returns no tags outside a CodePipeline build, which
+  would erase another provider's tags on a CodeBuild-hosted runner. Here the
+  providers are tried in name order, and the first whose tags name a provider
+  wins.
+- GitLab's `CI_COMMIT_AUTHOR` is split at `<` instead of indexing the fields of
+  `strings.FieldsFunc`, which panicked when the variable was missing or the
+  email empty (`Name <>`).
+- Jenkins's branch is quoted with `regexp.QuoteMeta` before it is removed from
+  the job name: a branch such as `feature/(cleanup` panicked in
+  `regexp.MustCompile`, and `.` matched any character.
+
+Check: `TestProviderTagsFromUnusualValues`, which fails without each change.
+
 ## Git safe.directory for linked checkouts
 
 Upstream `execGit` in [`civisibility/utils/git.go`](civisibility/utils/git.go)

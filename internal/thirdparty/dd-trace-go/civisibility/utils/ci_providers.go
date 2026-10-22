@@ -8,8 +8,10 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -101,12 +103,19 @@ func getEnvVarsJSON(envVars ...string) ([]byte, error) {
 
 // getProviderTags extracts CI information from environment variables.
 func getProviderTags() map[string]string {
+	// One provider, the same in every process: the first, in name order, whose
+	// variable is set and whose tags name it. CodeBuild's variable outside a
+	// CodePipeline build, as on a CodeBuild-hosted runner of another CI,
+	// names none.
 	tags := map[string]string{}
-	for key, provider := range providers {
+	for _, key := range slices.Sorted(maps.Keys(providers)) {
 		if _, ok := env.Lookup(key); !ok {
 			continue
 		}
-		tags = provider()
+		if found := providers[key](); found[constants.CIProviderName] != "" {
+			tags = found
+			break
+		}
 	}
 
 	// replace with user specific tags
@@ -567,12 +576,10 @@ func extractGitlab() map[string]string {
 	tags[constants.CINodeName] = env.Get("CI_RUNNER_ID")
 	tags[constants.CINodeLabels] = env.Get("CI_RUNNER_TAGS")
 
-	author := env.Get("CI_COMMIT_AUTHOR")
-	authorArray := strings.FieldsFunc(author, func(s rune) bool {
-		return s == '<' || s == '>'
-	})
-	tags[constants.GitCommitAuthorName] = strings.TrimSpace(authorArray[0])
-	tags[constants.GitCommitAuthorEmail] = strings.TrimSpace(authorArray[1])
+	// "Name <email>", which may be missing or have an empty email.
+	authorName, authorEmail, _ := strings.Cut(env.Get("CI_COMMIT_AUTHOR"), "<")
+	tags[constants.GitCommitAuthorName] = strings.TrimSpace(authorName)
+	tags[constants.GitCommitAuthorEmail] = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(authorEmail), ">"))
 	tags[constants.GitCommitAuthorDate] = env.Get("CI_COMMIT_TIMESTAMP")
 
 	jsonString, err := getEnvVarsJSON("CI_PROJECT_URL", "CI_PIPELINE_ID", "CI_JOB_ID")
@@ -605,7 +612,8 @@ func extractJenkins() map[string]string {
 	} else {
 		tags[constants.GitBranch] = branchOrTag
 		// remove branch for job name
-		removeBranch := regexp.MustCompile("/" + normalizeRef(branchOrTag))
+		// A branch name is literal text: it can hold "(" or ".".
+		removeBranch := regexp.MustCompile("/" + regexp.QuoteMeta(normalizeRef(branchOrTag)))
 		name = string(removeBranch.ReplaceAll([]byte(name), empty))
 	}
 
