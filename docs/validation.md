@@ -285,11 +285,12 @@ so one cache per configuration is what fits the repository's 10 GB limit. The
 first job of each layout saves it when its key is new: the Go version and every
 `go.sum` are part of the key. Pull requests save only when nothing was
 restored, so `main` and nightly runs own the caches. The frozen Orchestrion
-binary is cached per platform and Go version. On Windows, the job of the
-Orchestrion group also keeps the builds that Orchestrion weaves in a Go cache of
-their own (`DDTO_TEST_ORCHESTRION_GOCACHE`), with the same saving rules: they
-depend on Orchestrion's and dd-trace-go's versions, not on ddto, but no other
-job builds them, and a cold one takes minutes there.
+binary is cached per platform and Go version. On Windows, the job of the two
+Orchestrion groups also keeps the builds that Orchestrion weaves in a Go cache of
+their own (`DDTO_TEST_ORCHESTRION_GOCACHE`), keyed by the job's groups, with the
+same saving rules: they depend on Orchestrion's and dd-trace-go's versions, not
+on ddto, but the job that saves the shared cache does not build them, and a cold
+one takes minutes there.
 
 Module downloads outside tests retry with a five-minute deadline per attempt,
 because a proxy fetch can stall for several minutes. Before the tests, the

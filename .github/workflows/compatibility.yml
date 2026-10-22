@@ -155,7 +155,7 @@ jobs:
             go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-differential-${{ matrix.mode }}-
       # Orchestrion's woven builds change with Orchestrion's and dd-trace-go's
       # versions, not with ddto. On Windows, where a cold one takes minutes, the
-      # Orchestrion job keeps them in a Go cache of its own.
+      # job of the Orchestrion groups keeps them in a Go cache of its own.
       - name: Locate the Orchestrion build cache
         if: runner.os == 'Windows' && contains(format(',{0},', matrix.shards), ',orchestrion,')
         shell: bash
@@ -165,9 +165,10 @@ jobs:
         if: runner.os == 'Windows' && contains(format(',{0},', matrix.shards), ',orchestrion,')
         with:
           path: ${{ runner.temp }}/orchestrion-gocache
-          key: orchestrion-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('testdata/orchestrion/go.mod', 'testdata/orchestrion/go.sum', 'testdata/fixture/go.sum', 'integration/orchestrion_composition_test.go') }}
+          # The job's groups decide which woven builds the cache holds.
+          key: orchestrion-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ matrix.job }}-${{ hashFiles('testdata/orchestrion/go.mod', 'testdata/orchestrion/go.sum', 'testdata/fixture/go.sum', 'integration/orchestrion_composition_test.go') }}
           restore-keys: |
-            orchestrion-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-
+            orchestrion-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ matrix.job }}-
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/orchestrion-reference

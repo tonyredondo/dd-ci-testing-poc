@@ -379,10 +379,10 @@
       ],
       [
         "orchestrion",
-        "fuzz"
+        "fuzz",
+        "sdk-orchestrion"
       ],
       [
-        "sdk-orchestrion",
         "provision"
       ]
     ],
