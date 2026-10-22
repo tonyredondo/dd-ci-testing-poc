@@ -308,7 +308,9 @@ refuses other branches. It:
 
 `scripts/release` rejects a version that is not `vMAJOR.MINOR.PATCH` with an
 optional prerelease, and a release above `v1`: the module path has no `/vN`
-suffix, so `go install` could not resolve it. The workflow stops before
+suffix, so `go install` could not resolve it. It also rejects a Go
+pseudo-version, such as `v0.0.0-20261022063454-376fffe35f8e`, from which `go
+install` would take another commit than the tag's. The workflow stops before
 building when the tag exists. Builds from `main` report the last release
 with `-dev`, or `0.0.0-dev` before the first one. Without `-stamp`,
 `-version` sets the version through `-overlay` for a local build, without

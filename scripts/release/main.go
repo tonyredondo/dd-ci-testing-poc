@@ -148,11 +148,18 @@ var semver = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-
 
 var numberDeclaration = regexp.MustCompile(`(?m)^const Number = "[^"]*"`)
 
+// pseudoVersion is golang.org/x/mod/module's pseudo-version pattern.
+var pseudoVersion = regexp.MustCompile(`^v[0-9]+\.(0\.0-|\d+\.\d+-([^+]*\.)?0\.)\d{14}-[A-Za-z0-9]+(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$`)
+
 // publishable rejects a tag that go install could not resolve: the module path
-// has no /vN suffix, so only v0 and v1 tags belong to it.
+// has no /vN suffix, so only v0 and v1 tags belong to it, and go reads a
+// pseudo-version's commit from its name instead of the tag.
 func publishable(tag string) error {
 	if !semver.MatchString(tag) {
 		return fmt.Errorf("version %q is not vMAJOR.MINOR.PATCH[-PRERELEASE]", tag)
+	}
+	if pseudoVersion.MatchString(tag) {
+		return fmt.Errorf("version %q is a Go pseudo-version, which names another commit", tag)
 	}
 	if !strings.HasPrefix(tag, "v0.") && !strings.HasPrefix(tag, "v1.") {
 		return fmt.Errorf("version %q needs the module path to end in /%s", tag, strings.SplitN(tag, ".", 2)[0])
