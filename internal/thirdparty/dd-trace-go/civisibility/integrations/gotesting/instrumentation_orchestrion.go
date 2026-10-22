@@ -504,11 +504,13 @@ func instrumentCloseAndSkip(tb testing.TB, skipReason string) {
 	if ciTestItem != nil && ciTestItem.test != nil && !tb.Failed() && ciTestItem.skipped.CompareAndSwap(0, 1) {
 		log.Debug("instrumentCloseAndSkip: skipping test [name: %q, reason: %q]", ciTestItem.test.Name(), skipReason)
 		// Retry wrappers and deferred fuzz events observe cleanup before closing.
-		if ciTestItem.hasAdditionalFeatureWrapper || ciTestItem.fuzzEvents != nil {
+		// A test's finalization closes it after its deferred calls, which can
+		// still fail it; only a benchmark, without a test identity, closes here.
+		if ciTestItem.hasAdditionalFeatureWrapper || ciTestItem.fuzzEvents != nil || ciTestItem.identity != nil {
 			ciTestItem.skipReason = skipReason
 			return
 		}
-		// For single-execution tests (no wrapper), this is the final execution.
+		// A benchmark's execution is its final one.
 		// Set test.final_status before closing.
 		ciTestItem.test.SetTag(constants.TestFinalStatus, constants.TestStatusSkip)
 		ciTestItem.test.Close(integrations.ResultStatusSkip, integrations.WithTestSkipReason(skipReason))
@@ -541,10 +543,12 @@ func instrumentSkipNow(tb testing.TB) {
 		}
 		log.Debug("instrumentSkipNow: skipping test [name: %q, reason: %q]", ciTestItem.test.Name(), ciTestItem.skipReason)
 		// Retry wrappers and deferred fuzz events observe cleanup before closing.
-		if ciTestItem.hasAdditionalFeatureWrapper || ciTestItem.fuzzEvents != nil {
+		// A test's finalization closes it after its deferred calls, which can
+		// still fail it; only a benchmark, without a test identity, closes here.
+		if ciTestItem.hasAdditionalFeatureWrapper || ciTestItem.fuzzEvents != nil || ciTestItem.identity != nil {
 			return
 		}
-		// For single-execution tests (no wrapper), this is the final execution.
+		// A benchmark's execution is its final one.
 		// Set test.final_status before closing.
 		ciTestItem.test.SetTag(constants.TestFinalStatus, constants.TestStatusSkip)
 		if ciTestItem.skipReason != "" {

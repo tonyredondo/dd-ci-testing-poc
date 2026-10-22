@@ -903,7 +903,10 @@ restarts. Check: `TestMiniSDKMirrorBenchmarkMeasuresNoBinding`.
 `gotesting/instrumentation_orchestrion.go` closed a test as skipped when it
 called `t.Skip` or `t.SkipNow`, also after `t.Error`: testing reports such a
 test as failed. A test that has already failed is left to its normal
-finalization, which closes it as failed. Check:
+finalization, which closes it as failed. A test that skips is left to it too,
+with its reason: a call that the test deferred can still fail it, as a leak
+check can, and testing then reports it as failed. Only a benchmark, whose
+metadata has no test identity, is still closed by the hooks. Check:
 `TestMiniSkipAfterFailureReportsFailure`.
 
 ## Failures in quarantined child processes

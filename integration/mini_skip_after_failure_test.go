@@ -26,19 +26,33 @@ func TestFailThenSkipNow(t *testing.T) {
 }
 
 func TestOnlySkip(t *testing.T) { t.Skip("reason") }
+
+// A deferred call that fails the test after it skips, as a leak check can.
+func TestSkipThenDeferredFailure(t *testing.T) {
+	defer t.Error("deferred failure")
+	t.Skip("reason")
+}
+
+func TestSkipNowThenDeferredFailure(t *testing.T) {
+	defer t.Error("deferred failure")
+	t.SkipNow()
+}
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	got := execute(t, dir, compileMini(t, dir, driver), []string{"-test.run=^Test(FailThenSkip|FailThenSkipNow|OnlySkip)$"}, true, false)
+	got := execute(t, dir, compileMini(t, dir, driver), []string{"-test.run=^Test(FailThenSkip|FailThenSkipNow|OnlySkip|SkipThenDeferredFailure|SkipNowThenDeferredFailure)$"}, true, false)
 	statuses := map[string]string{}
 	for _, event := range got.wireEvents {
 		content, _ := event["content"].(map[string]any)
 		meta, _ := content["meta"].(map[string]any)
 		if event["type"] == "test" {
 			statuses[fmt.Sprint(meta["test.name"])] = fmt.Sprint(meta["test.status"], "/", meta["test.final_status"])
+			if meta["test.name"] == "TestOnlySkip" && meta["test.skip_reason"] != "reason" {
+				t.Errorf("TestOnlySkip skip reason %v", meta["test.skip_reason"])
+			}
 		}
 	}
-	want := map[string]string{"TestFailThenSkip": "fail/fail", "TestFailThenSkipNow": "fail/fail", "TestOnlySkip": "skip/skip"}
+	want := map[string]string{"TestFailThenSkip": "fail/fail", "TestFailThenSkipNow": "fail/fail", "TestOnlySkip": "skip/skip", "TestSkipThenDeferredFailure": "fail/fail", "TestSkipNowThenDeferredFailure": "fail/fail"}
 	if got.code != 1 || fmt.Sprint(statuses) != fmt.Sprint(want) {
 		t.Fatalf("exit %d, statuses %v; want 1, %v\n%s", got.code, statuses, want, got.stderr)
 	}

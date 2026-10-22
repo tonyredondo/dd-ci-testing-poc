@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "6a4c937d0e83af065feea9b5987be122e9705d7051eea04f5fcbac26d3a6d046",
+      "sha256": "7de68feb3ea609e20ff2bd01a3cf0ca16adcf934bf7c4ae690a8fa0a9463eeb7",
       "role": "local"
     },
     {
@@ -522,7 +522,7 @@
     },
     {
       "path": "civisibility/integrations/gotesting/instrumentation_orchestrion.go",
-      "sha256": "5995b421c96e3aed22120e1ecd10665173a6918d348763885a06ae55654a5898",
+      "sha256": "0d259ebf76ccdef8f3d60efdd7d84a34ac56ec7baf5d32d9fdeb7f4835e1bf25",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/instrumentation_orchestrion.go",
       "source_sha256": "e07e0e5d272cdf6148fea865f53b1f1f40dfe29b60b4c461bfe29a5dd52784b3"
