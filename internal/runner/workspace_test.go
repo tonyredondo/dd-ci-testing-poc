@@ -480,3 +480,43 @@ func TestMiniVendorWithoutRuntimeAndDuplicateOverlay(t *testing.T) {
 		t.Errorf("duplicate overlay paths: %v; want go's rejection", err)
 	}
 }
+
+// A workspace whose runtime ddto cannot resolve, as offline with a vendored
+// one, runs natively: go test may still build it.
+func TestMiniUnresolvedWorkspaceRuntimeRunsNatively(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "client"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for file, data := range map[string]string{
+		"go.work":               "go 1.25.0\nuse ./client\n",
+		"client/go.mod":         "module example.com/client\ngo 1.25.0\nrequire " + miniModule + " v0.9.9\n",
+		"client/client_test.go": "package client\n",
+	} {
+		if err := os.WriteFile(filepath.Join(root, file), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("GOWORK", filepath.Join(root, "go.work"))
+	t.Setenv("GOFLAGS", "")
+	t.Setenv("GOPROXY", "off")
+	t.Setenv("GOMODCACHE", t.TempDir())
+	t.Cleanup(func() {
+		// Go extracts module directories readonly.
+		_ = filepath.WalkDir(os.Getenv("GOMODCACHE"), func(path string, entry fs.DirEntry, err error) error {
+			if err == nil && entry.IsDir() {
+				return os.Chmod(path, 0700)
+			}
+			return err
+		})
+	})
+	plan, err := PrepareRuntime(t.Context(), filepath.Join(root, "client"), []string{"."}, Mini)
+	if plan.Dir != "" {
+		plan.Release()
+		_ = os.RemoveAll(plan.Dir)
+	}
+	var native *nativeGoError
+	if !errors.As(err, &native) || native.bypass != "workspace_runtime_unavailable" {
+		t.Fatalf("%v; want the workspace_runtime_unavailable bypass", err)
+	}
+}

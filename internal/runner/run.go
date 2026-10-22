@@ -322,7 +322,9 @@ func prepare(ctx context.Context, dir string, opts options, runtime Runtime, pro
 		if work := workspaceFile(opts.environment); work != "" {
 			plan.Workfile, e = provideMiniWorkspace(ctx, dir, work, temp, opts.environment.GOMODCACHE, replacements)
 			if e != nil {
-				return plan, e
+				// go test can still build the workspace, as from its vendor
+				// directory offline, where ddto could not resolve the runtime.
+				return plan, &nativeGoError{"workspace_runtime_unavailable", e}
 			}
 
 			// Use the vendor directory only where Go would: a go mod vendor tree
