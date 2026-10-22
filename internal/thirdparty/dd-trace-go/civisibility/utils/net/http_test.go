@@ -1528,3 +1528,19 @@ func TestLogError(t *testing.T) {
 		t.Fatalf("logError = %q", got)
 	}
 }
+
+// A URL that the request cannot be built from, as an agentless URL can be,
+// leaves the client without its user information or query.
+func TestRequestErrorHidesURLCredentials(t *testing.T) {
+	for _, config := range []RequestConfig{
+		{Method: "GET"},
+		{Method: "POST", Body: []byte("{}"), Format: FormatJSON},
+		{Method: "POST", Files: []FormFile{{FieldName: "f", Content: []byte("x"), ContentType: ContentTypeOctetStream}}},
+	} {
+		config.URL = "https://user:password@proxy.example/%zz?token=sensitive"
+		_, err := NewRequestHandler().SendRequest(config)
+		if err == nil || strings.Contains(err.Error(), "password") || strings.Contains(err.Error(), "sensitive") {
+			t.Fatalf("%s with files=%d: %v", config.Method, len(config.Files), err)
+		}
+	}
+}

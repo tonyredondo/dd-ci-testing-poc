@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "59577a49e632f6f761a8463b2d85aa19e92656e59b4673367800c28f63d119aa",
+      "sha256": "a801ac07162018a14dd68b707aeb9101a1df5e339e6006c6d95783c2375cb024",
       "role": "local"
     },
     {
@@ -1477,7 +1477,7 @@
     },
     {
       "path": "civisibility/utils/net/http.go",
-      "sha256": "5cea42449d69719868cfc76f0b243ac693675861008d013e3924c175445c03e8",
+      "sha256": "ae769756fccab128863e4992165971138249e7cac401480814bbcbf766b49da8",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/net/http.go",
       "source_sha256": "6a0ad6c1e3935019ce88e4d6931a091c562c3e9f96cc2e21474b716ac8cf8d09"
@@ -1504,7 +1504,7 @@
     },
     {
       "path": "civisibility/utils/net/http_test.go",
-      "sha256": "44a41c9f39b7230df5572d62952b6db196ed795d39e4be272f916465ebdb40f0",
+      "sha256": "804e7c7a3ac64e47ca4c30a7c5583737ea9f37888ab0ee2ff9b351c76b39b5fd",
       "role": "adapted",
       "source_path": "internal/civisibility/utils/net/http_test.go",
       "source_sha256": "4c280d018a3d9acef0c767aa30d15dd424cb2c49b3f95a044eb5013bda7985cd"
@@ -2328,14 +2328,14 @@
     },
     {
       "path": "telemetry/internal/writer.go",
-      "sha256": "5314e8d7a890296ba257cc526b44208a49c523b5a4088d027b52d08a8f587519",
+      "sha256": "4e98549f3712b6d76a7986c0fc2df2b19fbcf3d31c5c2d9cc3e91c7feaf493d5",
       "role": "adapted",
       "source_path": "internal/telemetry/internal/writer.go",
       "source_sha256": "d13665bb661561f291036ffc215a65845716f0a9e904d31c69067f787474afe5"
     },
     {
       "path": "telemetry/internal/writer_lifecycle_test.go",
-      "sha256": "79d4dfd2c5040d6ab94713bb38e32974d4895c314e9a82334640d1dbcfa98ca3",
+      "sha256": "71b87808eba1976085c5a61b7668a1297cb564b3e8682df92d73d24097a62594",
       "role": "local"
     },
     {

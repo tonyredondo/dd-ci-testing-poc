@@ -836,9 +836,15 @@ pass its arguments and output through `filterSensitiveInfo`: a CI clone's
 remote URL can hold a job token, which `git ls-remote --get-url` prints.
 A request's error, an `*url.Error` that keeps the URL's user and query, goes
 through `logError`, and `AgentURLFromEnv`'s warnings in
-[`agent.go`](agent.go) leave out the URL of `DD_TRACE_AGENT_URL`.
-Checks: `TestCIClientDoesNotFollowRedirects`, `TestLogURL`, `TestLogError`
-and `TestGitDebugLinesHideRemoteCredentials`.
+[`agent.go`](agent.go) leave out the URL of `DD_TRACE_AGENT_URL`. A URL that
+a request cannot be built from, such as a malformed agentless URL, returns
+its error through `redactURLError`, since callers log it, and telemetry's
+writer in [`telemetry/internal/writer.go`](telemetry/internal/writer.go) keeps
+a failed request's error the same way.
+Checks: `TestCIClientDoesNotFollowRedirects`, `TestLogURL`, `TestLogError`,
+`TestRequestErrorHidesURLCredentials`,
+`TestWriterRequestErrorHidesURLCredentials` and
+`TestGitDebugLinesHideRemoteCredentials`.
 
 ## LCOV paths of nested modules
 

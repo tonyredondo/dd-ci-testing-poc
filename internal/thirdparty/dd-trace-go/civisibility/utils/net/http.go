@@ -337,7 +337,7 @@ func (rh *RequestHandler) internalSendRequest(config *RequestConfig, attempt int
 		}
 		req, err = http.NewRequestWithContext(rh.context(), config.Method, config.URL, bytes.NewBuffer(body))
 		if err != nil {
-			return true, nil, err
+			return true, nil, redactURLError(err)
 		}
 		req.Header.Set(HeaderContentType, contentType)
 		if config.Compressed {
@@ -374,7 +374,7 @@ func (rh *RequestHandler) internalSendRequest(config *RequestConfig, attempt int
 
 		req, err = http.NewRequestWithContext(rh.context(), config.Method, config.URL, bytes.NewBuffer(serializedBody))
 		if err != nil {
-			return true, nil, err
+			return true, nil, redactURLError(err)
 		}
 		if config.Format == FormatJSON {
 			req.Header.Set(HeaderContentType, ContentTypeJSON)
@@ -390,7 +390,7 @@ func (rh *RequestHandler) internalSendRequest(config *RequestConfig, attempt int
 		var err error
 		req, err = http.NewRequestWithContext(rh.context(), config.Method, config.URL, nil)
 		if err != nil {
-			return true, nil, err
+			return true, nil, redactURLError(err)
 		}
 
 		log.Debug("ciVisibilityHttpClient: new request [method: %s, url: %s, attempt: %d, maxRetries: %d]",
@@ -663,13 +663,20 @@ func createMultipartFormData(files []FormFile, compressed bool) ([]byte, string,
 // logError returns err's text for a debug line, with the URL that an
 // *url.Error, as http.Client.Do returns, carries shown as logURL shows it.
 func logError(err error) string {
+	return redactURLError(err).Error()
+}
+
+// redactURLError returns the *url.Error in err, as http.Client.Do and
+// http.NewRequest return, with its URL shown as logURL shows it. Callers log
+// the errors that this client returns.
+func redactURLError(err error) error {
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {
 		copied := *urlErr
 		copied.URL = logURL(copied.URL)
-		return copied.Error()
+		return &copied
 	}
-	return err.Error()
+	return err
 }
 
 // logURL returns rawURL for a debug line, without the user information or
