@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "ADAPTATIONS.md",
-      "sha256": "8a41247c38e4e417d37942b19253f2917f63963d9ad80b9cc69115d8562b9d3d",
+      "sha256": "f7bb3c81b6c266768b33faf6bb3c7fb6cb7cfcc00fa226cf0c4b241a909bc454",
       "role": "local"
     },
     {
@@ -339,14 +339,14 @@
     },
     {
       "path": "civisibility/integrations/gotesting/coverage/lcov_report.go",
-      "sha256": "3cf35e842d2df388a73050a103e870fb3fb142d163ae7066bdbc6d7575bdfff7",
+      "sha256": "c2441716c5b499db3c9fd68447df216d70b1284792b070246699d466bdbff403",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/coverage/lcov_report.go",
       "source_sha256": "6096d74ce03f20c81f65fa8872a92f15215da21809d9620c71faa9aa36344049"
     },
     {
       "path": "civisibility/integrations/gotesting/coverage/lcov_report_test.go",
-      "sha256": "c3c410c7090825926e8e5702be10c97538cfa75289438aa6b6ad289adc6dd523",
+      "sha256": "41ffe95134f47a04d54367ac2c31073428d493ae6f232d9a671bbed758505851",
       "role": "adapted",
       "source_path": "internal/civisibility/integrations/gotesting/coverage/lcov_report_test.go",
       "source_sha256": "c524a44acc49c08a288f387aa4157879369ac8798711f1e142d4c6a9f9495d33"

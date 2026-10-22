@@ -822,6 +822,17 @@ remote URL can hold a job token, which `git ls-remote --get-url` prints.
 Checks: `TestCIClientDoesNotFollowRedirects`, `TestLogURL` and
 `TestGitDebugLinesHideRemoteCredentials`.
 
+## LCOV paths of nested modules
+
+`lcovModuleSourceFilePath` in
+[`gotesting/coverage/lcov_report.go`](civisibility/integrations/gotesting/coverage/lcov_report.go)
+joins a module-relative path to the module's directory in the repository.
+The SDK derives that directory from the module path's major version suffix
+alone, so the files of a nested module, such as `services/api` with module
+`github.com/acme/project/services/api`, were reported as `handler.go`. Here the
+module directory relative to the CI workspace comes first, when the module
+lies inside it. Check: `TestWriteLCOVReportFromProfileUsesNestedModuleDirectory`.
+
 ## Sub-benchmarks sharing a callback
 
 `instrumentTestingBFunc` marked the original callback of a sub-benchmark as

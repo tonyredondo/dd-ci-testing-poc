@@ -197,6 +197,33 @@ end_of_record
 	}
 }
 
+// A nested module's files keep the module's directory in the repository,
+// which its module path does not show.
+func TestWriteLCOVReportFromProfileUsesNestedModuleDirectory(t *testing.T) {
+	ResetForTesting()
+	civisibilityutils.ResetCITags()
+	t.Cleanup(func() {
+		ResetForTesting()
+		civisibilityutils.ResetCITags()
+	})
+
+	workspace := t.TempDir()
+	civisibilityutils.AddCITagsMap(map[string]string{constants.CIWorkspacePath: workspace})
+	modulePath = "github.com/acme/project/services/api"
+	moduleDir = filepath.Join(workspace, "services", "api")
+	profilePath := writeLCOVTestProfile(t, `mode: count
+github.com/acme/project/services/api/handler.go:1.1,2.1 1 1
+`)
+
+	var report bytes.Buffer
+	if err := WriteLCOVReportFromProfile(profilePath, &report); err != nil {
+		t.Fatalf("WriteLCOVReportFromProfile() error = %v", err)
+	}
+	if want := "SF:services/api/handler.go\nDA:1,1\nLH:1\nLF:1\nend_of_record\n"; report.String() != want {
+		t.Fatalf("unexpected LCOV report\nwant:\n%s\ngot:\n%s", want, report.String())
+	}
+}
+
 func TestWriteLCOVReportFromProfileIncludesProfileWithoutExecutableStatements(t *testing.T) {
 	profilePath := writeLCOVTestProfile(t, `mode: count
 ignored.go:1.1,3.1 0 1

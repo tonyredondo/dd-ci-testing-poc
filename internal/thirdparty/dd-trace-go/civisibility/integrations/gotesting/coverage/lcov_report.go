@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/constants"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/civisibility/utils"
 	"github.com/tonyredondo/dd-ci-testing-poc/internal/thirdparty/dd-trace-go/log"
 )
@@ -141,7 +142,7 @@ func lcovSourceFilePath(profileFile string) string {
 // into repository-relative source paths when they belong to the current module.
 func lcovModuleSourceFilePath(profileFile string) string {
 	resolveModuleInfo()
-	moduleRepoPrefix := moduleRepositoryRelativePrefix(modulePath)
+	moduleRepoPrefix := lcovModuleRepositoryPrefix()
 	normalizedProfileFile := cleanLCOVSourcePath(profileFile)
 	normalizedModulePath := strings.TrimSuffix(cleanLCOVSourcePath(modulePath), "/")
 	if normalizedProfileFile != "" && normalizedModulePath != "" {
@@ -158,6 +159,19 @@ func lcovModuleSourceFilePath(profileFile string) string {
 		return ""
 	}
 	return cleanLCOVSourcePath(path.Join(moduleRepoPrefix, filepath.ToSlash(relPath)))
+}
+
+// lcovModuleRepositoryPrefix returns the module directory's path in the
+// repository: relative to the CI workspace when the module lies inside it, as
+// a nested module such as services/api does, or else what the module path's
+// major version suffix implies.
+func lcovModuleRepositoryPrefix() string {
+	if workspace := utils.GetCITagsReadOnly()[constants.CIWorkspacePath]; workspace != "" && moduleDir != "" {
+		if rel, err := filepath.Rel(workspace, moduleDir); err == nil && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return cleanLCOVSourcePath(filepath.ToSlash(rel))
+		}
+	}
+	return moduleRepositoryRelativePrefix(modulePath)
 }
 
 // cleanLCOVSourcePath normalizes path separators and removes empty or current
