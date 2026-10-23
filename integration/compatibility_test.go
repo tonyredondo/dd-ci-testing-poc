@@ -150,28 +150,40 @@ func commandWithTiming(t *testing.T, dir string, env []string, name string, args
 // testing.T, so independent builds can run in other goroutines. The
 // Orchestrion reference, ORCHESTRION_BIN, weaves its builds, which also
 // compile dd-trace-go's integrations: cold on a Windows runner one can take
-// more than three minutes, so its commands get ten.
+// more than three minutes, so a command that runs it gets ten.
 func runCommand(dir string, env []string, name string, args ...string) (string, string, int, time.Duration, error) {
 	timeout := 3 * time.Minute
-	if isOrchestrionReference(name) {
+	if runsOrchestrionReference(name, args) {
 		timeout = 10 * time.Minute
 	}
 	return runCommandWithin(timeout, dir, env, name, args...)
 }
 
-// isOrchestrionReference reports whether name runs the Orchestrion reference
-// that ORCHESTRION_BIN names.
-func isOrchestrionReference(name string) bool {
+// runsOrchestrionReference reports whether a command runs the Orchestrion
+// reference that ORCHESTRION_BIN names: the reference itself, a command with
+// an argument that names it, as -toolexec does, or ddto's orchestrion
+// command, which finds it on PATH.
+func runsOrchestrionReference(name string, args []string) bool {
 	reference := os.Getenv("ORCHESTRION_BIN")
 	if reference == "" {
 		return false
 	}
-	command, err := filepath.Abs(name)
+	absolute, err := filepath.Abs(reference)
 	if err != nil {
-		return false
+		absolute = reference
 	}
-	reference, err = filepath.Abs(reference)
-	return err == nil && command == reference
+	if command, err := filepath.Abs(name); err == nil && command == absolute {
+		return true
+	}
+	if len(args) != 0 && args[0] == "orchestrion" {
+		return true
+	}
+	for _, arg := range args {
+		if strings.Contains(arg, reference) || strings.Contains(arg, absolute) {
+			return true
+		}
+	}
+	return false
 }
 
 // runCommandWithin is runCommand with another bound for the command.
