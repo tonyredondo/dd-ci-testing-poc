@@ -287,7 +287,8 @@ jobs:
         with:
           name: go-tip-toolchain
           path: ${{ runner.temp }}/toolchain/
-          retention-days: 1
+          # As long as the groups' results: rerunning a failed tip job needs it.
+          retention-days: 7
 
   mini:
     name: mini (Linux, ${{ matrix.go }}, ${{ matrix.mode }}, ${{ matrix.job }})
