@@ -147,9 +147,31 @@ func commandWithTiming(t *testing.T, dir string, env []string, name string, args
 }
 
 // runCommand reports start failures and timeouts as errors instead of through
-// testing.T, so independent builds can run in other goroutines.
+// testing.T, so independent builds can run in other goroutines. The
+// Orchestrion reference, ORCHESTRION_BIN, weaves its builds, which also
+// compile dd-trace-go's integrations: cold on a Windows runner one can take
+// more than three minutes, so its commands get ten.
 func runCommand(dir string, env []string, name string, args ...string) (string, string, int, time.Duration, error) {
-	return runCommandWithin(3*time.Minute, dir, env, name, args...)
+	timeout := 3 * time.Minute
+	if isOrchestrionReference(name) {
+		timeout = 10 * time.Minute
+	}
+	return runCommandWithin(timeout, dir, env, name, args...)
+}
+
+// isOrchestrionReference reports whether name runs the Orchestrion reference
+// that ORCHESTRION_BIN names.
+func isOrchestrionReference(name string) bool {
+	reference := os.Getenv("ORCHESTRION_BIN")
+	if reference == "" {
+		return false
+	}
+	command, err := filepath.Abs(name)
+	if err != nil {
+		return false
+	}
+	reference, err = filepath.Abs(reference)
+	return err == nil && command == reference
 }
 
 // runCommandWithin is runCommand with another bound for the command.
