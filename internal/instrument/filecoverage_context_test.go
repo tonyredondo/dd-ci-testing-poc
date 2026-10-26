@@ -353,6 +353,14 @@ func main() {
 	}), "unknown")
 	expect("io hook", fmt.Sprint(mini.Calls.IO), "1")
 	expect("file", in("A", func() { os.ReadFile("go.mod") }), "A")
+	// So does a pipe read, such as a worker's: Windows does not poll pipes.
+	pipeReader, pipeWriter, err := os.Pipe()
+	if err != nil {
+		panic(err)
+	}
+	go pipeWriter.Write([]byte("x"))
+	expect("pipe", in("A", func() { pipeReader.Read(make([]byte, 1)) }), "unknown")
+	expect("pipe io hook", fmt.Sprint(mini.Calls.IO), "2")
 
 	// A goroutine without a context passes its calls to its children and its
 	// timers, and its sends carry them.
